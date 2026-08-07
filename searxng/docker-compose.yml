@@ -1,0 +1,31 @@
+# Local SearXNG for keyless web search.
+#
+#   cd searxng && docker compose up -d
+#   export SEARXNG_URL=http://127.0.0.1:8888
+#
+# Bound to loopback only — this is a personal search endpoint, not a public
+# instance. Running a public one without rate limiting gets your IP blocked by
+# the upstream engines it aggregates.
+
+services:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: maple-searxng
+    ports:
+      - "127.0.0.1:8888:8080"
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      - SEARXNG_BASE_URL=http://127.0.0.1:8888/
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "1"

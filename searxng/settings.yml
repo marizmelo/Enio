@@ -1,0 +1,47 @@
+# Minimal SearXNG config for agent use.
+#
+# The one line that matters is `json` under search.formats. It is NOT enabled by
+# default, and without it every API request returns 403 Forbidden with no
+# explanation of why. This is the single most common reason people give up on
+# SearXNG as an agent backend.
+
+use_default_settings: true
+
+general:
+  instance_name: "maple-agent"
+  # No usage stats on a personal instance.
+  enable_metrics: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  formats:
+    - html
+    - json # <-- required for the API. Without it: 403.
+
+server:
+  # Replace this. Any non-empty value works; it just must not be the default.
+  secret_key: "change-me-to-anything-random"
+  limiter: false # off because only we talk to it, over loopback
+  image_proxy: false
+
+ui:
+  static_use_hash: true
+
+# Engines that are fast, don't require keys, and rarely rate-limit a single
+# personal user. Trim further if results feel noisy — fewer, better engines
+# usually beats more engines for agent use.
+engines:
+  - name: google
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+  - name: brave
+    disabled: false
+  - name: wikipedia
+    disabled: false
+  - name: github
+    disabled: false
+  - name: stackoverflow
+    disabled: false
