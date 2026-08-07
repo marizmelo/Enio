@@ -111,6 +111,45 @@ enio examples           # saved examples
 enio reindex            # rebuild memory from raw transcripts
 ```
 
+### Skills
+
+Tools are capability. Skills are know-how. A tool lets it send an email; a skill tells it how you want emails written.
+
+```sh
+enio skills --install-examples   # three to start from
+enio skills                      # what's installed
+enio skills --new my-workflow    # scaffold your own
+```
+
+A skill is a folder with a `SKILL.md` — [the same format other agents use](https://agentskills.io/home), so skills written elsewhere work here unmodified:
+
+```
+~/.enio/skills/commit-message/
+├── SKILL.md         # frontmatter + instructions
+├── references/      # loaded on demand
+└── scripts/         # runnable by full path
+```
+
+```markdown
+---
+name: commit-message
+description: Writing a git commit message. Use whenever the user is about
+  to commit or says "commit this".
+allowed-tools: [run_command, read_file]
+---
+
+# Writing a commit message
+
+Never write from file names alone — run `git diff --staged` and read it.
+...
+```
+
+**Why this is the cheapest way to extend a small model.** Only the name and description are in the prompt at rest — roughly 40 tokens each, so four skills cost about 230 tokens. The full body loads only when the model calls `read_skill`. That means **one tool slot no matter how many skills you install**, which against a 16-tool ceiling is the whole game. The same capability added via MCP would cost a slot per server.
+
+The `description` is the entire basis on which the model decides, so write it as trigger conditions rather than a summary. "Use when the user is about to commit" beats "helps with git". A skill missing a description is refused at load rather than sitting in the catalogue as dead weight.
+
+Skills are reloaded from disk on every turn, so editing one takes effect on the next message with no restart. A malformed skill is reported and skipped rather than breaking the others.
+
 ### Tools
 
 `read_file`, `write_file`, `list_dir`, `run_command`, `web_search`, `web_fetch`, `web_fetch_rendered`, `remember`, `recall`, `set_preference`.
@@ -239,6 +278,7 @@ Set `ENIO_DIR` to put it elsewhere. Earlier layouts (`<repo>/runtime`, `~/maple`
 | `enio stats` / `graph` / `remember` / `forget` | memory |
 | `enio prefs` / `pref` / `unpref` / `examples` | learned behaviour |
 | `enio index` / `reindex` | fold conversations into memory |
+| `enio skills` | list, show, scaffold, install examples |
 | `enio tools` / `backends` / `mcp-init` | configuration |
 
 ## Configuration
@@ -333,6 +373,8 @@ The HTTP endpoint requires a bearer token, including on loopback. A web page you
 **Search returns 403** — SearXNG ships with JSON output off. The bundled `settings.yml` enables it; on your own instance, add `json` under `search.formats`.
 
 **A page comes back empty** — it renders with JavaScript. Install Playwright and the model will retry with `web_fetch_rendered`.
+
+**A skill never triggers** — its `description` is the only thing the model sees before deciding. Rewrite it as concrete trigger conditions, including the phrases you actually use. `enio inspect` shows whether `read_skill` was called.
 
 **It picks the wrong tool** — probably over the tool budget. `enio tools` shows the count; add allowlists to your MCP servers. `enio inspect` shows exactly which tools the specialist could see and what it was told.
 

@@ -31,6 +31,11 @@ export interface Specialist {
   mcpServers?: string[];
 }
 
+/**
+ * read_skill appears in every specialist. Skills are know-how rather than
+ * capability, so any role can need them, and the slot is cheap: one tool
+ * covers every installed skill.
+ */
 export const SPECIALISTS: Specialist[] = [
   {
     name: "researcher",
@@ -44,7 +49,7 @@ export const SPECIALISTS: Specialist[] = [
       `Cite the URL for anything you assert. If the sources disagree, say so ` +
       `rather than picking one silently. If you could not find something, say ` +
       `that plainly — a confident wrong answer is worse than an admission.`,
-    tools: ["web_search", "web_fetch", "web_fetch_rendered", "recall"],
+    tools: ["web_search", "web_fetch", "web_fetch_rendered", "recall", "read_skill"],
   },
   {
     name: "coder",
@@ -58,7 +63,7 @@ export const SPECIALISTS: Specialist[] = [
       `failures — do not describe an intended outcome as if it happened.\n\n` +
       `Everything is scoped to the workspace directory. Paths outside it are ` +
       `refused, which is expected, not a bug to work around.`,
-    tools: ["read_file", "write_file", "list_dir", "run_command"],
+    tools: ["read_file", "write_file", "list_dir", "run_command", "read_skill"],
     mcpServers: ["filesystem", "git", "github"],
   },
   {
@@ -73,7 +78,7 @@ export const SPECIALISTS: Specialist[] = [
       `When they state how they want you to behave, use set_preference instead: ` +
       `preferences shape every future conversation, facts only inform them.\n\n` +
       `If memory holds nothing relevant, say so rather than inventing continuity.`,
-    tools: ["recall", "remember", "set_preference"],
+    tools: ["recall", "remember", "set_preference", "read_skill"],
   },
   {
     name: "generalist",
@@ -83,7 +88,7 @@ export const SPECIALISTS: Specialist[] = [
       `You are a thoughtful assistant. Answer directly from what you know.\n\n` +
       `Use recall if the user refers to something from a past conversation. ` +
       `Otherwise just answer — not everything needs a tool.`,
-    tools: ["recall"],
+    tools: ["recall", "read_skill"],
   },
 ];
 

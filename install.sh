@@ -255,6 +255,12 @@ if ask "Install Playwright for JavaScript-heavy pages? (~150MB)"; then
   fi
 fi
 
+# ------------------------------------------------------ optional: skills
+if [ -d "$AGENT_DIR/examples/skills" ] && ask "Install the example skills? (commit messages, weekly review, research)"; then
+  ( cd "$AGENT_DIR" && node dist/index.js skills --install-examples ) \
+    || warn "Could not install example skills."
+fi
+
 # ---------------------------------------------------- optional: inspector
 if [ -d "$AGENT_DIR/ui" ] && ask "Build the inspector UI? (trace viewer + knowledge graph)"; then
   if ( cd "$AGENT_DIR/ui" && npm install --no-audit --no-fund >/dev/null 2>&1 \
@@ -336,6 +342,7 @@ ${BOLD}Worth knowing${OFF}
 
     /good in chat saves an answer as an example to imitate later
     /pref "be concise" sets a standing instruction
+    enio skills      teach it how you like things done
     enio inspect     see why it did what it did, and prune bad memories
     enio backends    switch to Ollama or another engine
     enio stats       see what it has remembered

@@ -4,6 +4,7 @@ import { fsTools } from "./fs.js";
 import { shellTools } from "./shell.js";
 import { buildWebTools } from "./web.js";
 import { memoryTools } from "./memory.js";
+import { skillTools } from "./skills.js";
 import { loadMcpTools } from "./mcp.js";
 
 export interface Registry {
@@ -21,6 +22,7 @@ export async function buildRegistry(
   onLog: (msg: string) => void = () => {},
 ): Promise<Registry> {
   const builtins: ToolDef[] = [
+    ...skillTools,
     ...memoryTools,
     ...fsTools,
     ...shellTools,

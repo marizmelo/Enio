@@ -4,6 +4,7 @@ import { buildMemoryBlock, logMessage } from "./memory/store.js";
 import { recordTurn, type StepRecord } from "./memory/traces.js";
 import { exemplarBlock, preferenceBlock } from "./memory/learning.js";
 import { getSpecialist, route, toolsFor } from "./specialists.js";
+import { skillCatalogue } from "./skills.js";
 import type { Registry } from "./tools/index.js";
 import { toWireTool, type Message, type ToolCall } from "./types.js";
 
@@ -72,7 +73,10 @@ export async function runTurn(
     handlers.onRoute?.(specialist.name);
   }
 
-  const system = [roleSystem, preferenceBlock(), memoryBlock, exemplars]
+  // Order matters: role, then how the user wants things done, then what is
+  // known, then worked examples. Skills sit with the role because they change
+  // *how* the task is approached rather than supplying facts about it.
+  const system = [roleSystem, skillCatalogue(), preferenceBlock(), memoryBlock, exemplars]
     .filter(Boolean)
     .join("\n\n");
 

@@ -3,9 +3,11 @@ import { spawn } from "node:child_process";
 import { existsSync, openSync, unlinkSync, writeFileSync } from "node:fs";
 import { ensureToken } from "./auth.js";
 import { join } from "node:path";
-import { activeBackend, config, ensureDirs } from "./config.js";
+import { activeBackend, config, ensureDirs, projectRoot } from "./config.js";
 import { canRunMaple, whyNoMaple } from "./platform.js";
 import { ensureBackend, type RunningBackend } from "./runtime.js";
+import { findSkill, loadSkills, skillContents, skillsDir } from "./skills.js";
+import { cpSync, mkdirSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { BACKENDS } from "./backends.js";
 import {
@@ -110,6 +112,83 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "skills": {
+      if (rest.includes("--install-examples")) {
+        const from = join(projectRoot, "examples", "skills");
+        if (!existsSync(from)) {
+          console.error(`No bundled examples found at ${from}`);
+          process.exit(1);
+        }
+        mkdirSync(skillsDir(), { recursive: true });
+        // force:false so a skill you have edited is never silently overwritten.
+        cpSync(from, skillsDir(), { recursive: true, force: false, errorOnExist: false });
+        console.log(`Installed examples into ${skillsDir()}`);
+        console.log(`Run 'enio skills' to see them.`);
+        break;
+      }
+
+      const newName = rest[rest.indexOf("--new") + 1];
+      if (rest.includes("--new")) {
+        if (!newName || newName.startsWith("--")) {
+          console.error(`Usage: enio skills --new <name>`);
+          process.exit(1);
+        }
+        const dir = join(skillsDir(), newName);
+        if (existsSync(dir)) {
+          console.error(`${dir} already exists.`);
+          process.exit(1);
+        }
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(
+          join(dir, "SKILL.md"),
+          `---\nname: ${newName}\ndescription: >-\n  When this skill applies. Be specific and concrete — this single line is\n  the ONLY thing the model sees until it decides to load the skill, so it\n  has to carry the whole decision.\n---\n\n# ${newName}\n\nWrite the instructions here as if briefing a capable new colleague who has\nnever done this task at your organisation.\n\n## Method\n\nThe steps, in order.\n\n## Rules\n\nThe things that are easy to get wrong, and what to do instead.\n`,
+        );
+        console.log(`Created ${join(dir, "SKILL.md")}`);
+        console.log(`Edit it, then run 'enio skills' to check it loads.`);
+        break;
+      }
+
+      const set = loadSkills();
+      const target = rest.find((a) => !a.startsWith("--"));
+
+      if (target) {
+        const skill = findSkill(target, set);
+        if (!skill) {
+          console.error(`No skill named "${target}".`);
+          process.exit(1);
+        }
+        console.log(`${skill.name}\n${"-".repeat(skill.name.length)}`);
+        console.log(`${skill.description}\n`);
+        console.log(skill.body);
+        const extra = skillContents(skill);
+        if (extra.length) console.log(`\nFiles: ${extra.join(", ")}`);
+        break;
+      }
+
+      if (set.skills.length === 0 && set.problems.length === 0) {
+        console.log(
+          `No skills installed.\n\n` +
+            `  enio skills --install-examples   copy the bundled examples\n` +
+            `  enio skills --new <name>         scaffold your own\n\n` +
+            `They live in ${skillsDir()}`,
+        );
+        break;
+      }
+
+      for (const skill of set.skills) {
+        const flags = [
+          skill.manualOnly ? "manual-only" : null,
+          skill.allowedTools ? `tools: ${skill.allowedTools.join(",")}` : null,
+        ].filter(Boolean);
+        console.log(`${skill.name}${flags.length ? `  (${flags.join("; ")})` : ""}`);
+        console.log(`  ${skill.description}\n`);
+      }
+      for (const p of set.problems) {
+        console.error(`\x1b[33mskipped\x1b[0m ${p.path}\n  ${p.reason}\n`);
+      }
+      break;
+    }
+
     case "token": {
       if (rest.includes("--rotate")) {
         const path = join(config.dataDir, "token");
@@ -120,6 +199,13 @@ async function main(): Promise<void> {
         break;
       }
       console.log(ensureToken());
+      break;
+    }
+
+    case "skills-new":
+    case "skills-init": {
+      console.error(`Use: enio skills --new <name>  /  enio skills --install-examples`);
+      process.exit(1);
       break;
     }
 
@@ -382,6 +468,10 @@ enio — a local agent with tools and persistent memory
   enio unpref ID          remove one
   enio examples           list saved answer examples
 
+  enio skills              list installed skills
+  enio skills NAME         show one in full
+  enio skills --new NAME   scaffold a new skill
+  enio skills --install-examples
   enio token              print the API key for the HTTP endpoint
   enio token --rotate     generate a new one, invalidating the old
   enio backends           list model backends and how to switch
