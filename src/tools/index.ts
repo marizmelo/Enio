@@ -5,6 +5,7 @@ import { shellTools } from "./shell.js";
 import { buildWebTools } from "./web.js";
 import { memoryTools } from "./memory.js";
 import { skillTools } from "./skills.js";
+import { visionTools } from "./vision.js";
 import { loadMcpTools } from "./mcp.js";
 
 export interface Registry {
@@ -25,6 +26,7 @@ export async function buildRegistry(
     ...skillTools,
     ...memoryTools,
     ...fsTools,
+    ...visionTools,
     ...shellTools,
     ...buildWebTools(),
   ];

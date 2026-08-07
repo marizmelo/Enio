@@ -141,6 +141,41 @@ export const config = {
   braveApiKey: process.env.BRAVE_API_KEY ?? "",
   tavilyApiKey: process.env.TAVILY_API_KEY ?? "",
 
+  /**
+   * Vision. Deliberately separate from the chat backend: the main model stays
+   * text-only and images are turned into text before it sees them, so this can
+   * be swapped without touching anything upstream.
+   *
+   * auto = describe with a VLM if one is available, otherwise OCR
+   * ocr  = tesseract only, zero resident memory, no model needed
+   * vlm  = require a vision model, error if missing
+   * off  = report dimensions only
+   */
+  visionMode: env("VISION_MODE") ?? "auto",
+
+  /**
+   * moondream is the default because of memory, not quality: 1.7GB alongside
+   * Maple's 6.9GB is comfortable on a 16GB machine. gemma3:4b or qwen3-vl:4b
+   * describe better if you have the headroom.
+   */
+  visionModel: env("VISION_MODEL") ?? "moondream:v2",
+  visionBaseUrl: env("VISION_URL") ?? "http://127.0.0.1:11434",
+
+  /**
+   * Unload the vision model the instant it answers. Ollama's default is 5
+   * minutes, which on a 16GB machine means it sits on top of Maple long after
+   * it was needed. Set to "5m" if you attach images constantly and would
+   * rather pay memory than reload time.
+   */
+  visionKeepAlive: env("VISION_KEEP_ALIVE") ?? 0,
+  visionTimeoutMs: Number(env("VISION_TIMEOUT") ?? 120_000),
+
+  /**
+   * Where tesseract looks for language data. It fetches from a CDN on first
+   * use and caches; set this to a local folder for a fully offline install.
+   */
+  tesseractLangPath: env("TESSERACT_LANG_PATH") ?? "",
+
   /** Playwright page-load budget. SPAs are slow; this is not a network timeout. */
   browserTimeoutMs: Number(env("BROWSER_TIMEOUT") ?? 30_000),
 

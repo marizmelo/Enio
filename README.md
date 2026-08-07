@@ -214,6 +214,41 @@ Skills are reloaded from disk on every turn, so editing one takes effect on the 
 
 Files and shell are locked to `~/enio-workspace`. Paths outside it are refused and shell commands go through an allowlist. Put things you want it to work on in that folder.
 
+### Images
+
+Attach one with `@`, or let the model reach for it:
+
+```
+› what's the error in @screenshot.png
+› /commit-message and check @diagram.png matches the code
+```
+
+```sh
+enio vision                  # is vision set up?
+enio vision screenshot.png   # read one directly
+```
+
+**Images become text before the chat model sees them.** Maple has no vision path and never needs one — the image is read separately and the result injected as text. That means the vision model is swappable, or absent, without anything upstream noticing.
+
+**The memory design, since a 16GB Mac has no room for two resident models.** Maple holds ~6.9GB. The vision model loads on demand and unloads the instant it answers (`keep_alive: 0`, versus Ollama's 5-minute default). Peak is Maple plus the vision model for a few seconds of one call — about **8.6GB with moondream** — falling straight back to 6.9GB. Nothing accumulates.
+
+Two tiers, and it picks by what's actually available:
+
+| | Memory | Good at |
+|---|---|---|
+| **OCR** (tesseract.js) | none resident | Text in screenshots and documents. No model at all. |
+| **VLM** (moondream, 1.7GB) | transient | Describing scenes, UI states, diagrams. Weak on dense text. |
+
+They're complementary rather than ranked — small VLMs are specifically bad at dense text, which is exactly what OCR is for.
+
+```sh
+ollama pull moondream:v2     # 1.7GB, the default
+```
+
+`ENIO_VISION_MODEL=gemma3:4b` or `qwen3-vl:4b` describe noticeably better if you have headroom; `ENIO_VISION_MODE=ocr` skips models entirely; `off` reports dimensions only.
+
+Every path degrades rather than failing: no vision model falls back to OCR, no OCR data falls back to dimensions. An attachment can never fail the turn.
+
 ### Web search without a key
 
 ```sh
@@ -338,6 +373,7 @@ Set `ENIO_DIR` to put it elsewhere. Earlier layouts (`<repo>/runtime`, `~/maple`
 | `enio index` / `reindex` | fold conversations into memory |
 | `enio tasks` / `task` / `daemon` | scheduled work |
 | `enio suggest` | find what's worth automating |
+| `enio vision [IMAGE]` | check vision setup, or read one image |
 | `enio skills` | list, show, scaffold, install examples |
 | `enio tools` / `backends` / `mcp-init` | configuration |
 
@@ -433,6 +469,8 @@ The HTTP endpoint requires a bearer token, including on loopback. A web page you
 **Search returns 403** — SearXNG ships with JSON output off. The bundled `settings.yml` enables it; on your own instance, add `json` under `search.formats`.
 
 **A page comes back empty** — it renders with JavaScript. Install Playwright and the model will retry with `web_fetch_rendered`.
+
+**Images come back as just dimensions** — neither a vision model nor OCR was available. `enio vision` says which. `ollama pull moondream:v2` fixes the first; OCR needs its language data cached once from the network.
 
 **A task never runs** — the daemon has to be running (`enio daemon`). Check `enio tasks` for the next fire time and `enio task runs <name>` for what happened.
 

@@ -24,6 +24,7 @@
     "better-sqlite3": "^11.7.0",
     "croner": "^10.0.1",
     "linkedom": "^0.18.13",
+    "tesseract.js": "^7.0.0",
     "yaml": "^2.9.0",
     "zod": "^3.24.1"
   },

@@ -255,6 +255,20 @@ if ask "Install Playwright for JavaScript-heavy pages? (~150MB)"; then
   fi
 fi
 
+# ------------------------------------------------------ optional: vision
+if ask "Set up image reading? (a 1.7GB vision model, loaded only while in use)"; then
+  if command -v ollama >/dev/null && curl -sf http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+    if curl -s http://127.0.0.1:11434/api/tags | grep -q "moondream"; then
+      skip "moondream already pulled"
+    else
+      ollama pull moondream:v2 || warn "Pull failed; OCR will still work."
+    fi
+  else
+    printf '    Ollama not running — images will use OCR, which needs no model.\n'
+    printf '    For descriptions later: ollama pull moondream:v2\n'
+  fi
+fi
+
 # ------------------------------------------------------ optional: skills
 if [ -d "$AGENT_DIR/examples/skills" ] && ask "Install the example skills? (commit messages, weekly review, research)"; then
   ( cd "$AGENT_DIR" && node dist/index.js skills --install-examples ) \

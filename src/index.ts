@@ -12,6 +12,7 @@ import {
   setTaskEnabled, startScheduler, validateSchedule,
 } from "./tasks.js";
 import { analyse, draftSkill } from "./suggest.js";
+import { visionStatus } from "./vision.js";
 import { cpSync, mkdirSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { BACKENDS } from "./backends.js";
@@ -335,6 +336,40 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "vision": {
+      const target = rest.find((a) => !a.startsWith("--"));
+      if (target) {
+        const { readImage } = await import("./vision.js");
+        const { safePath } = await import("./tools/fs.js");
+        const started = Date.now();
+        const result = await readImage(safePath(target));
+        console.log(`${result.text}\n`);
+        console.log(
+          `\x1b[2mread by ${result.method} in ${((Date.now() - started) / 1000).toFixed(1)}s\x1b[0m`,
+        );
+        break;
+      }
+
+      const status = await visionStatus();
+      console.log(`mode           ${status.mode}`);
+      console.log(`model          ${status.model}`);
+      console.log(`ollama         ${status.ollamaReachable ? "reachable" : "not running"}`);
+      console.log(`model pulled   ${status.modelPulled ? "yes" : "no"}`);
+      console.log(`ocr            ${status.ocrReady ? "ready" : "language data not cached"}`);
+      console.log("");
+      if (!status.ollamaReachable) {
+        console.log(`Without Ollama, images fall back to OCR — which needs no model at all`);
+        console.log(`and handles screenshots of text well. For descriptions:`);
+        console.log(`  ollama serve && ollama pull ${status.model}`);
+      } else if (!status.modelPulled) {
+        console.log(`  ollama pull ${status.model}     # ~1.7GB, loads only while in use`);
+      } else {
+        console.log(`Ready. Images are described on demand and the model unloads`);
+        console.log(`immediately after, so nothing sits alongside your chat model.`);
+      }
+      break;
+    }
+
     case "token": {
       if (rest.includes("--rotate")) {
         const path = join(config.dataDir, "token");
@@ -624,6 +659,7 @@ enio — a local agent with tools and persistent memory
   enio skills NAME         show one in full
   enio skills --new NAME   scaffold a new skill
   enio skills --install-examples
+  enio vision [IMAGE]      check vision setup, or read one image
   enio token              print the API key for the HTTP endpoint
   enio token --rotate     generate a new one, invalidating the old
   enio backends           list model backends and how to switch

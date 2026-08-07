@@ -63,7 +63,7 @@ export const SPECIALISTS: Specialist[] = [
       `failures — do not describe an intended outcome as if it happened.\n\n` +
       `Everything is scoped to the workspace directory. Paths outside it are ` +
       `refused, which is expected, not a bug to work around.`,
-    tools: ["read_file", "write_file", "list_dir", "run_command", "read_skill"],
+    tools: ["read_file", "write_file", "list_dir", "run_command", "read_image", "read_skill"],
     mcpServers: ["filesystem", "git", "github"],
   },
   {

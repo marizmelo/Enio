@@ -9,6 +9,7 @@ import { invokedSkillBlock } from "./mentions.js";
 import type { Skill } from "./skills.js";
 import { safePath } from "./tools/fs.js";
 import { readFile } from "node:fs/promises";
+import { isImage, readImage } from "./vision.js";
 import type { Registry } from "./tools/index.js";
 import { toWireTool, type Message, type ToolCall } from "./types.js";
 
@@ -250,9 +251,23 @@ export async function runTurn(
 async function readAttachments(files: string[]): Promise<string> {
   if (files.length === 0) return "";
   const blocks: string[] = [];
+
   for (const rel of files.slice(0, 5)) {
     try {
-      const text = await readFile(safePath(rel), "utf8");
+      const absolute = safePath(rel);
+
+      // An attached image is converted to text here rather than being handed
+      // to the model. That is what lets a text-only model handle images at
+      // all, and it means the vision model is an implementation detail.
+      if (isImage(rel)) {
+        const reading = await readImage(absolute);
+        blocks.push(
+          `<image path="${rel}" read-by="${reading.method}">\n${reading.text}\n</image>`,
+        );
+        continue;
+      }
+
+      const text = await readFile(absolute, "utf8");
       const clipped =
         text.length > 12_000 ? text.slice(0, 12_000) + "\n[...truncated]" : text;
       blocks.push(`<file path="${rel}">\n${clipped}\n</file>`);
@@ -260,7 +275,8 @@ async function readAttachments(files: string[]): Promise<string> {
       blocks.push(`<file path="${rel}">could not read: ${(err as Error).message}</file>`);
     }
   }
-  return `The user attached these files:\n\n${blocks.join("\n\n")}`;
+
+  return `The user attached these. Images have already been read for you — the\ntext below is what they contain.\n\n${blocks.join("\n\n")}`;
 }
 
 async function executeCall(
