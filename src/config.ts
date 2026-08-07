@@ -10,26 +10,34 @@ export const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), ".."
 /**
  * Where the model runtime and weights live.
  *
- * Default is `<repo>/runtime`, so the whole system is one directory tree you
- * can move or delete in one go. It is gitignored: it holds a clone of someone
- * else's repo plus ~5GB of weights, neither of which belongs in this history.
- * A submodule would be the textbook way to pin an external repo, but we never
- * modify that fork, so it would buy nothing and cost every clone a
- * --recurse-submodules footgun.
+ * Default is `~/.maple-agent/runtime`, alongside the database and API key —
+ * machine-local state, not source. Deliberately OUTSIDE the repo:
  *
- * Earlier installs put this at ~/maple. That layout still works and is picked
- * up automatically, so upgrading doesn't force a 5GB re-download.
+ *  - Time Machine, iCloud and Dropbox crawl a project folder; 5.5GB of weights
+ *    in it turns every backup into a slog.
+ *  - IDE indexers and file watchers try to walk it.
+ *  - `rm -rf` on the project, or re-cloning it, would otherwise cost a 5GB
+ *    re-download. Keeping it out means the expensive part survives.
+ *
+ * Git never saw it either way — it has always been ignored — but "not in the
+ * repo" and "not in the folder" are different problems, and only the second
+ * one is what tooling actually trips over.
+ *
+ * Earlier layouts (`<repo>/runtime`, `~/maple`) are detected so upgrading never
+ * forces a re-download.
  */
 function resolveMapleDir(): string {
   if (process.env.MAPLE_DIR) return process.env.MAPLE_DIR;
 
-  const vendored = join(projectRoot, "runtime");
-  if (existsSync(vendored)) return vendored;
+  const dataDir = process.env.MAPLE_DATA_DIR ?? join(homedir(), ".maple-agent");
+  const preferred = join(dataDir, "runtime");
+  if (existsSync(join(preferred, ".venv"))) return preferred;
 
-  const legacy = join(homedir(), "maple");
-  if (existsSync(join(legacy, ".venv"))) return legacy;
+  for (const previous of [join(projectRoot, "runtime"), join(homedir(), "maple")]) {
+    if (existsSync(join(previous, ".venv"))) return previous;
+  }
 
-  return vendored;
+  return preferred;
 }
 
 /** Resolved without throwing so a typo in MAPLE_BACKEND surfaces as a clear

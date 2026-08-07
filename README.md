@@ -1,199 +1,133 @@
 # maple-agent
 
-A local agent harness for [DeepGrove Maple](https://huggingface.co/deepgrove/maple-preview): tools, MCP servers, and persistent knowledge-graph memory. Everything runs on your machine — no API keys required, no data leaves the box.
+A local AI agent for macOS. Runs [DeepGrove Maple](https://huggingface.co/deepgrove/maple-preview) on your own machine and gives it tools, MCP servers, and memory that persists across conversations.
 
-## What this is
+No API keys. No account. Nothing leaves your computer.
 
-`mlx_lm.server` gives you a fast local model with an OpenAI-compatible API. It does not give you tools that actually execute, or memory that survives restarting the process. This adds both.
+---
 
-```
-┌─────────────┐    ┌──────────────────────────────┐    ┌──────────────────┐
-│ REPL        │    │ maple-agent                  │    │ mlx_lm.server    │
-│ or any      │───▶│  tool loop · memory · MCP    │───▶│  Maple 20B-A1B   │
-│ OpenAI      │    │  :8787                       │    │  :8080  (Python) │
-│ client      │    └───────────┬──────────────────┘    └──────────────────┘
-└─────────────┘                │
-                      ┌────────▼─────────┐
-                      │ SQLite           │
-                      │  raw transcripts │
-                      │  facts + vectors │
-                      │  entities/edges  │
-                      └──────────────────┘
-```
+## Requirements
 
-The only Python is the model server itself, started for you as a subprocess. Everything you'd edit is TypeScript.
+| | |
+|---|---|
+| **Mac with Apple Silicon** | M1 or newer. Intel Macs can't run this. |
+| **16GB RAM** | 8GB works but swaps hard — the model needs ~7GB. |
+| **15GB free disk** | ~5.5GB model, the rest is dependencies. |
+| **Node.js 22+** | `brew install node` |
+| **Xcode command line tools** | `xcode-select --install` |
+
+Optional: Docker, for keyless web search.
 
 ## Install
 
 ```sh
-git clone <your-remote> maple-agent && cd maple-agent
+git clone <your-remote> maple-agent
+cd maple-agent
+bash install.sh
 ```
 
-One command does everything — model runtime, weights, agent, and optional extras:
+That's the whole thing. It checks your hardware, installs `uv`, downloads the model runtime and weights, builds the agent, runs the tests, and offers to set up web search, browser rendering, and the desktop app. At the end it offers to launch.
 
 ```sh
-bash install.sh          # interactive
-bash install.sh --yes    # accept all defaults
-bash install.sh --minimal   # core only, no search/browser/desktop
+bash install.sh --yes        # no prompts, accept every default
+bash install.sh --minimal    # core only, skip the optional parts
 ```
 
-It's idempotent: every step checks before doing work, so re-running after a failed download resumes rather than restarting. Optional components that fail are reported at the end and don't block the rest.
+It's idempotent. If the 5GB download dies halfway, re-run and it resumes. Optional components that fail are listed at the end and don't block anything else.
 
-Then:
+**First run takes a while** — mostly the weights. Later runs start in about 30 seconds.
+
+## Run it
 
 ```sh
-source ~/.maple-agent/env
-node dist/index.js up      # terminal 1 — loads ~5GB, ~30s first time
-node dist/index.js chat    # terminal 2
+node dist/index.js start
 ```
 
-Or the desktop app, which starts both servers itself:
+Starts the model, waits for it, opens chat. Ctrl-C stops both.
+
+Or the desktop app, which does the same in a window:
 
 ```sh
 cd desktop && npm start
 ```
 
-## What's on disk
+Run `npm link` once to type `maple` instead of `node dist/index.js`.
 
-`install.sh` produces one directory tree:
+---
+
+## Using it
 
 ```
-maple-agent/
-├── src/  desktop/  searxng/  scripts/   ← tracked in git
-├── install.sh  README.md  tunnel.md
-├── node_modules/                        ← gitignored
-├── dist/                                ← gitignored, built
-└── runtime/                             ← gitignored, ~5.5GB
-    ├── .venv/                              python + mlx-lm
-    └── maple-2bit-mlx/                     the weights
+› what files are in my workspace
+  → coder
+  ⚒ list_dir {"path":"."}
+    ↳ notes.md (1204 bytes)
+
+You have one file, notes.md.
 ```
 
-Plus two things deliberately kept outside, because they're *yours* rather than the app's:
+`→ coder` is the router choosing a specialist. `⚒` lines are tools running.
 
-- `~/.maple-agent/` — memory database, API key, config. Survives deleting and reinstalling the project.
-- `~/maple-workspace/` — what the file and shell tools can touch.
+### Commands in chat
 
-### Do you need `runtime/`?
-
-Yes, to run Maple. It holds the Python inference engine and the 5GB of weights — the agent is a client, it doesn't do inference itself. Earlier versions put this at `~/maple`; that still works and is detected automatically, and `install.sh` offers to move it rather than re-download.
-
-It stays out of git on purpose: it's a clone of [someone else's repo](https://github.com/deepgrove-ai/mlx-lm-deepgrove) plus multi-gigabyte binaries. A submodule would be the textbook way to pin an external repo, but you never modify that fork, so it buys nothing and costs every clone a `--recurse-submodules` footgun.
-
-**You can skip it entirely** if you point at a different backend. With Ollama already running, `runtime/` is dead weight:
-
-```sh
-bash install.sh --minimal        # then delete runtime/ if you want
-MAPLE_BACKEND=ollama MAPLE_MODEL=qwen3:8b maple chat
-```
-
-The agent, memory, specialists and tools are all backend-agnostic.
-
-## Specialists
-
-Each turn is routed to one specialist with a narrow, coherent tool set:
-
-| | sees |
+| | |
 |---|---|
-| **researcher** | `web_search`, `web_fetch`, `web_fetch_rendered`, `recall` |
-| **coder** | `read_file`, `write_file`, `list_dir`, `run_command` |
-| **librarian** | `recall`, `remember`, `set_preference` |
-| **generalist** | `recall` — the safe fallback |
+| `/good` | save the last answer as an example to imitate later |
+| `/pref "be concise"` | add a standing instruction |
+| `/pref` | list them |
+| `/unpref 3` | remove one |
+| `/think` | show the model's reasoning |
+| `/stats` | what memory holds |
+| `/clear` | forget this conversation (not what's on disk) |
+| `/quit` | exit and fold this conversation into memory |
 
-This exists because of the tool budget, not org-chart aesthetics. Maple picks badly once it can see more than a handful of tools, and 16 is roughly the ceiling. Showing it 4–5 disjoint, coherent tools is the single largest available improvement to small-model tool accuracy — larger than any prompt tweak.
+### Teaching it
 
-Depth is capped at one hop: router → specialist → answer. No agent-to-agent conversation. Every hand-off compounds error, and at ~1B active parameters that compounds fast. Routing costs one short extra call and nothing else, since specialists are the same weights with a different system prompt. `MAPLE_ROUTING=0` disables it.
+Three mechanisms, none involving training:
 
-The router constrains output to a closed set — same trick as memory extraction — and salvages a bare specialist name when the JSON is malformed, which is the common small-model failure: right answer, wrong envelope.
+**Facts** — say "I'm working on a deploy tool for Acme" and it stores that. Extraction also runs automatically over each finished conversation.
 
-## Learning over time
+**Preferences** — `/pref "no bullet points"` applies to every future conversation. Different from a fact: facts inform answers, preferences shape them.
 
-Three mechanisms, none of which touch weights.
-
-**Facts** are what's true about you. Covered above.
-
-**Preferences** are how you want it to behave — `/pref "answer concisely"`. Kept apart from facts deliberately: facts compete for space under relevance ranking, and a standing instruction that only fires when it happens to rank well is not a standing instruction. All preferences are injected every turn, capped at 12 because past that a small model starts following whichever it noticed last.
-
-**Exemplars** are the interesting one. After a good answer, `/good` saves the (question, answer) pair. On similar future questions the nearest examples are retrieved and shown as demonstrations. This is the closest thing to learning available without training: it changes behaviour, generalises, works immediately, and is trivially reversible.
-
-The similarity floor is high (0.55) and the cap is two. A loosely-related example is worse than none — the model imitates its shape and answers the example's question instead of yours. When embeddings are unavailable it returns nothing rather than falling back to lexical matching, for the same reason.
-
-If you want it to know about *the world* since its cutoff rather than about you, that's retrieval, not training. Fine-tuning teaches form; retrieval teaches facts. Training on a corpus produces fluent, correctly-shaped, subtly-wrong answers with no provenance.
-
-## Swapping the model
-
-Maple is the default, but anything OpenAI-compatible works:
+**Examples** — after a response you like, `/good`. On similar questions later that exchange is shown as a demonstration. The fastest way to change how it writes.
 
 ```sh
-maple backends                                       # list them
-MAPLE_BACKEND=ollama MAPLE_MODEL=qwen3:8b maple chat
+maple stats              # counts
+maple graph "acme"       # what it knows about something
+maple remember "..."     # pin a fact by hand
+maple prefs              # standing instructions
+maple examples           # saved examples
+maple reindex            # rebuild memory from raw transcripts
 ```
 
-Presets exist for `ollama`, `lmstudio`, `llamacpp` and `custom` because the *quirks* differ, not just the URL. mlx-lm reads `max_tokens: -1` as unlimited; Ollama and OpenAI return a 400 for a negative value, so the field is omitted for those. Tool calling also requires a model actually trained for it — most small instruct models aren't, and fail silently by answering in prose instead of calling anything.
+### Tools
 
-## How memory works
+`read_file`, `write_file`, `list_dir`, `run_command`, `web_search`, `web_fetch`, `web_fetch_rendered`, `remember`, `recall`, `set_preference`.
 
-Three layers, deliberately kept separate because they fail in different ways.
+Files and shell are locked to `~/maple-workspace`. Paths outside it are refused and shell commands go through an allowlist. Put things you want it to work on in that folder.
 
-**Raw transcripts** are the source of truth. Every message is written to SQLite as it happens. Nothing derives from anything else at this layer, so nothing here can be corrupted by a bad extraction.
-
-**Explicit facts** come from the model calling `remember`, or you running `maple remember "..."`. These are the highest-signal memories because someone deliberately chose to store them. Marking one important pins it, and pinned facts are injected into every conversation regardless of relevance ranking — identity, not retrieval.
-
-**The knowledge graph** is *derived*. After a conversation ends, a batch job asks Maple to extract entities and relations, which land in `entities` and `edges` tables. Because it's derived, `maple reindex` throws it all away and rebuilds from the transcripts — including, later, with a better model.
-
-Retrieval blends all three into a `<memory>` block prepended to the system prompt: pinned facts always, plus semantically-matched facts, one-hop graph neighbours of matched entities, and summaries of related past conversations. It's budgeted to ~4000 characters because a small model's attention is the scarce resource — 800 characters of the right context beats 4000 characters of nearly-right context, measurably.
-
-### Why extraction is constrained
-
-Maple is a preview model with ~1B active parameters. Asked to "extract any facts you see," it produces inconsistent relation names (`USES` / `uses` / `USES_TOOL` / `is_using`), entities that are really whole sentences, and near-duplicates that never merge. A graph built that way gets worse as it grows.
-
-So extraction is restricted to a closed vocabulary — nine relations, six entity types, defined in `src/memory/schema.ts`. That turns open-ended generation into something much closer to classification, which small models are far better at. Output is validated with Zod, retried once on failure, and dropped if it fails twice. An empty extraction is treated as a correct answer.
-
-**Keep those lists short.** Every relation you add measurably increases confusion. Anything that doesn't fit the vocabulary should go in `facts` instead, which is free text.
-
-Confidence rises on repeated observation rather than being asserted once. With a single weak extractor, seeing the same claim in a second conversation is the only evidence of correctness available.
-
-Superseded edges get a `valid_to` timestamp instead of being deleted. "You use Hyper" doesn't stop being true about the past when it stops being true about the present, and a memory that silently rewrites history is worse than one that forgets.
-
-## Tools
-
-Built in: `remember`, `recall`, `read_file`, `write_file`, `list_dir`, `run_command`, `web_search`, `web_fetch`, and `web_fetch_rendered` (when Playwright is installed).
-
-Filesystem and shell access are hard-scoped to `MAPLE_WORKSPACE`. Paths are resolved before the containment check, which is what makes it robust against `../` traversal and outward-pointing symlinks. Shell commands go through an allowlist of executables, checked across pipes and `&&` chains rather than just the first word, and command substitution is refused outright.
-
-`MAPLE_ALLOW_ANY_COMMAND=1` disables that. It is a genuinely different risk posture: the model can then run anything your user account can, and it is small enough to be talked into things by content it reads out of a file or a web page.
-
-### Web search without an API key
-
-Search resolves through providers in order: SearXNG, then Brave, then Tavily. SearXNG is a self-hosted metasearch engine that aggregates ~70 engines — no key, no account, nothing leaves your network except the searches themselves.
+### Web search without a key
 
 ```sh
 cd searxng && docker compose up -d
 export SEARXNG_URL=http://127.0.0.1:8888
 ```
 
-The bundled `settings.yml` already has the one setting everyone gets caught by: **JSON output is disabled in SearXNG by default**, and without it every API call returns a bare `403 Forbidden` that explains nothing. It's the `json` entry under `search.formats`.
+[SearXNG](https://docs.searxng.org/) is a self-hosted metasearch engine aggregating ~70 sources. `install.sh` sets it up if you say yes. Brave and Tavily work too — set `BRAVE_API_KEY` or `TAVILY_API_KEY`.
 
-Scraping Google or Bing directly isn't offered. It breaks their terms, it breaks constantly because they defend against it, and a headless browser only postpones that.
-
-### JavaScript-rendered pages
-
-`web_fetch` is plain HTTP plus [Readability](https://github.com/mozilla/readability) — Firefox reader mode's algorithm, which scores DOM nodes by text density and link ratio to find the real article. It's fast and handles most of the web.
-
-For pages that render client-side, install Playwright and a second tool appears:
+For pages that need JavaScript:
 
 ```sh
 npm install playwright && npx playwright install chromium
 ```
 
-It's an optional dependency (~150MB of Chromium), and when absent `web_fetch_rendered` simply isn't offered rather than existing and failing — a tool that always errors just burns the model's attention. `web_fetch` detects thin extractions and tells the model to retry with the rendered version.
-
 ### MCP servers
 
 ```sh
-node dist/index.js mcp-init   # writes ~/.maple-agent/mcp.json
+maple mcp-init      # writes ~/.maple-agent/mcp.json
 ```
 
-The format matches Claude Desktop's, so existing configs copy across unchanged, with one addition — a per-server `tools` allowlist:
+Same format as Claude Desktop, so existing configs copy across. One addition — a per-server `tools` allowlist:
 
 ```json
 {
@@ -207,77 +141,170 @@ The format matches Claude Desktop's, so existing configs copy across unchanged, 
 }
 ```
 
-That allowlist matters more than it looks. A typical MCP server exposes 10–30 tools; two or three servers blow past what a ~1B-active model can choose between. The failure mode isn't an error — it's the model quietly picking the wrong tool. There's a hard ceiling of 16 exposed tools (`MAPLE_MAX_TOOLS`), and anything over budget is dropped with a warning rather than silently truncated.
+Use it. A typical MCP server exposes 10–30 tools and the model degrades badly past ~16 total. The starter config includes Playwright MCP, disabled, with an allowlist ready.
 
-## As a server
+### Using it from other apps
 
 ```sh
-node dist/index.js serve
-maple token                # the API key
+maple serve
+maple token          # the API key
 ```
 
-Exposes an OpenAI-compatible endpoint on `http://127.0.0.1:8787/v1` wrapping the *agent* — tools, memory and specialists included. Point Open WebUI, an editor extension, or your own scripts at it. Different port from the raw model on `:8080`, which has none of that.
+An OpenAI-compatible endpoint on `http://127.0.0.1:8787/v1` wrapping the full agent. Point Open WebUI, an editor extension, or a script at it — paste the token where the client asks for an API key.
 
-Every `/v1/*` request needs `Authorization: Bearer <key>`, which is what OpenAI-compatible clients already send for their API key — paste it into their existing field. The key is generated on first run into `~/.maple-agent/token` (mode 0600).
+To reach it from your phone or another network, see **[tunnel.md](tunnel.md)**.
 
-Auth applies on loopback too, deliberately. A web page you have open can issue requests to `127.0.0.1`, and origin checks aren't a boundary against no-cors posts or DNS rebinding. Since the `coder` specialist has `run_command`, an unauthenticated endpoint here is remote code execution wearing a chat interface.
+### Using a different model
 
-`/ping` is the one open route, returning `{"ok":true}` and nothing else so clients can check liveness before they have a key.
+```sh
+maple backends
+MAPLE_BACKEND=ollama MAPLE_MODEL=qwen3:8b maple chat
+```
 
-To reach it from your phone or elsewhere, see **[tunnel.md](tunnel.md)** — Tailscale and Cloudflare Tunnel setups, and why NAT traversal works the way it does.
+Works with Ollama, LM Studio, llama.cpp, or any OpenAI-compatible endpoint. Everything above the model — memory, specialists, tools — is backend-agnostic, so you can delete the Maple runtime entirely if you go this route.
 
-## Commands
+Tool calling needs a model actually trained for it. Most small instruct models aren't, and fail by answering in prose instead of calling anything.
+
+---
+
+## What goes where
+
+The repo stays small — a clone is well under a megabyte:
+
+```
+maple-agent/
+├── src/  desktop/  searxng/  scripts/
+├── install.sh  README.md  tunnel.md
+├── node_modules/   dist/          ← gitignored
+```
+
+Everything large or personal lives outside it:
+
+```
+~/.maple-agent/
+├── runtime/          ← python env + weights, ~5.5GB
+├── memory.db         ← conversations, facts, knowledge graph
+├── token             ← API key for the HTTP endpoint
+└── mcp.json  env
+
+~/maple-workspace/    ← what the file and shell tools can reach
+```
+
+The runtime is out of the project on purpose. It was always gitignored, but "not in the repo" and "not in the folder" are different problems — Time Machine and iCloud crawl the folder, IDE indexers try to walk it, and `rm -rf` on the project would cost you a 5GB re-download. Keeping it in `~/.maple-agent/` means you can delete and re-clone the project freely; the expensive part and everything it has learned both survive.
+
+Set `MAPLE_DIR` to put it elsewhere. Earlier layouts (`<repo>/runtime`, `~/maple`) are detected automatically, and `install.sh` offers to move rather than re-download.
+
+## All commands
 
 | | |
 |---|---|
-| `maple up` | start the model server |
-| `maple chat [--think]` | interactive chat; `--think` shows reasoning |
+| `maple start` | model + chat, the usual entry point |
+| `maple chat` | chat against an already-running model |
+| `maple up` | model server in the foreground |
 | `maple serve` | OpenAI-compatible endpoint on :8787 |
-| `maple index` | fold unindexed conversations into memory |
-| `maple reindex` | rebuild the graph from raw transcripts |
-| `maple stats` | what memory holds |
-| `maple graph "topic"` | inspect what the graph knows |
-| `maple remember "..."` | pin a fact by hand |
-| `maple forget "..."` | remove a fact |
-| `maple tools` | list every tool, built-in and MCP |
-| `maple backends` | list model backends |
-| `maple prefs` / `maple pref "..."` | standing instructions |
-| `maple examples` | saved answer exemplars |
-| `maple token` | print the API key (`--rotate` to replace it) |
+| `maple token` | print the API key (`--rotate` to replace) |
+| `maple stats` / `graph` / `remember` / `forget` | memory |
+| `maple prefs` / `pref` / `unpref` / `examples` | learned behaviour |
+| `maple index` / `reindex` | fold conversations into memory |
+| `maple tools` / `backends` / `mcp-init` | configuration |
 
 ## Configuration
 
-All environment variables, all optional. See `src/config.ts`.
+Environment variables, all optional. See `src/config.ts`.
 
-| Variable | Default |
+| | |
 |---|---|
-| `MAPLE_DIR` | `~/maple` |
 | `MAPLE_WORKSPACE` | `~/maple-workspace` |
+| `MAPLE_DIR` | `~/.maple-agent/runtime` |
 | `MAPLE_DATA_DIR` | `~/.maple-agent` |
-| `MAPLE_BASE_URL` | `http://127.0.0.1:8080/v1` |
+| `MAPLE_BACKEND` | `maple` |
+| `MAPLE_ROUTING` | `1` — set `0` for one agent with every tool |
 | `MAPLE_MAX_TOOLS` | `16` |
-| `MAPLE_MAX_ITERS` | `8` |
-| `SEARXNG_URL` | unset — set to `http://127.0.0.1:8888` after starting it |
-| `BRAVE_API_KEY` / `TAVILY_API_KEY` | unset — fallbacks if you'd rather not self-host |
-| `MAPLE_BROWSER_TIMEOUT` | `30000` |
+| `SEARXNG_URL` | unset |
+| `MAPLE_ALLOW_ANY_COMMAND` | unset — see below |
 
-## Honest limitations
+---
 
-**Multi-step tool chains are unreliable.** Maple handles one or two tool calls well. Past three or four it loses the thread of what it was doing. The loop is capped at 8 rounds and forces an answer on the last one, so it degrades into a partial answer rather than spinning.
+## How it works
 
-**Extraction quality is capped by the model.** Expect noise in the graph. `maple graph "topic"` shows you what it believes; `maple reindex` rebuilds from scratch when you want to start over. If memory quality ever becomes the thing you care about most, pointing extraction at a stronger model is a change to one function in `src/memory/extract.ts` — the transcripts are all still there.
+### Specialists
 
-**Embeddings degrade gracefully but noticeably.** If the embedding model can't be downloaded, recall falls back to lexical overlap, which is meaningfully worse at finding things phrased differently. It'll tell you when this happens.
+Every turn is routed to one specialist with a narrow tool set:
 
-**The tool budget is real.** 16 tools is not a lot if you connect several MCP servers. Use the allowlists.
+| | sees |
+|---|---|
+| **researcher** | `web_search`, `web_fetch`, `web_fetch_rendered`, `recall` |
+| **coder** | `read_file`, `write_file`, `list_dir`, `run_command` |
+| **librarian** | `recall`, `remember`, `set_preference` |
+| **generalist** | `recall` — the safe fallback |
+
+This exists because of the tool budget, not org-chart aesthetics. Maple picks badly once it sees more than a handful of tools. Showing it 4–5 disjoint, coherent tools is the single largest available improvement to small-model tool accuracy — larger than any prompt tweak.
+
+Depth is capped at one hop: router → specialist → answer. No agent-to-agent conversation. Every hand-off compounds error, and at ~1B active parameters that compounds fast.
+
+The router constrains output to a closed set — the same trick as memory extraction — and salvages a bare specialist name when the JSON is malformed, which is the characteristic small-model failure: right answer, wrong envelope.
+
+### Memory
+
+Three layers that fail differently, so they're kept apart.
+
+**Raw transcripts** are the source of truth, written as they happen. Nothing derives from anything else here, so nothing can be corrupted by a bad extraction.
+
+**Explicit facts** come from `remember`. Someone deliberately chose to store these, so they're the highest-signal memories. Pinned ones are injected every conversation regardless of ranking — identity, not retrieval.
+
+**The knowledge graph** is *derived*. A batch job extracts entities and relations after each conversation. Because it's derived, `maple reindex` discards and rebuilds it from the transcripts — including, later, with a better model.
+
+Retrieval blends all three into a `<memory>` block budgeted to ~4000 characters. A small model's attention is the scarce resource: 800 characters of the right context beats 4000 of nearly-right, measurably.
+
+### Why extraction is constrained
+
+Asked to "extract any facts you see," a ~1B-active model produces inconsistent relation names (`USES` / `uses` / `USES_TOOL` / `is_using`), entities that are really sentences, and near-duplicates that never merge. A graph built that way degrades as it grows.
+
+So extraction is restricted to nine relations and six entity types (`src/memory/schema.ts`). That turns open-ended generation into something close to classification, which small models handle far better. Output is validated, retried once, dropped if it fails twice. An empty extraction is a correct answer.
+
+**Keep those lists short.** Every added relation measurably increases confusion. Anything that doesn't fit belongs in `facts`, which is free text.
+
+Confidence rises on repeated observation rather than being asserted once — with a single weak extractor, seeing a claim again is the only evidence of correctness available. Superseded edges get a `valid_to` timestamp instead of being deleted; a memory that silently rewrites history is worse than one that forgets.
+
+### Learning without training
+
+Fine-tuning teaches form. Retrieval teaches facts. People get this backwards, train on a corpus expecting recall, and get fluent, correctly-shaped, subtly-wrong answers with no provenance.
+
+So: preferences and exemplars, not weights. Preferences are injected every turn, capped at 12 — past that a small model follows whichever it noticed last. Exemplars use a high similarity floor (0.55) and a cap of two, because a loosely-related example is worse than none: the model imitates its shape and answers the example's question instead of yours. When embeddings are unavailable it returns none rather than falling back to lexical matching, for the same reason.
+
+### Security
+
+Files and shell are scoped to the workspace. Paths are resolved *before* the containment check, which is what makes it robust against `../` traversal and outward-pointing symlinks — checking the string first, the common mistake, catches neither. Shell commands go through an allowlist checked across pipes and `&&` chains rather than just the first word, and command substitution is refused.
+
+`MAPLE_ALLOW_ANY_COMMAND=1` removes that. It's a genuinely different risk posture: the model can then run anything your account can, and it's small enough to be talked into things by content it reads from a file or a web page.
+
+The HTTP endpoint requires a bearer token, including on loopback. A web page you have open can issue requests to `127.0.0.1`, and origin checks aren't a boundary against no-cors posts or DNS rebinding. Since the `coder` specialist has `run_command`, an unauthenticated endpoint here is remote code execution wearing a chat interface.
+
+---
+
+## Troubleshooting
+
+**"No model runtime found"** — run `bash install.sh`, or set `MAPLE_DIR`, or switch backends with `MAPLE_BACKEND=ollama`.
+
+**Model won't start** — `tail -50 ~/.maple-agent/model-server.log`. Usually a half-finished weight download; re-run `install.sh` to resume.
+
+**Slow, or the fans spin up** — check RAM. The model wants ~7GB; if other apps hold most of yours, it swaps.
+
+**Search returns 403** — SearXNG ships with JSON output off. The bundled `settings.yml` enables it; on your own instance, add `json` under `search.formats`.
+
+**A page comes back empty** — it renders with JavaScript. Install Playwright and the model will retry with `web_fetch_rendered`.
+
+**It picks the wrong tool** — probably over the tool budget. `maple tools` shows the count; add allowlists to your MCP servers.
+
+**It forgot something** — `maple stats` shows whether anything is unindexed; `maple index` folds it in. Memory is written at the end of a conversation, so a hard kill can lose the last one.
 
 ## Development
 
 ```sh
 npm run typecheck
-npm test          # 98 tests, no model server required — the model is stubbed
+npm test        # 98 tests, no model server needed — the model is stubbed
 ```
 
-The test suite covers the parts most likely to break quietly: malformed-JSON repair, `<think>` tags split across stream chunks, sandbox escapes, shell allowlist bypasses via pipes, SSRF-blocked hosts being rejected before any request is made, Readability extraction versus its fallback, and the full tool loop including hallucinated tool names and runaway loops.
+Tests cover what breaks quietly: JSON repair, `<think>` tags split across stream chunks, sandbox escapes, allowlist bypasses via pipes, SSRF hosts rejected before any request is made, constant-time token comparison, and the full tool loop including hallucinated tool names and runaway loops.
 
 MIT.

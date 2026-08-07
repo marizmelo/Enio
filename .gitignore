@@ -1,5 +1,5 @@
-# Model runtime: an upstream clone plus ~5GB of weights.
-# Recreated by install.sh; must never enter this history.
+# Model runtime now installs to ~/.maple-agent/runtime, outside the project.
+# Still ignored here in case someone points MAPLE_DIR back inside.
 runtime/
 
 # Build output

@@ -39,12 +39,16 @@ ask() {
 }
 
 AGENT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# Model runtime lives inside the project so the whole system is one directory.
-# runtime/ is gitignored -- it's someone else's repo plus ~5GB of weights.
-MAPLE_DIR="${MAPLE_DIR:-$AGENT_DIR/runtime}"
-LEGACY_DIR="$HOME/maple"
+DATA_DIR="${MAPLE_DATA_DIR:-$HOME/.maple-agent}"
+# The runtime (python env + ~5GB of weights) lives OUTSIDE the project, next to
+# the database. Keeps the repo small enough to zip, back up and index, and means
+# deleting or re-cloning the project doesn't cost a 5GB re-download.
+MAPLE_DIR="${MAPLE_DIR:-$DATA_DIR/runtime}"
 WORKSPACE="${MAPLE_WORKSPACE:-$HOME/maple-workspace}"
-ENV_FILE="$HOME/.maple-agent/env"
+ENV_FILE="$DATA_DIR/env"
+
+# Earlier layouts, checked so an upgrade never re-downloads.
+PREVIOUS_DIRS=("$AGENT_DIR/runtime" "$HOME/maple")
 
 FAILED_OPTIONAL=()
 
@@ -89,18 +93,26 @@ fi
 # ------------------------------------------------------------------- model
 say "Maple model runtime"
 
-# Earlier installs used ~/maple. Move it rather than re-downloading 5GB.
-if [ ! -d "$MAPLE_DIR" ] && [ -d "$LEGACY_DIR/.venv" ]; then
-  printf '    found an existing install at %s\n' "$LEGACY_DIR"
-  if ask "Move it into $MAPLE_DIR? (keeps the 5GB of weights, no re-download)"; then
-    mv "$LEGACY_DIR" "$MAPLE_DIR" && printf '    moved\n' || {
-      warn "Move failed; continuing to use $LEGACY_DIR."
-      MAPLE_DIR="$LEGACY_DIR"
-    }
-  else
-    MAPLE_DIR="$LEGACY_DIR"
-    printf '    leaving it where it is\n'
-  fi
+mkdir -p "$DATA_DIR"
+
+# Relocate an earlier install rather than downloading 5GB again.
+if [ ! -d "$MAPLE_DIR/.venv" ]; then
+  for prev in "${PREVIOUS_DIRS[@]}"; do
+    [ -d "$prev/.venv" ] || continue
+    printf '    found an existing runtime at %s\n' "$prev"
+    if ask "Move it to $MAPLE_DIR? (keeps the weights, no re-download)"; then
+      if mv "$prev" "$MAPLE_DIR"; then
+        printf '    moved\n'
+      else
+        warn "Move failed; continuing to use $prev."
+        MAPLE_DIR="$prev"
+      fi
+    else
+      MAPLE_DIR="$prev"
+      printf '    leaving it where it is\n'
+    fi
+    break
+  done
 fi
 
 if [ -d "$MAPLE_DIR/.git" ]; then
@@ -132,7 +144,7 @@ fi
 say "Agent"
 ( cd "$AGENT_DIR" && npm install --no-audit --no-fund ) || die "npm install failed."
 ( cd "$AGENT_DIR" && npm run build ) || die "Build failed."
-mkdir -p "$WORKSPACE" "$HOME/.maple-agent"
+mkdir -p "$WORKSPACE" "$DATA_DIR"
 
 printf '    running tests\n'
 if ( cd "$AGENT_DIR" && npm test >/tmp/maple-test.log 2>&1 ); then
@@ -199,7 +211,7 @@ say "Writing configuration"
 {
   echo "# Written by install.sh on $(date '+%Y-%m-%d %H:%M')."
   echo "# Source this, or copy the lines into your shell profile."
-  echo "export MAPLE_DIR=\"$MAPLE_DIR\""
+  echo "export MAPLE_DIR=\"$MAPLE_DIR\"   # python env + weights, ~5.5GB"
   echo "export MAPLE_WORKSPACE=\"$WORKSPACE\""
   [ "$SEARXNG_ENABLED" = "1" ] && echo 'export SEARXNG_URL="http://127.0.0.1:8888"'
   echo "# export MAPLE_BACKEND=ollama    # to use Ollama instead of Maple"
@@ -220,15 +232,13 @@ cat <<EOF
 
 ${BOLD}Start it${OFF}
 
-    source $ENV_FILE
     cd $AGENT_DIR
-    node dist/index.js up          ${DIM}# terminal 1 — model server${OFF}
-    node dist/index.js chat        ${DIM}# terminal 2${OFF}
+    node dist/index.js start       ${DIM}# starts the model, then opens chat${OFF}
 EOF
 
 [ "$DESKTOP_READY" = "1" ] && cat <<EOF
-${DIM}or, instead of both:${OFF}
-    cd $AGENT_DIR/desktop && npm start   ${DIM}# starts the servers for you${OFF}
+${DIM}or the desktop app, which does the same with a window:${OFF}
+    cd $AGENT_DIR/desktop && npm start
 EOF
 
 cat <<EOF
@@ -239,5 +249,35 @@ ${BOLD}Worth knowing${OFF}
     /pref "be concise" sets a standing instruction
     maple backends    switch to Ollama or another engine
     maple stats       see what it has remembered
+    maple --help      everything else
 
 EOF
+
+# ------------------------------------------------------------- launch now
+if [ "$ASSUME_YES" != "1" ] && [ "$MINIMAL" != "1" ]; then
+  LAUNCH_CHOICE=""
+  if [ "$DESKTOP_READY" = "1" ]; then
+    printf '%s?%s Start it now? [d]esktop app / [t]erminal / [n]o: ' "$BOLD" "$OFF"
+    read -r LAUNCH_CHOICE </dev/tty
+  else
+    printf '%s?%s Start it now in this terminal? [Y/n] ' "$BOLD" "$OFF"
+    read -r LAUNCH_CHOICE </dev/tty
+    case "$LAUNCH_CHOICE" in [nN]*) LAUNCH_CHOICE="n" ;; *) LAUNCH_CHOICE="t" ;; esac
+  fi
+
+  case "$LAUNCH_CHOICE" in
+    d|D)
+      printf '\n'
+      # exec replaces this shell, so the app owns the terminal and ctrl-C
+      # reaches it directly rather than killing the installer around it.
+      cd "$AGENT_DIR/desktop" && exec npm start
+      ;;
+    t|T)
+      printf '\n'
+      cd "$AGENT_DIR" && exec node dist/index.js start
+      ;;
+    *)
+      printf '%sNot started. Run it whenever you like.%s\n\n' "$DIM" "$OFF"
+      ;;
+  esac
+fi

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { existsSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, openSync, unlinkSync, writeFileSync } from "node:fs";
 import { ensureToken } from "./auth.js";
 import { join } from "node:path";
 import { activeBackend, config, ensureDirs } from "./config.js";
@@ -31,6 +31,10 @@ async function main(): Promise<void> {
   ensureDirs();
 
   switch (command) {
+    case "start":
+      await startEverything(rest.includes("--think"));
+      break;
+
     case "chat":
       await repl({ showThinking: rest.includes("--think") });
       break;
@@ -244,38 +248,43 @@ async function main(): Promise<void> {
   }
 }
 
-/** Launch mlx_lm.server from the checkout the setup script produced, and wait
- *  until it actually answers before returning. */
+const MODEL_ARGS = (modelPath: string) => [
+  "-m", "mlx_lm.server",
+  "--model", modelPath,
+  "--trust-remote-code",
+  "--flash-head",
+  "--port", "8080",
+];
+
+/** Verify the runtime exists before trying to use it, with an actionable error. */
+function requireRuntime(): string {
+  const venvPython = join(config.mapleDir, ".venv", "bin", "python");
+  if (!existsSync(venvPython)) {
+    console.error(
+      `\nNo model runtime found at ${config.mapleDir}\n\n` +
+        `Install it with:   bash install.sh\n` +
+        `Point elsewhere:   MAPLE_DIR=/path/to/runtime\n` +
+        `Or skip it and use another engine:\n` +
+        `                   MAPLE_BACKEND=ollama maple chat\n`,
+    );
+    process.exit(1);
+  }
+  return venvPython;
+}
+
+/** Foreground model server — logs to this terminal, runs until interrupted. */
 async function startModelServer(): Promise<void> {
   if (await serverIsUp()) {
     console.log(`Model server already running at ${config.modelBaseUrl}`);
     return;
   }
-
-  const venvPython = join(config.mapleDir, ".venv", "bin", "python");
-  if (!existsSync(venvPython)) {
-    console.error(
-      `No Python environment at ${venvPython}.\n` +
-        `Run the Maple setup script first, or set MAPLE_DIR to your checkout.`,
-    );
-    process.exit(1);
-  }
-
-  const modelPath = join(config.mapleDir, "maple-2bit-mlx");
+  const venvPython = requireRuntime();
   console.log(`Starting mlx_lm.server on ${config.modelBaseUrl} ...`);
 
-  const child = spawn(
-    venvPython,
-    [
-      "-m", "mlx_lm.server",
-      "--model", modelPath,
-      "--trust-remote-code",
-      "--flash-head",
-      "--port", "8080",
-    ],
-    { cwd: config.mapleDir, stdio: "inherit" },
-  );
-
+  const child = spawn(venvPython, MODEL_ARGS(join(config.mapleDir, "maple-2bit-mlx")), {
+    cwd: config.mapleDir,
+    stdio: "inherit",
+  });
   child.on("exit", (code) => process.exit(code ?? 0));
 
   // First load pages ~5GB off disk, so allow a generous window.
@@ -289,12 +298,76 @@ async function startModelServer(): Promise<void> {
   console.error("Server did not become ready within two minutes.");
 }
 
+/**
+ * `maple start` — the single command that does everything: brings the model up
+ * if it isn't already, waits for it, then drops into chat, and tears down only
+ * what it started.
+ *
+ * Two terminals was always an implementation detail leaking into the UX. The
+ * ownership rule matters: a model server that was already running is left
+ * alone on exit, because someone else is using it.
+ */
+async function startEverything(showThinking: boolean): Promise<void> {
+  let child: ReturnType<typeof spawn> | null = null;
+
+  if (await serverIsUp()) {
+    console.log(`\x1b[2mUsing the model server already running on ${config.modelBaseUrl}\x1b[0m`);
+  } else {
+    const venvPython = requireRuntime();
+    const logPath = join(config.dataDir, "model-server.log");
+    const log = openSync(logPath, "a");
+
+    process.stdout.write(
+      `\x1b[2mStarting the model — first load reads ~5GB, about 30 seconds\x1b[0m`,
+    );
+
+    child = spawn(venvPython, MODEL_ARGS(join(config.mapleDir, "maple-2bit-mlx")), {
+      cwd: config.mapleDir,
+      // Output goes to a file rather than the terminal so it doesn't scribble
+      // over the chat UI. The path is printed if startup fails.
+      stdio: ["ignore", log, log],
+    });
+
+    let exitedEarly = false;
+    child.on("exit", () => { exitedEarly = true; });
+
+    let ready = false;
+    for (let i = 0; i < 90 && !exitedEarly; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      if (i % 2 === 0) process.stdout.write("\x1b[2m.\x1b[0m");
+      if (await serverIsUp()) { ready = true; break; }
+    }
+    process.stdout.write("\n");
+
+    if (!ready) {
+      console.error(
+        `\nThe model server did not start.\n` +
+          (exitedEarly ? `It exited early. ` : `It timed out. `) +
+          `Check the log:\n  tail -50 ${logPath}\n`,
+      );
+      child.kill("SIGKILL");
+      process.exit(1);
+    }
+  }
+
+  // Only stop what we started. Someone else's server stays up.
+  if (child) {
+    const stop = () => { try { child?.kill("SIGTERM"); } catch { /* already gone */ } };
+    process.on("exit", stop);
+    process.on("SIGINT", stop);
+    process.on("SIGTERM", stop);
+  }
+
+  await repl({ showThinking });
+}
+
 function printHelp(): void {
   console.log(`
 maple — a local agent with tools and persistent memory
 
-  maple up                 start the Maple model server (leave running)
-  maple chat [--think]     interactive chat with tools and memory
+  maple start [--think]    start the model and open chat — the usual entry point
+  maple chat [--think]     chat against an already-running model
+  maple up                 run the model server in the foreground
   maple serve              expose an OpenAI-compatible endpoint on :${config.agentPort}
 
   maple index              summarise and extract from unindexed conversations
