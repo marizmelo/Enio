@@ -1,6 +1,8 @@
 import { readFile, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname } from "node:path";
 import { config } from "./config.js";
 
 /**
@@ -159,30 +161,42 @@ export async function describeWithVlm(path: string, question?: string): Promise<
  * Small VLMs are specifically weak at dense text.
  */
 /**
+ * Where the OCR language data lives on disk.
+ *
+ * tesseract.js defaults to fetching this from a CDN at first use, which is
+ * indefensible in something that claims to run entirely on your machine: it
+ * fails on a plane, on an air-gapped box, and whenever jsDelivr has a bad day.
+ *
+ * The data is published to npm as @tesseract.js-data/eng in exactly the layout
+ * tesseract expects, so it is a normal dependency installed once by npm and
+ * read from node_modules thereafter. No request is ever made at runtime.
+ *
+ * ENIO_TESSERACT_LANG_PATH overrides it, for a shared or trimmed copy.
+ */
+export function langPath(): string | null {
+  if (config.tesseractLangPath) return config.tesseractLangPath;
+  try {
+    const require = createRequire(import.meta.url);
+    // "_best_int" is the integerised model: 2.9MB against 11MB for the full
+    // one, with no meaningful accuracy loss for screen text.
+    const pkg = require.resolve("@tesseract.js-data/eng/package.json");
+    return join(dirname(pkg), "4.0.0_best_int");
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Whether OCR can actually run.
  *
- * This has to be checked up front rather than caught. tesseract.js reports a
- * failed language-data fetch by throwing from inside a worker event handler,
- * which escapes the promise chain entirely — an await around it cannot catch
- * it, and the process dies. So: establish that the data is reachable before
- * starting a worker at all.
+ * Checked up front rather than caught, because tesseract.js reports a missing
+ * language file by throwing from inside a worker event handler — that escapes
+ * the promise chain entirely, so an await around it catches nothing and the
+ * process dies.
  */
 export async function ocrAvailable(): Promise<boolean> {
-  if (config.tesseractLangPath) return true;
-
-  const cached = join(config.dataDir, "tesseract", "eng.traineddata");
-  if (existsSync(cached) || existsSync(`${cached}.gz`)) return true;
-
-  // Not cached yet, so the first run needs one download.
-  try {
-    const res = await fetch(
-      "https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz",
-      { method: "HEAD", signal: AbortSignal.timeout(4000) },
-    );
-    return res.ok;
-  } catch {
-    return false;
-  }
+  const dir = langPath();
+  return Boolean(dir && existsSync(join(dir, "eng.traineddata.gz")));
 }
 
 export async function ocrImage(path: string): Promise<string> {
@@ -191,9 +205,19 @@ export async function ocrImage(path: string): Promise<string> {
   // Language data is fetched from a CDN on first use and cached. Pointing the
   // cache at the data directory keeps it out of the working directory and
   // means it is downloaded exactly once — after which OCR is fully offline.
+  const dir = langPath();
+  if (!dir) {
+    throw new Error(
+      "OCR language data is missing. Reinstall dependencies: npm install",
+    );
+  }
+
   const worker = await createWorker("eng", 1, {
+    langPath: dir,
     cachePath: join(config.dataDir, "tesseract"),
-    ...(config.tesseractLangPath ? { langPath: config.tesseractLangPath } : {}),
+    // Belt and braces: without a language file this would silently reach for
+    // the CDN, which is the entire thing we are avoiding.
+    gzip: true,
   });
 
   try {
@@ -209,8 +233,14 @@ export async function ocrImage(path: string): Promise<string> {
  * The entry point. Picks a method by what's actually available rather than
  * failing when the ideal one isn't.
  */
-export async function readImage(path: string, question?: string): Promise<ImageReading> {
-  const mode = config.visionMode as VisionMode;
+export async function readImage(
+  path: string,
+  question?: string,
+  /** Overrides the configured mode for one call — forcing OCR on a dense
+   *  document is often better than whatever the VLM would have said. */
+  modeOverride?: VisionMode,
+): Promise<ImageReading> {
+  const mode = modeOverride ?? (config.visionMode as VisionMode);
   const meta = await imageMetadata(path);
   const dimensions =
     meta.width && meta.height ? `${meta.width}×${meta.height} ` : "";
@@ -281,7 +311,7 @@ export async function readImage(path: string, question?: string): Promise<ImageR
     text:
       `${header}\n\n(no way to read this image right now)\n` +
       `A vision model would describe it:  ollama pull ${config.visionModel}\n` +
-      `OCR needs its language data cached once from the network.`,
+      `OCR data appears to be missing — try: npm install`,
     method: "metadata",
     note: "neither a vision model nor OCR is available",
   };

@@ -1,6 +1,6 @@
 import { test, describe, after, before } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
@@ -104,17 +104,20 @@ describe("metadata from the file header", () => {
 
 describe("degradation", () => {
   test("off mode reports dimensions and nothing else", async () => {
-    process.env.ENIO_VISION_MODE = "off";
-    const fresh = await import(`./vision.js?off=${Date.now()}`);
-    const reading = await fresh.readImage(join(workspace(), "shot.png"));
+    const reading = await vision.readImage(join(workspace(), "shot.png"), undefined, "off");
     assert.equal(reading.method, "metadata");
     assert.match(reading.text, /1280×720/);
-    process.env.ENIO_VISION_MODE = "auto";
   });
 
-  test("auto mode returns something rather than throwing when nothing is available", async () => {
-    // No Ollama and no cached OCR data here. An attachment must never be able
-    // to fail the whole turn.
+  test("ocr mode can be forced for one image", async () => {
+    // Worth having: on a dense document, OCR beats whatever a small VLM says.
+    const reading = await vision.readImage(join(workspace(), "shot.png"), undefined, "ocr");
+    assert.equal(reading.method, "ocr");
+  });
+
+  test("auto mode always returns something rather than throwing", async () => {
+    // There is no Ollama here, so this exercises the fall-through. An
+    // attachment must never be able to fail the whole turn.
     const reading = await vision.readImage(join(workspace(), "shot.png"));
     assert.ok(reading.text.length > 0);
     assert.match(reading.text, /1280×720/, "dimensions are always available");
@@ -125,6 +128,42 @@ describe("degradation", () => {
     // An OCR dump and a small VLM's description warrant different confidence.
     const reading = await vision.readImage(join(workspace(), "tiny.png"));
     assert.ok(reading.method);
+  });
+});
+
+describe("OCR is genuinely offline", () => {
+  test("language data resolves to a local file, not a URL", () => {
+    const dir = vision.langPath();
+    assert.ok(dir, "language data should be found in node_modules");
+    assert.ok(!dir!.startsWith("http"), `must not be a URL: ${dir}`);
+    assert.ok(
+      existsSync(join(dir!, "eng.traineddata.gz")),
+      "the traineddata file must exist on disk",
+    );
+  });
+
+  test("reports ready without any network access", async () => {
+    assert.equal(await vision.ocrAvailable(), true);
+  });
+
+  test("runs OCR with fetch disabled entirely", async () => {
+    // The real guarantee. If anything reaches for a CDN this throws, and the
+    // whole point of shipping the language data as a dependency is that
+    // nothing does.
+    const originalFetch = globalThis.fetch;
+    let attempted: string | null = null;
+    globalThis.fetch = (async (url: unknown) => {
+      attempted = String(url);
+      throw new Error("network disabled for this test");
+    }) as typeof fetch;
+
+    try {
+      const text = await vision.ocrImage(join(workspace(), "shot.png"));
+      assert.equal(typeof text, "string");
+      assert.equal(attempted, null, `something tried to fetch ${attempted}`);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 

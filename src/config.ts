@@ -171,8 +171,9 @@ export const config = {
   visionTimeoutMs: Number(env("VISION_TIMEOUT") ?? 120_000),
 
   /**
-   * Where tesseract looks for language data. It fetches from a CDN on first
-   * use and caches; set this to a local folder for a fully offline install.
+   * Overrides where OCR language data is read from. Normally unset: the data
+   * ships as an npm dependency and is read from node_modules, so OCR never
+   * touches the network.
    */
   tesseractLangPath: env("TESSERACT_LANG_PATH") ?? "",
 

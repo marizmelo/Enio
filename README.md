@@ -236,7 +236,7 @@ Two tiers, and it picks by what's actually available:
 
 | | Memory | Good at |
 |---|---|---|
-| **OCR** (tesseract.js) | none resident | Text in screenshots and documents. No model at all. |
+| **OCR** (tesseract.js) | none resident | Text in screenshots and documents. No model, no network. |
 | **VLM** (moondream, 1.7GB) | transient | Describing scenes, UI states, diagrams. Weak on dense text. |
 
 They're complementary rather than ranked — small VLMs are specifically bad at dense text, which is exactly what OCR is for.
@@ -247,7 +247,9 @@ ollama pull moondream:v2     # 1.7GB, the default
 
 `ENIO_VISION_MODEL=gemma3:4b` or `qwen3-vl:4b` describe noticeably better if you have headroom; `ENIO_VISION_MODE=ocr` skips models entirely; `off` reports dimensions only.
 
-Every path degrades rather than failing: no vision model falls back to OCR, no OCR data falls back to dimensions. An attachment can never fail the turn.
+**OCR never touches the network.** tesseract.js defaults to fetching its language data from a CDN on first use, which is indefensible in something that claims to run entirely on your machine — it fails on a plane, on an air-gapped box, and whenever jsDelivr has a bad day. The data ships as a normal npm dependency (`@tesseract.js-data/eng`, installed once, read from `node_modules`) so no request is ever made at runtime. There's a test that disables `fetch` entirely and asserts OCR still works.
+
+Every path degrades rather than failing: no vision model falls back to OCR, missing OCR data falls back to dimensions. An attachment can never fail the turn.
 
 ### Web search without a key
 
