@@ -8,6 +8,7 @@ import { closeMcp } from "./tools/mcp.js";
 import { closeBrowser } from "./tools/browser.js";
 import { setMemorySession } from "./tools/memory.js";
 import { endSession, indexPending, startSession, stats } from "./memory/store.js";
+import { completeMention, mentionContext, parseMentions } from "./mentions.js";
 import {
   addExemplar,
   addPreference,
@@ -68,9 +69,15 @@ export async function repl(opts: { showThinking: boolean }): Promise<void> {
     `\n${green("enio")} ${dim(`· ${registry.all.length} tools · ${s.facts} facts · ${s.entities} entities`)}`,
   );
   console.log(dim(`workspace: ${config.workspace}`));
-  console.log(dim(`/help for commands, ctrl-C to quit\n`));
+  console.log(dim(`/help for commands · tab completes /skills and @mentions · ctrl-C to quit\n`));
 
-  const rl = readline.createInterface({ input: stdin, output: stdout });
+  // Tab completion is what makes /skill and @mention discoverable. Without it
+  // you have to already know the names, which defeats the point.
+  const rl = readline.createInterface({
+    input: stdin,
+    output: stdout,
+    completer: (line: string) => completeMention(line, mentionContext(registry)),
+  });
   const history: Message[] = [];
   let showThinking = opts.showThinking;
   /** Kept so /good can turn the last exchange into a training exemplar. */
@@ -109,11 +116,26 @@ export async function repl(opts: { showThinking: boolean }): Promise<void> {
       continue;
     }
 
+    // Resolve /skill and @mentions before the turn. Anything unrecognised stays
+    // as literal text, so an email address is never eaten.
+    const mentions = parseMentions(input, mentionContext(registry));
+    if (mentions.skills.length > 0) {
+      stdout.write(dim(`  using skill: ${mentions.skills.map((s) => s.name).join(", ")}\n`));
+    }
+    if (mentions.files.length > 0) {
+      stdout.write(dim(`  attached: ${mentions.files.join(", ")}\n`));
+    }
+    if (mentions.unresolved.length > 0) {
+      stdout.write(
+        dim(`  (no skill, specialist or file called ${mentions.unresolved.join(", ")} — left as text)\n`),
+      );
+    }
+
     let streamedAny = false;
     let inThinking = false;
 
     try {
-      const turn = await runTurn(input, history, registry, sessionId, {
+      const turn = await runTurn(mentions.text || input, history, registry, sessionId, {
         onRoute(specialist) {
           stdout.write(dim(`  → ${specialist}\n`));
         },
@@ -153,6 +175,11 @@ export async function repl(opts: { showThinking: boolean }): Promise<void> {
         onNotice(text) {
           stdout.write(yellow(`\n  ! ${text}\n`));
         },
+      }, {
+        specialist: mentions.specialist,
+        skills: mentions.skills,
+        files: mentions.files,
+        servers: mentions.servers,
       });
       lastExchange = { question: turn.question, answer: turn.reply };
       stdout.write(streamedAny ? "\n\n" : dim("\n(no response)\n\n"));
@@ -179,6 +206,9 @@ async function handleCommand(
     case "/help":
       console.log(
         [
+          "",
+          "  /<skill>    run a skill directly (tab to list them)",
+          "  @<name>     force a specialist, attach a file, or allow an MCP server",
           "",
           "  /help       this message",
           "  /good       save the last answer as an example to imitate",

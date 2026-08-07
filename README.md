@@ -79,6 +79,25 @@ You have one file, notes.md.
 
 `→ coder` is the router choosing a specialist. `⚒` lines are tools running.
 
+### `/skill` and `@mention`
+
+Two ways to override the model's judgement — useful precisely because the model is small, and the router picking a specialist or the model deciding a skill applies are exactly the calls it gets wrong.
+
+```
+/commit-message                  run a skill directly, no deciding involved
+@coder why does this fail        force a specialist, skipping the router
+summarise @notes/plan.md         attach a workspace file
+@github what changed this week   allow an MCP server's tools this turn
+```
+
+Tab completes all of it — `/` lists skills, `@` lists specialists, MCP servers and workspace files.
+
+An invoked skill is injected whole rather than offered through `read_skill`. The point of asking explicitly is to remove a decision; making the model call a tool to fetch what you already handed it would put the decision straight back. Same for attached files — you naming a file is unambiguous, so spending a round trip for the model to request it is pure latency.
+
+**Unrecognised mentions stay as ordinary text.** `mariz@example.com` and `@property` in code are never eaten. A mention that looks deliberate but matches nothing is reported as a hint rather than silently dropped, so a typo reads as a typo.
+
+This is also how `disable-model-invocation: true` skills are reached — they're kept out of the catalogue and only run when you ask for them by name.
+
 ### Commands in chat
 
 | | |

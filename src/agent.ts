@@ -5,6 +5,10 @@ import { recordTurn, type StepRecord } from "./memory/traces.js";
 import { exemplarBlock, preferenceBlock } from "./memory/learning.js";
 import { getSpecialist, route, toolsFor } from "./specialists.js";
 import { skillCatalogue } from "./skills.js";
+import { invokedSkillBlock } from "./mentions.js";
+import type { Skill } from "./skills.js";
+import { safePath } from "./tools/fs.js";
+import { readFile } from "node:fs/promises";
 import type { Registry } from "./tools/index.js";
 import { toWireTool, type Message, type ToolCall } from "./types.js";
 
@@ -32,6 +36,14 @@ export interface TurnHandlers {
   onRoute?(specialist: string): void;
 }
 
+/** Per-turn overrides from /skill and @mention syntax. */
+export interface TurnOverrides {
+  specialist?: string | null;
+  skills?: Skill[];
+  files?: string[];
+  servers?: string[];
+}
+
 export interface TurnResult {
   reply: string;
   messages: Message[];
@@ -54,14 +66,23 @@ export async function runTurn(
   registry: Registry,
   sessionId: string,
   handlers: TurnHandlers = {},
+  overrides: TurnOverrides = {},
 ): Promise<TurnResult> {
   // Routing, memory and exemplar lookup are independent — run them together
   // rather than paying for three sequential round trips.
-  const [specialistName, memoryBlock, exemplars] = await Promise.all([
-    config.routingEnabled ? route(userInput) : Promise.resolve(""),
+  // An explicit @specialist skips the routing call entirely — the user has
+  // already made the decision the router exists to make.
+  const [routed, memoryBlock, exemplars, attachments] = await Promise.all([
+    overrides.specialist
+      ? Promise.resolve(overrides.specialist)
+      : config.routingEnabled
+        ? route(userInput)
+        : Promise.resolve(""),
     buildMemoryBlock(userInput),
     exemplarBlock(userInput),
+    readAttachments(overrides.files ?? []),
   ]);
+  const specialistName = routed;
 
   let activeTools = registry.all;
   let roleSystem = BASE_SYSTEM;
@@ -69,6 +90,14 @@ export async function runTurn(
   if (specialistName) {
     const specialist = getSpecialist(specialistName);
     activeTools = toolsFor(specialist, registry);
+
+    // @server widens the specialist's view for this turn only.
+    for (const server of overrides.servers ?? []) {
+      for (const tool of registry.all) {
+        if (tool.server === server && !activeTools.includes(tool)) activeTools.push(tool);
+      }
+    }
+
     roleSystem = `${specialist.systemPrompt}\n\n${SHARED_RULES}`;
     handlers.onRoute?.(specialist.name);
   }
@@ -76,7 +105,18 @@ export async function runTurn(
   // Order matters: role, then how the user wants things done, then what is
   // known, then worked examples. Skills sit with the role because they change
   // *how* the task is approached rather than supplying facts about it.
-  const system = [roleSystem, skillCatalogue(), preferenceBlock(), memoryBlock, exemplars]
+  // An explicitly invoked skill goes in ahead of the catalogue: it is no longer
+  // one option among many, it is the instruction for this turn.
+  const invoked = invokedSkillBlock(overrides.skills ?? []);
+  const system = [
+    roleSystem,
+    invoked,
+    invoked ? "" : skillCatalogue(),
+    preferenceBlock(),
+    memoryBlock,
+    exemplars,
+    attachments,
+  ]
     .filter(Boolean)
     .join("\n\n");
 
@@ -200,6 +240,27 @@ export async function runTurn(
     specialist: specialistName || "single",
     question: userInput,
   };
+}
+
+/**
+ * Attached files are read here rather than left to a tool call. The user
+ * naming a file is unambiguous, and spending a round trip for the model to
+ * request what it was already handed is pure latency.
+ */
+async function readAttachments(files: string[]): Promise<string> {
+  if (files.length === 0) return "";
+  const blocks: string[] = [];
+  for (const rel of files.slice(0, 5)) {
+    try {
+      const text = await readFile(safePath(rel), "utf8");
+      const clipped =
+        text.length > 12_000 ? text.slice(0, 12_000) + "\n[...truncated]" : text;
+      blocks.push(`<file path="${rel}">\n${clipped}\n</file>`);
+    } catch (err) {
+      blocks.push(`<file path="${rel}">could not read: ${(err as Error).message}</file>`);
+    }
+  }
+  return `The user attached these files:\n\n${blocks.join("\n\n")}`;
 }
 
 async function executeCall(
