@@ -58,28 +58,60 @@ printf '%sinstalling to: %s%s\n' "$DIM" "$AGENT_DIR" "$OFF"
 # ---------------------------------------------------------------- preflight
 say "Checking your system"
 
-[ "$(uname -s)" = "Darwin" ] || die "macOS required (the model runs on Apple Silicon via MLX)."
-[ "$(uname -m)" = "arm64" ]  || die "Apple Silicon required — this Mac reports $(uname -m)."
+# enio itself is portable. The Maple RUNTIME is not -- MLX is Apple-only --
+# so on other platforms we install the agent and point it at Ollama.
+OS="$(uname -s)"
+ARCH="$(uname -m)"
+CAN_RUN_MAPLE=0
 
-MEM_GB=$(( $(sysctl -n hw.memsize) / 1073741824 ))
-CHIP=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "Apple Silicon")
+case "$OS" in
+  Darwin)
+    if [ "$ARCH" = "arm64" ]; then
+      CAN_RUN_MAPLE=1
+      CHIP=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "Apple Silicon")
+      MEM_GB=$(( $(sysctl -n hw.memsize) / 1073741824 ))
+    else
+      CHIP="Intel Mac"
+      MEM_GB=$(( $(sysctl -n hw.memsize) / 1073741824 ))
+      warn "Maple needs Apple Silicon; this Mac is Intel. Installing for Ollama instead."
+    fi
+    FREE_GB=$(df -g "$HOME" | awk 'NR==2 {print $4}')
+    ;;
+  Linux)
+    CHIP=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | sed 's/^ *//' || echo "Linux")
+    MEM_GB=$(( $(awk "/MemTotal/ {print \$2}" /proc/meminfo) / 1048576 ))
+    FREE_GB=$(df -BG "$HOME" | awk "NR==2 {gsub(/G/,\"\",\$4); print \$4}")
+    ;;
+  MINGW*|MSYS*|CYGWIN*)
+    die "Run this under WSL2, or use install.ps1. Git Bash isn't supported."
+    ;;
+  *)
+    warn "Unrecognised OS ($OS). Continuing, but only the Ollama path is likely to work."
+    CHIP="$OS"; MEM_GB=16; FREE_GB=99
+    ;;
+esac
+
 printf '    %s, %s GB RAM\n' "$CHIP" "$MEM_GB"
-[ "$MEM_GB" -ge 8 ] || warn "The model needs ~7GB at runtime. ${MEM_GB}GB will swap heavily."
-
-FREE_GB=$(df -g "$HOME" | awk 'NR==2 {print $4}')
 printf '    %s GB free disk\n' "$FREE_GB"
-[ "${FREE_GB:-99}" -ge 15 ] || die "Need ~15GB free, found ${FREE_GB}GB."
 
-command -v git >/dev/null || die "git not found. Run: xcode-select --install"
+if [ "$CAN_RUN_MAPLE" = "1" ]; then
+  [ "$MEM_GB" -ge 8 ] || warn "The model needs ~7GB at runtime. ${MEM_GB}GB will swap heavily."
+  [ "${FREE_GB:-99}" -ge 15 ] || die "Need ~15GB free for the model, found ${FREE_GB}GB."
+else
+  [ "${FREE_GB:-99}" -ge 2 ] || die "Need ~2GB free, found ${FREE_GB}GB."
+fi
+
+command -v git >/dev/null || die "git not found. Install it first$([ "$OS" = "Darwin" ] && echo " (xcode-select --install)")."
 
 if ! command -v node >/dev/null; then
-  die "Node.js not found. Install Node 22+ from https://nodejs.org or: brew install node"
+  die "Node.js not found. Install Node 22+ from https://nodejs.org"
 fi
 NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
 [ "$NODE_MAJOR" -ge 22 ] || die "Node 22+ required, found $(node --version)."
 printf '    node %s\n' "$(node --version)"
 
 # --------------------------------------------------------------------- uv
+if [ "$CAN_RUN_MAPLE" = "1" ]; then
 say "Python environment manager (uv)"
 export PATH="$HOME/.local/bin:$PATH"
 if command -v uv >/dev/null; then
@@ -138,6 +170,35 @@ else
   ( cd "$ENIO_DIR" && source .venv/bin/activate && \
     hf download deepgrove/maple-2bit-mlx --local-dir maple-2bit-mlx ) \
     || die "Weight download failed. Re-run this script to resume."
+fi
+
+else
+# ------------------------------------------------------- non-Apple path
+say "Model backend"
+printf '    Maple needs Apple Silicon, so enio will use Ollama here.\n'
+printf '    Everything else — memory, specialists, tools, inspector — is unchanged.\n\n'
+
+if command -v ollama >/dev/null; then
+  printf '    ollama found\n'
+  if curl -sf http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+    printf '    ollama is running\n'
+    if curl -s http://127.0.0.1:11434/api/tags | grep -q "qwen3"; then
+      skip "a qwen3 model is already pulled"
+    else
+      # Tool calling needs a model trained for it; most small instruct models
+      # answer in prose instead of emitting a call, which looks like a bug.
+      if ask "Pull qwen3:8b? (~5GB, and it actually supports tool calling)"; then
+        ollama pull qwen3:8b || warn "Pull failed; do it yourself later."
+      fi
+    fi
+  else
+    warn "ollama is installed but not running. Start it with: ollama serve"
+    FAILED_OPTIONAL+=("ollama not running")
+  fi
+else
+  warn "ollama not found. Install it from https://ollama.com, then: ollama pull qwen3:8b"
+  FAILED_OPTIONAL+=("ollama missing")
+fi
 fi
 
 # ------------------------------------------------------------------- agent
@@ -222,7 +283,12 @@ say "Writing configuration"
 {
   echo "# Written by install.sh on $(date '+%Y-%m-%d %H:%M')."
   echo "# Source this, or copy the lines into your shell profile."
-  echo "export ENIO_DIR=\"$ENIO_DIR\"   # python env + weights, ~5.5GB"
+  if [ "$CAN_RUN_MAPLE" = "1" ]; then
+    echo "export ENIO_DIR=\"$ENIO_DIR\"   # python env + weights, ~5.5GB"
+  else
+    echo "export ENIO_BACKEND=ollama"
+    echo "export ENIO_MODEL=qwen3:8b"
+  fi
   echo "export ENIO_WORKSPACE=\"$WORKSPACE\""
   [ "$SEARXNG_ENABLED" = "1" ] && echo 'export SEARXNG_URL="http://127.0.0.1:8888"'
   echo "# export ENIO_BACKEND=ollama    # to use Ollama instead of Maple"
@@ -239,6 +305,7 @@ if [ ${#FAILED_OPTIONAL[@]} -gt 0 ]; then
   printf '    Everything else works. Re-run this script to retry them.\n'
 fi
 
+if [ "$CAN_RUN_MAPLE" = "1" ]; then
 cat <<EOF
 
 ${BOLD}Start it${OFF}
@@ -246,6 +313,17 @@ ${BOLD}Start it${OFF}
     cd $AGENT_DIR
     node dist/index.js start       ${DIM}# starts the model, then opens chat${OFF}
 EOF
+else
+cat <<EOF
+
+${BOLD}Start it${OFF}
+
+    ollama serve &                 ${DIM}# if it isn't already running${OFF}
+    cd $AGENT_DIR
+    source $ENV_FILE
+    node dist/index.js chat        ${DIM}# 'start' is for the Maple runtime only${OFF}
+EOF
+fi
 
 [ "$DESKTOP_READY" = "1" ] && cat <<EOF
 ${DIM}or the desktop app, which does the same with a window:${OFF}

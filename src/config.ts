@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { BACKENDS, resolveBackend, type Backend } from "./backends.js";
+import { defaultBackendId } from "./platform.js";
 
 /** Repo root, from dist/config.js -> up two. */
 export const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -83,7 +84,7 @@ function resolveRuntimeDir(): string {
 /** Resolved without throwing so a typo in ENIO_BACKEND surfaces as a clear
  *  error at startup rather than a crash while building the config object. */
 function backendDefaults(id: string | undefined): Backend {
-  return BACKENDS[(id ?? "maple").toLowerCase()] ?? BACKENDS.maple!;
+  return BACKENDS[(id ?? defaultBackendId()).toLowerCase()] ?? BACKENDS.maple!;
 }
 
 /**
@@ -91,8 +92,13 @@ function backendDefaults(id: string | undefined): Backend {
  * project can be dropped onto someone else's machine and work unchanged.
  */
 export const config = {
-  /** Which engine to talk to: maple | ollama | lmstudio | llamacpp | custom. */
-  backendId: env("BACKEND") ?? "maple",
+  /**
+   * Which engine to talk to: maple | ollama | lmstudio | llamacpp | custom.
+   * Defaults to maple on Apple Silicon and ollama everywhere else, because
+   * defaulting to a backend the machine cannot run produces a confusing
+   * connection error rather than a useful one.
+   */
+  backendId: env("BACKEND") ?? defaultBackendId(),
 
   /** Explicit overrides. When unset, the backend preset supplies these. */
   modelBaseUrl: env("BASE_URL") ?? backendDefaults(env("BACKEND")).baseUrl,

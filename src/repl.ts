@@ -15,6 +15,38 @@ import {
   removePreference,
 } from "./memory/learning.js";
 import type { Message } from "./types.js";
+import { canRunMaple, platformLabel, whyNoMaple } from "./platform.js";
+
+/** The advice differs by platform: telling a Linux user to run `enio up` when
+ *  MLX cannot exist on their machine is worse than saying nothing. */
+function unreachableMessage(): string {
+  const where = `Can't reach a model at ${config.modelBaseUrl}.`;
+
+  if (config.backendId === "maple") {
+    if (!canRunMaple()) {
+      return (
+        `\n${where}\n\n${whyNoMaple()}\n` +
+        `On ${platformLabel()}, use another engine:\n\n` +
+        `    ollama serve\n` +
+        `    ollama pull qwen3:8b\n` +
+        `    ENIO_BACKEND=ollama ENIO_MODEL=qwen3:8b enio chat\n`
+      );
+    }
+    return (
+      `\n${where}\n\nStart it with:  enio start\n` +
+      `Or separately:  enio up\n`
+    );
+  }
+
+  return (
+    `\n${where}\n\n` +
+    `The '${config.backendId}' backend is selected but nothing is listening there.\n` +
+    (config.backendId === "ollama"
+      ? `Start Ollama with 'ollama serve', then check the model is pulled:\n` +
+        `    ollama pull ${config.modelName}\n`
+      : `Start that server, or run 'enio backends' to see the options.\n`)
+  );
+}
 
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
 const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
@@ -23,12 +55,7 @@ const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
 
 export async function repl(opts: { showThinking: boolean }): Promise<void> {
   if (!(await serverIsUp())) {
-    console.error(
-      `\nCan't reach the model at ${config.modelBaseUrl}.\n` +
-        `Start it with:  enio up\n` +
-        `Or manually:    cd ${config.runtimeDir} && source .venv/bin/activate && ` +
-        `python -m mlx_lm.server --model ./maple-2bit-mlx --trust-remote-code --flash-head --port 8080\n`,
-    );
+    console.error(unreachableMessage());
     process.exit(1);
   }
 

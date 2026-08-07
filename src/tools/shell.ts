@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { config } from "../config.js";
+import { WINDOWS_COMMANDS, isWindows, shellFor } from "../platform.js";
 import type { ToolDef } from "../types.js";
 
 /**
@@ -27,7 +28,8 @@ function allowedCommands(): Set<string> {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  return new Set([...DEFAULT_ALLOWED, ...extra]);
+  const platformCommands = isWindows() ? WINDOWS_COMMANDS : [];
+  return new Set([...DEFAULT_ALLOWED, ...platformCommands, ...extra]);
 }
 
 const bypass = () => process.env.ENIO_ALLOW_ANY_COMMAND === "1";
@@ -54,9 +56,17 @@ export function checkCommand(command: string): { ok: true } | { ok: false; reaso
   if (/\$\(|`/.test(command)) {
     return { ok: false, reason: "Command substitution is not permitted." };
   }
+  // cmd.exe's %VAR% and delayed-expansion !VAR! are the same hazard.
+  if (isWindows() && /%\w+%|![\w]+!/.test(command)) {
+    return { ok: false, reason: "Variable expansion is not permitted." };
+  }
   const allowed = allowedCommands();
   for (const exe of invokedExecutables(command)) {
-    if (!allowed.has(exe)) {
+    // Windows executables are case-insensitive and usually carry an extension.
+    const normalised = isWindows()
+      ? exe.toLowerCase().replace(/\.(exe|cmd|bat|com)$/, "")
+      : exe;
+    if (!allowed.has(normalised)) {
       return {
         ok: false,
         reason:
@@ -89,7 +99,8 @@ export const shellTools: ToolDef[] = [
       if (!check.ok) return `Refused: ${check.reason}`;
 
       return await new Promise<string>((resolveRun) => {
-        const child = spawn("bash", ["-c", command], {
+        const shell = shellFor(command);
+        const child = spawn(shell.file, shell.args, {
           cwd: config.workspace,
           env: { ...process.env, GIT_PAGER: "cat", PAGER: "cat" },
         });

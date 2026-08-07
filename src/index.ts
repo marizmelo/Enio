@@ -4,6 +4,7 @@ import { existsSync, openSync, unlinkSync, writeFileSync } from "node:fs";
 import { ensureToken } from "./auth.js";
 import { join } from "node:path";
 import { activeBackend, config, ensureDirs } from "./config.js";
+import { canRunMaple, whyNoMaple } from "./platform.js";
 import { BACKENDS } from "./backends.js";
 import {
   addPreference,
@@ -263,13 +264,28 @@ const MODEL_ARGS = (modelPath: string) => [
 
 /** Verify the runtime exists before trying to use it, with an actionable error. */
 function requireRuntime(): string {
+  // Telling someone on Linux to run install.sh for a runtime that can never
+  // exist on their machine wastes their time. Say what is actually true.
+  if (!canRunMaple()) {
+    console.error(
+      `\n${whyNoMaple()}\n\n` +
+        `Everything else in enio works here — run it against a local server instead:\n\n` +
+        `    ollama serve\n` +
+        `    ollama pull qwen3:8b\n` +
+        `    ENIO_BACKEND=ollama ENIO_MODEL=qwen3:8b enio chat\n\n` +
+        `'enio start' only manages the Maple runtime; use 'enio chat' with any\n` +
+        `other backend. See 'enio backends'.\n`,
+    );
+    process.exit(1);
+  }
+
   const venvPython = join(config.runtimeDir, ".venv", "bin", "python");
   if (!existsSync(venvPython)) {
     console.error(
       `\nNo model runtime found at ${config.runtimeDir}\n\n` +
         `Install it with:   bash install.sh\n` +
         `Point elsewhere:   ENIO_DIR=/path/to/runtime\n` +
-        `Or skip it and use another engine:\n` +
+        `Or use another engine:\n` +
         `                   ENIO_BACKEND=ollama enio chat\n`,
     );
     process.exit(1);

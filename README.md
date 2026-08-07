@@ -1,22 +1,25 @@
 # enio
 
-A local AI agent for macOS. Runs [DeepGrove Maple](https://huggingface.co/deepgrove/maple-preview) on your own machine and gives it tools, MCP servers, and memory that persists across conversations.
+A local AI agent. Runs a model on your own machine and gives it tools, MCP servers, and memory that persists across conversations.
 
 No API keys. No account. Nothing leaves your computer.
+
+**enio runs anywhere. [Maple](https://huggingface.co/deepgrove/maple-preview) requires Apple Silicon.** On a Mac with an M-series chip the installer sets up Maple — a 20B-A1B ternary model that decodes at ~218 tok/s. Everywhere else, point it at Ollama; memory, specialists, tools and the inspector are identical.
 
 ---
 
 ## Requirements
 
-| | |
-|---|---|
-| **Mac with Apple Silicon** | M1 or newer. Intel Macs can't run this. |
-| **16GB RAM** | 8GB works but swaps hard — the model needs ~7GB. |
-| **15GB free disk** | ~5.5GB model, the rest is dependencies. |
-| **Node.js 22+** | `brew install node` |
-| **Xcode command line tools** | `xcode-select --install` |
+Everywhere: **Node.js 22+** and **git**.
 
-Optional: Docker, for keyless web search.
+| Platform | Model | Disk | Notes |
+|---|---|---|---|
+| **macOS, Apple Silicon** | Maple, local | ~15GB | The fast path. 16GB RAM recommended; 8GB swaps. |
+| **macOS, Intel** | Ollama | ~2GB | MLX needs Apple Silicon. |
+| **Linux** | Ollama | ~2GB | Fully supported. |
+| **Windows** | Ollama | ~2GB | Use WSL2 — `install.ps1` isn't written yet. |
+
+Optional everywhere: Docker, for keyless web search.
 
 ## Install
 
@@ -35,15 +38,28 @@ bash install.sh --minimal    # core only, skip the optional parts
 
 It's idempotent. If the 5GB download dies halfway, re-run and it resumes. Optional components that fail are listed at the end and don't block anything else.
 
-**First run takes a while** — mostly the weights. Later runs start in about 30 seconds.
+The installer detects your platform. On Apple Silicon it installs the Maple runtime and weights; elsewhere it skips all of that, checks for Ollama, and offers to pull a model that can actually do tool calling.
+
+**First run takes a while** on Apple Silicon — mostly the weights. Later runs start in about 30 seconds.
 
 ## Run it
+
+**On Apple Silicon:**
 
 ```sh
 node dist/index.js start
 ```
 
 Starts the model, waits for it, opens chat. Ctrl-C stops both.
+
+**On Linux, Windows (WSL) or an Intel Mac:**
+
+```sh
+ollama serve &                 # if not already running
+node dist/index.js chat
+```
+
+`start` manages the Maple runtime specifically, so it doesn't apply — `chat` connects to whatever backend is configured. The default is already Ollama on non-Apple-Silicon machines, so there's usually nothing to set.
 
 Or the desktop app, which does the same in a window:
 
@@ -177,9 +193,11 @@ enio backends
 ENIO_BACKEND=ollama ENIO_MODEL=qwen3:8b enio chat
 ```
 
-Works with Ollama, LM Studio, llama.cpp, or any OpenAI-compatible endpoint. Everything above the model — memory, specialists, tools — is backend-agnostic, so you can delete the Maple runtime entirely if you go this route.
+Works with Ollama, LM Studio, llama.cpp, or any OpenAI-compatible endpoint. Everything above the model — memory, specialists, tools, inspector — is backend-agnostic, so you can delete the Maple runtime entirely if you go this route.
 
-Tool calling needs a model actually trained for it. Most small instruct models aren't, and fail by answering in prose instead of calling anything.
+The default is `maple` on Apple Silicon and `ollama` everywhere else. Defaulting to a backend the machine can't run would produce a confusing connection error rather than a useful one.
+
+**Tool calling needs a model actually trained for it.** Most small instruct models aren't, and the failure is quiet: instead of erroring, they answer in prose and never emit a call, so it looks like the tools are broken. qwen3 and recent Llama variants work. If tools seem inert, check this before anything else.
 
 ---
 
@@ -309,7 +327,11 @@ The HTTP endpoint requires a bearer token, including on loopback. A web page you
 
 **Model won't start** — `tail -50 ~/.enio/model-server.log`. Usually a half-finished weight download; re-run `install.sh` to resume.
 
-**Slow, or the fans spin up** — check RAM. The model wants ~7GB; if other apps hold most of yours, it swaps.
+**Slow, or the fans spin up** — check RAM. Maple wants ~7GB; if other apps hold most of yours, it swaps.
+
+**"Maple runs through MLX, which is macOS-only"** — expected on Linux, Windows or an Intel Mac. Use Ollama; everything except the local Maple runtime works identically.
+
+**Tools never fire on Ollama** — your model probably wasn't trained for tool calling. It answers in prose instead of emitting a call, which reads like a bug. Try `qwen3:8b`.
 
 **Search returns 403** — SearXNG ships with JSON output off. The bundled `settings.yml` enables it; on your own instance, add `json` under `search.formats`.
 
