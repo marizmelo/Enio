@@ -25,6 +25,10 @@ The only Python is the model server itself, started for you as a subprocess. Eve
 
 ## Install
 
+```sh
+git clone <your-remote> maple-agent && cd maple-agent
+```
+
 One command does everything — model runtime, weights, agent, and optional extras:
 
 ```sh
@@ -174,9 +178,18 @@ That allowlist matters more than it looks. A typical MCP server exposes 10–30 
 
 ```sh
 node dist/index.js serve
+maple token                # the API key
 ```
 
-Exposes an OpenAI-compatible endpoint on `http://127.0.0.1:8787/v1` that wraps the *agent* — tools and memory included. Point Open WebUI, an editor extension, or your own scripts at it. Note this is a different port from the raw model on `:8080`, which has neither.
+Exposes an OpenAI-compatible endpoint on `http://127.0.0.1:8787/v1` wrapping the *agent* — tools, memory and specialists included. Point Open WebUI, an editor extension, or your own scripts at it. Different port from the raw model on `:8080`, which has none of that.
+
+Every `/v1/*` request needs `Authorization: Bearer <key>`, which is what OpenAI-compatible clients already send for their API key — paste it into their existing field. The key is generated on first run into `~/.maple-agent/token` (mode 0600).
+
+Auth applies on loopback too, deliberately. A web page you have open can issue requests to `127.0.0.1`, and origin checks aren't a boundary against no-cors posts or DNS rebinding. Since the `coder` specialist has `run_command`, an unauthenticated endpoint here is remote code execution wearing a chat interface.
+
+`/ping` is the one open route, returning `{"ok":true}` and nothing else so clients can check liveness before they have a key.
+
+To reach it from your phone or elsewhere, see **[tunnel.md](tunnel.md)** — Tailscale and Cloudflare Tunnel setups, and why NAT traversal works the way it does.
 
 ## Commands
 
@@ -195,6 +208,7 @@ Exposes an OpenAI-compatible endpoint on `http://127.0.0.1:8787/v1` that wraps t
 | `maple backends` | list model backends |
 | `maple prefs` / `maple pref "..."` | standing instructions |
 | `maple examples` | saved answer exemplars |
+| `maple token` | print the API key (`--rotate` to replace it) |
 
 ## Configuration
 
@@ -226,7 +240,7 @@ All environment variables, all optional. See `src/config.ts`.
 
 ```sh
 npm run typecheck
-npm test          # 82 tests, no model server required — the model is stubbed
+npm test          # 98 tests, no model server required — the model is stubbed
 ```
 
 The test suite covers the parts most likely to break quietly: malformed-JSON repair, `<think>` tags split across stream chunks, sandbox escapes, shell allowlist bypasses via pipes, SSRF-blocked hosts being rejected before any request is made, Readability extraction versus its fallback, and the full tool loop including hallucinated tool names and runaway loops.
