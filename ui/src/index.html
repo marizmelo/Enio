@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>enio inspector</title>
+    <link rel="stylesheet" href="/bundle.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <!--
+      The enio backend injects the API token here before this bundle loads,
+      e.g. by inserting a script tag right before this comment when it
+      serves this file:
+
+        <script>window.__ENIO_TOKEN__="<token>";</script>
+
+      If no token has been injected (e.g. this file opened directly), the
+      line below defines a harmless empty default so the app still boots
+      and shows a clear "unauthorized" state instead of a blank crash.
+    -->
+    <script>
+      if (typeof window.__ENIO_TOKEN__ === "undefined") {
+        window.__ENIO_TOKEN__ = "";
+      }
+    </script>
+    <script src="/bundle.js"></script>
+  </body>
+</html>

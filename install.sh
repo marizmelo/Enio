@@ -194,6 +194,17 @@ if ask "Install Playwright for JavaScript-heavy pages? (~150MB)"; then
   fi
 fi
 
+# ---------------------------------------------------- optional: inspector
+if [ -d "$AGENT_DIR/ui" ] && ask "Build the inspector UI? (trace viewer + knowledge graph)"; then
+  if ( cd "$AGENT_DIR/ui" && npm install --no-audit --no-fund >/dev/null 2>&1 \
+       && npm run build >/dev/null 2>&1 ); then
+    printf '    built — open it with: node dist/index.js inspect\n'
+  else
+    warn "Inspector build failed; 'enio inspect' will not work."
+    FAILED_OPTIONAL+=("inspector")
+  fi
+fi
+
 # ----------------------------------------------------- optional: desktop
 DESKTOP_READY=0
 if [ -d "$AGENT_DIR/desktop" ] && ask "Set up the desktop app?"; then
@@ -247,6 +258,7 @@ ${BOLD}Worth knowing${OFF}
 
     /good in chat saves an answer as an example to imitate later
     /pref "be concise" sets a standing instruction
+    enio inspect     see why it did what it did, and prune bad memories
     enio backends    switch to Ollama or another engine
     enio stats       see what it has remembered
     enio --help      everything else

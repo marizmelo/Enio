@@ -1,6 +1,7 @@
 import { config } from "./config.js";
 import { complete } from "./model.js";
 import { buildMemoryBlock, logMessage } from "./memory/store.js";
+import { recordTurn, type StepRecord } from "./memory/traces.js";
 import { exemplarBlock, preferenceBlock } from "./memory/learning.js";
 import { getSpecialist, route, toolsFor } from "./specialists.js";
 import type { Registry } from "./tools/index.js";
@@ -90,8 +91,16 @@ export async function runTurn(
   const toolsUsed: string[] = [];
   let reply = "";
 
+  // Diagnostic trace, written once at the end of the turn. Kept out of the hot
+  // path -- a failed trace write must never break a working conversation.
+  const turnStartedAt = Date.now();
+  const steps: StepRecord[] = [];
+  let iterations = 0;
+
   for (let iteration = 0; iteration < config.maxToolIterations; iteration++) {
     const isLast = iteration === config.maxToolIterations - 1;
+    iterations = iteration + 1;
+    const modelStartedAt = Date.now();
 
     const result = await complete(
       history,
@@ -103,6 +112,16 @@ export async function runTurn(
         onContent: handlers.onContent,
       },
     );
+
+    steps.push({
+      seq: steps.length,
+      kind: "model",
+      rawContent: result.rawContent,
+      reasoning: result.reasoning || null,
+      repaired: result.repaired,
+      scavenged: result.scavenged,
+      durationMs: Date.now() - modelStartedAt,
+    });
 
     if (result.toolCalls.length === 0) {
       reply = result.content;
@@ -123,8 +142,19 @@ export async function runTurn(
     });
 
     for (const call of result.toolCalls) {
+      const toolStartedAt = Date.now();
       const output = await executeCall(call, registry, handlers);
       toolsUsed.push(call.function.name);
+      steps.push({
+        seq: steps.length,
+        kind: "tool",
+        name: call.function.name,
+        args: call.function.arguments,
+        output,
+        // executeCall converts throws into text, so treat the prefix as the signal.
+        error: output.startsWith("Error:") ? output.slice(0, 300) : null,
+        durationMs: Date.now() - toolStartedAt,
+      });
       history.push({
         role: "tool",
         tool_call_id: call.id,
@@ -139,6 +169,24 @@ export async function runTurn(
           `Raise ENIO_MAX_ITERS if this was a genuinely long task.`,
       );
     }
+  }
+
+  try {
+    recordTurn({
+      sessionId,
+      question: userInput,
+      reply,
+      specialist: specialistName || "single",
+      systemPrompt: system,
+      memoryBlock,
+      startedAt: turnStartedAt,
+      durationMs: Date.now() - turnStartedAt,
+      iterations,
+      steps,
+    });
+  } catch {
+    // Tracing is diagnostic. Losing a trace is annoying; losing the user's
+    // answer because the trace insert failed would be unacceptable.
   }
 
   return {

@@ -92,6 +92,40 @@ function migrate(d: Database.Database): void {
       created_at  INTEGER NOT NULL
     );
 
+    -- Diagnostic record, distinct from the messages table (the conversational
+    -- record). Captures what the model was shown and what it emitted before
+    -- any repair, which is where small-model failures are visible.
+    CREATE TABLE IF NOT EXISTS turns (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id    TEXT NOT NULL,
+      question      TEXT NOT NULL,
+      reply         TEXT NOT NULL DEFAULT '',
+      specialist    TEXT NOT NULL DEFAULT 'single',
+      system_prompt TEXT NOT NULL DEFAULT '',
+      memory_block  TEXT NOT NULL DEFAULT '',
+      started_at    INTEGER NOT NULL,
+      duration_ms   INTEGER NOT NULL DEFAULT 0,
+      iterations    INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id);
+
+    CREATE TABLE IF NOT EXISTS turn_steps (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      turn_id     INTEGER NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
+      seq         INTEGER NOT NULL,
+      kind        TEXT NOT NULL,
+      name        TEXT,
+      args        TEXT,
+      output      TEXT,
+      raw_content TEXT,
+      reasoning   TEXT,
+      repaired    INTEGER NOT NULL DEFAULT 0,
+      scavenged   INTEGER NOT NULL DEFAULT 0,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      error       TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_steps_turn ON turn_steps(turn_id);
+
     CREATE TABLE IF NOT EXISTS facts (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       text        TEXT NOT NULL UNIQUE,

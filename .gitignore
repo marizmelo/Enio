@@ -23,3 +23,6 @@ token
 
 # OS
 .DS_Store
+
+# Inspector UI build output
+ui/dist/

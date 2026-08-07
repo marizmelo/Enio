@@ -120,6 +120,9 @@ export const config = {
    */
   agentHost: env("AGENT_HOST") ?? "127.0.0.1",
 
+  /** Inspector UI. Always loopback-only — it exposes prompts and memory. */
+  inspectPort: Number(env("INSPECT_PORT") ?? 8788),
+
   /** Local embedding model, run through ONNX in-process. ~130MB, downloaded once. */
   embeddingModel: env("EMBED_MODEL") ?? "Xenova/bge-small-en-v1.5",
 

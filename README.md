@@ -143,6 +143,22 @@ Same format as Claude Desktop, so existing configs copy across. One addition —
 
 Use it. A typical MCP server exposes 10–30 tools and the model degrades badly past ~16 total. The starter config includes Playwright MCP, disabled, with an allowlist ready.
 
+### Seeing what it did
+
+```sh
+enio inspect
+```
+
+Opens a local web UI showing every turn: which specialist was chosen, **the exact system prompt that was sent with the injected memory highlighted**, each tool call with arguments and results, and the raw model output before any repair.
+
+That highlighted memory block is the point. When a small model answers oddly, the cause is usually what it was shown rather than the model itself — a stale fact retrieved, a preference that didn't fire, an exemplar that pulled the answer sideways. Prompt-in/completion-out logging can't show you that.
+
+Turns where output had to be salvaged are flagged: `repaired` means the tool-call JSON was malformed and got fixed, `scavenged` means the call was recovered from plain text because the server didn't parse it. One is noise. A run of them means something about the prompt is confusing the model, and you can filter the timeline to just those.
+
+The second tab is an interactive knowledge graph — entities and relations as a force-directed layout, sized by mention count, filtered by confidence. Click an edge to delete it. This is where extraction quality becomes visible: a 1B-active model produces wrong triples, and pruning them by hand is faster than trying to prompt around them. It's the only write operation in the inspector.
+
+Bound to loopback and key-protected like the API, because it exposes prompts and memory. The URL it prints contains the key.
+
 ### Using it from other apps
 
 ```sh
@@ -173,9 +189,12 @@ The repo stays small — a clone is well under a megabyte:
 
 ```
 enio/
-├── src/  desktop/  searxng/  scripts/
+├── src/           the agent
+├── ui/            inspector (React + ReactFlow)
+├── desktop/       Electron client
+├── searxng/  scripts/
 ├── install.sh  README.md  tunnel.md
-├── node_modules/   dist/          ← gitignored
+└── node_modules/  dist/  ui/dist/   ← gitignored
 ```
 
 Everything large or personal lives outside it:
@@ -202,6 +221,7 @@ Set `ENIO_DIR` to put it elsewhere. Earlier layouts (`<repo>/runtime`, `~/maple`
 | `enio chat` | chat against an already-running model |
 | `enio up` | model server in the foreground |
 | `enio serve` | OpenAI-compatible endpoint on :8787 |
+| `enio inspect` | trace viewer + knowledge graph on :8788 |
 | `enio token` | print the API key (`--rotate` to replace) |
 | `enio stats` / `graph` / `remember` / `forget` | memory |
 | `enio prefs` / `pref` / `unpref` / `examples` | learned behaviour |
@@ -220,6 +240,7 @@ Environment variables, all optional. See `src/config.ts`.
 | `ENIO_BACKEND` | `maple` |
 | `ENIO_ROUTING` | `1` — set `0` for one agent with every tool |
 | `ENIO_MAX_TOOLS` | `16` |
+| `ENIO_INSPECT_PORT` | `8788` |
 | `SEARXNG_URL` | unset |
 | `ENIO_ALLOW_ANY_COMMAND` | unset — see below |
 
@@ -294,7 +315,9 @@ The HTTP endpoint requires a bearer token, including on loopback. A web page you
 
 **A page comes back empty** — it renders with JavaScript. Install Playwright and the model will retry with `web_fetch_rendered`.
 
-**It picks the wrong tool** — probably over the tool budget. `enio tools` shows the count; add allowlists to your MCP servers.
+**It picks the wrong tool** — probably over the tool budget. `enio tools` shows the count; add allowlists to your MCP servers. `enio inspect` shows exactly which tools the specialist could see and what it was told.
+
+**Answers seem to ignore what it knows about you** — open `enio inspect` and check the system prompt for that turn. Either the memory wasn't retrieved (nothing relevant scored high enough) or it was retrieved and ignored. Those are different problems and the prompt panel tells you which.
 
 **It forgot something** — `enio stats` shows whether anything is unindexed; `enio index` folds it in. Memory is written at the end of a conversation, so a hard kill can lose the last one.
 
@@ -302,7 +325,8 @@ The HTTP endpoint requires a bearer token, including on loopback. A web page you
 
 ```sh
 npm run typecheck
-npm test        # 98 tests, no model server needed — the model is stubbed
+npm test               # 98 tests, no model server needed — the model is stubbed
+cd ui && npm run build # rebuild the inspector UI after changing it
 ```
 
 Tests cover what breaks quietly: JSON repair, `<think>` tags split across stream chunks, sandbox escapes, allowlist bypasses via pipes, SSRF hosts rejected before any request is made, constant-time token comparison, and the full tool loop including hallucinated tool names and runaway loops.

@@ -16,6 +16,12 @@ export interface CompletionResult {
   content: string;
   reasoning: string;
   toolCalls: ToolCall[];
+  /** Everything the model emitted, before <think> splitting or repair. */
+  rawContent: string;
+  /** JSON repair altered the tool arguments — the model emitted malformed JSON. */
+  repaired: boolean;
+  /** A tool call was recovered from plain text because the server didn't parse it. */
+  scavenged: boolean;
 }
 
 interface StreamHandlers {
@@ -134,13 +140,22 @@ async function consumeStream(
     }
   }
 
+  let repaired = false;
+  let scavenged = false;
+
   let toolCalls: ToolCall[] = [...partials.entries()]
     .sort(([a], [b]) => a - b)
-    .map(([i, p], n) => ({
-      id: p.id || `call_${n}`,
-      type: "function" as const,
-      function: { name: p.name, arguments: repairJson(p.args) },
-    }))
+    .map(([i, p], n) => {
+      const fixed = repairJson(p.args);
+      // Whitespace-only differences aren't worth flagging; anything else means
+      // the model produced JSON that would not have parsed.
+      if (p.args.trim() && fixed !== p.args.trim()) repaired = true;
+      return {
+        id: p.id || `call_${n}`,
+        type: "function" as const,
+        function: { name: p.name, arguments: fixed },
+      };
+    })
     .filter((t) => t.function.name.length > 0);
 
   let content = think.visibleText();
@@ -148,14 +163,22 @@ async function consumeStream(
   // Fallback path: the server didn't parse the tool call, so it came through as
   // literal text. Recover it and strip it out of what the user sees.
   if (toolCalls.length === 0) {
-    const scavenged = scavengeToolCalls(content);
-    if (scavenged.calls.length > 0) {
-      toolCalls = scavenged.calls;
-      content = scavenged.remaining;
+    const recovered = scavengeToolCalls(content);
+    if (recovered.calls.length > 0) {
+      toolCalls = recovered.calls;
+      content = recovered.remaining;
+      scavenged = true;
     }
   }
 
-  return { content: content.trim(), reasoning: think.reasoningText(), toolCalls };
+  return {
+    content: content.trim(),
+    reasoning: think.reasoningText(),
+    toolCalls,
+    rawContent: raw,
+    repaired,
+    scavenged,
+  };
 }
 
 /**

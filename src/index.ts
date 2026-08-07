@@ -13,6 +13,7 @@ import {
 } from "./memory/learning.js";
 import { repl } from "./repl.js";
 import { serve } from "./server.js";
+import { inspect } from "./inspect.js";
 import { serverIsUp } from "./model.js";
 import {
   forgetFact,
@@ -41,6 +42,10 @@ async function main(): Promise<void> {
 
     case "serve":
       await serve();
+      break;
+
+    case "inspect":
+      await inspect();
       break;
 
     case "up":
@@ -369,6 +374,7 @@ enio — a local agent with tools and persistent memory
   enio chat [--think]     chat against an already-running model
   enio up                 run the model server in the foreground
   enio serve              expose an OpenAI-compatible endpoint on :${config.agentPort}
+  enio inspect            open the trace + knowledge-graph inspector
 
   enio index              summarise and extract from unindexed conversations
   enio reindex            rebuild the whole graph from the raw log
