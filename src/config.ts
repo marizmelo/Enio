@@ -1,7 +1,36 @@
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
-import { mkdirSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { BACKENDS, resolveBackend, type Backend } from "./backends.js";
+
+/** Repo root, from dist/config.js -> up two. */
+export const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * Where the model runtime and weights live.
+ *
+ * Default is `<repo>/runtime`, so the whole system is one directory tree you
+ * can move or delete in one go. It is gitignored: it holds a clone of someone
+ * else's repo plus ~5GB of weights, neither of which belongs in this history.
+ * A submodule would be the textbook way to pin an external repo, but we never
+ * modify that fork, so it would buy nothing and cost every clone a
+ * --recurse-submodules footgun.
+ *
+ * Earlier installs put this at ~/maple. That layout still works and is picked
+ * up automatically, so upgrading doesn't force a 5GB re-download.
+ */
+function resolveMapleDir(): string {
+  if (process.env.MAPLE_DIR) return process.env.MAPLE_DIR;
+
+  const vendored = join(projectRoot, "runtime");
+  if (existsSync(vendored)) return vendored;
+
+  const legacy = join(homedir(), "maple");
+  if (existsSync(join(legacy, ".venv"))) return legacy;
+
+  return vendored;
+}
 
 /** Resolved without throwing so a typo in MAPLE_BACKEND surfaces as a clear
  *  error at startup rather than a crash while building the config object. */
@@ -26,8 +55,8 @@ export const config = {
   modelName:
     process.env.MAPLE_MODEL ?? backendDefaults(process.env.MAPLE_BACKEND).model,
 
-  /** Root of the mlx-lm-deepgrove checkout produced by the setup script. */
-  mapleDir: process.env.MAPLE_DIR ?? join(home, "maple"),
+  /** Root of the mlx-lm-deepgrove checkout and weights. See resolveMapleDir(). */
+  mapleDir: resolveMapleDir(),
 
   /** Everything this agent persists lives under here. Delete it to factory-reset. */
   dataDir: process.env.MAPLE_DATA_DIR ?? join(home, ".maple-agent"),

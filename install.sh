@@ -39,7 +39,10 @@ ask() {
 }
 
 AGENT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MAPLE_DIR="${MAPLE_DIR:-$HOME/maple}"
+# Model runtime lives inside the project so the whole system is one directory.
+# runtime/ is gitignored -- it's someone else's repo plus ~5GB of weights.
+MAPLE_DIR="${MAPLE_DIR:-$AGENT_DIR/runtime}"
+LEGACY_DIR="$HOME/maple"
 WORKSPACE="${MAPLE_WORKSPACE:-$HOME/maple-workspace}"
 ENV_FILE="$HOME/.maple-agent/env"
 
@@ -85,6 +88,21 @@ fi
 
 # ------------------------------------------------------------------- model
 say "Maple model runtime"
+
+# Earlier installs used ~/maple. Move it rather than re-downloading 5GB.
+if [ ! -d "$MAPLE_DIR" ] && [ -d "$LEGACY_DIR/.venv" ]; then
+  printf '    found an existing install at %s\n' "$LEGACY_DIR"
+  if ask "Move it into $MAPLE_DIR? (keeps the 5GB of weights, no re-download)"; then
+    mv "$LEGACY_DIR" "$MAPLE_DIR" && printf '    moved\n' || {
+      warn "Move failed; continuing to use $LEGACY_DIR."
+      MAPLE_DIR="$LEGACY_DIR"
+    }
+  else
+    MAPLE_DIR="$LEGACY_DIR"
+    printf '    leaving it where it is\n'
+  fi
+fi
+
 if [ -d "$MAPLE_DIR/.git" ]; then
   skip "mlx-lm-deepgrove at $MAPLE_DIR"
   git -C "$MAPLE_DIR" pull --ff-only >/dev/null 2>&1 || warn "Could not update the checkout; continuing with what's there."

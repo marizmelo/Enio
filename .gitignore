@@ -1,3 +1,7 @@
+# Model runtime: an upstream clone plus ~5GB of weights.
+# Recreated by install.sh; must never enter this history.
+runtime/
+
 # Build output
 dist/
 *.tsbuildinfo

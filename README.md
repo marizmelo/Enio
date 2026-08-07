@@ -53,6 +53,41 @@ Or the desktop app, which starts both servers itself:
 cd desktop && npm start
 ```
 
+## What's on disk
+
+`install.sh` produces one directory tree:
+
+```
+maple-agent/
+├── src/  desktop/  searxng/  scripts/   ← tracked in git
+├── install.sh  README.md  tunnel.md
+├── node_modules/                        ← gitignored
+├── dist/                                ← gitignored, built
+└── runtime/                             ← gitignored, ~5.5GB
+    ├── .venv/                              python + mlx-lm
+    └── maple-2bit-mlx/                     the weights
+```
+
+Plus two things deliberately kept outside, because they're *yours* rather than the app's:
+
+- `~/.maple-agent/` — memory database, API key, config. Survives deleting and reinstalling the project.
+- `~/maple-workspace/` — what the file and shell tools can touch.
+
+### Do you need `runtime/`?
+
+Yes, to run Maple. It holds the Python inference engine and the 5GB of weights — the agent is a client, it doesn't do inference itself. Earlier versions put this at `~/maple`; that still works and is detected automatically, and `install.sh` offers to move it rather than re-download.
+
+It stays out of git on purpose: it's a clone of [someone else's repo](https://github.com/deepgrove-ai/mlx-lm-deepgrove) plus multi-gigabyte binaries. A submodule would be the textbook way to pin an external repo, but you never modify that fork, so it buys nothing and costs every clone a `--recurse-submodules` footgun.
+
+**You can skip it entirely** if you point at a different backend. With Ollama already running, `runtime/` is dead weight:
+
+```sh
+bash install.sh --minimal        # then delete runtime/ if you want
+MAPLE_BACKEND=ollama MAPLE_MODEL=qwen3:8b maple chat
+```
+
+The agent, memory, specialists and tools are all backend-agnostic.
+
 ## Specialists
 
 Each turn is routed to one specialist with a narrow, coherent tool set:
