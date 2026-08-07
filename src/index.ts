@@ -5,6 +5,8 @@ import { ensureToken } from "./auth.js";
 import { join } from "node:path";
 import { activeBackend, config, ensureDirs } from "./config.js";
 import { canRunMaple, whyNoMaple } from "./platform.js";
+import { ensureBackend, type RunningBackend } from "./runtime.js";
+import { createInterface } from "node:readline/promises";
 import { BACKENDS } from "./backends.js";
 import {
   addPreference,
@@ -320,73 +322,49 @@ async function startModelServer(): Promise<void> {
 }
 
 /**
- * `enio start` — the single command that does everything: brings the model up
- * if it isn't already, waits for it, then drops into chat, and tears down only
- * what it started.
+ * `enio start` — bring the configured backend up, then open chat.
  *
- * Two terminals was always an implementation detail leaking into the UX. The
- * ownership rule matters: a model server that was already running is left
- * alone on exit, because someone else is using it.
+ * Backend-agnostic: Maple on Apple Silicon, Ollama elsewhere, with a clear
+ * message for engines we can't launch. Only stops what it started, since an
+ * already-running server usually belongs to something else.
  */
 async function startEverything(showThinking: boolean): Promise<void> {
-  let child: ReturnType<typeof spawn> | null = null;
-
-  if (await serverIsUp()) {
-    console.log(`\x1b[2mUsing the model server already running on ${config.modelBaseUrl}\x1b[0m`);
-  } else {
-    const venvPython = requireRuntime();
-    const logPath = join(config.dataDir, "model-server.log");
-    const log = openSync(logPath, "a");
-
-    process.stdout.write(
-      `\x1b[2mStarting the model — first load reads ~5GB, about 30 seconds\x1b[0m`,
-    );
-
-    child = spawn(venvPython, MODEL_ARGS(join(config.runtimeDir, "maple-2bit-mlx")), {
-      cwd: config.runtimeDir,
-      // Output goes to a file rather than the terminal so it doesn't scribble
-      // over the chat UI. The path is printed if startup fails.
-      stdio: ["ignore", log, log],
+  let backend: RunningBackend;
+  try {
+    backend = await ensureBackend({
+      log: (m) => console.log(`\x1b[2m${m}\x1b[0m`),
+      confirm: askYesNo,
     });
-
-    let exitedEarly = false;
-    child.on("exit", () => { exitedEarly = true; });
-
-    let ready = false;
-    for (let i = 0; i < 90 && !exitedEarly; i++) {
-      await new Promise((r) => setTimeout(r, 1000));
-      if (i % 2 === 0) process.stdout.write("\x1b[2m.\x1b[0m");
-      if (await serverIsUp()) { ready = true; break; }
-    }
-    process.stdout.write("\n");
-
-    if (!ready) {
-      console.error(
-        `\nThe model server did not start.\n` +
-          (exitedEarly ? `It exited early. ` : `It timed out. `) +
-          `Check the log:\n  tail -50 ${logPath}\n`,
-      );
-      child.kill("SIGKILL");
-      process.exit(1);
-    }
+  } catch (err) {
+    console.error(`\n${(err as Error).message}`);
+    process.exit(1);
   }
 
-  // Only stop what we started. Someone else's server stays up.
-  if (child) {
-    const stop = () => { try { child?.kill("SIGTERM"); } catch { /* already gone */ } };
-    process.on("exit", stop);
-    process.on("SIGINT", stop);
-    process.on("SIGTERM", stop);
-  }
+  const stop = () => backend.stop();
+  process.on("exit", stop);
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
 
   await repl({ showThinking });
+}
+
+/** Yes/no on the terminal. Non-interactive runs decline rather than hang. */
+async function askYesNo(question: string): Promise<boolean> {
+  if (!process.stdin.isTTY) return false;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = await rl.question(`${question} [y/N] `);
+    return /^y(es)?$/i.test(answer.trim());
+  } finally {
+    rl.close();
+  }
 }
 
 function printHelp(): void {
   console.log(`
 enio — a local agent with tools and persistent memory
 
-  enio start [--think]    start the model and open chat — the usual entry point
+  enio start [--think]    start the backend and open chat — the usual entry point
   enio chat [--think]     chat against an already-running model
   enio up                 run the model server in the foreground
   enio serve              expose an OpenAI-compatible endpoint on :${config.agentPort}

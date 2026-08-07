@@ -68,3 +68,41 @@ describe("shell selection", () => {
     }
   });
 });
+
+/* ------------------------------------------------------------------ */
+
+const { modelIsPulled } = await import("./runtime.js");
+
+describe("ollama model matching", () => {
+  const installed = ["qwen3:8b", "llama3.2:latest", "nomic-embed-text:latest"];
+
+  test("matches an exact tag", () => {
+    assert.equal(modelIsPulled("qwen3:8b", installed), true);
+  });
+
+  test("a bare name matches any tag of that model", () => {
+    // Ollama accepts "llama3.2" and resolves it to llama3.2:latest, so demanding
+    // an exact string match would trigger a pointless multi-gigabyte download.
+    assert.equal(modelIsPulled("llama3.2", installed), true);
+    assert.equal(modelIsPulled("qwen3", installed), true);
+  });
+
+  test("is case-insensitive", () => {
+    assert.equal(modelIsPulled("QWEN3:8B", installed), true);
+  });
+
+  test("a specific tag that isn't present is not a match", () => {
+    // Having qwen3:8b does not mean qwen3:32b is available.
+    assert.equal(modelIsPulled("qwen3:32b", installed), false);
+  });
+
+  test("an unknown model is not a match", () => {
+    assert.equal(modelIsPulled("mistral", installed), false);
+    assert.equal(modelIsPulled("qwen3:8b", []), false);
+  });
+
+  test("does not match on a shared prefix", () => {
+    // "llama3" must not be satisfied by "llama3.2:latest".
+    assert.equal(modelIsPulled("llama3", installed), false);
+  });
+});

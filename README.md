@@ -44,22 +44,17 @@ The installer detects your platform. On Apple Silicon it installs the Maple runt
 
 ## Run it
 
-**On Apple Silicon:**
-
 ```sh
 node dist/index.js start
 ```
 
-Starts the model, waits for it, opens chat. Ctrl-C stops both.
+One command on every platform. It brings the configured backend up, waits for it, and opens chat. Ctrl-C stops it.
 
-**On Linux, Windows (WSL) or an Intel Mac:**
+- **Apple Silicon** — starts the Maple runtime (~30s on first load).
+- **Everywhere else** — starts Ollama if it isn't already running, and checks the model is pulled, offering to pull it if not. Usually Ollama is already up (desktop app on macOS/Windows, systemd on Linux), in which case it just connects.
+- **LM Studio / llama.cpp** — can't be launched programmatically, so `start` tells you how and you use `enio chat` once it's running.
 
-```sh
-ollama serve &                 # if not already running
-node dist/index.js chat
-```
-
-`start` manages the Maple runtime specifically, so it doesn't apply — `chat` connects to whatever backend is configured. The default is already Ollama on non-Apple-Silicon machines, so there's usually nothing to set.
+It only stops what it started. An Ollama that was already running is left alone on exit, because it's a shared service and something else may be using it.
 
 Or the desktop app, which does the same in a window:
 
@@ -332,6 +327,8 @@ The HTTP endpoint requires a bearer token, including on loopback. A web page you
 **"Maple runs through MLX, which is macOS-only"** — expected on Linux, Windows or an Intel Mac. Use Ollama; everything except the local Maple runtime works identically.
 
 **Tools never fire on Ollama** — your model probably wasn't trained for tool calling. It answers in prose instead of emitting a call, which reads like a bug. Try `qwen3:8b`.
+
+**"Model isn't pulled yet"** — `enio start` checks before connecting, because a missing model 404s in a way that looks like enio is broken. Accept the prompt, or run `ollama pull <name>` yourself. A bare name like `qwen3` matches any tag you already have; `qwen3:32b` is treated as specific and won't be satisfied by `qwen3:8b`.
 
 **Search returns 403** — SearXNG ships with JSON output off. The bundled `settings.yml` enables it; on your own instance, add `json` under `search.formats`.
 
