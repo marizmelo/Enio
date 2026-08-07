@@ -177,6 +177,36 @@ export const config = {
    */
   tesseractLangPath: env("TESSERACT_LANG_PATH") ?? "",
 
+  /**
+   * SMTP. Withheld entirely unless host and from are set, so the tool never
+   * exists in a state where it can only fail.
+   */
+  smtpHost: env("SMTP_HOST") ?? "",
+  smtpPort: Number(env("SMTP_PORT") ?? 587),
+  smtpUser: env("SMTP_USER") ?? "",
+  smtpPass: env("SMTP_PASS") ?? "",
+  emailFrom: env("EMAIL_FROM") ?? "",
+
+  /**
+   * Off by default: sending is irreversible, and deciding to send is exactly
+   * the judgement a small model gets wrong. Until this is on, messages are
+   * rendered to a .eml in the workspace so you can read what it would have sent.
+   */
+  emailSend: env("EMAIL_SEND") === "1",
+
+  /** Optional recipient allowlist. Accepts addresses or "@domain" rules. */
+  emailAllowedTo: (env("EMAIL_ALLOWED_TO") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+
+  /**
+   * Desktop control: screenshots and AppleScript. Off by default because
+   * AppleScript can do anything you can do, which meaningfully raises what a
+   * wrong tool call costs.
+   */
+  desktopEnabled: env("DESKTOP") === "1",
+
   /** Playwright page-load budget. SPAs are slow; this is not a network timeout. */
   browserTimeoutMs: Number(env("BROWSER_TIMEOUT") ?? 30_000),
 

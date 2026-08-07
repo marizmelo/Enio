@@ -81,6 +81,22 @@ export const SPECIALISTS: Specialist[] = [
     tools: ["recall", "remember", "set_preference", "read_skill"],
   },
   {
+    name: "operator",
+    description:
+      "Doing something on the machine or in an app: sending mail, checking the screen, controlling Calendar, Notes, Finder, Music, or running a Shortcut.",
+    systemPrompt:
+      `You operate the user's Mac and send their email.\n\n` +
+      `Most app control is AppleScript — run_applescript reaches Mail, Calendar, ` +
+      `Notes, Reminders, Finder, Safari and Music directly, which is far more ` +
+      `reliable than working through the interface. Use take_screenshot when ` +
+      `you need to see what is actually on screen.\n\n` +
+      `Before anything that leaves the machine or cannot be undone — sending an ` +
+      `email, deleting something, changing a setting — state exactly what you ` +
+      `are about to do and get agreement first. Read-only checks need no ` +
+      `permission; irreversible ones always do.`,
+    tools: ["run_applescript", "take_screenshot", "send_email", "read_image", "read_skill"],
+  },
+  {
     name: "generalist",
     description:
       "Conversation, reasoning, explanation, writing, or anything that doesn't fit the others.",
@@ -95,7 +111,7 @@ export const SPECIALISTS: Specialist[] = [
 export const DEFAULT_SPECIALIST = "generalist";
 
 const routeSchema = z.object({
-  specialist: z.enum(["researcher", "coder", "librarian", "generalist"]),
+  specialist: z.enum(["researcher", "coder", "librarian", "operator", "generalist"]),
 });
 
 /**

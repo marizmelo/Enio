@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { config } from "../config.js";
 import { WINDOWS_COMMANDS, isWindows, shellFor } from "../platform.js";
+import { DESKTOP_COMMANDS, desktopEnabled } from "./desktop.js";
 import type { ToolDef } from "../types.js";
 
 /**

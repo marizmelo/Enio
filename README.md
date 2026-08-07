@@ -214,6 +214,34 @@ Skills are reloaded from disk on every turn, so editing one takes effect on the 
 
 Files and shell are locked to `~/enio-workspace`. Paths outside it are refused and shell commands go through an allowlist. Put things you want it to work on in that folder.
 
+### Email
+
+```sh
+export ENIO_SMTP_HOST=smtp.fastmail.com ENIO_SMTP_PORT=587
+export ENIO_SMTP_USER=you ENIO_SMTP_PASS=... ENIO_EMAIL_FROM=you@example.com
+```
+
+Works with any provider or your own server. The tool is withheld entirely until SMTP is configured, so it never exists in a state where it can only fail.
+
+**Dry run by default.** Sending is irreversible, and deciding to send is exactly the judgement a ~1B-active model gets wrong. Until you set `ENIO_EMAIL_SEND=1`, the message is rendered and written to your workspace as a `.eml` — so you find out what it would have said before it says it to anyone. `ENIO_EMAIL_ALLOWED_TO` takes addresses or `@domain` rules and is worth setting even after you turn sending on.
+
+### Controlling your Mac
+
+```sh
+export ENIO_DESKTOP=1
+```
+
+This does **not** install a GUI automation library. It opens the shell allowlist to the macOS automation commands, and adds two tools around the awkward parts:
+
+- `run_applescript` — drives any scriptable app: Mail, Calendar, Notes, Reminders, Finder, Safari, Music
+- `take_screenshot` — captures the screen and reads it through the vision path, so you get text back rather than a file path
+
+Plus, in the shell: `osascript`, `shortcuts` (anything you can build in Shortcuts), `open`, `mdfind` (Spotlight), `pbcopy`/`pbpaste`, `say`, `networksetup`.
+
+**Why not nut.js or similar.** Almost everything people want from "computer use" on a Mac is already reachable from the shell — the blocker was the allowlist, not a missing library. What pixel-level automation adds is narrow: clicking coordinates in apps with no scripting interface. It is also the least reliable path, because it needs a vision model that can ground coordinates precisely, and small local VLMs cannot. Scripting is more accurate, faster, and doesn't break when a window moves. (nut.js is separately no longer freely installable — its packaged builds moved to a paid private registry.)
+
+Off by default because AppleScript can do anything you can do, which genuinely raises the cost of a wrong tool call. macOS only — the flag does nothing elsewhere, since these commands don't exist there. First use will prompt for Screen Recording and Automation permissions; both errors are detected and explained rather than surfacing as raw failures.
+
 ### Images
 
 Attach one with `@`, or let the model reach for it:
@@ -394,6 +422,9 @@ Environment variables, all optional. See `src/config.ts`.
 | `ENIO_INSPECT_PORT` | `8788` |
 | `SEARXNG_URL` | unset |
 | `ENIO_ALLOW_ANY_COMMAND` | unset — see below |
+| `ENIO_DESKTOP` | unset — AppleScript and screenshots, macOS only |
+| `ENIO_EMAIL_SEND` | unset — dry run until set to `1` |
+| `ENIO_VISION_MODEL` | `moondream:v2` |
 
 ---
 
@@ -408,6 +439,7 @@ Every turn is routed to one specialist with a narrow tool set:
 | **researcher** | `web_search`, `web_fetch`, `web_fetch_rendered`, `recall` |
 | **coder** | `read_file`, `write_file`, `list_dir`, `run_command` |
 | **librarian** | `recall`, `remember`, `set_preference` |
+| **operator** | `run_applescript`, `take_screenshot`, `send_email`, `read_image` |
 | **generalist** | `recall` — the safe fallback |
 
 This exists because of the tool budget, not org-chart aesthetics. Maple picks badly once it sees more than a handful of tools. Showing it 4–5 disjoint, coherent tools is the single largest available improvement to small-model tool accuracy — larger than any prompt tweak.
