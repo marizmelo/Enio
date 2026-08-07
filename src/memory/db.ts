@@ -126,6 +126,32 @@ function migrate(d: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_steps_turn ON turn_steps(turn_id);
 
+    -- Scheduled work. Each run produces a normal turn, so task output is
+    -- traceable in the inspector exactly like a conversation.
+    CREATE TABLE IF NOT EXISTS tasks (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      name         TEXT NOT NULL UNIQUE,
+      prompt       TEXT NOT NULL,
+      schedule     TEXT NOT NULL,
+      specialist   TEXT,
+      enabled      INTEGER NOT NULL DEFAULT 1,
+      created_at   INTEGER NOT NULL,
+      last_run_at  INTEGER,
+      last_status  TEXT,
+      last_error   TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS task_runs (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id     INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      started_at  INTEGER NOT NULL,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      status      TEXT NOT NULL,
+      output      TEXT,
+      error       TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_runs_task ON task_runs(task_id);
+
     CREATE TABLE IF NOT EXISTS facts (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       text        TEXT NOT NULL UNIQUE,

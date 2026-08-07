@@ -7,6 +7,11 @@ import { activeBackend, config, ensureDirs, projectRoot } from "./config.js";
 import { canRunMaple, whyNoMaple } from "./platform.js";
 import { ensureBackend, type RunningBackend } from "./runtime.js";
 import { findSkill, loadSkills, skillContents, skillsDir } from "./skills.js";
+import {
+  addTask, getTask, listTasks, removeTask, runTask, runsFor,
+  setTaskEnabled, startScheduler, validateSchedule,
+} from "./tasks.js";
+import { analyse, draftSkill } from "./suggest.js";
 import { cpSync, mkdirSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { BACKENDS } from "./backends.js";
@@ -185,6 +190,147 @@ async function main(): Promise<void> {
       }
       for (const p of set.problems) {
         console.error(`\x1b[33mskipped\x1b[0m ${p.path}\n  ${p.reason}\n`);
+      }
+      break;
+    }
+
+    case "tasks": {
+      const tasks = listTasks();
+      if (tasks.length === 0) {
+        console.log(
+          `No tasks.\n\n  enio task add <name> --cron "0 9 * * 1" --prompt "..."\n` +
+            `  enio suggest      find candidates in what you have already repeated`,
+        );
+        break;
+      }
+      for (const t of tasks) {
+        const next = validateSchedule(t.schedule);
+        const when = next.ok ? next.next.toISOString().replace("T", " ").slice(0, 16) : "invalid";
+        const state = t.enabled ? `next ${when}` : "disabled";
+        console.log(`${t.name.padEnd(24)} ${t.schedule.padEnd(16)} ${state}`);
+        console.log(`  ${t.prompt.replace(/\s+/g, " ").slice(0, 90)}`);
+        if (t.lastStatus) {
+          const ago = t.lastRunAt ? new Date(t.lastRunAt).toISOString().slice(0, 16).replace("T", " ") : "?";
+          console.log(`  last: ${t.lastStatus} at ${ago}${t.lastError ? ` — ${t.lastError}` : ""}`);
+        }
+        console.log("");
+      }
+      break;
+    }
+
+    case "task": {
+      const [action, name, ...opts] = rest;
+      const flag = (f: string) => {
+        const i = opts.indexOf(f);
+        return i >= 0 ? opts[i + 1] : undefined;
+      };
+
+      if (action === "add") {
+        if (!name) { console.error(`Usage: enio task add <name> --cron "0 9 * * 1" --prompt "..."`); process.exit(1); }
+        try {
+          const task = addTask({
+            name,
+            prompt: flag("--prompt") ?? "",
+            schedule: flag("--cron") ?? "0 9 * * 1",
+            specialist: flag("--specialist") ?? null,
+          });
+          const next = validateSchedule(task.schedule);
+          console.log(`Added ${task.name}. Next run: ${next.ok ? next.next.toISOString() : "?"}`);
+          console.log(`Start the scheduler with: enio daemon`);
+        } catch (err) {
+          console.error((err as Error).message);
+          process.exit(1);
+        }
+        break;
+      }
+
+      if (action === "rm" || action === "remove") {
+        console.log(removeTask(name ?? "") ? "Removed." : "No such task.");
+        break;
+      }
+      if (action === "enable" || action === "disable") {
+        const ok = setTaskEnabled(name ?? "", action === "enable");
+        console.log(ok ? `${action}d ${name}` : "No such task.");
+        break;
+      }
+      if (action === "run") {
+        const task = getTask(name ?? "");
+        if (!task) { console.error("No such task."); process.exit(1); }
+        const run = await runTask(task, (m) => console.log(m));
+        if (run.output) console.log(`\n${run.output}`);
+        break;
+      }
+      if (action === "runs") {
+        for (const r of runsFor(name ?? "")) {
+          console.log(
+            `${new Date(r.startedAt).toISOString().slice(0, 16).replace("T", " ")}  ` +
+              `${r.status.padEnd(6)} ${Math.round(r.durationMs / 1000)}s` +
+              `${r.error ? `  ${r.error}` : ""}`,
+          );
+        }
+        break;
+      }
+
+      console.error(`Usage: enio task <add|rm|enable|disable|run|runs> <name> [...]`);
+      process.exit(1);
+      break;
+    }
+
+    case "daemon": {
+      console.log("Starting the scheduler. Ctrl-C to stop.\n");
+      const backend = await ensureBackend({
+        log: (m) => console.log(`\x1b[2m${m}\x1b[0m`),
+        confirm: async () => false,
+      });
+      const scheduler = startScheduler((m) =>
+        console.log(`\x1b[2m${new Date().toISOString().slice(11, 19)}\x1b[0m ${m}`),
+      );
+      const shutdown = () => { scheduler.stop(); backend.stop(); process.exit(0); };
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+      await new Promise(() => {}); // run until interrupted
+      break;
+    }
+
+    case "suggest": {
+      const { proposals, turnsExamined, usedEmbeddings } = await analyse();
+      if (turnsExamined < 5) {
+        console.log(
+          `Only ${turnsExamined} turns recorded so far — not enough to see a pattern.\n` +
+            `Use enio for a while and try again.`,
+        );
+        break;
+      }
+      console.log(
+        `Examined ${turnsExamined} turns` +
+          `${usedEmbeddings ? "" : " (lexical matching — embeddings unavailable)"}.\n`,
+      );
+      if (proposals.length === 0) {
+        console.log(`Nothing repeated often enough to be worth automating yet.`);
+        break;
+      }
+
+      proposals.forEach((p, i) => {
+        console.log(`\x1b[1m${i + 1}. ${p.title}\x1b[0m  \x1b[2m[${p.kind}]\x1b[0m`);
+        console.log(`   ${p.reason}`);
+        for (const e of p.evidence) console.log(`   \x1b[2m· ${e}\x1b[0m`);
+        if (p.cron) console.log(`   suggested schedule: ${p.cron}`);
+        if (p.tools?.length) console.log(`   tools: ${p.tools.join(", ")}`);
+        console.log("");
+      });
+
+      if (rest.includes("--write")) {
+        mkdirSync(skillsDir(), { recursive: true });
+        for (const p of proposals.filter((p) => p.kind === "skill")) {
+          const dir = join(skillsDir(), p.suggestedName);
+          if (existsSync(dir)) { console.log(`skipped ${p.suggestedName} (exists)`); continue; }
+          mkdirSync(dir, { recursive: true });
+          writeFileSync(join(dir, "SKILL.md"), draftSkill(p));
+          console.log(`drafted ${join(dir, "SKILL.md")}`);
+        }
+        console.log(`\nThese are starting points. Edit them — you know your method, enio only saw the pattern.`);
+      } else {
+        console.log(`Run 'enio suggest --write' to scaffold drafts for the skills.`);
       }
       break;
     }
@@ -467,6 +613,12 @@ enio — a local agent with tools and persistent memory
   enio pref "..."         add one
   enio unpref ID          remove one
   enio examples           list saved answer examples
+
+  enio tasks               list scheduled tasks
+  enio task add NAME --cron "0 9 * * 1" --prompt "..."
+  enio task run|rm|enable|disable|runs NAME
+  enio daemon              run the scheduler
+  enio suggest [--write]   find what is worth automating
 
   enio skills              list installed skills
   enio skills NAME         show one in full

@@ -111,6 +111,45 @@ enio examples           # saved examples
 enio reindex            # rebuild memory from raw transcripts
 ```
 
+### Scheduled tasks
+
+A task is a prompt plus a cron expression. It runs through the ordinary turn path — same specialists, same memory, same tracing — so a scheduled run is inspectable exactly like a conversation, and anything it learns is remembered.
+
+```sh
+enio task add weekly-review --cron "0 9 * * 1" \
+  --prompt "Summarise what I worked on this week and what's still open"
+
+enio tasks                    # what's scheduled, and when next
+enio task run weekly-review   # run it now, ignoring the schedule
+enio task runs weekly-review  # recent runs and their outcomes
+enio daemon                   # the scheduler; leave it running
+```
+
+The daemon re-reads tasks every 30 seconds, so adding or disabling one takes effect without a restart. Overlapping runs are skipped rather than stacked — a turn can take tens of seconds and a `*/1 * * * *` schedule would otherwise pile up. A failing task is recorded and the others keep running.
+
+Bad cron expressions are rejected when you create the task, not at 3am when it silently fails to fire.
+
+To survive reboots, wrap `enio daemon` in a launchd plist (macOS) or a systemd user unit (Linux).
+
+### Finding what to automate
+
+The usual way automation gets built is deciding in advance what *ought* to be repetitive and being wrong. enio records every turn, so the question is answerable from evidence:
+
+```sh
+enio suggest            # what you have actually repeated
+enio suggest --write    # scaffold SKILL.md drafts from it
+```
+
+It looks for three things:
+
+- **Clusters of near-identical questions** — you've been re-explaining something, which is a skill you never wrote down.
+- **Repeated tool sequences** — the same steps in the same order, which is a procedure whether or not you think of it as one.
+- **Time concentration within a cluster** — the same ask every Monday is a schedule, not a prompt. That's what turns a suggestion from a skill into a task.
+
+Every proposal comes with verbatim examples, so a wrong one is obvious at a glance. Clustering is a greedy threshold pass rather than k-means: the number of clusters isn't known in advance, most turns belong to none, and when a suggestion is wrong you want to see immediately why it grouped what it did.
+
+It uses embeddings when available and stemmed word overlap when not. The stemming matters more than it sounds — people rephrase when they repeat themselves, usually as a tense change or a spelling variant, so without it `summarise` / `summarize` / `summary` and `work` / `worked` all look like different requests.
+
 ### Skills
 
 Tools are capability. Skills are know-how. A tool lets it send an email; a skill tells it how you want emails written.
@@ -278,6 +317,8 @@ Set `ENIO_DIR` to put it elsewhere. Earlier layouts (`<repo>/runtime`, `~/maple`
 | `enio stats` / `graph` / `remember` / `forget` | memory |
 | `enio prefs` / `pref` / `unpref` / `examples` | learned behaviour |
 | `enio index` / `reindex` | fold conversations into memory |
+| `enio tasks` / `task` / `daemon` | scheduled work |
+| `enio suggest` | find what's worth automating |
 | `enio skills` | list, show, scaffold, install examples |
 | `enio tools` / `backends` / `mcp-init` | configuration |
 
@@ -373,6 +414,8 @@ The HTTP endpoint requires a bearer token, including on loopback. A web page you
 **Search returns 403** — SearXNG ships with JSON output off. The bundled `settings.yml` enables it; on your own instance, add `json` under `search.formats`.
 
 **A page comes back empty** — it renders with JavaScript. Install Playwright and the model will retry with `web_fetch_rendered`.
+
+**A task never runs** — the daemon has to be running (`enio daemon`). Check `enio tasks` for the next fire time and `enio task runs <name>` for what happened.
 
 **A skill never triggers** — its `description` is the only thing the model sees before deciding. Rewrite it as concrete trigger conditions, including the phrases you actually use. `enio inspect` shows whether `read_skill` was called.
 
