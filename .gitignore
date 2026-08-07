@@ -1,0 +1,21 @@
+# Build output
+dist/
+*.tsbuildinfo
+
+# Dependencies
+node_modules/
+
+# Secrets — never commit the API key
+token
+*.pem
+.env
+.env.*
+
+# Local data
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# OS
+.DS_Store

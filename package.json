@@ -1,0 +1,38 @@
+{
+  "name": "maple-agent",
+  "version": "0.1.0",
+  "description": "A local agent harness for DeepGrove Maple: tools + persistent knowledge-graph memory, fully offline.",
+  "type": "module",
+  "bin": {
+    "maple": "./dist/index.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "chat": "node dist/index.js chat",
+    "serve": "node dist/index.js serve",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test dist/*.test.js"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@mozilla/readability": "^0.6.0",
+    "better-sqlite3": "^11.7.0",
+    "linkedom": "^0.18.13",
+    "zod": "^3.24.1"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "license": "MIT"
+}
