@@ -1,0 +1,300 @@
+// Electron main process for Maple desktop.
+//
+// This file owns two things: the BrowserWindow, and the lifecycle of the two
+// backend processes maple-agent needs (the raw model server on :8080 and the
+// agent's OpenAI-compatible endpoint on :8787). It does not talk to either
+// server itself beyond health-checking them — all chat traffic happens in the
+// renderer via fetch(), because that's where streaming response bodies are
+// easiest to consume incrementally.
+"use strict";
+
+const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const path = require("node:path");
+const { spawn } = require("node:child_process");
+const http = require("node:http");
+const fs = require("node:fs");
+const os = require("node:os");
+
+// The parent project (../ from this folder) is where `node dist/index.js ...`
+// lives. It must already be built (`npm run build` there) — this app is only
+// a client, it doesn't compile TypeScript.
+const PARENT_DIR = path.join(__dirname, "..");
+const AGENT_ENTRY = path.join(PARENT_DIR, "dist", "index.js");
+
+const MODEL_HEALTH_URL = "http://127.0.0.1:8080/v1/models";
+// /ping is unauthenticated and returns nothing but {ok:true}; /health needs the
+// API key. Liveness polling therefore uses /ping, because the token file may
+// not exist yet on a first run — the agent server creates it at startup.
+const AGENT_PING_URL = "http://127.0.0.1:8787/ping";
+const AGENT_HEALTH_URL = "http://127.0.0.1:8787/health";
+
+const TOKEN_PATH = path.join(
+  process.env.MAPLE_DATA_DIR || path.join(os.homedir(), ".maple-agent"),
+  "token",
+);
+
+/**
+ * The agent endpoint requires a bearer token. It's generated on first `serve`
+ * and written to a 0600 file, so we read it from disk rather than passing it
+ * around. Re-read on each call: on a cold start the file appears only after the
+ * agent server boots, so a value cached at app launch would be stale (null).
+ */
+function readToken() {
+  try {
+    const value = fs.readFileSync(TOKEN_PATH, "utf8").trim();
+    return value.length >= 32 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+const POLL_INTERVAL_MS = 800;
+// Model load reads ~5GB off disk; give it a generous window before we give up
+// and report failure rather than leaving the user staring at "starting".
+const MODEL_TIMEOUT_MS = 120_000;
+const AGENT_TIMEOUT_MS = 30_000;
+
+/** @type {BrowserWindow | null} */
+let mainWindow = null;
+
+/** @type {import('node:child_process').ChildProcess | null} */
+let modelProc = null;
+/** @type {import('node:child_process').ChildProcess | null} */
+let agentProc = null;
+
+// Tracked explicitly (rather than just holding the ChildProcess objects) so
+// shutdown logic can log/verify what it's killing even if the process
+// reference has already been nulled out by an 'exit' handler race.
+let modelPid = null;
+let agentPid = null;
+
+let shuttingDown = false;
+
+function sendStatus(phase, message, extra) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("backend-status", { phase, message, ...extra });
+  }
+  lastStatus = { phase, message, ...extra };
+}
+
+let lastStatus = { phase: "starting", message: "Starting up…" };
+
+/** GET a URL with a short timeout, resolving true/false rather than throwing. */
+function checkHealth(url, timeoutMs = 2000) {
+  return new Promise((resolve) => {
+    const req = http.get(url, { timeout: timeoutMs }, (res) => {
+      // Drain the response so the socket can be reused/closed cleanly.
+      res.resume();
+      resolve(res.statusCode != null && res.statusCode >= 200 && res.statusCode < 300);
+    });
+    req.on("timeout", () => req.destroy());
+    req.on("error", () => resolve(false));
+  });
+}
+
+/** Poll a health URL until it responds OK or the deadline passes. */
+async function waitForHealth(url, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await checkHealth(url)) return true;
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
+  return false;
+}
+
+/**
+ * Spawn a backend child process, piping its output to our stdout/stderr so
+ * `npm start` shows logs, and returning it so the caller can track the PID.
+ */
+function spawnBackend(args, label) {
+  // Plain `node` off PATH, not Electron's own binary — the parent project
+  // assumes a normal Node runtime (ESM loader, no Electron-specific globals).
+  const child = spawn("node", [AGENT_ENTRY, ...args], {
+    cwd: PARENT_DIR,
+    env: process.env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  child.stdout?.on("data", (chunk) => process.stdout.write(`[${label}] ${chunk}`));
+  child.stderr?.on("data", (chunk) => process.stderr.write(`[${label}] ${chunk}`));
+
+  child.on("exit", (code, signal) => {
+    console.log(`[${label}] exited (code=${code}, signal=${signal})`);
+    if (label === "model") {
+      modelProc = null;
+      modelPid = null;
+    } else {
+      agentProc = null;
+      agentPid = null;
+    }
+    // An unexpected exit while we're not already shutting down means the
+    // backend crashed after having started successfully; tell the renderer.
+    if (!shuttingDown && lastStatus.phase === "ready") {
+      sendStatus("failed", `${label === "model" ? "Model" : "Agent"} server stopped unexpectedly (code ${code}).`);
+    }
+  });
+
+  child.on("error", (err) => {
+    console.error(`[${label}] failed to spawn:`, err);
+    sendStatus("failed", `Could not start the ${label} server: ${err.message}`);
+  });
+
+  return child;
+}
+
+/**
+ * Bring both backends up, or discover they're already running (started from
+ * the CLI by the user). Reports progress to the renderer via IPC the whole
+ * way so the UI never sits silently during the ~30s model load.
+ */
+async function startBackends() {
+  sendStatus("starting", "Checking for a running model server…");
+
+  const modelAlreadyUp = await checkHealth(MODEL_HEALTH_URL);
+  let modelStartedByUs = false;
+
+  if (modelAlreadyUp) {
+    sendStatus("starting", "Model server already running — reusing it.");
+  } else {
+    sendStatus(
+      "starting",
+      "Starting the model server. First load reads ~5GB from disk and takes about 30 seconds…",
+    );
+    modelProc = spawnBackend(["up"], "model");
+    modelPid = modelProc.pid ?? null;
+    modelStartedByUs = true;
+
+    const modelReady = await waitForHealth(MODEL_HEALTH_URL, MODEL_TIMEOUT_MS);
+    if (!modelReady) {
+      sendStatus(
+        "failed",
+        "Model server did not respond in time. Check that Maple is installed (see setup.sh) and that nothing else is using port 8080.",
+      );
+      return;
+    }
+  }
+
+  sendStatus("starting", "Model server ready. Checking for the agent endpoint…");
+
+  const agentAlreadyUp = await checkHealth(AGENT_PING_URL);
+  if (agentAlreadyUp) {
+    sendStatus("starting", "Agent endpoint already running — reusing it.");
+  } else {
+    sendStatus("starting", "Starting the agent server (tools, memory, :8787)…");
+    agentProc = spawnBackend(["serve"], "agent");
+    agentPid = agentProc.pid ?? null;
+
+    const agentReady = await waitForHealth(AGENT_PING_URL, AGENT_TIMEOUT_MS);
+    if (!agentReady) {
+      sendStatus(
+        "failed",
+        "Agent server did not respond in time. Check the logs in the terminal that launched this app.",
+      );
+      return;
+    }
+  }
+
+  // Fetch the final health payload for the tool count shown in the status bar.
+  let toolCount = null;
+  try {
+    const token = readToken();
+    const res = await fetch(AGENT_HEALTH_URL, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (res.ok) {
+      const data = await res.json();
+      toolCount = typeof data.tools === "number" ? data.tools : null;
+    }
+  } catch {
+    // Non-fatal — the status bar just won't show a tool count.
+  }
+
+  sendStatus("ready", modelStartedByUs ? "Ready." : "Ready (reused existing servers).", { tools: toolCount });
+}
+
+function killChild(child, pid, label) {
+  if (!child && !pid) return;
+  try {
+    if (child && !child.killed) {
+      child.kill();
+    } else if (pid) {
+      // Fallback: we lost the ChildProcess reference (e.g. after an 'exit'
+      // race) but still recorded the PID, so try to signal it directly.
+      process.kill(pid);
+    }
+  } catch (err) {
+    // ESRCH etc. — process is already gone, which is the outcome we wanted.
+    console.log(`[${label}] kill on shutdown: ${err.message}`);
+  }
+}
+
+function stopBackends() {
+  shuttingDown = true;
+  killChild(modelProc, modelPid, "model");
+  killChild(agentProc, agentPid, "agent");
+  modelProc = null;
+  agentProc = null;
+}
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1100,
+    height: 760,
+    minWidth: 700,
+    minHeight: 500,
+    titleBarStyle: "hiddenInset",
+    backgroundColor: "#1a1a1e",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+
+  // Re-send the last known status as soon as the page finishes loading, in
+  // case backend startup (which begins immediately at app ready) finishes —
+  // or progresses — before the renderer has attached its listener.
+  mainWindow.webContents.on("did-finish-load", () => {
+    sendStatus(lastStatus.phase, lastStatus.message, { tools: lastStatus.tools });
+  });
+}
+
+ipcMain.handle("get-status", () => lastStatus);
+
+// The renderer makes the chat requests itself (streaming bodies are far easier
+// to consume there), so it needs the key. This is our own trusted page with no
+// remote content loaded into it.
+ipcMain.handle("get-token", () => readToken());
+
+ipcMain.handle("open-external", (_event, url) => {
+  // Only allow http(s) links out — this is the one bit of OS access the
+  // renderer gets, and it goes through the main process, never direct.
+  if (typeof url === "string" && /^https?:\/\//i.test(url)) {
+    shell.openExternal(url);
+  }
+});
+
+app.whenReady().then(() => {
+  createWindow();
+  startBackends();
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
+
+app.on("window-all-closed", () => {
+  stopBackends();
+  if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  stopBackends();
+});

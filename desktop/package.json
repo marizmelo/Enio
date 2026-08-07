@@ -1,0 +1,38 @@
+{
+  "name": "maple-desktop",
+  "productName": "Maple",
+  "version": "0.1.0",
+  "description": "Desktop chat UI for maple-agent, a local AI agent with tools and memory.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac --arm64"
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.maple-agent.desktop",
+    "productName": "Maple",
+    "directories": {
+      "output": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
+        }
+      ]
+    }
+  }
+}
