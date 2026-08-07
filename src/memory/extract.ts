@@ -11,7 +11,7 @@ import {
 /**
  * Extraction and summarisation, both performed by Maple itself.
  *
- * These run as a *batch job* (`maple index`), never inline in the chat loop.
+ * These run as a *batch job* (`enio index`), never inline in the chat loop.
  * That matters for two reasons: it keeps conversation latency untouched, and it
  * means a failed extraction is retryable at leisure rather than a user-visible
  * error. The raw transcript is already safely stored by the time this runs.
@@ -55,7 +55,7 @@ export async function extractTriples(transcript: string): Promise<Triple[]> {
 
   // One retry with the constraint restated. Beyond this it's throwing good
   // tokens after bad — an empty result is fine, the transcript is still on disk
-  // and `maple reindex` can try again later with a better model.
+  // and `enio reindex` can try again later with a better model.
   const second = await attempt(
     `\n\nYour previous output was rejected. It must be valid JSON matching the ` +
       `shape exactly, and every relation must come from the allowed list.`,

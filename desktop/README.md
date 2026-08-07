@@ -1,6 +1,6 @@
-# Maple desktop
+# Enio desktop
 
-An Electron chat UI for `maple-agent`. It is a thin client of the agent's
+An Electron chat UI for `enio`. It is a thin client of the agent's
 OpenAI-compatible HTTP endpoint — all tool execution, memory, and model
 inference happen in the parent project; this app only renders the
 conversation and manages the two backend processes.
@@ -29,7 +29,7 @@ npm start
 
 On launch, the app checks whether the model server (`:8080`) and agent
 server (`:8787`) are already running (e.g. you started them yourself with
-`maple up` / `maple serve`). If not, it spawns them as child processes and
+`enio up` / `enio serve`). If not, it spawns them as child processes and
 shows startup progress in the status bar — the first model load reads
 about 5GB off disk and takes roughly 30 seconds, which the status bar says
 explicitly rather than leaving you looking at a blank screen. Closing the
@@ -68,6 +68,6 @@ only targets Apple Silicon Macs; adjust the `build.mac.target.arch` in
 - No auto-update, no code signing/notarization configured — `npm run dist`
   produces an unsigned `.dmg` suitable for local use, not distribution.
 - If the model server is already running under a different port than 8080
-  (via `MAPLE_BASE_URL`) or the agent under a different port than 8787
-  (via `MAPLE_AGENT_PORT`), this app won't find it — the health-check URLs
+  (via `ENIO_BASE_URL`) or the agent under a different port than 8787
+  (via `ENIO_AGENT_PORT`), this app won't find it — the health-check URLs
   are hardcoded to the defaults.

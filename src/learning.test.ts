@@ -4,10 +4,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const scratch = mkdtempSync(join(tmpdir(), "maple-learn-"));
-process.env.MAPLE_DATA_DIR = join(scratch, "data");
-process.env.MAPLE_WORKSPACE = join(scratch, "workspace");
-process.env.MAPLE_MCP_CONFIG = join(scratch, "none.json");
+const scratch = mkdtempSync(join(tmpdir(), "enio-learn-"));
+process.env.ENIO_DATA_DIR = join(scratch, "data");
+process.env.ENIO_WORKSPACE = join(scratch, "workspace");
+process.env.ENIO_MCP_CONFIG = join(scratch, "none.json");
 
 const learning = await import("./memory/learning.js");
 const { closeDb } = await import("./memory/db.js");

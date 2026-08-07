@@ -10,7 +10,7 @@ import type { ToolDef } from "../types.js";
  * the wrong thing to ship: you cannot enumerate every dangerous command, but you
  * can enumerate the useful safe ones.
  *
- * Set MAPLE_ALLOW_ANY_COMMAND=1 to bypass this. That is a genuinely different
+ * Set ENIO_ALLOW_ANY_COMMAND=1 to bypass this. That is a genuinely different
  * risk posture — the model can then run anything your user account can, and this
  * model is small enough to be talked into things by content it reads in a file.
  */
@@ -23,14 +23,14 @@ const DEFAULT_ALLOWED = [
 ];
 
 function allowedCommands(): Set<string> {
-  const extra = (process.env.MAPLE_EXTRA_COMMANDS ?? "")
+  const extra = (process.env.ENIO_EXTRA_COMMANDS ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
   return new Set([...DEFAULT_ALLOWED, ...extra]);
 }
 
-const bypass = () => process.env.MAPLE_ALLOW_ANY_COMMAND === "1";
+const bypass = () => process.env.ENIO_ALLOW_ANY_COMMAND === "1";
 
 /** Extract the executables a shell line will actually invoke, across pipes,
  *  sequencing and substitution — not just the first word. */

@@ -25,8 +25,8 @@ export async function repl(opts: { showThinking: boolean }): Promise<void> {
   if (!(await serverIsUp())) {
     console.error(
       `\nCan't reach the model at ${config.modelBaseUrl}.\n` +
-        `Start it with:  maple up\n` +
-        `Or manually:    cd ${config.mapleDir} && source .venv/bin/activate && ` +
+        `Start it with:  enio up\n` +
+        `Or manually:    cd ${config.runtimeDir} && source .venv/bin/activate && ` +
         `python -m mlx_lm.server --model ./maple-2bit-mlx --trust-remote-code --flash-head --port 8080\n`,
     );
     process.exit(1);
@@ -38,7 +38,7 @@ export async function repl(opts: { showThinking: boolean }): Promise<void> {
 
   const s = stats();
   console.log(
-    `\n${green("maple")} ${dim(`· ${registry.all.length} tools · ${s.facts} facts · ${s.entities} entities`)}`,
+    `\n${green("enio")} ${dim(`· ${registry.all.length} tools · ${s.facts} facts · ${s.entities} entities`)}`,
   );
   console.log(dim(`workspace: ${config.workspace}`));
   console.log(dim(`/help for commands, ctrl-C to quit\n`));

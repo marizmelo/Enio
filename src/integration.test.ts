@@ -4,14 +4,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const scratch = mkdtempSync(join(tmpdir(), "maple-int-"));
-process.env.MAPLE_DATA_DIR = join(scratch, "data");
-process.env.MAPLE_WORKSPACE = join(scratch, "workspace");
-process.env.MAPLE_MCP_CONFIG = join(scratch, "no-such-mcp.json");
+const scratch = mkdtempSync(join(tmpdir(), "enio-int-"));
+process.env.ENIO_DATA_DIR = join(scratch, "data");
+process.env.ENIO_WORKSPACE = join(scratch, "workspace");
+process.env.ENIO_MCP_CONFIG = join(scratch, "no-such-mcp.json");
 // These exercise the tool loop itself. Routing adds a model call in front of
 // every turn, which would consume the scripted responses below; it has its own
 // tests in learning.test.ts and routing.test.ts.
-process.env.MAPLE_ROUTING = "0";
+process.env.ENIO_ROUTING = "0";
 
 const { runTurn } = await import("./agent.js");
 const { buildRegistry } = await import("./tools/index.js");

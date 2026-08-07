@@ -51,7 +51,7 @@ export async function buildRegistry(
         `the ${config.maxExposedTools}-tool budget: ${dropped.join(", ")}`,
     );
     onLog(
-      `[tools] Raise MAPLE_MAX_TOOLS, or add a "tools" allowlist per server in mcp.json.`,
+      `[tools] Raise ENIO_MAX_TOOLS, or add a "tools" allowlist per server in mcp.json.`,
     );
   }
 

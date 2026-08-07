@@ -136,7 +136,7 @@ export async function runTurn(
     if (isLast) {
       handlers.onNotice?.(
         `Stopped after ${config.maxToolIterations} tool rounds. ` +
-          `Raise MAPLE_MAX_ITERS if this was a genuinely long task.`,
+          `Raise ENIO_MAX_ITERS if this was a genuinely long task.`,
       );
     }
   }

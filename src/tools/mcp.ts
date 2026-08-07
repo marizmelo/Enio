@@ -94,7 +94,7 @@ export async function loadMcpTools(
           env: { ...process.env, ...(cfg.env ?? {}) },
         });
         const client = new Client(
-          { name: "maple-agent", version: "0.1.0" },
+          { name: "enio", version: "0.1.0" },
           { capabilities: {} },
         );
         await client.connect(transport);

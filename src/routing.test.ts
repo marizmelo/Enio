@@ -4,11 +4,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const scratch = mkdtempSync(join(tmpdir(), "maple-route-"));
-process.env.MAPLE_DATA_DIR = join(scratch, "data");
-process.env.MAPLE_WORKSPACE = join(scratch, "workspace");
-process.env.MAPLE_MCP_CONFIG = join(scratch, "none.json");
-process.env.MAPLE_ROUTING = "1";
+const scratch = mkdtempSync(join(tmpdir(), "enio-route-"));
+process.env.ENIO_DATA_DIR = join(scratch, "data");
+process.env.ENIO_WORKSPACE = join(scratch, "workspace");
+process.env.ENIO_MCP_CONFIG = join(scratch, "none.json");
+process.env.ENIO_ROUTING = "1";
 
 const { route, DEFAULT_SPECIALIST } = await import("./specialists.js");
 const { runTurn } = await import("./agent.js");

@@ -4,9 +4,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const scratch = mkdtempSync(join(tmpdir(), "maple-web-"));
-process.env.MAPLE_DATA_DIR = join(scratch, "data");
-process.env.MAPLE_WORKSPACE = join(scratch, "workspace");
+const scratch = mkdtempSync(join(tmpdir(), "enio-web-"));
+process.env.ENIO_DATA_DIR = join(scratch, "data");
+process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 process.env.SEARXNG_URL = "http://127.0.0.1:8888";
 
 const { extractReadable, htmlToText, isBlockedHost, activeProvider, buildWebTools } =

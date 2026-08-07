@@ -8,7 +8,7 @@
 use_default_settings: true
 
 general:
-  instance_name: "maple-agent"
+  instance_name: "enio"
   # No usage stats on a personal instance.
   enable_metrics: false
 

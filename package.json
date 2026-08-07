@@ -1,10 +1,10 @@
 {
-  "name": "maple-agent",
+  "name": "enio",
   "version": "0.1.0",
-  "description": "A local agent harness for DeepGrove Maple: tools + persistent knowledge-graph memory, fully offline.",
+  "description": "A local AI agent for macOS: tools, MCP servers, and memory that persists across conversations.",
   "type": "module",
   "bin": {
-    "maple": "./dist/index.js"
+    "enio": "./dist/index.js"
   },
   "engines": {
     "node": ">=22"

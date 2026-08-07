@@ -1,7 +1,7 @@
-// Electron main process for Maple desktop.
+// Electron main process for Enio desktop.
 //
 // This file owns two things: the BrowserWindow, and the lifecycle of the two
-// backend processes maple-agent needs (the raw model server on :8080 and the
+// backend processes enio needs (the raw model server on :8080 and the
 // agent's OpenAI-compatible endpoint on :8787). It does not talk to either
 // server itself beyond health-checking them — all chat traffic happens in the
 // renderer via fetch(), because that's where streaming response bodies are
@@ -29,7 +29,7 @@ const AGENT_PING_URL = "http://127.0.0.1:8787/ping";
 const AGENT_HEALTH_URL = "http://127.0.0.1:8787/health";
 
 const TOKEN_PATH = path.join(
-  process.env.MAPLE_DATA_DIR || path.join(os.homedir(), ".maple-agent"),
+  process.env.ENIO_DATA_DIR || path.join(os.homedir(), ".enio"),
   "token",
 );
 

@@ -9,11 +9,11 @@ The `coder` specialist has `run_command`. Anyone who can reach this endpoint **w
 The endpoint requires a bearer token on every `/v1/*` request. Print it with:
 
 ```sh
-maple token
-maple token --rotate    # invalidate the old one
+enio token
+enio token --rotate    # invalidate the old one
 ```
 
-The token is a 32-byte random value in `~/.maple-agent/token`, mode 0600, generated on first `serve`. Send it as `Authorization: Bearer <key>` — that's what an OpenAI-compatible client sends for its API key, so most tools work by pasting it into their existing "API key" field.
+The token is a 32-byte random value in `~/.enio/token`, mode 0600, generated on first `serve`. Send it as `Authorization: Bearer <key>` — that's what an OpenAI-compatible client sends for its API key, so most tools work by pasting it into their existing "API key" field.
 
 Auth is enforced even on loopback, deliberately. A web page you have open *can* issue requests to `127.0.0.1`, and origin checks aren't a real boundary against no-cors posts or DNS rebinding.
 
@@ -48,12 +48,12 @@ tailscale ip -4                   # e.g. 100.x.y.z
 Install Tailscale on your phone, sign in with the same account, then bind the agent to the tailnet interface:
 
 ```sh
-MAPLE_AGENT_HOST=0.0.0.0 maple serve
+ENIO_AGENT_HOST=0.0.0.0 enio serve
 ```
 
 Point your client at `http://100.x.y.z:8787/v1` with the API key. With MagicDNS enabled it's `http://your-mini:8787/v1`.
 
-Binding to `0.0.0.0` also exposes the port on your local LAN. If that matters, use Tailscale's ACLs to restrict which devices can reach it, or bind to the tailnet IP specifically: `MAPLE_AGENT_HOST=100.x.y.z`.
+Binding to `0.0.0.0` also exposes the port on your local LAN. If that matters, use Tailscale's ACLs to restrict which devices can reach it, or bind to the tailnet IP specifically: `ENIO_AGENT_HOST=100.x.y.z`.
 
 ## Option B — Cloudflare Tunnel
 
@@ -73,7 +73,7 @@ The agent stays on loopback — `cloudflared` reaches it locally. Your client us
 
 ## Option C — don't tunnel
 
-If you only need it on your own LAN, `MAPLE_AGENT_HOST=0.0.0.0` plus the API key is enough, and there's no third party involved at all.
+If you only need it on your own LAN, `ENIO_AGENT_HOST=0.0.0.0` plus the API key is enough, and there's no third party involved at all.
 
 ---
 
@@ -84,21 +84,21 @@ Any OpenAI-compatible client:
 | | |
 |---|---|
 | Base URL | `http://100.x.y.z:8787/v1` or `https://maple.yourdomain.com/v1` |
-| API key | output of `maple token` |
-| Model | `maple-agent` |
+| API key | output of `enio token` |
+| Model | `enio` |
 
 ```sh
 curl https://maple.yourdomain.com/v1/chat/completions \
-  -H "Authorization: Bearer $(maple token)" \
+  -H "Authorization: Bearer $(enio token)" \
   -H "Content-Type: application/json" \
-  -d '{"model":"maple-agent","messages":[{"role":"user","content":"hello"}]}'
+  -d '{"model":"enio","messages":[{"role":"user","content":"hello"}]}'
 ```
 
 ## If something breaks
 
-**401 on every request** — the key is wrong or missing. `maple token` prints the current one; it changes if you ever ran `--rotate` or deleted the data directory.
+**401 on every request** — the key is wrong or missing. `enio token` prints the current one; it changes if you ever ran `--rotate` or deleted the data directory.
 
-**Connection refused through the tunnel** — the agent is probably still on `127.0.0.1` while the tunnel points elsewhere. Cloudflare wants loopback (correct); Tailscale needs `MAPLE_AGENT_HOST` set.
+**Connection refused through the tunnel** — the agent is probably still on `127.0.0.1` while the tunnel points elsewhere. Cloudflare wants loopback (correct); Tailscale needs `ENIO_AGENT_HOST` set.
 
 **Works on wifi, fails on cellular** — carrier-grade NAT defeating hole punching. Tailscale falls back to DERP relays automatically; if it doesn't, check `tailscale netcheck`.
 

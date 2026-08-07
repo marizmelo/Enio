@@ -3,7 +3,7 @@
 # Idempotent: safe to re-run. Installs into ~/maple by default.
 set -euo pipefail
 
-INSTALL_DIR="${MAPLE_DIR:-$HOME/maple}"
+INSTALL_DIR="${ENIO_DIR:-$HOME/maple}"
 REPO="https://github.com/deepgrove-ai/mlx-lm-deepgrove.git"
 MODEL="deepgrove/maple-preview-2bit-mlx"
 

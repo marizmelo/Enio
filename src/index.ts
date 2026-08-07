@@ -69,7 +69,7 @@ async function main(): Promise<void> {
     case "remember": {
       const text = rest.join(" ").trim();
       if (!text) {
-        console.error('Usage: maple remember "some durable fact"');
+        console.error('Usage: enio remember "some durable fact"');
         process.exit(1);
       }
       const result = await rememberFact(text, { pinned: true, source: "cli" });
@@ -86,7 +86,7 @@ async function main(): Promise<void> {
     case "graph": {
       const query = rest.join(" ").trim();
       if (!query) {
-        console.error('Usage: maple graph "topic"');
+        console.error('Usage: enio graph "topic"');
         process.exit(1);
       }
       const hits = await searchGraph(query, 30);
@@ -123,7 +123,7 @@ async function main(): Promise<void> {
         console.log(`    ${b.baseUrl}  ·  default model: ${b.model}`);
         console.log(`    ${b.notes}\n`);
       }
-      console.log(`Switch with:  MAPLE_BACKEND=ollama MAPLE_MODEL=qwen3:8b maple chat`);
+      console.log(`Switch with:  ENIO_BACKEND=ollama ENIO_MODEL=qwen3:8b enio chat`);
       break;
     }
 
@@ -140,7 +140,7 @@ async function main(): Promise<void> {
     case "pref": {
       const text = rest.join(" ").trim();
       if (!text) {
-        console.error('Usage: maple pref "answer concisely"');
+        console.error('Usage: enio pref "answer concisely"');
         process.exit(1);
       }
       const result = addPreference(text);
@@ -258,14 +258,14 @@ const MODEL_ARGS = (modelPath: string) => [
 
 /** Verify the runtime exists before trying to use it, with an actionable error. */
 function requireRuntime(): string {
-  const venvPython = join(config.mapleDir, ".venv", "bin", "python");
+  const venvPython = join(config.runtimeDir, ".venv", "bin", "python");
   if (!existsSync(venvPython)) {
     console.error(
-      `\nNo model runtime found at ${config.mapleDir}\n\n` +
+      `\nNo model runtime found at ${config.runtimeDir}\n\n` +
         `Install it with:   bash install.sh\n` +
-        `Point elsewhere:   MAPLE_DIR=/path/to/runtime\n` +
+        `Point elsewhere:   ENIO_DIR=/path/to/runtime\n` +
         `Or skip it and use another engine:\n` +
-        `                   MAPLE_BACKEND=ollama maple chat\n`,
+        `                   ENIO_BACKEND=ollama enio chat\n`,
     );
     process.exit(1);
   }
@@ -281,8 +281,8 @@ async function startModelServer(): Promise<void> {
   const venvPython = requireRuntime();
   console.log(`Starting mlx_lm.server on ${config.modelBaseUrl} ...`);
 
-  const child = spawn(venvPython, MODEL_ARGS(join(config.mapleDir, "maple-2bit-mlx")), {
-    cwd: config.mapleDir,
+  const child = spawn(venvPython, MODEL_ARGS(join(config.runtimeDir, "maple-2bit-mlx")), {
+    cwd: config.runtimeDir,
     stdio: "inherit",
   });
   child.on("exit", (code) => process.exit(code ?? 0));
@@ -291,7 +291,7 @@ async function startModelServer(): Promise<void> {
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 2000));
     if (await serverIsUp()) {
-      console.log(`\nReady. In another terminal: maple chat\n`);
+      console.log(`\nReady. In another terminal: enio chat\n`);
       return;
     }
   }
@@ -299,7 +299,7 @@ async function startModelServer(): Promise<void> {
 }
 
 /**
- * `maple start` — the single command that does everything: brings the model up
+ * `enio start` — the single command that does everything: brings the model up
  * if it isn't already, waits for it, then drops into chat, and tears down only
  * what it started.
  *
@@ -321,8 +321,8 @@ async function startEverything(showThinking: boolean): Promise<void> {
       `\x1b[2mStarting the model — first load reads ~5GB, about 30 seconds\x1b[0m`,
     );
 
-    child = spawn(venvPython, MODEL_ARGS(join(config.mapleDir, "maple-2bit-mlx")), {
-      cwd: config.mapleDir,
+    child = spawn(venvPython, MODEL_ARGS(join(config.runtimeDir, "maple-2bit-mlx")), {
+      cwd: config.runtimeDir,
       // Output goes to a file rather than the terminal so it doesn't scribble
       // over the chat UI. The path is printed if startup fails.
       stdio: ["ignore", log, log],
@@ -363,30 +363,30 @@ async function startEverything(showThinking: boolean): Promise<void> {
 
 function printHelp(): void {
   console.log(`
-maple — a local agent with tools and persistent memory
+enio — a local agent with tools and persistent memory
 
-  maple start [--think]    start the model and open chat — the usual entry point
-  maple chat [--think]     chat against an already-running model
-  maple up                 run the model server in the foreground
-  maple serve              expose an OpenAI-compatible endpoint on :${config.agentPort}
+  enio start [--think]    start the model and open chat — the usual entry point
+  enio chat [--think]     chat against an already-running model
+  enio up                 run the model server in the foreground
+  enio serve              expose an OpenAI-compatible endpoint on :${config.agentPort}
 
-  maple index              summarise and extract from unindexed conversations
-  maple reindex            rebuild the whole graph from the raw log
-  maple stats              what memory currently holds
-  maple graph "topic"      show what the graph knows about something
-  maple remember "..."     pin a fact by hand
-  maple forget "..."       remove a fact
+  enio index              summarise and extract from unindexed conversations
+  enio reindex            rebuild the whole graph from the raw log
+  enio stats              what memory currently holds
+  enio graph "topic"      show what the graph knows about something
+  enio remember "..."     pin a fact by hand
+  enio forget "..."       remove a fact
 
-  maple prefs              list standing instructions
-  maple pref "..."         add one
-  maple unpref ID          remove one
-  maple examples           list saved answer examples
+  enio prefs              list standing instructions
+  enio pref "..."         add one
+  enio unpref ID          remove one
+  enio examples           list saved answer examples
 
-  maple token              print the API key for the HTTP endpoint
-  maple token --rotate     generate a new one, invalidating the old
-  maple backends           list model backends and how to switch
-  maple tools              list every tool, built-in and MCP
-  maple mcp-init           write a starter mcp.json
+  enio token              print the API key for the HTTP endpoint
+  enio token --rotate     generate a new one, invalidating the old
+  enio backends           list model backends and how to switch
+  enio tools              list every tool, built-in and MCP
+  enio mcp-init           write a starter mcp.json
 
 Config lives in environment variables — see src/config.ts.
 Backend:   ${config.backendId} (${config.modelBaseUrl})

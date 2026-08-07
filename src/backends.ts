@@ -17,7 +17,7 @@ export interface Backend {
   id: string;
   label: string;
   baseUrl: string;
-  /** Default model identifier. Overridable with MAPLE_MODEL. */
+  /** Default model identifier. Overridable with ENIO_MODEL. */
   model: string;
   /** Whether `max_tokens: -1` is understood as "unlimited". */
   supportsUnlimitedTokens: boolean;
@@ -35,7 +35,7 @@ export const BACKENDS: Record<string, Backend> = {
     model: "maple-2bit-mlx",
     supportsUnlimitedTokens: true,
     nativeToolCalls: true,
-    notes: "Started by `maple up`. Fastest option on Apple Silicon.",
+    notes: "Started by `enio up`. Fastest option on Apple Silicon.",
   },
   ollama: {
     id: "ollama",
@@ -45,7 +45,7 @@ export const BACKENDS: Record<string, Backend> = {
     supportsUnlimitedTokens: false,
     nativeToolCalls: true,
     notes:
-      "Set MAPLE_MODEL to any tag you have pulled. Tool calling requires a " +
+      "Set ENIO_MODEL to any tag you have pulled. Tool calling requires a " +
       "model trained for it — most small instruct models are not.",
   },
   lmstudio: {
@@ -73,7 +73,7 @@ export const BACKENDS: Record<string, Backend> = {
     model: "local",
     supportsUnlimitedTokens: false,
     nativeToolCalls: true,
-    notes: "Set MAPLE_BASE_URL and MAPLE_MODEL.",
+    notes: "Set ENIO_BASE_URL and ENIO_MODEL.",
   },
 };
 

@@ -21,7 +21,7 @@ let available: boolean | null = null;
  *  the tool at all. Resolves the module path without loading the browser. */
 export function playwrightAvailable(): boolean {
   if (available !== null) return available;
-  if (process.env.MAPLE_DISABLE_BROWSER === "1") {
+  if (process.env.ENIO_DISABLE_BROWSER === "1") {
     available = false;
     return false;
   }

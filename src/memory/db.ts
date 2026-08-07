@@ -7,7 +7,7 @@ import { dbPath, ensureDirs } from "../config.js";
  * `messages` is the source of truth and is never derived from anything. The
  * graph (`entities` + `edges`) and `sessions.summary` are *derived indexes* —
  * built by asking Maple to extract structure, which it does imperfectly. Keeping
- * the raw log means a bad extraction is never destructive: `maple reindex`
+ * the raw log means a bad extraction is never destructive: `enio reindex`
  * rebuilds the graph from scratch, including with a better model later.
  *
  * Edges carry `valid_to` rather than being deleted when superseded. "Mariz uses

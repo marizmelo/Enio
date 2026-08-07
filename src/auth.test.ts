@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IncomingMessage } from "node:http";
 
-const scratch = mkdtempSync(join(tmpdir(), "maple-auth-"));
-process.env.MAPLE_DATA_DIR = join(scratch, "data");
-process.env.MAPLE_WORKSPACE = join(scratch, "workspace");
+const scratch = mkdtempSync(join(tmpdir(), "enio-auth-"));
+process.env.ENIO_DATA_DIR = join(scratch, "data");
+process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 
 const { ensureToken, readToken, extractToken, isAuthorized } = await import("./auth.js");
 
@@ -34,12 +34,12 @@ describe("token generation", () => {
 
   test("is written owner-only", () => {
     ensureToken();
-    const mode = statSync(join(process.env.MAPLE_DATA_DIR!, "token")).mode & 0o777;
+    const mode = statSync(join(process.env.ENIO_DATA_DIR!, "token")).mode & 0o777;
     assert.equal(mode, 0o600, `expected 0600, got ${mode.toString(8)}`);
   });
 
   test("the file has no other content", () => {
-    const raw = readFileSync(join(process.env.MAPLE_DATA_DIR!, "token"), "utf8");
+    const raw = readFileSync(join(process.env.ENIO_DATA_DIR!, "token"), "utf8");
     assert.equal(raw.trim(), ensureToken());
   });
 });

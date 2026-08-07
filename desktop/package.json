@@ -1,8 +1,8 @@
 {
-  "name": "maple-desktop",
+  "name": "enio-desktop",
   "productName": "Maple",
   "version": "0.1.0",
-  "description": "Desktop chat UI for maple-agent, a local AI agent with tools and memory.",
+  "description": "Desktop client for enio, a local AI agent.",
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -14,8 +14,8 @@
     "electron-builder": "^25.0.0"
   },
   "build": {
-    "appId": "com.maple-agent.desktop",
-    "productName": "Maple",
+    "appId": "dev.enio.desktop",
+    "productName": "Enio",
     "directories": {
       "output": "build"
     },
@@ -30,7 +30,9 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["arm64"]
+          "arch": [
+            "arm64"
+          ]
         }
       ]
     }

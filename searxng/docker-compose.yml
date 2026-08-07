@@ -10,7 +10,7 @@
 services:
   searxng:
     image: searxng/searxng:latest
-    container_name: maple-searxng
+    container_name: enio-searxng
     ports:
       - "127.0.0.1:8888:8080"
     volumes:

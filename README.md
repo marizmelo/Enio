@@ -1,4 +1,4 @@
-# maple-agent
+# enio
 
 A local AI agent for macOS. Runs [DeepGrove Maple](https://huggingface.co/deepgrove/maple-preview) on your own machine and gives it tools, MCP servers, and memory that persists across conversations.
 
@@ -21,8 +21,8 @@ Optional: Docker, for keyless web search.
 ## Install
 
 ```sh
-git clone <your-remote> maple-agent
-cd maple-agent
+git clone <your-remote> enio
+cd enio
 bash install.sh
 ```
 
@@ -51,7 +51,7 @@ Or the desktop app, which does the same in a window:
 cd desktop && npm start
 ```
 
-Run `npm link` once to type `maple` instead of `node dist/index.js`.
+Run `npm link` once to type `enio` instead of `node dist/index.js`.
 
 ---
 
@@ -92,19 +92,19 @@ Three mechanisms, none involving training:
 **Examples** — after a response you like, `/good`. On similar questions later that exchange is shown as a demonstration. The fastest way to change how it writes.
 
 ```sh
-maple stats              # counts
-maple graph "acme"       # what it knows about something
-maple remember "..."     # pin a fact by hand
-maple prefs              # standing instructions
-maple examples           # saved examples
-maple reindex            # rebuild memory from raw transcripts
+enio stats              # counts
+enio graph "acme"       # what it knows about something
+enio remember "..."     # pin a fact by hand
+enio prefs              # standing instructions
+enio examples           # saved examples
+enio reindex            # rebuild memory from raw transcripts
 ```
 
 ### Tools
 
 `read_file`, `write_file`, `list_dir`, `run_command`, `web_search`, `web_fetch`, `web_fetch_rendered`, `remember`, `recall`, `set_preference`.
 
-Files and shell are locked to `~/maple-workspace`. Paths outside it are refused and shell commands go through an allowlist. Put things you want it to work on in that folder.
+Files and shell are locked to `~/enio-workspace`. Paths outside it are refused and shell commands go through an allowlist. Put things you want it to work on in that folder.
 
 ### Web search without a key
 
@@ -124,7 +124,7 @@ npm install playwright && npx playwright install chromium
 ### MCP servers
 
 ```sh
-maple mcp-init      # writes ~/.maple-agent/mcp.json
+enio mcp-init      # writes ~/.enio/mcp.json
 ```
 
 Same format as Claude Desktop, so existing configs copy across. One addition — a per-server `tools` allowlist:
@@ -146,8 +146,8 @@ Use it. A typical MCP server exposes 10–30 tools and the model degrades badly 
 ### Using it from other apps
 
 ```sh
-maple serve
-maple token          # the API key
+enio serve
+enio token          # the API key
 ```
 
 An OpenAI-compatible endpoint on `http://127.0.0.1:8787/v1` wrapping the full agent. Point Open WebUI, an editor extension, or a script at it — paste the token where the client asks for an API key.
@@ -157,8 +157,8 @@ To reach it from your phone or another network, see **[tunnel.md](tunnel.md)**.
 ### Using a different model
 
 ```sh
-maple backends
-MAPLE_BACKEND=ollama MAPLE_MODEL=qwen3:8b maple chat
+enio backends
+ENIO_BACKEND=ollama ENIO_MODEL=qwen3:8b enio chat
 ```
 
 Works with Ollama, LM Studio, llama.cpp, or any OpenAI-compatible endpoint. Everything above the model — memory, specialists, tools — is backend-agnostic, so you can delete the Maple runtime entirely if you go this route.
@@ -172,7 +172,7 @@ Tool calling needs a model actually trained for it. Most small instruct models a
 The repo stays small — a clone is well under a megabyte:
 
 ```
-maple-agent/
+enio/
 ├── src/  desktop/  searxng/  scripts/
 ├── install.sh  README.md  tunnel.md
 ├── node_modules/   dist/          ← gitignored
@@ -181,32 +181,32 @@ maple-agent/
 Everything large or personal lives outside it:
 
 ```
-~/.maple-agent/
+~/.enio/
 ├── runtime/          ← python env + weights, ~5.5GB
 ├── memory.db         ← conversations, facts, knowledge graph
 ├── token             ← API key for the HTTP endpoint
 └── mcp.json  env
 
-~/maple-workspace/    ← what the file and shell tools can reach
+~/enio-workspace/    ← what the file and shell tools can reach
 ```
 
-The runtime is out of the project on purpose. It was always gitignored, but "not in the repo" and "not in the folder" are different problems — Time Machine and iCloud crawl the folder, IDE indexers try to walk it, and `rm -rf` on the project would cost you a 5GB re-download. Keeping it in `~/.maple-agent/` means you can delete and re-clone the project freely; the expensive part and everything it has learned both survive.
+The runtime is out of the project on purpose. It was always gitignored, but "not in the repo" and "not in the folder" are different problems — Time Machine and iCloud crawl the folder, IDE indexers try to walk it, and `rm -rf` on the project would cost you a 5GB re-download. Keeping it in `~/.enio/` means you can delete and re-clone the project freely; the expensive part and everything it has learned both survive.
 
-Set `MAPLE_DIR` to put it elsewhere. Earlier layouts (`<repo>/runtime`, `~/maple`) are detected automatically, and `install.sh` offers to move rather than re-download.
+Set `ENIO_DIR` to put it elsewhere. Earlier layouts (`<repo>/runtime`, `~/maple`) are detected automatically, and `install.sh` offers to move rather than re-download.
 
 ## All commands
 
 | | |
 |---|---|
-| `maple start` | model + chat, the usual entry point |
-| `maple chat` | chat against an already-running model |
-| `maple up` | model server in the foreground |
-| `maple serve` | OpenAI-compatible endpoint on :8787 |
-| `maple token` | print the API key (`--rotate` to replace) |
-| `maple stats` / `graph` / `remember` / `forget` | memory |
-| `maple prefs` / `pref` / `unpref` / `examples` | learned behaviour |
-| `maple index` / `reindex` | fold conversations into memory |
-| `maple tools` / `backends` / `mcp-init` | configuration |
+| `enio start` | model + chat, the usual entry point |
+| `enio chat` | chat against an already-running model |
+| `enio up` | model server in the foreground |
+| `enio serve` | OpenAI-compatible endpoint on :8787 |
+| `enio token` | print the API key (`--rotate` to replace) |
+| `enio stats` / `graph` / `remember` / `forget` | memory |
+| `enio prefs` / `pref` / `unpref` / `examples` | learned behaviour |
+| `enio index` / `reindex` | fold conversations into memory |
+| `enio tools` / `backends` / `mcp-init` | configuration |
 
 ## Configuration
 
@@ -214,14 +214,14 @@ Environment variables, all optional. See `src/config.ts`.
 
 | | |
 |---|---|
-| `MAPLE_WORKSPACE` | `~/maple-workspace` |
-| `MAPLE_DIR` | `~/.maple-agent/runtime` |
-| `MAPLE_DATA_DIR` | `~/.maple-agent` |
-| `MAPLE_BACKEND` | `maple` |
-| `MAPLE_ROUTING` | `1` — set `0` for one agent with every tool |
-| `MAPLE_MAX_TOOLS` | `16` |
+| `ENIO_WORKSPACE` | `~/enio-workspace` |
+| `ENIO_DIR` | `~/.enio/runtime` |
+| `ENIO_DATA_DIR` | `~/.enio` |
+| `ENIO_BACKEND` | `maple` |
+| `ENIO_ROUTING` | `1` — set `0` for one agent with every tool |
+| `ENIO_MAX_TOOLS` | `16` |
 | `SEARXNG_URL` | unset |
-| `MAPLE_ALLOW_ANY_COMMAND` | unset — see below |
+| `ENIO_ALLOW_ANY_COMMAND` | unset — see below |
 
 ---
 
@@ -252,7 +252,7 @@ Three layers that fail differently, so they're kept apart.
 
 **Explicit facts** come from `remember`. Someone deliberately chose to store these, so they're the highest-signal memories. Pinned ones are injected every conversation regardless of ranking — identity, not retrieval.
 
-**The knowledge graph** is *derived*. A batch job extracts entities and relations after each conversation. Because it's derived, `maple reindex` discards and rebuilds it from the transcripts — including, later, with a better model.
+**The knowledge graph** is *derived*. A batch job extracts entities and relations after each conversation. Because it's derived, `enio reindex` discards and rebuilds it from the transcripts — including, later, with a better model.
 
 Retrieval blends all three into a `<memory>` block budgeted to ~4000 characters. A small model's attention is the scarce resource: 800 characters of the right context beats 4000 of nearly-right, measurably.
 
@@ -276,7 +276,7 @@ So: preferences and exemplars, not weights. Preferences are injected every turn,
 
 Files and shell are scoped to the workspace. Paths are resolved *before* the containment check, which is what makes it robust against `../` traversal and outward-pointing symlinks — checking the string first, the common mistake, catches neither. Shell commands go through an allowlist checked across pipes and `&&` chains rather than just the first word, and command substitution is refused.
 
-`MAPLE_ALLOW_ANY_COMMAND=1` removes that. It's a genuinely different risk posture: the model can then run anything your account can, and it's small enough to be talked into things by content it reads from a file or a web page.
+`ENIO_ALLOW_ANY_COMMAND=1` removes that. It's a genuinely different risk posture: the model can then run anything your account can, and it's small enough to be talked into things by content it reads from a file or a web page.
 
 The HTTP endpoint requires a bearer token, including on loopback. A web page you have open can issue requests to `127.0.0.1`, and origin checks aren't a boundary against no-cors posts or DNS rebinding. Since the `coder` specialist has `run_command`, an unauthenticated endpoint here is remote code execution wearing a chat interface.
 
@@ -284,9 +284,9 @@ The HTTP endpoint requires a bearer token, including on loopback. A web page you
 
 ## Troubleshooting
 
-**"No model runtime found"** — run `bash install.sh`, or set `MAPLE_DIR`, or switch backends with `MAPLE_BACKEND=ollama`.
+**"No model runtime found"** — run `bash install.sh`, or set `ENIO_DIR`, or switch backends with `ENIO_BACKEND=ollama`.
 
-**Model won't start** — `tail -50 ~/.maple-agent/model-server.log`. Usually a half-finished weight download; re-run `install.sh` to resume.
+**Model won't start** — `tail -50 ~/.enio/model-server.log`. Usually a half-finished weight download; re-run `install.sh` to resume.
 
 **Slow, or the fans spin up** — check RAM. The model wants ~7GB; if other apps hold most of yours, it swaps.
 
@@ -294,9 +294,9 @@ The HTTP endpoint requires a bearer token, including on loopback. A web page you
 
 **A page comes back empty** — it renders with JavaScript. Install Playwright and the model will retry with `web_fetch_rendered`.
 
-**It picks the wrong tool** — probably over the tool budget. `maple tools` shows the count; add allowlists to your MCP servers.
+**It picks the wrong tool** — probably over the tool budget. `enio tools` shows the count; add allowlists to your MCP servers.
 
-**It forgot something** — `maple stats` shows whether anything is unindexed; `maple index` folds it in. Memory is written at the end of a conversation, so a hard kill can lose the last one.
+**It forgot something** — `enio stats` shows whether anything is unindexed; `enio index` folds it in. Memory is written at the end of a conversation, so a hard kill can lose the last one.
 
 ## Development
 

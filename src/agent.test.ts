@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Point every path at a scratch dir BEFORE anything imports config.
-const scratch = mkdtempSync(join(tmpdir(), "maple-test-"));
-process.env.MAPLE_DATA_DIR = join(scratch, "data");
-process.env.MAPLE_WORKSPACE = join(scratch, "workspace");
+const scratch = mkdtempSync(join(tmpdir(), "enio-test-"));
+process.env.ENIO_DATA_DIR = join(scratch, "data");
+process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 
 const { repairJson, complete } = await import("./model.js");
 const { safePath } = await import("./tools/fs.js");
@@ -273,10 +273,10 @@ describe("memory store", () => {
         {
           subject: "Mariz", subject_type: "person",
           relation: "WORKS_ON",
-          object: "maple-agent", object_type: "project",
+          object: "enio", object_type: "project",
         },
         {
-          subject: "maple-agent", subject_type: "project",
+          subject: "enio", subject_type: "project",
           relation: "USES",
           object: "SQLite", object_type: "technology",
         },
@@ -284,9 +284,9 @@ describe("memory store", () => {
       sessionId,
     );
 
-    const hits = await store.searchGraph("maple-agent");
-    assert.ok(hits.length >= 1, "expected edges for maple-agent");
-    assert.ok(hits.some((h) => h.object === "SQLite" || h.subject === "maple-agent"));
+    const hits = await store.searchGraph("enio");
+    assert.ok(hits.length >= 1, "expected edges for enio");
+    assert.ok(hits.some((h) => h.object === "SQLite" || h.subject === "enio"));
   });
 
   test("repeated observation raises confidence rather than duplicating", async () => {

@@ -1,5 +1,5 @@
 #!/bin/bash
-# One-shot installer for maple-agent and everything it needs.
+# One-shot installer for enio and everything it needs.
 #
 #   bash install.sh              interactive, asks about optional components
 #   bash install.sh --yes        accept all defaults, no prompts
@@ -39,20 +39,20 @@ ask() {
 }
 
 AGENT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DATA_DIR="${MAPLE_DATA_DIR:-$HOME/.maple-agent}"
+DATA_DIR="${ENIO_DATA_DIR:-$HOME/.enio}"
 # The runtime (python env + ~5GB of weights) lives OUTSIDE the project, next to
 # the database. Keeps the repo small enough to zip, back up and index, and means
 # deleting or re-cloning the project doesn't cost a 5GB re-download.
-MAPLE_DIR="${MAPLE_DIR:-$DATA_DIR/runtime}"
-WORKSPACE="${MAPLE_WORKSPACE:-$HOME/maple-workspace}"
+ENIO_DIR="${ENIO_DIR:-$DATA_DIR/runtime}"
+WORKSPACE="${ENIO_WORKSPACE:-$HOME/enio-workspace}"
 ENV_FILE="$DATA_DIR/env"
 
 # Earlier layouts, checked so an upgrade never re-downloads.
-PREVIOUS_DIRS=("$AGENT_DIR/runtime" "$HOME/maple")
+PREVIOUS_DIRS=("$HOME/.maple-agent/runtime" "$AGENT_DIR/runtime" "$HOME/maple")
 
 FAILED_OPTIONAL=()
 
-printf '\n%smaple-agent installer%s\n' "$BOLD" "$OFF"
+printf '\n%senio installer%s\n' "$BOLD" "$OFF"
 printf '%sinstalling to: %s%s\n' "$DIM" "$AGENT_DIR" "$OFF"
 
 # ---------------------------------------------------------------- preflight
@@ -96,46 +96,46 @@ say "Maple model runtime"
 mkdir -p "$DATA_DIR"
 
 # Relocate an earlier install rather than downloading 5GB again.
-if [ ! -d "$MAPLE_DIR/.venv" ]; then
+if [ ! -d "$ENIO_DIR/.venv" ]; then
   for prev in "${PREVIOUS_DIRS[@]}"; do
     [ -d "$prev/.venv" ] || continue
     printf '    found an existing runtime at %s\n' "$prev"
-    if ask "Move it to $MAPLE_DIR? (keeps the weights, no re-download)"; then
-      if mv "$prev" "$MAPLE_DIR"; then
+    if ask "Move it to $ENIO_DIR? (keeps the weights, no re-download)"; then
+      if mv "$prev" "$ENIO_DIR"; then
         printf '    moved\n'
       else
         warn "Move failed; continuing to use $prev."
-        MAPLE_DIR="$prev"
+        ENIO_DIR="$prev"
       fi
     else
-      MAPLE_DIR="$prev"
+      ENIO_DIR="$prev"
       printf '    leaving it where it is\n'
     fi
     break
   done
 fi
 
-if [ -d "$MAPLE_DIR/.git" ]; then
-  skip "mlx-lm-deepgrove at $MAPLE_DIR"
-  git -C "$MAPLE_DIR" pull --ff-only >/dev/null 2>&1 || warn "Could not update the checkout; continuing with what's there."
+if [ -d "$ENIO_DIR/.git" ]; then
+  skip "mlx-lm-deepgrove at $ENIO_DIR"
+  git -C "$ENIO_DIR" pull --ff-only >/dev/null 2>&1 || warn "Could not update the checkout; continuing with what's there."
 else
-  git clone --depth 1 https://github.com/deepgrove-ai/mlx-lm-deepgrove.git "$MAPLE_DIR" \
+  git clone --depth 1 https://github.com/deepgrove-ai/mlx-lm-deepgrove.git "$ENIO_DIR" \
     || die "Could not clone mlx-lm-deepgrove."
 fi
 
-if [ -d "$MAPLE_DIR/.venv" ]; then
+if [ -d "$ENIO_DIR/.venv" ]; then
   skip "python venv"
 else
-  ( cd "$MAPLE_DIR" && uv venv --python 3.12 ) || die "Could not create the Python venv."
+  ( cd "$ENIO_DIR" && uv venv --python 3.12 ) || die "Could not create the Python venv."
 fi
-( cd "$MAPLE_DIR" && uv pip install -e . rich >/dev/null ) || die "Could not install mlx-lm."
+( cd "$ENIO_DIR" && uv pip install -e . rich >/dev/null ) || die "Could not install mlx-lm."
 
 say "Model weights (~5GB)"
-if [ -f "$MAPLE_DIR/maple-2bit-mlx/config.json" ]; then
+if [ -f "$ENIO_DIR/maple-2bit-mlx/config.json" ]; then
   skip "weights present"
 else
   printf '    downloading — resumable, safe to interrupt\n'
-  ( cd "$MAPLE_DIR" && source .venv/bin/activate && \
+  ( cd "$ENIO_DIR" && source .venv/bin/activate && \
     hf download deepgrove/maple-2bit-mlx --local-dir maple-2bit-mlx ) \
     || die "Weight download failed. Re-run this script to resume."
 fi
@@ -147,10 +147,10 @@ say "Agent"
 mkdir -p "$WORKSPACE" "$DATA_DIR"
 
 printf '    running tests\n'
-if ( cd "$AGENT_DIR" && npm test >/tmp/maple-test.log 2>&1 ); then
-  printf '    %s\n' "$(grep -E '^# (tests|pass)' /tmp/maple-test.log | tr '\n' ' ')"
+if ( cd "$AGENT_DIR" && npm test >/tmp/enio-test.log 2>&1 ); then
+  printf '    %s\n' "$(grep -E '^# (tests|pass)' /tmp/enio-test.log | tr '\n' ' ')"
 else
-  warn "Some tests failed — see /tmp/maple-test.log. Continuing."
+  warn "Some tests failed — see /tmp/enio-test.log. Continuing."
 fi
 
 # ------------------------------------------------------ optional: search
@@ -211,11 +211,11 @@ say "Writing configuration"
 {
   echo "# Written by install.sh on $(date '+%Y-%m-%d %H:%M')."
   echo "# Source this, or copy the lines into your shell profile."
-  echo "export MAPLE_DIR=\"$MAPLE_DIR\"   # python env + weights, ~5.5GB"
-  echo "export MAPLE_WORKSPACE=\"$WORKSPACE\""
+  echo "export ENIO_DIR=\"$ENIO_DIR\"   # python env + weights, ~5.5GB"
+  echo "export ENIO_WORKSPACE=\"$WORKSPACE\""
   [ "$SEARXNG_ENABLED" = "1" ] && echo 'export SEARXNG_URL="http://127.0.0.1:8888"'
-  echo "# export MAPLE_BACKEND=ollama    # to use Ollama instead of Maple"
-  echo "# export MAPLE_ROUTING=0         # to disable specialist routing"
+  echo "# export ENIO_BACKEND=ollama    # to use Ollama instead of Maple"
+  echo "# export ENIO_ROUTING=0         # to disable specialist routing"
 } > "$ENV_FILE"
 printf '    %s\n' "$ENV_FILE"
 
@@ -247,9 +247,9 @@ ${BOLD}Worth knowing${OFF}
 
     /good in chat saves an answer as an example to imitate later
     /pref "be concise" sets a standing instruction
-    maple backends    switch to Ollama or another engine
-    maple stats       see what it has remembered
-    maple --help      everything else
+    enio backends    switch to Ollama or another engine
+    enio stats       see what it has remembered
+    enio --help      everything else
 
 EOF
 

@@ -32,7 +32,7 @@ export async function serve(): Promise<void> {
 
   server.listen(config.agentPort, config.agentHost, () => {
     const shown = config.agentHost === "0.0.0.0" ? "<this-machine>" : config.agentHost;
-    console.log(`\nmaple-agent listening on http://${shown}:${config.agentPort}/v1`);
+    console.log(`\nenio listening on http://${shown}:${config.agentPort}/v1`);
     console.log(`  ${registry.all.length} tools · upstream ${config.modelBaseUrl}`);
     console.log(`\n  API key: ${token}`);
     console.log(`  ${DIM}paste that into any OpenAI-compatible client's API key field${RESET}`);
@@ -83,12 +83,12 @@ async function handle(
   }
 
   if (!isAuthorized(req, token)) {
-    res.setHeader("WWW-Authenticate", 'Bearer realm="maple-agent"');
+    res.setHeader("WWW-Authenticate", 'Bearer realm="enio"');
     sendJson(res, 401, {
       error: {
         message:
           "Missing or invalid API key. Send it as 'Authorization: Bearer <key>'. " +
-          "Find yours with: maple token",
+          "Find yours with: enio token",
         type: "invalid_request_error",
         code: "invalid_api_key",
       },
@@ -99,7 +99,7 @@ async function handle(
   if (req.method === "GET" && url.pathname === "/v1/models") {
     sendJson(res, 200, {
       object: "list",
-      data: [{ id: "maple-agent", object: "model", owned_by: "local" }],
+      data: [{ id: "enio", object: "model", owned_by: "local" }],
     });
     return;
   }
@@ -151,7 +151,7 @@ async function handle(
           id,
           object: "chat.completion.chunk",
           created,
-          model: "maple-agent",
+          model: "enio",
           choices: [{ index: 0, delta, finish_reason: null }],
         })}\n\n`,
       );
@@ -173,7 +173,7 @@ async function handle(
         id,
         object: "chat.completion.chunk",
         created,
-        model: "maple-agent",
+        model: "enio",
         choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
       })}\n\n`,
     );
@@ -193,7 +193,7 @@ async function handle(
     id,
     object: "chat.completion",
     created,
-    model: "maple-agent",
+    model: "enio",
     choices: [
       {
         index: 0,

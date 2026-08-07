@@ -257,7 +257,7 @@ const fetchTool: ToolDef = {
     if (typeof target === "string") return target;
     try {
       const res = await fetch(target, {
-        headers: { "User-Agent": "maple-agent/0.1 (+local)" },
+        headers: { "User-Agent": "enio/0.1 (+local)" },
         signal: AbortSignal.timeout(20_000),
         redirect: "follow",
       });
