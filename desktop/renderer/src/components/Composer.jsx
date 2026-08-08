@@ -99,6 +99,60 @@ export function Composer({
     ref.current?.focus();
   };
 
+  // Everything below funnels into the same place: a file the agent can read is
+  // a file inside the workspace, so anything from outside is copied in and then
+  // referenced by name. The mention is the only thing the server ever sees.
+  const attachAll = (names) => {
+    let next = value;
+    for (const name of names) next = appendMention(next, name);
+    onChange(next);
+    ref.current?.focus();
+  };
+
+  const pickFiles = async () => {
+    const names = (await window.maple?.pickFiles()) ?? [];
+    if (names.length > 0) attachAll(names);
+  };
+
+  /** Image bytes with no path: a paste, or a drag from a browser. */
+  const saveImageBlob = async (file) => {
+    const buffer = await file.arrayBuffer();
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    // Chunked because String.fromCharCode(...bytes) blows the argument limit on
+    // anything larger than a small icon.
+    for (let i = 0; i < bytes.length; i += 8192) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    }
+    return window.maple?.saveImage(file.name || "pasted.png", btoa(binary));
+  };
+
+  const handlePaste = async (e) => {
+    const images = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
+    if (images.length === 0) return;
+    e.preventDefault();
+    const names = (await Promise.all(images.map(saveImageBlob))).filter(Boolean);
+    if (names.length > 0) attachAll(names);
+  };
+
+  const handleDrop = async (e) => {
+    const dropped = [...e.dataTransfer.files];
+    if (dropped.length === 0) return;
+    e.preventDefault();
+    // A dragged file has a real path; only pasted bytes need the base64 route.
+    const paths = dropped.map((f) => window.maple?.filePath?.(f) ?? null);
+    const names = [];
+    for (let i = 0; i < dropped.length; i++) {
+      names.push(
+        paths[i]
+          ? await window.maple?.importFile(paths[i])
+          : await saveImageBlob(dropped[i]),
+      );
+    }
+    const usable = names.filter(Boolean);
+    if (usable.length > 0) attachAll(usable);
+  };
+
   return (
     <footer className="relative flex shrink-0 items-end gap-2 border-t p-3">
       {slashMatches.length > 0 && (
@@ -113,6 +167,7 @@ export function Composer({
         capabilities={capabilities}
         onInsertMention={insertMention}
         onInsertSkill={insertSkill}
+        onPickFiles={pickFiles}
         disabled={disabled || streaming}
       />
 
@@ -123,6 +178,9 @@ export function Composer({
         disabled={streaming}
         placeholder="Message Enio…"
         className="max-h-[200px] min-h-[40px] resize-none"
+        onPaste={handlePaste}
+        onDrop={handleDrop}
+        onDragOver={(e) => e.preventDefault()}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
           // While the palette is open the arrow keys and Enter belong to it,

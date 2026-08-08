@@ -251,14 +251,19 @@ export const config = {
    * failed". Omitting the field is no better, since mlx-lm then falls back to
    * its own 512 default and truncates answers mid-sentence.
    *
-   * The value is a latency rail, not a capacity limit. Maple frequently fails
-   * to stop on its own and keeps reasoning until something cuts it off, so the
-   * ceiling is what a turn costs in the bad case: at ~81 tok/s, 4096 is a
-   * 60-second wait for an answer whose visible part arrived in the first two
-   * seconds, because the rest is <think> that gets stripped. Same rationale as
-   * maxToolIterations below — given the chance, a small model runs forever.
+   * The number itself is a latency rail. Maple's chat template appends a
+   * <think> block on every generation unconditionally — there is no flag to
+   * turn it off — and the model will reason until something cuts it off. So the
+   * ceiling is what a turn costs in the bad case, and it trades two failures
+   * against each other: too high and a one-line answer takes a minute, too low
+   * and a question needing any deliberation returns *nothing at all*, because
+   * the budget went entirely on reasoning that then gets stripped.
+   *
+   * 2048 is where those meet. Short answers stop early and are unaffected;
+   * questions over an attachment come back with something rather than blank.
+   * Raise ENIO_MAX_TOKENS if you would rather wait than be told less.
    */
-  maxTokens: Number(env("MAX_TOKENS") ?? 1024),
+  maxTokens: Number(env("MAX_TOKENS") ?? 2048),
 
   /** Safety rails on the agent loop. A small model can loop forever given the chance. */
   maxToolIterations: Number(env("MAX_ITERS") ?? 8),

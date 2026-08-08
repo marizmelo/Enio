@@ -8,7 +8,7 @@
 // easiest to consume incrementally.
 "use strict";
 
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
@@ -274,6 +274,78 @@ ipcMain.handle("get-status", () => lastStatus);
 // to consume there), so it needs the key. This is our own trusted page with no
 // remote content loaded into it.
 ipcMain.handle("get-token", () => readToken());
+
+/**
+ * Where attachments have to end up.
+ *
+ * The agent resolves every attachment through safePath, which refuses anything
+ * outside the workspace — so a file chosen from elsewhere on disk cannot be
+ * read no matter how it is referenced. Copying into the workspace is therefore
+ * not a convenience, it is the only thing that makes a native file picker
+ * usable at all. Mirrors config.ts, which is the source of truth.
+ */
+const WORKSPACE = path.resolve(
+  process.env.ENIO_WORKSPACE ??
+    process.env.MAPLE_WORKSPACE ??
+    path.join(os.homedir(), "enio-workspace"),
+);
+
+/**
+ * Copy into the workspace without ever overwriting.
+ *
+ * A second screenshot.png must not silently replace the first — the user would
+ * be asking about one image while the model reads another, and nothing on
+ * screen would say so.
+ */
+function copyIntoWorkspace(sourcePath) {
+  fs.mkdirSync(WORKSPACE, { recursive: true });
+  const ext = path.extname(sourcePath);
+  const stem = path.basename(sourcePath, ext).replace(/[^\w.-]+/g, "-") || "file";
+
+  let name = `${stem}${ext}`;
+  for (let n = 2; fs.existsSync(path.join(WORKSPACE, name)); n++) {
+    name = `${stem}-${n}${ext}`;
+  }
+  fs.copyFileSync(sourcePath, path.join(WORKSPACE, name));
+  return name;
+}
+
+ipcMain.handle("pick-files", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Attach to this message",
+    properties: ["openFile", "multiSelections"],
+    filters: [
+      { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff"] },
+      { name: "Text", extensions: ["txt", "md", "json", "csv", "log", "yml", "yaml"] },
+      { name: "All files", extensions: ["*"] },
+    ],
+  });
+  if (result.canceled) return [];
+  return result.filePaths.map(copyIntoWorkspace);
+});
+
+ipcMain.handle("import-file", (_event, sourcePath) => {
+  try {
+    return copyIntoWorkspace(sourcePath);
+  } catch {
+    // A drag from somewhere unreadable should drop the file, not the app.
+    return null;
+  }
+});
+
+/** Pasted or dropped image bytes, which have no path to copy from. */
+ipcMain.handle("save-image", (_event, { name, base64 }) => {
+  fs.mkdirSync(WORKSPACE, { recursive: true });
+  const ext = path.extname(name || "") || ".png";
+  const stem = (path.basename(name || "pasted", ext) || "pasted").replace(/[^\w.-]+/g, "-");
+
+  let file = `${stem}${ext}`;
+  for (let n = 2; fs.existsSync(path.join(WORKSPACE, file)); n++) {
+    file = `${stem}-${n}${ext}`;
+  }
+  fs.writeFileSync(path.join(WORKSPACE, file), Buffer.from(base64, "base64"));
+  return file;
+});
 
 ipcMain.handle("open-external", (_event, url) => {
   // Only allow http(s) links out — this is the one bit of OS access the

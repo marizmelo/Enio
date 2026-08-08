@@ -34,6 +34,7 @@ export async function complete(
   tools: WireTool[],
   handlers: StreamHandlers = {},
   signal?: AbortSignal,
+  maxTokens: number = config.maxTokens,
 ): Promise<CompletionResult> {
   const body: Record<string, unknown> = {
     model: config.modelName,
@@ -48,7 +49,7 @@ export async function complete(
   // killing the connection — the caller gets "fetch failed" with no status code
   // and nothing in it points at max_tokens. Every backend accepts a positive
   // value, so there is no longer a reason to vary this per backend.
-  body.max_tokens = config.maxTokens;
+  body.max_tokens = maxTokens;
 
   if (tools.length > 0) body.tools = tools;
 

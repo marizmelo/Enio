@@ -5,7 +5,7 @@
 // that; IPC here is only for backend lifecycle status and opening links.
 "use strict";
 
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("maple", {
   /** Subscribe to backend status pushes. Returns an unsubscribe function. */
@@ -23,6 +23,37 @@ contextBridge.exposeInMainWorld("maple", {
   /** The API key for the agent endpoint, read from disk by the main process. */
   getToken() {
     return ipcRenderer.invoke("get-token");
+  },
+
+  /**
+   * Native file picker. Returns workspace-relative names, because the chosen
+   * files are copied in — the agent cannot read anything outside the workspace.
+   */
+  pickFiles() {
+    return ipcRenderer.invoke("pick-files");
+  },
+
+  /** Save pasted or dropped image bytes into the workspace. */
+  saveImage(name, base64) {
+    return ipcRenderer.invoke("save-image", { name, base64 });
+  },
+
+  /**
+   * The real path behind a dropped File. Electron removed File.path from the
+   * renderer, and webUtils is the supported replacement — it must be called
+   * here, in the preload, because the renderer is sandboxed.
+   */
+  filePath(file) {
+    try {
+      return webUtils.getPathForFile(file) || null;
+    } catch {
+      return null;
+    }
+  },
+
+  /** Copy an already-on-disk file into the workspace. */
+  importFile(sourcePath) {
+    return ipcRenderer.invoke("import-file", sourcePath);
   },
 
   /** Open a link in the user's default browser instead of navigating in-app. */

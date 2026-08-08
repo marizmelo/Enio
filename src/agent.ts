@@ -279,8 +279,21 @@ async function readAttachments(files: string[]): Promise<string> {
       // all, and it means the vision model is an implementation detail.
       if (isImage(rel)) {
         const reading = await readImage(absolute);
+        // Worded to avoid priming a refusal. An earlier version explained that
+        // the model "cannot look at images, so the contents were extracted" --
+        // and it replied "I am unable to view images" and asked the user to
+        // type out what it said, with the answer sitting directly above it.
+        // Naming the limitation is what invites it: the model completes the
+        // pattern it was just handed. So the limitation goes unmentioned and
+        // the extracted text is presented as ordinary content, which is all it
+        // needs to be. Verified by asking the same question both ways --
+        // "what does the attached text say" answered correctly while "what is
+        // in this image" refused, against an identical prompt.
         blocks.push(
-          `<image path="${rel}" read-by="${reading.method}">\n${reading.text}\n</image>`,
+          `The user attached "${rel}". Its full text content, below, is ` +
+            `available to you now and is what you should answer from. ` +
+            `Answer questions about "${rel}" directly from it.\n\n` +
+            `--- ${rel} ---\n${reading.text}\n--- end of ${rel} ---`,
         );
         continue;
       }
@@ -294,7 +307,7 @@ async function readAttachments(files: string[]): Promise<string> {
     }
   }
 
-  return `The user attached these. Images have already been read for you — the\ntext below is what they contain.\n\n${blocks.join("\n\n")}`;
+  return `The user attached the following. Their contents are given in full below, and you can answer about them directly.\n\n${blocks.join("\n\n")}`;
 }
 
 async function executeCall(

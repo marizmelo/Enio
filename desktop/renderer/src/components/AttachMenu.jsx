@@ -24,7 +24,13 @@ import {
  * anywhere else could not be read anyway; offering the whole disk would be an
  * invitation to pick something that silently fails.
  */
-export function AttachMenu({ capabilities, onInsertMention, onInsertSkill, disabled }) {
+export function AttachMenu({
+  capabilities,
+  onInsertMention,
+  onInsertSkill,
+  onPickFiles,
+  disabled,
+}) {
   const { files = [], servers = [], skills = [], agents = [] } = capabilities;
 
   const folders = [...new Set(
@@ -43,10 +49,19 @@ export function AttachMenu({ capabilities, onInsertMention, onInsertSkill, disab
         <DropdownMenuLabel>Add to this message</DropdownMenuLabel>
         <DropdownMenuSeparator />
 
+        {/* Browsing the disk comes first. The workspace list below is only
+            useful once something is already in there, which on a fresh install
+            is never — the menu used to open onto "Workspace is empty" with no
+            way to put anything in it. */}
+        <DropdownMenuItem onSelect={onPickFiles}>
+          <FileText className="mr-2 size-4" />
+          Choose file or image…
+        </DropdownMenuItem>
+
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <FileText className="mr-2 size-4" />
-            File or image
+            From workspace
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="max-h-72 overflow-y-auto">
             {files.length === 0 ? (
