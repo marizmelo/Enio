@@ -134,6 +134,13 @@ withhold the tool entirely when unconfigured.
 a skill — markdown, no code, one shared tool slot. Capability is a tool or an
 MCP server. People reach for MCP when they needed a skill.
 
+## Further reading
+
+`DECISIONS.md` records what was considered and rejected on the way here —
+frameworks evaluated, alternatives declined, and what is deliberately not built.
+Read it before proposing an architectural change; the option may already have
+been weighed.
+
 ## Things that have bitten before
 
 - Backticks inside a SQL comment inside a JS template literal terminate the
