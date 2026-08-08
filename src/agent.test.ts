@@ -96,6 +96,36 @@ describe("streaming and <think> handling", () => {
       )) as typeof fetch;
   }
 
+  test("sends a positive max_tokens", async () => {
+    // A negative value does not come back as a 400. mlx-lm raises while
+    // validating, inside the request handler, so the socket closes and fetch
+    // rejects with a bare "fetch failed" -- no status, no mention of the field.
+    // Every turn fails and the error points nowhere near the cause.
+    let sent: Record<string, unknown> = {};
+    const originalFetchLocal = globalThis.fetch;
+    globalThis.fetch = (async (_url: unknown, init: { body: string }) => {
+      sent = JSON.parse(init.body);
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+            controller.close();
+          },
+        }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+
+    await complete([{ role: "user", content: "hi" }], []);
+    globalThis.fetch = originalFetchLocal;
+
+    assert.equal(typeof sent.max_tokens, "number");
+    assert.ok(
+      (sent.max_tokens as number) > 0,
+      `max_tokens must be positive, got ${sent.max_tokens}`,
+    );
+  });
+
   test("separates reasoning from visible content", async () => {
     stubStream(["<think>", "let me consider", "</think>", "The answer is 4."]);
     const result = await complete([{ role: "user", content: "2+2" }], []);

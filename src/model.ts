@@ -43,9 +43,12 @@ export async function complete(
     stream: true,
   };
 
-  // mlx-lm reads -1 as "no limit". OpenAI and Ollama reject a negative value
-  // with a 400, so the field is omitted entirely for those rather than sent.
-  if (activeBackend().supportsUnlimitedTokens) body.max_tokens = -1;
+  // Always an explicit positive cap. mlx-lm once read -1 as "no limit", but it
+  // now validates max_tokens >= 0 and raises from inside the request handler,
+  // killing the connection — the caller gets "fetch failed" with no status code
+  // and nothing in it points at max_tokens. Every backend accepts a positive
+  // value, so there is no longer a reason to vary this per backend.
+  body.max_tokens = config.maxTokens;
 
   if (tools.length > 0) body.tools = tools;
 

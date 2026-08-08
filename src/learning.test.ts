@@ -148,13 +148,6 @@ describe("backends", () => {
     assert.throws(() => resolveBackend("gpt5"), /Unknown backend.*Available/s);
   });
 
-  test("only mlx-lm claims unlimited token support", () => {
-    // This flag guards a real incompatibility: max_tokens:-1 is a 400 on Ollama.
-    assert.equal(BACKENDS.maple!.supportsUnlimitedTokens, true);
-    assert.equal(BACKENDS.ollama!.supportsUnlimitedTokens, false);
-    assert.equal(BACKENDS.lmstudio!.supportsUnlimitedTokens, false);
-  });
-
   test("every backend has a loopback base url", () => {
     for (const b of Object.values(BACKENDS)) {
       assert.match(b.baseUrl, /^http:\/\/127\.0\.0\.1:/, `${b.id} should be local`);

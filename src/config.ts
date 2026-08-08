@@ -232,6 +232,17 @@ export const config = {
   temperature: Number(env("TEMP") ?? 1.0),
   topP: Number(env("TOP_P") ?? 0.95),
 
+  /**
+   * Ceiling on a single completion, sent explicitly on every request.
+   *
+   * It has to be a positive number rather than "unlimited": mlx-lm validates
+   * max_tokens >= 0 and raises from inside the request handler, which drops the
+   * connection instead of returning a 400 — the client sees only "fetch
+   * failed". Omitting the field is no better, since mlx-lm then falls back to
+   * its own 512 default and truncates answers mid-sentence.
+   */
+  maxTokens: Number(env("MAX_TOKENS") ?? 4096),
+
   /** Safety rails on the agent loop. A small model can loop forever given the chance. */
   maxToolIterations: Number(env("MAX_ITERS") ?? 8),
   maxToolOutputChars: 8000,

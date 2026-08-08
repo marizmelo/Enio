@@ -5,9 +5,11 @@
  * is mostly a base URL. The presets exist because the *quirks* differ, and each
  * one below is a real incompatibility that silently breaks a request:
  *
- *  - mlx-lm accepts `max_tokens: -1` to mean "no limit". OpenAI and Ollama
- *    reject a negative value outright, so it has to be omitted rather than
- *    passed through.
+ *  - max_tokens used to vary per backend, because mlx-lm read -1 as "no limit"
+ *    while OpenAI and Ollama 400 on a negative value. Current mlx-lm validates
+ *    it too, and raises from inside the request handler rather than returning a
+ *    status, so the client sees a dropped connection. Every backend now gets
+ *    one explicit positive cap (`config.maxTokens`) and the flag is gone.
  *  - Ollama needs the model tag ("qwen3:8b"), not a filesystem path.
  *  - llama.cpp's server ignores an unknown `model` field but requires the
  *    field to be present.
@@ -19,8 +21,6 @@ export interface Backend {
   baseUrl: string;
   /** Default model identifier. Overridable with ENIO_MODEL. */
   model: string;
-  /** Whether `max_tokens: -1` is understood as "unlimited". */
-  supportsUnlimitedTokens: boolean;
   /** Whether the server parses tool calls into structured deltas. When false,
    *  we lean harder on scavenging <tool_call> blocks out of the text. */
   nativeToolCalls: boolean;
@@ -33,7 +33,6 @@ export const BACKENDS: Record<string, Backend> = {
     label: "Maple via mlx-lm (default)",
     baseUrl: "http://127.0.0.1:8080/v1",
     model: "maple-2bit-mlx",
-    supportsUnlimitedTokens: true,
     nativeToolCalls: true,
     notes: "Started by `enio up`. Fastest option on Apple Silicon.",
   },
@@ -42,7 +41,6 @@ export const BACKENDS: Record<string, Backend> = {
     label: "Ollama",
     baseUrl: "http://127.0.0.1:11434/v1",
     model: "qwen3:8b",
-    supportsUnlimitedTokens: false,
     nativeToolCalls: true,
     notes:
       "Set ENIO_MODEL to any tag you have pulled. Tool calling requires a " +
@@ -53,7 +51,6 @@ export const BACKENDS: Record<string, Backend> = {
     label: "LM Studio",
     baseUrl: "http://127.0.0.1:1234/v1",
     model: "local-model",
-    supportsUnlimitedTokens: false,
     nativeToolCalls: true,
     notes: "Start the local server from LM Studio's Developer tab first.",
   },
@@ -62,7 +59,6 @@ export const BACKENDS: Record<string, Backend> = {
     label: "llama.cpp server",
     baseUrl: "http://127.0.0.1:8081/v1",
     model: "local",
-    supportsUnlimitedTokens: false,
     nativeToolCalls: false,
     notes: "Run llama-server with --jinja for chat-template tool support.",
   },
@@ -71,7 +67,6 @@ export const BACKENDS: Record<string, Backend> = {
     label: "Custom OpenAI-compatible endpoint",
     baseUrl: "http://127.0.0.1:8000/v1",
     model: "local",
-    supportsUnlimitedTokens: false,
     nativeToolCalls: true,
     notes: "Set ENIO_BASE_URL and ENIO_MODEL.",
   },
