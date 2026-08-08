@@ -3,6 +3,7 @@ import { apiFetch } from "./api.js";
 import { RunsView } from "./components/RunsView.jsx";
 import { GraphView } from "./components/GraphView.jsx";
 import { ErrorBanner } from "./components/Common.jsx";
+import { useInspector } from "./store.js";
 
 const TABS = [
   { id: "runs", label: "Runs" },
@@ -10,27 +11,28 @@ const TABS = [
 ];
 
 export function App() {
-  const [tab, setTab] = useState("runs");
+  // Tab and auth live in the store because the views set them and the shell
+  // renders them. Stats stay local: nothing outside this component reads them.
+  const tab = useInspector((s) => s.tab);
+  const setTab = useInspector((s) => s.setTab);
+  const globalAuthError = useInspector((s) => s.authError);
+  const reportError = useInspector((s) => s.reportError);
+
   const [stats, setStats] = useState(null);
   const [statsError, setStatsError] = useState(null);
-  const [globalAuthError, setGlobalAuthError] = useState(null);
 
   const loadStats = useCallback(() => {
     apiFetch("/api/stats")
       .then((data) => setStats(data && typeof data === "object" ? data : null))
       .catch((err) => {
         setStatsError(err);
-        if (err && err.status === 401) setGlobalAuthError(err);
+        reportError(err);
       });
-  }, []);
+  }, [reportError]);
 
   useEffect(() => {
     loadStats();
   }, [loadStats]);
-
-  const handleAuthError = useCallback((err) => {
-    setGlobalAuthError(err);
-  }, []);
 
   return (
     <div className="app-shell">
@@ -82,8 +84,8 @@ export function App() {
       )}
 
       <div className="app-body">
-        {tab === "runs" && <RunsView onAuthError={handleAuthError} />}
-        {tab === "graph" && <GraphView onAuthError={handleAuthError} />}
+        {tab === "runs" && <RunsView />}
+        {tab === "graph" && <GraphView />}
       </div>
     </div>
   );

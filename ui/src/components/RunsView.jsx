@@ -2,8 +2,10 @@ import React, { useEffect, useState, useCallback } from "react";
 import { apiFetch } from "../api.js";
 import { SessionList } from "./SessionList.jsx";
 import { TurnTimeline } from "./TurnTimeline.jsx";
+import { useInspector } from "../store.js";
 
-export function RunsView({ onAuthError }) {
+export function RunsView() {
+  const reportError = useInspector((s) => s.reportError);
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState(null);
@@ -23,10 +25,10 @@ export function RunsView({ onAuthError }) {
       })
       .catch((err) => {
         setSessionsError(err);
-        if (err && err.status === 401) onAuthError?.(err);
+        reportError(err);
       })
       .finally(() => setSessionsLoading(false));
-  }, [onAuthError]);
+  }, [reportError]);
 
   useEffect(() => {
     loadSessions();
@@ -44,11 +46,11 @@ export function RunsView({ onAuthError }) {
         })
         .catch((err) => {
           setTurnsError(err);
-          if (err && err.status === 401) onAuthError?.(err);
+          reportError(err);
         })
         .finally(() => setTurnsLoading(false));
     },
-    [onAuthError]
+    [reportError]
   );
 
   const handleSelect = (id) => {

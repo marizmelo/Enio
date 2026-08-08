@@ -4,6 +4,7 @@ import { Message } from "@/components/Message";
 import { Composer } from "@/components/Composer";
 import { EmptyState } from "@/components/EmptyState";
 import { streamTurn } from "@/lib/agent";
+import { fetchCapabilities } from "@/lib/capabilities";
 
 export function App() {
   const [status, setStatus] = useState({
@@ -13,6 +14,7 @@ export function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [capabilities, setCapabilities] = useState({});
 
   const abortRef = useRef(null);
   const scrollRef = useRef(null);
@@ -36,6 +38,13 @@ export function App() {
   }, [messages]);
 
   const backendReady = status.phase === "ready";
+
+  // Fetched once the agent endpoint is up rather than on mount: before that the
+  // token file may not exist yet, and a 401 here would leave the menus empty
+  // for the rest of the session with nothing to retry it.
+  useEffect(() => {
+    if (backendReady) fetchCapabilities().then(setCapabilities);
+  }, [backendReady]);
 
   const send = useCallback(
     async (text) => {
@@ -120,6 +129,7 @@ export function App() {
         onStop={() => abortRef.current?.abort()}
         disabled={!backendReady}
         streaming={streaming}
+        capabilities={capabilities}
       />
     </div>
   );

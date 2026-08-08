@@ -14,6 +14,7 @@ import { EntityNode } from "./EntityNode.jsx";
 import { NodeDetailsPanel } from "./NodeDetailsPanel.jsx";
 import { EmptyState, Spinner, ErrorBanner } from "./Common.jsx";
 import { entityColor } from "../utils.js";
+import { useInspector } from "../store.js";
 
 const NODE_TYPES = { entityNode: EntityNode };
 
@@ -22,7 +23,8 @@ function confidenceOr(value, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-export function GraphView({ onAuthError }) {
+export function GraphView() {
+  const reportError = useInspector((s) => s.reportError);
   const [raw, setRaw] = useState(null); // { nodes, edges }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -38,10 +40,10 @@ export function GraphView({ onAuthError }) {
       })
       .catch((err) => {
         setError(err);
-        if (err && err.status === 401) onAuthError?.(err);
+        reportError(err);
       })
       .finally(() => setLoading(false));
-  }, [onAuthError]);
+  }, [reportError]);
 
   useEffect(() => {
     load();
@@ -76,12 +78,15 @@ export function GraphView({ onAuthError }) {
 
   return (
     <ReactFlowProvider>
-      <GraphCanvas raw={raw} setRaw={setRaw} onAuthError={onAuthError} />
+      <GraphCanvas raw={raw} setRaw={setRaw} />
     </ReactFlowProvider>
   );
 }
 
-function GraphCanvas({ raw, setRaw, onAuthError }) {
+function GraphCanvas({ raw, setRaw }) {
+  // Pulled straight from the store rather than passed down: this component is
+  // two levels below the shell that renders the banner.
+  const reportError = useInspector((s) => s.reportError);
   const { setCenter, getZoom } = useReactFlow();
   const [selectedId, setSelectedId] = useState(null);
   const [confidenceMin, setConfidenceMin] = useState(0);
@@ -190,10 +195,10 @@ function GraphCanvas({ raw, setRaw, onAuthError }) {
         }));
       } catch (err) {
         setDeleteError(err);
-        if (err && err.status === 401) onAuthError?.(err);
+        reportError(err);
       }
     },
-    [setRaw, onAuthError]
+    [setRaw, reportError]
   );
 
   const handleDeleteEdgeFromPanel = useCallback(
@@ -204,11 +209,11 @@ function GraphCanvas({ raw, setRaw, onAuthError }) {
         setRaw((prev) => ({ ...prev, edges: prev.edges.filter((e) => e.id !== edge.id) }));
       } catch (err) {
         setDeleteError(err);
-        if (err && err.status === 401) onAuthError?.(err);
+        reportError(err);
         throw err;
       }
     },
-    [setRaw, onAuthError]
+    [setRaw, reportError]
   );
 
   const handleDeleteEntity = useCallback(
@@ -223,11 +228,11 @@ function GraphCanvas({ raw, setRaw, onAuthError }) {
         setSelectedId(null);
       } catch (err) {
         setDeleteError(err);
-        if (err && err.status === 401) onAuthError?.(err);
+        reportError(err);
         throw err;
       }
     },
-    [setRaw, onAuthError]
+    [setRaw, reportError]
   );
 
   const legendEntries = [
