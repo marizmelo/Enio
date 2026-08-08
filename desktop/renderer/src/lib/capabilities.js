@@ -9,7 +9,7 @@
 
 const AGENT_BASE = "http://127.0.0.1:8787";
 
-const EMPTY = { tools: [], skills: [], specialists: [], servers: [], files: [] };
+const EMPTY = { tools: [], skills: [], agents: [], servers: [], files: [] };
 
 export async function fetchCapabilities() {
   try {
@@ -47,4 +47,21 @@ export function appendMention(value, token) {
 export function slashQuery(value) {
   const m = /^\/([\w-]*)$/.exec(value);
   return m ? m[1].toLowerCase() : null;
+}
+
+/**
+ * The "@word" currently being typed at the end of the box, or null.
+ *
+ * Requires start-of-string or whitespace before the @, matching the server's
+ * rule — that is what keeps `user@example.com` from opening a palette halfway
+ * through an email address.
+ */
+export function mentionQuery(value) {
+  const m = /(^|\s)@([\w./-]*)$/.exec(value);
+  return m ? m[2].toLowerCase() : null;
+}
+
+/** Replace the half-typed @token at the end with the chosen one. */
+export function completeMention(value, token) {
+  return value.replace(/(^|\s)@[\w./-]*$/, `$1@${token} `);
 }

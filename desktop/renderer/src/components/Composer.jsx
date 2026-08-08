@@ -4,7 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AttachMenu } from "@/components/AttachMenu";
 import { SlashPalette } from "@/components/SlashPalette";
-import { appendMention, applySlash, slashQuery } from "@/lib/capabilities";
+import { MentionPalette } from "@/components/MentionPalette";
+import {
+  appendMention,
+  applySlash,
+  completeMention,
+  mentionQuery,
+  slashQuery,
+} from "@/lib/capabilities";
 
 /**
  * Input row. Enter sends, shift-Enter inserts a newline -- and the send button
@@ -52,6 +59,29 @@ export function Composer({
           s.name.toLowerCase().startsWith(slash),
         );
 
+  // Agents lead the @ palette. They are the smallest set and the one a user
+  // reaches for deliberately -- files are usually picked from the menu, where
+  // there is room to show a long path.
+  const at = streaming ? null : mentionQuery(value);
+  const mentionGroups = [];
+  if (at !== null) {
+    const agents = (capabilities.agents ?? [])
+      .filter((a) => a.name.toLowerCase().startsWith(at))
+      .map((a) => ({ token: a.name, hint: a.description }));
+    const servers = (capabilities.servers ?? [])
+      .filter((s) => s.toLowerCase().startsWith(at))
+      .map((s) => ({ token: s, hint: "MCP connection" }));
+    const files = (capabilities.files ?? [])
+      .filter((f) => f.toLowerCase().startsWith(at))
+      .slice(0, 8)
+      .map((f) => ({ token: f, hint: null }));
+
+    if (agents.length) mentionGroups.push({ heading: "Agents", items: agents });
+    if (servers.length) mentionGroups.push({ heading: "Connections", items: servers });
+    if (files.length) mentionGroups.push({ heading: "Files", items: files });
+  }
+  const firstMention = mentionGroups[0]?.items[0]?.token ?? null;
+
   const insertMention = (token) => {
     onChange(appendMention(value, token));
     ref.current?.focus();
@@ -62,10 +92,21 @@ export function Composer({
     ref.current?.focus();
   };
 
+  // Replaces the half-typed "@wor" rather than appending, which is what the
+  // menu does — the menu has nothing half-typed to replace.
+  const pickMention = (token) => {
+    onChange(completeMention(value, token));
+    ref.current?.focus();
+  };
+
   return (
     <footer className="relative flex shrink-0 items-end gap-2 border-t p-3">
       {slashMatches.length > 0 && (
         <SlashPalette matches={slashMatches} onPick={insertSkill} />
+      )}
+
+      {slashMatches.length === 0 && mentionGroups.length > 0 && (
+        <MentionPalette groups={mentionGroups} onPick={pickMention} />
       )}
 
       <AttachMenu
@@ -91,6 +132,10 @@ export function Composer({
             e.preventDefault();
             if (slashMatches.length > 0) {
               insertSkill(slashMatches[0].name);
+              return;
+            }
+            if (firstMention) {
+              pickMention(firstMention);
               return;
             }
             if (canSend) onSend();

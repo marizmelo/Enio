@@ -134,7 +134,7 @@ async function handle(
         name: s.name,
         description: s.description,
       })),
-      specialists: SPECIALISTS.map((s) => ({
+      agents: SPECIALISTS.map((s) => ({
         name: s.name,
         description: s.description,
         tools: s.tools,

@@ -80,7 +80,7 @@ export function TurnTimeline({ turns, loading, error, onRetry, sessionSelected }
           Only repaired / scavenged
         </label>
         <label className="filter-select">
-          Specialist
+          Agent
           <select value={specialistFilter} onChange={(e) => setSpecialistFilter(e.target.value)}>
             <option value="all">All</option>
             {specialists.map((s) => (

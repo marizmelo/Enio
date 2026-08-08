@@ -25,7 +25,7 @@ import {
  * invitation to pick something that silently fails.
  */
 export function AttachMenu({ capabilities, onInsertMention, onInsertSkill, disabled }) {
-  const { files = [], servers = [], skills = [], specialists = [] } = capabilities;
+  const { files = [], servers = [], skills = [], agents = [] } = capabilities;
 
   const folders = [...new Set(
     files.filter((f) => f.includes("/")).map((f) => f.split("/")[0]),
@@ -129,10 +129,10 @@ export function AttachMenu({ capabilities, onInsertMention, onInsertSkill, disab
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Users className="mr-2 size-4" />
-            Send to specialist
+            Send to agent
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-72">
-            {specialists.map((s) => (
+            {agents.map((s) => (
               <DropdownMenuItem
                 key={s.name}
                 onSelect={() => onInsertMention(s.name)}

@@ -127,7 +127,7 @@ export async function repl(opts: { showThinking: boolean }): Promise<void> {
     }
     if (mentions.unresolved.length > 0) {
       stdout.write(
-        dim(`  (no skill, specialist or file called ${mentions.unresolved.join(", ")} — left as text)\n`),
+        dim(`  (no skill, agent or file called ${mentions.unresolved.join(", ")} — left as text)\n`),
       );
     }
 
@@ -208,7 +208,7 @@ async function handleCommand(
         [
           "",
           "  /<skill>    run a skill directly (tab to list them)",
-          "  @<name>     force a specialist, attach a file, or allow an MCP server",
+          "  @<name>     send to an agent, attach a file, or allow an MCP server",
           "",
           "  /help       this message",
           "  /good       save the last answer as an example to imitate",

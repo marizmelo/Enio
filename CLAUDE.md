@@ -82,6 +82,16 @@ ask which specialist owns it, not "where can I fit this".
 web access; `researcher` has no shell. Overlap erodes the benefit until you have
 one agent with every tool again.
 
+**Users see "agents"; the code says "specialists".** Deliberate, not drift.
+"Specialist" describes the architecture accurately and this file, `DECISIONS.md`
+and the module names all use it. "Agent" is what anyone who has used an AI
+product already understands, so it is what the UI, the CLI help and the
+`/capabilities` response say. The line is: anything a user reads says agent,
+anything a maintainer reads says specialist. The DB column, the router's own
+prompt and its JSON key stay `specialist` — the first needs a migration to
+change and the other two are model-facing, where re-wording a working classifier
+buys nothing.
+
 **One hop only.** Router → specialist → answer. No agent-to-agent conversation.
 Every hand-off compounds error and at this model size it compounds fast.
 
