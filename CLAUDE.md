@@ -14,6 +14,38 @@ running.
 
 ---
 
+## The four documents
+
+| | For | Read it when |
+|---|---|---|
+| `README.md` | Users | Someone asks how to install, run or configure it |
+| `CLAUDE.md` | You, now | Before changing code — it lists what must not be casually undone |
+| `DECISIONS.md` | You, later | Before proposing an architectural change |
+| `tunnel.md` | Users | Reaching the agent from a phone or another network |
+
+**`DECISIONS.md` is the one that is easy to skip and shouldn't be.** It records
+what was *considered and rejected* — which nothing else captures. `git log`
+shows what was done, never what was deliberately declined, so without it you
+will re-argue settled questions and rediscover dead ends.
+
+It covers: the agent frameworks evaluated and why the loop stayed hand-rolled;
+why the knowledge graph is derived rather than authoritative; why skills instead
+of more MCP servers; why desktop control is scripting rather than pixel
+automation; libraries that turned out to be dead ends (Kùzu, LadybugDB, nut.js);
+the bugs that already cost real time; and a list of things deliberately **not**
+built, each with the condition under which it would become worth building.
+
+It also ends with genuinely open questions. Those are open, not rhetorical —
+treat them as unknowns rather than inheriting them as settled.
+
+**`tunnel.md`** covers reaching the HTTP endpoint from outside the machine:
+Tailscale and Cloudflare Tunnel setups, why NAT traversal works the way it does,
+and the bearer-token auth. Relevant to code changes in one respect — anything
+touching `src/server.ts` or auth should keep it accurate, since the security
+model is documented there rather than here.
+
+---
+
 ## The constraint everything else follows from
 
 **The model is small.** Maple has ~1B active parameters. Nearly every design
@@ -133,13 +165,6 @@ withhold the tool entirely when unconfigured.
 **Adding a capability:** ask whether it's *know-how* or *capability*. Know-how is
 a skill — markdown, no code, one shared tool slot. Capability is a tool or an
 MCP server. People reach for MCP when they needed a skill.
-
-## Further reading
-
-`DECISIONS.md` records what was considered and rejected on the way here —
-frameworks evaluated, alternatives declined, and what is deliberately not built.
-Read it before proposing an architectural change; the option may already have
-been weighed.
 
 ## Things that have bitten before
 
