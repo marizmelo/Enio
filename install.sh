@@ -162,6 +162,12 @@ else
 fi
 ( cd "$ENIO_DIR" && uv pip install -e . rich >/dev/null ) || die "Could not install mlx-lm."
 
+# Re-applied after every pull, because a pull is exactly what reverts it. The
+# script is idempotent and refuses to touch a file it does not recognise, so
+# running it against a fixed upstream is a no-op rather than damage.
+ENIO_DIR="$ENIO_DIR" node "$AGENT_DIR/scripts/patch-runtime.mjs" || \
+  warn "Could not patch the mlx-lm tool parser; tool calls may be dropped."
+
 say "Model weights (~5GB)"
 if [ -f "$ENIO_DIR/maple-2bit-mlx/config.json" ]; then
   skip "weights present"

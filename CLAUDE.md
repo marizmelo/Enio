@@ -183,6 +183,15 @@ MCP server. People reach for MCP when they needed a skill.
 - tesseract.js reports a missing language file by throwing from inside a worker
   event handler — that escapes the promise chain, so `await` catches nothing and
   the process dies. Availability is checked up front, never attempted-and-caught.
+- Maple closes its `<think>` block *inside* the `<tool_call>` block, so the
+  JSON is followed by a stray `</think>`. mlx-lm's parser is
+  `json.loads(text.strip())`, which rejects that as "Extra data", drops the
+  call, and returns empty content — every tool call silently lost, the turn
+  looking like the model said nothing, with the only evidence in
+  `~/.enio/model-server.log`. enio cannot repair it: its own JSON repair and
+  `<tool_call>` scavenging never see the text, because the failed parse
+  consumes it first. `scripts/patch-runtime.mjs` makes the parser use
+  `raw_decode`; `install.sh` re-applies it after every pull.
 - Cosine similarity and lexical-overlap scores are on different scales. They had
   a shared threshold once and keyword search silently returned nothing.
 - The lexical fallback needs stemming: people rephrase when they repeat
