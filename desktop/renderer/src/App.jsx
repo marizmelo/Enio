@@ -61,6 +61,7 @@ export function App() {
 
       let assistant = "";
       const tools = [];
+      const widgets = [];
 
       try {
         for await (const event of streamTurn(
@@ -69,6 +70,8 @@ export function App() {
         )) {
           if (event.type === "tool") {
             tools.push(event.name);
+          } else if (event.type === "widget") {
+            widgets.push(event.widget);
           } else {
             // The model opens with a blank line or two once its <think> block
             // is stripped. Trimmed at the front only, and on the accumulated
@@ -76,7 +79,15 @@ export function App() {
             // space between words and trimming those runs them together.
             assistant = (assistant + event.text).replace(/^\s+/, "");
           }
-          setMessages([...history, { role: "assistant", content: assistant, tools: [...tools] }]);
+          setMessages([
+            ...history,
+            {
+              role: "assistant",
+              content: assistant,
+              tools: [...tools],
+              widgets: [...widgets],
+            },
+          ]);
         }
       } catch (err) {
         if (err?.name === "AbortError") {

@@ -19,15 +19,27 @@ const MODEL_ID = "enio";
 export function parseSseEvent(block) {
   let data = null;
   let tool = null;
+  let widget = null;
   for (const line of block.split("\n")) {
     if (line.startsWith("data:")) {
       data = (data ?? "") + line.slice(5).trimStart();
     } else if (line.startsWith(":")) {
-      const match = /^tool\s+(.+)$/.exec(line.slice(1).trim());
-      if (match) tool = match[1];
+      const comment = line.slice(1).trim();
+      const toolMatch = /^tool\s+(.+)$/.exec(comment);
+      if (toolMatch) tool = toolMatch[1];
+      const widgetMatch = /^widget\s+(.+)$/.exec(comment);
+      if (widgetMatch) {
+        try {
+          widget = JSON.parse(widgetMatch[1]);
+        } catch {
+          // A malformed payload is dropped rather than thrown: the tool's text
+          // is already in the bubble, so this can only ever cost decoration.
+          widget = null;
+        }
+      }
     }
   }
-  return { data, tool };
+  return { data, tool, widget };
 }
 
 /**
@@ -85,8 +97,9 @@ export async function* streamTurn(messages, signal) {
       const block = buffer.slice(0, split);
       buffer = buffer.slice(split + 2);
 
-      const { data, tool } = parseSseEvent(block);
+      const { data, tool, widget } = parseSseEvent(block);
       if (tool) yield { type: "tool", name: tool };
+      if (widget) yield { type: "widget", widget };
       if (!data) continue;
       if (data === "[DONE]") return;
 

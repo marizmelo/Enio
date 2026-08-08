@@ -119,7 +119,7 @@ export const SPECIALISTS: Specialist[] = [
       `You are a thoughtful assistant. Answer directly from what you know.\n\n` +
       `Use recall if the user refers to something from a past conversation. ` +
       `Otherwise just answer — not everything needs a tool.`,
-    tools: ["recall", "read_skill"],
+    tools: ["recall", "current_time", "read_skill"],
   },
 ];
 

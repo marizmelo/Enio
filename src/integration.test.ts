@@ -186,3 +186,50 @@ describe("agent loop end to end", () => {
     assert.ok(hits.some((h) => h.text.includes("Mac mini")), "fact should be retrievable");
   });
 });
+
+describe("widget channel", () => {
+  test("a tool's widget reaches the handler while its text reaches the model", async () => {
+    // The clock is the shipped example, but the property under test is the
+    // contract, not the tool: text is the answer, the widget is a second view
+    // of the same answer. A client that cannot draw must lose nothing, which is
+    // what makes the CLI need no fallback code at all.
+    scriptModel([
+      { toolCall: { name: "current_time", args: {} } },
+      { content: "Told you." },
+    ]);
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const history: Message[] = [];
+    const widgets: unknown[] = [];
+    await runTurn("what time is it", history, registry, sessionId, {
+      onWidget: (w) => widgets.push(w),
+    });
+
+    assert.equal(widgets.length, 1, "the widget should have been emitted once");
+    assert.equal((widgets[0] as { type: string }).type, "clock");
+
+    // The same answer must be in the tool message the model reads, in words.
+    const toolMessage = history.find((m) => m.role === "tool");
+    assert.ok(toolMessage, "the tool result must be in the transcript");
+    assert.match(String(toolMessage!.content), /^It is .+\(.+\)\.$/);
+  });
+
+  test("a tool returning a bare string emits no widget", async () => {
+    // Every existing tool returns a string. Nothing may start emitting widgets
+    // by accident, or the channel stops meaning anything.
+    scriptModel([
+      { toolCall: { name: "read_file", args: { path: "hello.txt" } } },
+      { content: "Read it." },
+    ]);
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const widgets: unknown[] = [];
+    await runTurn("read hello.txt", [], registry, sessionId, {
+      onWidget: (w) => widgets.push(w),
+    });
+
+    assert.equal(widgets.length, 0);
+  });
+});
