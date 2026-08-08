@@ -225,6 +225,22 @@ Works with any provider or your own server. The tool is withheld entirely until 
 
 **Dry run by default.** Sending is irreversible, and deciding to send is exactly the judgement a ~1B-active model gets wrong. Until you set `ENIO_EMAIL_SEND=1`, the message is rendered and written to your workspace as a `.eml` — so you find out what it would have said before it says it to anyone. `ENIO_EMAIL_ALLOWED_TO` takes addresses or `@domain` rules and is worth setting even after you turn sending on.
 
+### Reading email
+
+```sh
+export ENIO_IMAP_HOST=imap.fastmail.com ENIO_IMAP_PORT=993
+export ENIO_IMAP_USER=you@example.com ENIO_IMAP_PASS=app-specific-password
+export ENIO_IMAP_FOLDERS=INBOX          # folders it may open
+```
+
+IMAP, not POP3 — deliberately. POP3 is a single-device protocol that downloads and traditionally deletes: no folders, no flags, no server-side search. Pointing an agent at it could pull mail off the server so your phone never sees it again. IMAP leaves everything in place and searches server-side, so finding a thread is one query rather than a mailbox download.
+
+**Strictly read-only.** No delete, no move, and specifically no marking read — an agent silently marking your inbox read is a bad afternoon with no undo. The mailbox is opened with `EXAMINE` rather than `SELECT`, so the *server* refuses any change, including the implicit `\Seen` flag a normal fetch would set.
+
+**Auth is the practical hurdle.** Gmail and Outlook have largely disabled plain IMAP passwords — you'll need an app-specific password, and OAuth2 is a project in itself. Fastmail, Proton Bridge and self-hosted servers work with a password today.
+
+A `mail` specialist owns `search_email`, `read_email` and `send_email` together, so the whole loop — find the thread, read it, draft a reply, dry-run the send — happens in one place with one prompt telling it to check who a message is *actually* from before replying.
+
 ### Controlling your Mac
 
 ```sh
@@ -439,7 +455,8 @@ Every turn is routed to one specialist with a narrow tool set:
 | **researcher** | `web_search`, `web_fetch`, `web_fetch_rendered`, `recall` |
 | **coder** | `read_file`, `write_file`, `list_dir`, `run_command` |
 | **librarian** | `recall`, `remember`, `set_preference` |
-| **operator** | `run_applescript`, `take_screenshot`, `send_email`, `read_image` |
+| **mail** | `search_email`, `read_email`, `send_email` |
+| **operator** | `run_applescript`, `take_screenshot`, `read_image` |
 | **generalist** | `recall` — the safe fallback |
 
 This exists because of the tool budget, not org-chart aesthetics. Maple picks badly once it sees more than a handful of tools. Showing it 4–5 disjoint, coherent tools is the single largest available improvement to small-model tool accuracy — larger than any prompt tweak.

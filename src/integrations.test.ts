@@ -122,10 +122,23 @@ describe("the operator specialist", () => {
 
   test("holds the machine-facing tools and nothing else", () => {
     assert.ok(operator.tools.includes("run_applescript"));
-    assert.ok(operator.tools.includes("send_email"));
+    assert.ok(operator.tools.includes("take_screenshot"));
     // Disjoint tool sets are the entire reason specialists exist.
     assert.ok(!operator.tools.includes("run_command"), "shell belongs to coder");
     assert.ok(!operator.tools.includes("web_search"), "search belongs to researcher");
+    assert.ok(!operator.tools.includes("send_email"), "email belongs to the mail specialist");
+  });
+
+  test("mail is its own specialist, and read-only about reading", () => {
+    const mail = getSpecialist("mail");
+    assert.equal(mail.name, "mail");
+    assert.ok(mail.tools.includes("search_email"));
+    assert.ok(mail.tools.includes("read_email"));
+    assert.ok(mail.tools.includes("send_email"));
+    // No tool exists that could mutate the mailbox, by design.
+    assert.ok(!mail.tools.some((t) => /delete|move|archive|mark/.test(t)));
+    assert.match(mail.systemPrompt, /read-only/i);
+    assert.match(mail.systemPrompt, /cannot be recalled|agreement first/i);
   });
 
   test("is told to confirm before anything irreversible", () => {

@@ -81,11 +81,26 @@ export const SPECIALISTS: Specialist[] = [
     tools: ["recall", "remember", "set_preference", "read_skill"],
   },
   {
+    name: "mail",
+    description:
+      "Anything about email: finding a message, catching up on the inbox, summarising a thread, or drafting and sending a reply.",
+    systemPrompt:
+      `You handle the user's email.\n\n` +
+      `Search before you answer — never guess what is in the inbox. search_email ` +
+      `returns headers and ids; read_email opens one in full. Reading is ` +
+      `strictly read-only: nothing you do marks a message read or moves it.\n\n` +
+      `Before drafting a reply, read the message you are replying to. Check who ` +
+      `it is actually from — the display name is not the address, and a reply ` +
+      `sent to the wrong person cannot be recalled.\n\n` +
+      `Show the user any message you intend to send and get agreement first.`,
+    tools: ["search_email", "read_email", "send_email", "read_skill"],
+  },
+  {
     name: "operator",
     description:
-      "Doing something on the machine or in an app: sending mail, checking the screen, controlling Calendar, Notes, Finder, Music, or running a Shortcut.",
+      "Doing something on the machine: checking the screen, controlling Calendar, Notes, Finder, Music, or running a Shortcut.",
     systemPrompt:
-      `You operate the user's Mac and send their email.\n\n` +
+      `You operate the user's Mac.\n\n` +
       `Most app control is AppleScript — run_applescript reaches Mail, Calendar, ` +
       `Notes, Reminders, Finder, Safari and Music directly, which is far more ` +
       `reliable than working through the interface. Use take_screenshot when ` +
@@ -94,7 +109,7 @@ export const SPECIALISTS: Specialist[] = [
       `email, deleting something, changing a setting — state exactly what you ` +
       `are about to do and get agreement first. Read-only checks need no ` +
       `permission; irreversible ones always do.`,
-    tools: ["run_applescript", "take_screenshot", "send_email", "read_image", "read_skill"],
+    tools: ["run_applescript", "take_screenshot", "read_image", "read_skill"],
   },
   {
     name: "generalist",
@@ -111,7 +126,9 @@ export const SPECIALISTS: Specialist[] = [
 export const DEFAULT_SPECIALIST = "generalist";
 
 const routeSchema = z.object({
-  specialist: z.enum(["researcher", "coder", "librarian", "operator", "generalist"]),
+  specialist: z.enum([
+    "researcher", "coder", "librarian", "mail", "operator", "generalist",
+  ]),
 });
 
 /**

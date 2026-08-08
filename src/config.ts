@@ -201,6 +201,24 @@ export const config = {
     .filter(Boolean),
 
   /**
+   * IMAP, for reading. Read-only in every operation — nothing here deletes,
+   * moves, or marks messages read.
+   *
+   * Most providers now require an app-specific password rather than your
+   * account password; Gmail and Outlook have largely disabled plain IMAP auth.
+   */
+  imapHost: env("IMAP_HOST") ?? "",
+  imapPort: Number(env("IMAP_PORT") ?? 993),
+  imapUser: env("IMAP_USER") ?? "",
+  imapPass: env("IMAP_PASS") ?? "",
+
+  /** Folders the model may open. Empty means all — worth narrowing. */
+  imapFolders: (env("IMAP_FOLDERS") ?? "INBOX")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+
+  /**
    * Desktop control: screenshots and AppleScript. Off by default because
    * AppleScript can do anything you can do, which meaningfully raises what a
    * wrong tool call costs.

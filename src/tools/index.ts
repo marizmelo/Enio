@@ -7,6 +7,7 @@ import { memoryTools } from "./memory.js";
 import { skillTools } from "./skills.js";
 import { visionTools } from "./vision.js";
 import { emailTools } from "./email.js";
+import { mailTools } from "./mail.js";
 import { desktopTools } from "./desktop.js";
 import { loadMcpTools } from "./mcp.js";
 
@@ -30,6 +31,7 @@ export async function buildRegistry(
     ...fsTools,
     ...visionTools,
     ...emailTools,
+    ...mailTools,
     ...desktopTools,
     ...shellTools,
     ...buildWebTools(),
