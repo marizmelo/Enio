@@ -12,8 +12,10 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
+    "start": "node dist/index.js start",
     "chat": "node dist/index.js chat",
     "serve": "node dist/index.js serve",
+    "inspect": "node dist/index.js inspect",
     "typecheck": "tsc --noEmit",
     "test": "node --test dist/*.test.js"
   },
