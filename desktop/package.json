@@ -5,6 +5,7 @@
   "description": "Desktop client for enio, a local AI agent.",
   "main": "main.js",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --mac --arm64"

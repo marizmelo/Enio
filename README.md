@@ -543,4 +543,12 @@ cd ui && npm run build # rebuild the inspector UI after changing it
 
 Tests cover what breaks quietly: JSON repair, `<think>` tags split across stream chunks, sandbox escapes, allowlist bypasses via pipes, SSRF hosts rejected before any request is made, constant-time token comparison, and the full tool loop including hallucinated tool names and runaway loops.
 
-MIT.
+## Licence
+
+Apache-2.0 — see [LICENSE](LICENSE). It grants a patent licence alongside the
+copyright one, which MIT is silent on.
+
+It covers the code in this repository and nothing else. In particular it does
+not cover the model: `install.sh` downloads Maple's weights from Hugging Face
+rather than redistributing them, and they are MIT from DeepGrove. Anything you
+pull through Ollama carries whatever licence its publisher set.

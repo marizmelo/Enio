@@ -2,6 +2,7 @@
   "name": "enio-ui",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "description": "Inspector UI for enio — a timeline of runs and a live view of the knowledge graph.",
   "type": "module",
   "scripts": {
