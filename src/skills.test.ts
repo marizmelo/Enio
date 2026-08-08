@@ -1,5 +1,6 @@
 import { test, describe, after, before } from "node:test";
 import assert from "node:assert/strict";
+import { toolText } from "./types.js";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -173,7 +174,7 @@ describe("read_skill tool", () => {
   const tool = skillTools.find((t) => t.name === "read_skill")!;
 
   test("returns the body plus where the files are", async () => {
-    const out = await tool.run({ name: "refs" });
+    const out = toolText(await tool.run({ name: "refs" }));
     assert.match(out, /# Skill: refs/);
     assert.match(out, /references\/guide\.md/);
     // The absolute path is what makes scripts runnable — the shell tool's cwd
@@ -182,24 +183,24 @@ describe("read_skill tool", () => {
   });
 
   test("returns a named reference file", async () => {
-    assert.match(await tool.run({ name: "refs", file: "references/guide.md" }), /Detail here/);
+    assert.match(toolText(await tool.run({ name: "refs", file: "references/guide.md" })), /Detail here/);
   });
 
   test("an unknown skill lists what does exist", async () => {
-    const out = await tool.run({ name: "made-up" });
+    const out = toolText(await tool.run({ name: "made-up" }));
     assert.match(out, /No skill named "made-up"/);
     assert.match(out, /tidy/);
   });
 
   test("a bad file path suggests the real ones", async () => {
-    const out = await tool.run({ name: "refs", file: "nope.md" });
+    const out = toolText(await tool.run({ name: "refs", file: "nope.md" }));
     assert.match(out, /no such file/);
     assert.match(out, /references\/guide\.md/);
   });
 
   test("surfaces the skill's tool restriction", async () => {
     writeSkill("scoped", `---\nname: scoped\ndescription: d\nallowed-tools: [read_file]\n---\nbody`);
-    assert.match(await tool.run({ name: "scoped" }), /Use only these tools.*read_file/s);
+    assert.match(toolText(await tool.run({ name: "scoped" })), /Use only these tools.*read_file/s);
   });
 
   test("costs exactly one tool slot for any number of skills", () => {

@@ -1,5 +1,6 @@
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
+import { toolText } from "./types.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -76,7 +77,7 @@ describe("search provider selection", () => {
   test("explains the 403 rather than passing it through raw", async () => {
     globalThis.fetch = (async () => new Response("", { status: 403 })) as typeof fetch;
     const search = buildWebTools().find((t) => t.name === "web_search")!;
-    const result = await search.run({ query: "anything" });
+    const result = toolText(await search.run({ query: "anything" }));
     assert.match(result, /JSON output is disabled/);
     assert.match(result, /settings\.yml/);
   });
@@ -94,7 +95,7 @@ describe("search provider selection", () => {
       )) as typeof fetch;
 
     const search = buildWebTools().find((t) => t.name === "web_search")!;
-    const result = await search.run({ query: "maple", count: 2 });
+    const result = toolText(await search.run({ query: "maple", count: 2 }));
     assert.match(result, /1\. Maple/);
     assert.match(result, /https:\/\/hf\.co\/deepgrove/);
     assert.ok(!result.includes("<b>"), "html should be stripped from snippets");
@@ -126,14 +127,14 @@ describe("fetch safety", () => {
     }) as typeof fetch;
 
     const fetchTool = buildWebTools().find((t) => t.name === "web_fetch")!;
-    const result = await fetchTool.run({ url: "http://169.254.169.254/latest/meta-data/" });
+    const result = toolText(await fetchTool.run({ url: "http://169.254.169.254/latest/meta-data/" }));
     assert.match(result, /not permitted/);
     assert.equal(called, false, "must not have issued a request");
   });
 
   test("web_fetch rejects non-http schemes", async () => {
     const fetchTool = buildWebTools().find((t) => t.name === "web_fetch")!;
-    assert.match(await fetchTool.run({ url: "file:///etc/passwd" }), /only http and https/);
+    assert.match(toolText(await fetchTool.run({ url: "file:///etc/passwd" })), /only http and https/);
   });
 
   test("suggests the rendered fetch when a page yields no text", async () => {
@@ -144,7 +145,7 @@ describe("fetch safety", () => {
       })) as typeof fetch;
 
     const fetchTool = buildWebTools().find((t) => t.name === "web_fetch")!;
-    const result = await fetchTool.run({ url: "https://spa.example.com" });
+    const result = toolText(await fetchTool.run({ url: "https://spa.example.com" }));
     assert.match(result, /web_fetch_rendered/);
   });
 });

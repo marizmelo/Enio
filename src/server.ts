@@ -6,6 +6,9 @@ import { buildRegistry, type Registry } from "./tools/index.js";
 import { setMemorySession } from "./tools/memory.js";
 import { startSession } from "./memory/store.js";
 import { ensureToken, isAuthorized } from "./auth.js";
+import { mentionContext, parseMentions } from "./mentions.js";
+import { SPECIALISTS } from "./specialists.js";
+import { loadSkills } from "./skills.js";
 import type { Message } from "./types.js";
 
 /**
@@ -109,6 +112,39 @@ async function handle(
     return;
   }
 
+  /**
+   * What this agent can do, as data.
+   *
+   * A client that wants to show the user their options should not have to ask
+   * the model. The model only ever sees one specialist's slice of the registry,
+   * so it answers "what tools do you have" with two when there are eleven —
+   * accurate for the turn, wrong as an answer. This is the whole picture, it
+   * costs no tokens, and it cannot hallucinate.
+   */
+  if (req.method === "GET" && url.pathname === "/capabilities") {
+    const ctx = mentionContext(registry);
+    sendJson(res, 200, {
+      tools: registry.all.map((t) => ({
+        name: t.name,
+        description: t.description,
+        origin: t.origin,
+        server: t.server ?? null,
+      })),
+      skills: loadSkills().skills.map((s) => ({
+        name: s.name,
+        description: s.description,
+      })),
+      specialists: SPECIALISTS.map((s) => ({
+        name: s.name,
+        description: s.description,
+        tools: s.tools,
+      })),
+      servers: ctx.servers,
+      files: ctx.files,
+    });
+    return;
+  }
+
   if (req.method !== "POST" || url.pathname !== "/v1/chat/completions") {
     sendJson(res, 404, { error: { message: "Not found" } });
     return;
@@ -135,6 +171,20 @@ async function handle(
     .filter((m) => m !== lastUser && m.role !== "system")
     .map((m) => ({ role: m.role, content: m.content ?? "" }));
 
+  // Resolve /skill and @mentions here rather than only in the REPL. Without
+  // this the grammar existed but only one client could speak it: "@notes.txt"
+  // typed into the desktop app reached the model as literal text, which looks
+  // like the feature is broken rather than absent. Anything unrecognised is
+  // left verbatim, so an email address is still never eaten.
+  const mentions = parseMentions(String(lastUser.content ?? ""), mentionContext(registry));
+  const prompt = mentions.text;
+  const overrides = {
+    specialist: mentions.specialist,
+    skills: mentions.skills,
+    files: mentions.files,
+    servers: mentions.servers,
+  };
+
   const id = `chatcmpl-${randomUUID()}`;
   const created = Math.floor(Date.now() / 1000);
 
@@ -159,12 +209,23 @@ async function handle(
 
     emit({ role: "assistant", content: "" });
     try {
-      await runTurn(String(lastUser.content ?? ""), history, registry, sessionId, {
-        onContent: (d) => emit({ content: d }),
-        // Surfaced as a comment frame so clients that don't understand it ignore
-        // it, rather than rendering tool chatter as assistant text.
-        onToolStart: (name) => res.write(`: tool ${name}\n\n`),
-      });
+      await runTurn(
+        prompt,
+        history,
+        registry,
+        sessionId,
+        {
+          onContent: (d) => emit({ content: d }),
+          // Surfaced as a comment frame so clients that don't understand it ignore
+          // it, rather than rendering tool chatter as assistant text.
+          onToolStart: (name) => res.write(`: tool ${name}\n\n`),
+          // Same channel, same reason. A widget is decoration for a client that
+          // can draw it; the tool's text has already gone to the model and to
+          // every client that cannot, so dropping this loses nothing.
+          onWidget: (widget) => res.write(`: widget ${JSON.stringify(widget)}\n\n`),
+        },
+        overrides,
+      );
     } catch (err) {
       emit({ content: `\n[error: ${(err as Error).message}]` });
     }
@@ -182,12 +243,7 @@ async function handle(
     return;
   }
 
-  const result = await runTurn(
-    String(lastUser.content ?? ""),
-    history,
-    registry,
-    sessionId,
-  );
+  const result = await runTurn(prompt, history, registry, sessionId, {}, overrides);
 
   sendJson(res, 200, {
     id,

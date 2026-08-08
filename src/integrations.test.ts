@@ -1,5 +1,6 @@
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
+import { toolText } from "./types.js";
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,11 +35,11 @@ describe("email", () => {
   test("dry run by default — nothing is transmitted", async () => {
     // Sending is irreversible and the model deciding to send is exactly the
     // judgement a small model gets wrong, so this is the shipping default.
-    const out = await tool.run({
+    const out = toolText(await tool.run({
       to: "team@example.com",
       subject: "Weekly update",
       body: "All good.",
-    });
+    }));
     assert.match(out, /DRY RUN/);
     assert.match(out, /Subject: Weekly update/);
   });
@@ -50,24 +51,24 @@ describe("email", () => {
   });
 
   test("enforces the recipient allowlist", async () => {
-    const out = await tool.run({
+    const out = toolText(await tool.run({
       to: "stranger@elsewhere.com",
       subject: "Hello",
       body: "Hi",
-    });
+    }));
     assert.match(out, /Refused/);
     assert.match(out, /not in the allowed recipient list/);
   });
 
   test("a domain rule permits everyone at that domain", async () => {
-    const out = await tool.run({ to: "anyone@trusted.org", subject: "Hi", body: "x" });
+    const out = toolText(await tool.run({ to: "anyone@trusted.org", subject: "Hi", body: "x" }));
     assert.match(out, /DRY RUN/, "should have been allowed through to the dry run");
   });
 
   test("rejects a malformed address and an empty subject", async () => {
-    assert.match(await tool.run({ to: "not-an-address", subject: "x", body: "y" }), /not an email/);
+    assert.match(toolText(await tool.run({ to: "not-an-address", subject: "x", body: "y" })), /not an email/);
     assert.match(
-      await tool.run({ to: "team@example.com", subject: "", body: "y" }),
+      toolText(await tool.run({ to: "team@example.com", subject: "", body: "y" })),
       /no subject/,
     );
   });

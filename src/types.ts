@@ -24,6 +24,31 @@ export interface JsonSchema {
   [k: string]: unknown;
 }
 
+/**
+ * Structured display data a tool may emit alongside its text.
+ *
+ * The type is a closed set for the same reason the memory schema is: open-ended
+ * types produce `map`, `Map` and `location_map` as three renderers for one
+ * thing. A client that does not know a type renders the text instead, so adding
+ * one here never breaks an older client.
+ */
+export type Widget =
+  | { type: "clock"; label: string; iso: string; zone: string };
+
+/**
+ * What a tool hands back.
+ *
+ * A bare string is still valid and is what almost every tool returns. The
+ * object form exists for tools that can also be *shown*: `text` is what the
+ * model reads and what any client without a renderer displays, so it must
+ * stand alone. The widget is additive — never the only copy of the answer.
+ */
+export type ToolOutput = string | { text: string; widget?: Widget };
+
+/** The text of a tool result, whichever form it came back in. */
+export const toolText = (out: ToolOutput): string =>
+  typeof out === "string" ? out : out.text;
+
 export interface ToolDef {
   name: string;
   description: string;
@@ -31,7 +56,7 @@ export interface ToolDef {
   /** Where this tool came from, for display and for filtering. */
   origin: "builtin" | "mcp";
   server?: string;
-  run(args: Record<string, unknown>): Promise<string>;
+  run(args: Record<string, unknown>): Promise<ToolOutput>;
 }
 
 /** OpenAI-format tool definition, i.e. what actually goes on the wire. */

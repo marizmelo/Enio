@@ -11,7 +11,7 @@ import { safePath } from "./tools/fs.js";
 import { readFile } from "node:fs/promises";
 import { isImage, readImage } from "./vision.js";
 import type { Registry } from "./tools/index.js";
-import { toWireTool, type Message, type ToolCall } from "./types.js";
+import { toWireTool, type Message, type ToolCall, type Widget } from "./types.js";
 
 /**
  * Who the assistant is, ahead of everything else in the system message.
@@ -47,6 +47,9 @@ export interface TurnHandlers {
   onContent?(delta: string): void;
   onToolStart?(name: string, args: Record<string, unknown>): void;
   onToolEnd?(name: string, result: string): void;
+  /** Structured display data from a tool. Clients that cannot render it simply
+   *  do not implement this — the tool's text has already been delivered. */
+  onWidget?(widget: Widget): void;
   onNotice?(text: string): void;
   onRoute?(specialist: string): void;
 }
@@ -324,7 +327,16 @@ async function executeCall(
 
   handlers.onToolStart?.(tool.name, args);
   try {
-    const raw = await tool.run(args);
+    const result = await tool.run(args);
+
+    // A tool may return a bare string or { text, widget }. The text is what
+    // the model reads either way -- the widget never carries information the
+    // text does not, so a client that cannot draw it loses nothing.
+    const raw = typeof result === "string" ? result : result.text;
+    if (typeof result !== "string" && result.widget) {
+      handlers.onWidget?.(result.widget);
+    }
+
     const output =
       raw.length > config.maxToolOutputChars
         ? raw.slice(0, config.maxToolOutputChars) + "\n[...truncated]"

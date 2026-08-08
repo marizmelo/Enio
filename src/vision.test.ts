@@ -1,5 +1,6 @@
 import { test, describe, after, before } from "node:test";
 import assert from "node:assert/strict";
+import { toolText } from "./types.js";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -171,27 +172,27 @@ describe("read_image tool", () => {
   const tool = visionTools.find((t) => t.name === "read_image")!;
 
   test("returns text for a valid image", async () => {
-    const out = await tool.run({ path: "shot.png" });
+    const out = toolText(await tool.run({ path: "shot.png" }));
     assert.match(out, /1280×720/);
   });
 
   test("explains itself when handed a non-image", async () => {
-    const out = await tool.run({ path: "notes.txt" });
+    const out = toolText(await tool.run({ path: "notes.txt" }));
     assert.match(out, /not an image/);
     assert.match(out, /read_file/, "should point at the right tool");
   });
 
   test("refuses to escape the workspace", async () => {
-    assert.match(await tool.run({ path: "../../../etc/shadow.png" }), /escapes the workspace/);
+    assert.match(toolText(await tool.run({ path: "../../../etc/shadow.png" })), /escapes the workspace/);
   });
 
   test("handles a missing file without throwing", async () => {
-    assert.match(await tool.run({ path: "nope.png" }), /Could not read/);
+    assert.match(toolText(await tool.run({ path: "nope.png" })), /Could not read/);
   });
 
   test("never throws — a bad attachment must not fail the turn", async () => {
     for (const path of ["", "   ", "x".repeat(500) + ".png"]) {
-      const out = await tool.run({ path });
+      const out = toolText(await tool.run({ path }));
       assert.equal(typeof out, "string");
       assert.ok(out.length > 0);
     }
