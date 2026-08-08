@@ -121,7 +121,7 @@ export function Composer({
         rows={1}
         value={value}
         disabled={streaming}
-        placeholder="Message Enio…  /skill to invoke one, @ to attach"
+        placeholder="Message Enio…"
         className="max-h-[200px] min-h-[40px] resize-none"
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
