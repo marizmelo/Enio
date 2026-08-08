@@ -1,0 +1,148 @@
+# Working on enio
+
+A local AI agent: tools, memory, skills, scheduled tasks. Runs against Maple
+(Apple Silicon) or any OpenAI-compatible server.
+
+```sh
+npm run typecheck
+npm test          # 211 tests, no model server needed — the model is stubbed
+npm run build     # tsc; dist/ is what actually runs
+```
+
+Always run the tests. They stub the model, so they're fast and need nothing
+running.
+
+---
+
+## The constraint everything else follows from
+
+**The model is small.** Maple has ~1B active parameters. Nearly every design
+decision here exists because of that, and most of them look like over-engineering
+until you remember it.
+
+Concretely, a ~1B-active model:
+
+- picks tools badly once it can see more than a handful
+- emits malformed JSON often enough that repair is a normal path, not an edge case
+- loses the thread after three or four tool calls
+- produces inconsistent vocabulary when asked to generate freely
+- is far better at *classification* than at open generation
+
+If you are about to make something depend on the model reliably making a
+judgement call, stop and check whether you can turn it into a choice from a
+short closed list instead. That single transformation is behind the specialists,
+the router, memory extraction, and skills.
+
+---
+
+## Invariants — do not undo these casually
+
+Each of these was a deliberate decision with a reason. If one is genuinely
+wrong, change it and update this file. Do not change one by accident.
+
+**The 16-tool ceiling** (`ENIO_MAX_TOOLS`). Past roughly this many tool
+definitions the model picks at random. The failure mode is not an error — it is
+quietly choosing wrong tools, which looks like the model being stupid. Every
+specialist stays at ≤6 tools; there's a test asserting it. When adding a tool,
+ask which specialist owns it, not "where can I fit this".
+
+**Specialists have disjoint tool sets.** That is the whole point. `coder` has no
+web access; `researcher` has no shell. Overlap erodes the benefit until you have
+one agent with every tool again.
+
+**One hop only.** Router → specialist → answer. No agent-to-agent conversation.
+Every hand-off compounds error and at this model size it compounds fast.
+
+**Memory extraction uses a closed vocabulary** (`src/memory/schema.ts`, nine
+relations, six entity types). Open-ended extraction produces `USES` / `uses` /
+`USES_TOOL` as three separate relations and a graph that degrades as it grows.
+Adding relations measurably increases confusion — anything that doesn't fit
+belongs in `facts`, which is free text.
+
+**Raw transcripts are the source of truth; the graph is derived.** That is what
+makes `enio reindex` safe and lets a better model rebuild memory later. Never
+make the graph authoritative.
+
+**Everything degrades, nothing fails.** No vision model → OCR. No OCR →
+dimensions. No embeddings → lexical matching. A tool that can only fail is
+*withheld* rather than offered, because a dead-end tool burns the model's
+limited attention. An attachment must never be able to fail a turn.
+
+**Irreversible actions are opt-in.** Email is dry-run until `ENIO_EMAIL_SEND=1`.
+IMAP opens with `EXAMINE` so the *server* refuses changes. Desktop control is off
+until `ENIO_DESKTOP=1`. The model deciding to do something irreversible is
+exactly the judgement it gets wrong.
+
+**No network at runtime for local features.** OCR language data ships as an npm
+dependency specifically because tesseract.js defaults to a CDN fetch. There is a
+test that disables `globalThis.fetch` and requires OCR to still work. Do not
+reintroduce a CDN path.
+
+**Auth applies on loopback too.** A web page you have open can POST to
+127.0.0.1, and origin checks aren't a boundary. The `coder` specialist has
+`run_command`, so an unauthenticated endpoint is remote code execution.
+
+**Tracing must never break a turn.** `recordTurn` is wrapped in try/catch. Losing
+a diagnostic is annoying; losing the user's answer to a failed trace insert is
+not acceptable.
+
+---
+
+## Layout
+
+```
+src/
+  agent.ts        the turn loop — tool calls, recovery, prompt assembly
+  model.ts        client for the model server; JSON repair, <think> splitting
+  specialists.ts  routing and per-specialist tool sets
+  skills.ts       SKILL.md loading, progressive disclosure
+  mentions.ts     /skill and @mention parsing
+  tasks.ts        scheduler
+  suggest.ts      mines traces for what's worth automating
+  vision.ts       images → text
+  inspect.ts      the trace/graph UI server
+  memory/         db, embeddings, extraction, store, traces, learning
+  tools/          one file per tool group
+ui/               React inspector (esbuild, no dev server)
+desktop/          Electron client
+examples/skills/  shipped example skills
+```
+
+`config.ts` reads `ENIO_*` with a `MAPLE_*` fallback — the project was renamed
+and old env vars still work.
+
+## Conventions
+
+**Comments explain why, not what.** The code says what it does. Comments carry
+the reasoning that would otherwise be lost — especially where something looks
+wrong and isn't. If a comment restates the line below it, delete it.
+
+**Commit messages do the same.** The diff shows what changed; record the
+constraint, the alternative rejected, and the failure it prevents.
+
+**Tests cover what breaks quietly.** JSON repair, `<think>` tags split across
+stream chunks, sandbox escapes, allowlist bypasses via pipes, SSRF hosts
+rejected *before* any request, constant-time token comparison against
+same-length wrong keys. Prefer a test that would catch a silent regression over
+one that checks something obvious.
+
+**Adding a tool:** define it in `src/tools/`, add it to `buildRegistry`, assign
+it to exactly one specialist, keep that specialist ≤6 tools. If it needs config,
+withhold the tool entirely when unconfigured.
+
+**Adding a capability:** ask whether it's *know-how* or *capability*. Know-how is
+a skill — markdown, no code, one shared tool slot. Capability is a tool or an
+MCP server. People reach for MCP when they needed a skill.
+
+## Things that have bitten before
+
+- Backticks inside a SQL comment inside a JS template literal terminate the
+  string. `src/memory/db.ts` uses plain words instead.
+- tesseract.js reports a missing language file by throwing from inside a worker
+  event handler — that escapes the promise chain, so `await` catches nothing and
+  the process dies. Availability is checked up front, never attempted-and-caught.
+- Cosine similarity and lexical-overlap scores are on different scales. They had
+  a shared threshold once and keyword search silently returned nothing.
+- The lexical fallback needs stemming: people rephrase when they repeat
+  themselves, so `summarise`/`summarize`/`summary` and `work`/`worked` must
+  collapse or clustering finds nothing.
