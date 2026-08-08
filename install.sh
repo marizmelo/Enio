@@ -209,7 +209,11 @@ mkdir -p "$WORKSPACE" "$DATA_DIR"
 
 printf '    running tests\n'
 if ( cd "$AGENT_DIR" && npm test >/tmp/enio-test.log 2>&1 ); then
-  printf '    %s\n' "$(grep -E '^# (tests|pass)' /tmp/enio-test.log | tr '\n' ' ')"
+  # node --test marks its summary with '#' under the TAP reporter and with 'ℹ'
+  # under the spec one, and which you get depends on the node version and on
+  # NODE_TEST_REPORTER. Matching only '#' printed a blank line where the count
+  # should be, which reads like the tests never ran.
+  printf '    %s\n' "$(grep -E '^(#|ℹ) (tests|pass|fail) ' /tmp/enio-test.log | sed 's/^[^ ]* //' | tr '\n' ' ')"
 else
   warn "Some tests failed — see /tmp/enio-test.log. Continuing."
 fi
