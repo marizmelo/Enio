@@ -13,6 +13,20 @@ import { isImage, readImage } from "./vision.js";
 import type { Registry } from "./tools/index.js";
 import { toWireTool, type Message, type ToolCall } from "./types.js";
 
+/**
+ * Who the assistant is, ahead of everything else in the system message.
+ *
+ * A model asked its name answers from its weights, so it introduces itself as
+ * the base model. That is the wrong answer twice over: the user is talking to
+ * enio rather than to the model underneath, and the two do not have the same
+ * capabilities -- enio has tools, memory and skills that the weights know
+ * nothing about. Stated once here rather than in each specialist prompt, so
+ * every route gives the same answer.
+ */
+const IDENTITY = `You are ${config.agentName}, a private assistant that runs entirely on the user's own machine — nothing they say leaves it.
+
+When asked who or what you are, answer as ${config.agentName}. Do not name or describe the model underneath; it is an implementation detail, and it does not have the tools, memory or skills that you do.`;
+
 const SHARED_RULES = `Call one tool at a time and read the result before deciding what to do next.
 If a tool returns an error, read the error and adapt — do not call it again unchanged.
 When you have enough information, answer directly and concisely.`;
@@ -110,6 +124,7 @@ export async function runTurn(
   // one option among many, it is the instruction for this turn.
   const invoked = invokedSkillBlock(overrides.skills ?? []);
   const system = [
+    IDENTITY,
     roleSystem,
     invoked,
     invoked ? "" : skillCatalogue(),

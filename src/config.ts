@@ -228,6 +228,16 @@ export const config = {
   /** Playwright page-load budget. SPAs are slow; this is not a network timeout. */
   browserTimeoutMs: Number(env("BROWSER_TIMEOUT") ?? 30_000),
 
+  /**
+   * What the agent calls itself.
+   *
+   * Without this the model answers "who are you" with whatever identity its
+   * weights carry -- the underlying model name -- which is accurate and useless:
+   * the user is talking to enio, not to Maple, and the two have different
+   * capabilities. Env-overridable so a fork does not have to patch a prompt.
+   */
+  agentName: env("NAME") ?? "Enio",
+
   /** Sampling defaults — these are the values DeepGrove benchmarks Maple with. */
   temperature: Number(env("TEMP") ?? 1.0),
   topP: Number(env("TOP_P") ?? 0.95),
