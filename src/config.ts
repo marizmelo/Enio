@@ -240,8 +240,15 @@ export const config = {
    * connection instead of returning a 400 — the client sees only "fetch
    * failed". Omitting the field is no better, since mlx-lm then falls back to
    * its own 512 default and truncates answers mid-sentence.
+   *
+   * The value is a latency rail, not a capacity limit. Maple frequently fails
+   * to stop on its own and keeps reasoning until something cuts it off, so the
+   * ceiling is what a turn costs in the bad case: at ~81 tok/s, 4096 is a
+   * 60-second wait for an answer whose visible part arrived in the first two
+   * seconds, because the rest is <think> that gets stripped. Same rationale as
+   * maxToolIterations below — given the chance, a small model runs forever.
    */
-  maxTokens: Number(env("MAX_TOKENS") ?? 4096),
+  maxTokens: Number(env("MAX_TOKENS") ?? 1024),
 
   /** Safety rails on the agent loop. A small model can loop forever given the chance. */
   maxToolIterations: Number(env("MAX_ITERS") ?? 8),

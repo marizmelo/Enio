@@ -1,0 +1,34 @@
+import { Button } from "@/components/ui/button";
+
+const EXAMPLES = [
+  "What tools do you have available right now?",
+  "Remember that I prefer concise answers.",
+  "Summarise what you know about me so far.",
+];
+
+export function EmptyState({ onPick, disabled }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-6 px-6 text-center">
+      <div className="space-y-1.5">
+        <h1 className="text-2xl font-semibold tracking-tight">Enio</h1>
+        <p className="text-sm text-muted-foreground">
+          A local agent with tools and memory. Nothing leaves your machine.
+        </p>
+      </div>
+
+      <div className="flex w-full max-w-md flex-col gap-2">
+        {EXAMPLES.map((prompt) => (
+          <Button
+            key={prompt}
+            variant="outline"
+            disabled={disabled}
+            className="h-auto justify-start whitespace-normal px-3.5 py-2.5 text-left text-sm font-normal"
+            onClick={() => onPick(prompt)}
+          >
+            {prompt}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}

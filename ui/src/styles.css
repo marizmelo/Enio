@@ -2,12 +2,12 @@
    System font stack, one accent hue, restrained chrome. */
 
 :root {
-  --accent: #5b8def;
+  --ins-accent: #5b8def;
   --accent-dim: rgba(91, 141, 239, 0.16);
   --bg: #0e1116;
   --panel-bg: #151a21;
   --panel-bg-raised: #1b212a;
-  --border: #262e3a;
+  --ins-border: #262e3a;
   --border-soft: #1e2530;
   --text: #e6e9ef;
   --text-dim: #98a2b3;
@@ -19,8 +19,8 @@
   --danger-bg: rgba(234, 107, 107, 0.14);
   --memory-bg: rgba(91, 141, 239, 0.14);
   --memory-border: rgba(91, 141, 239, 0.5);
-  --radius: 9px;
-  --radius-sm: 7px;
+  --ins-radius: 9px;
+  --ins-radius-sm: 7px;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji";
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -28,12 +28,12 @@
 
 @media (prefers-color-scheme: light) {
   :root {
-    --accent: #3563d4;
+    --ins-accent: #3563d4;
     --accent-dim: rgba(53, 99, 212, 0.1);
     --bg: #f6f7f9;
     --panel-bg: #ffffff;
     --panel-bg-raised: #ffffff;
-    --border: #e2e5ea;
+    --ins-border: #e2e5ea;
     --border-soft: #eceef2;
     --text: #1c2129;
     --text-dim: #5b6472;
@@ -97,7 +97,7 @@ select {
   align-items: center;
   gap: 24px;
   padding: 12px 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--ins-border);
   background: var(--panel-bg);
   flex-shrink: 0;
 }
@@ -124,8 +124,8 @@ select {
   display: flex;
   gap: 2px;
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--ins-border);
+  border-radius: var(--ins-radius-sm);
   padding: 2px;
 }
 
@@ -141,7 +141,7 @@ select {
 
 .app-tab.is-active {
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--ins-accent);
 }
 
 .app-tab:hover:not(.is-active) {
@@ -193,17 +193,17 @@ select {
 /* ---------- Buttons / badges / common ---------- */
 
 .btn {
-  border: 1px solid var(--border);
+  border: 1px solid var(--ins-border);
   background: var(--panel-bg-raised);
   color: var(--text);
-  border-radius: var(--radius-sm);
+  border-radius: var(--ins-radius-sm);
   padding: 6px 12px;
   cursor: pointer;
   font-weight: 500;
 }
 
 .btn:hover {
-  border-color: var(--accent);
+  border-color: var(--ins-accent);
 }
 
 .btn:disabled {
@@ -229,7 +229,7 @@ select {
 .btn-link {
   background: none;
   border: none;
-  color: var(--accent);
+  color: var(--ins-accent);
   cursor: pointer;
   padding: 4px 0;
   font-size: 12px;
@@ -279,7 +279,7 @@ select {
 
 .badge-memory {
   background: var(--memory-bg);
-  color: var(--accent);
+  color: var(--ins-accent);
 }
 
 .spinner-row {
@@ -294,8 +294,8 @@ select {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
+  border: 2px solid var(--ins-border);
+  border-top-color: var(--ins-accent);
   animation: spin 0.7s linear infinite;
 }
 
@@ -313,7 +313,7 @@ select {
   background: var(--danger-bg);
   color: var(--danger);
   border: 1px solid var(--danger);
-  border-radius: var(--radius-sm);
+  border-radius: var(--ins-radius-sm);
   padding: 10px 14px;
   margin: 12px;
   font-size: 13px;
@@ -346,8 +346,8 @@ select {
 /* ---------- Disclosure ---------- */
 
 .disclosure {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--ins-border);
+  border-radius: var(--ins-radius-sm);
   background: var(--panel-bg-raised);
   margin: 8px 0;
 }
@@ -402,7 +402,7 @@ select {
 .block {
   background: var(--bg);
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--ins-radius-sm);
   padding: 10px 12px;
   font-size: 12.5px;
   white-space: pre-wrap;
@@ -435,7 +435,7 @@ select {
 .runs-sidebar {
   width: 300px;
   flex-shrink: 0;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--ins-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -463,7 +463,7 @@ select {
   text-align: left;
   background: none;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--ins-radius-sm);
   padding: 9px 10px;
   cursor: pointer;
   margin-bottom: 2px;
@@ -476,7 +476,7 @@ select {
 
 .session-item.is-active {
   background: var(--accent-dim);
-  border-color: var(--accent);
+  border-color: var(--ins-accent);
 }
 
 .session-item-top {
@@ -514,7 +514,7 @@ select {
   align-items: center;
   gap: 18px;
   padding: 12px 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--ins-border);
   background: var(--panel-bg);
   position: sticky;
   top: 0;
@@ -533,8 +533,8 @@ select {
 
 .filter-select select {
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--ins-border);
+  border-radius: var(--ins-radius-sm);
   padding: 4px 6px;
   color: var(--text);
 }
@@ -560,13 +560,13 @@ select {
   top: 8px;
   bottom: 8px;
   width: 2px;
-  background: var(--border);
+  background: var(--ins-border);
 }
 
 .turn-card {
   background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--ins-border);
+  border-radius: var(--ins-radius);
   padding: 14px 16px;
   margin-left: 24px;
   position: relative;
@@ -580,7 +580,7 @@ select {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--ins-accent);
   border: 2px solid var(--bg);
 }
 
@@ -619,7 +619,7 @@ select {
 }
 
 .turn-meta .dot {
-  color: var(--border);
+  color: var(--ins-border);
 }
 
 .turn-flags {
@@ -681,7 +681,7 @@ select {
 
 .step {
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--ins-radius-sm);
   padding: 8px 10px;
   background: var(--bg);
 }
@@ -715,7 +715,7 @@ select {
 }
 
 .step-kind-tool {
-  color: var(--accent);
+  color: var(--ins-accent);
   background: var(--accent-dim);
 }
 
@@ -752,15 +752,15 @@ select {
   align-items: center;
   gap: 20px;
   padding: 12px 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--ins-border);
   background: var(--panel-bg);
   flex-wrap: wrap;
 }
 
 .graph-search {
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--ins-border);
+  border-radius: var(--ins-radius-sm);
   padding: 6px 10px;
   min-width: 220px;
   color: var(--text);
@@ -839,8 +839,8 @@ select {
   bottom: 16px;
   width: 300px;
   background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--ins-border);
+  border-radius: var(--ins-radius);
   padding: 14px;
   overflow-y: auto;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
@@ -897,7 +897,7 @@ select {
 
 .edge-item {
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--ins-radius-sm);
   padding: 8px 10px;
 }
 
@@ -911,7 +911,7 @@ select {
 }
 
 .edge-relation {
-  color: var(--accent);
+  color: var(--ins-accent);
   font-weight: 500;
 }
 
@@ -952,15 +952,15 @@ select {
 }
 
 .react-flow__controls {
-  border-radius: var(--radius-sm);
+  border-radius: var(--ins-radius-sm);
   overflow: hidden;
   box-shadow: none;
-  border: 1px solid var(--border);
+  border: 1px solid var(--ins-border);
 }
 
 .react-flow__controls-button {
   background: var(--panel-bg-raised);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--ins-border);
   color: var(--text);
 }
 
@@ -973,9 +973,9 @@ select {
 }
 
 .react-flow__minimap {
-  border-radius: var(--radius-sm);
+  border-radius: var(--ins-radius-sm);
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--ins-border);
   background: var(--panel-bg);
 }
 

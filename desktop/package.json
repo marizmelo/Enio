@@ -7,12 +7,16 @@
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
-    "start": "electron .",
-    "dist": "electron-builder --mac --arm64"
+    "build": "node build.mjs",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --mac --arm64"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
     "electron": "^32.0.0",
-    "electron-builder": "^25.0.0"
+    "electron-builder": "^25.0.0",
+    "esbuild": "^0.28.1",
+    "tailwindcss": "^4.3.3"
   },
   "build": {
     "appId": "dev.enio.desktop",
@@ -37,5 +41,14 @@
         }
       ]
     }
+  },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.30.0",
+    "radix-ui": "^1.6.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwind-merge": "^3.6.0"
   }
 }

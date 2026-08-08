@@ -2,6 +2,7 @@
 // CSS file, using esbuild's JS API. No dev server — the enio Node backend
 // serves ui/dist/ as static files.
 import { build } from "esbuild";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, copyFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -11,7 +12,27 @@ const outdir = path.join(__dirname, "dist");
 
 mkdirSync(outdir, { recursive: true });
 
+// Tailwind runs as its own step because esbuild cannot resolve
+// `@import "tailwindcss"`. Its output is linked before bundle.css in
+// index.html, so the inspector's hand-written rules still win where the two
+// overlap.
+function runTailwind() {
+  const bin = path.join(__dirname, "node_modules", ".bin", "tailwindcss");
+  const result = spawnSync(
+    bin,
+    [
+      "--input", path.join(__dirname, "src", "styles", "globals.css"),
+      "--output", path.join(outdir, "tailwind.css"),
+      "--minify",
+    ],
+    { stdio: "inherit" },
+  );
+  if (result.status !== 0) throw new Error("Tailwind build failed.");
+}
+
 async function run() {
+  runTailwind();
+
   const result = await build({
     entryPoints: [path.join(__dirname, "src", "main.jsx")],
     bundle: true,
@@ -25,6 +46,9 @@ async function run() {
       ".jsx": "jsx",
     },
     jsx: "automatic",
+    // shadcn components import through "@/..." -- resolved here, with
+    // jsconfig.json mirroring it so editors and the shadcn CLI agree.
+    alias: { "@": path.join(__dirname, "src") },
     define: {
       "process.env.NODE_ENV": '"production"',
     },

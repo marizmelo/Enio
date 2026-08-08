@@ -252,7 +252,9 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+  // renderer/dist is build output (npm run build). The sources live in
+  // renderer/src and are never loaded directly -- they are JSX.
+  mainWindow.loadFile(path.join(__dirname, "renderer", "dist", "index.html"));
 
   mainWindow.on("closed", () => {
     mainWindow = null;

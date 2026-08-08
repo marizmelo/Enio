@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+@source "../**/*.{js,jsx}";
+
+@custom-variant dark (&:is(.dark *));
+
+/**
+ * shadcn design tokens for the inspector.
+ *
+ * The inspector was dark-only long before this file existed, and its own
+ * palette lives in styles.css. Those tokens were renamed to --ins-* when
+ * shadcn arrived, because both stylesheets wanted --accent, --border,
+ * --radius and --radius-sm for different things and whichever loaded second
+ * would silently repaint the other's components.
+ *
+ * The values below are the inspector's palette expressed as shadcn tokens, so
+ * a shadcn Button and a hand-written .btn sit next to each other without
+ * looking like two applications.
+ */
+:root {
+  --radius: 0.5625rem;
+
+  --background: #0e1116;
+  --foreground: #e6e9ef;
+  --card: #151a21;
+  --card-foreground: #e6e9ef;
+  --popover: #1b212a;
+  --popover-foreground: #e6e9ef;
+  --primary: #5b8def;
+  --primary-foreground: #0e1116;
+  --secondary: #1b212a;
+  --secondary-foreground: #e6e9ef;
+  --muted: #1b212a;
+  --muted-foreground: #98a2b3;
+  --accent: #1e2530;
+  --accent-foreground: #e6e9ef;
+  --destructive: #ea6b6b;
+  --destructive-foreground: #0e1116;
+  --border: #262e3a;
+  --input: #262e3a;
+  --ring: #5b8def;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* The inspector is dark by default and light via prefers-color-scheme, which
+   styles.css has always handled. The shadcn tokens have to follow the same
+   switch or a Button renders as a dark chip on a light page. Values mirror the
+   light block in styles.css. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --background: #f6f7f9;
+    --foreground: #1c2129;
+    --card: #ffffff;
+    --card-foreground: #1c2129;
+    --popover: #ffffff;
+    --popover-foreground: #1c2129;
+    --primary: #3563d4;
+    --primary-foreground: #ffffff;
+    --secondary: #eceef2;
+    --secondary-foreground: #1c2129;
+    --muted: #eceef2;
+    --muted-foreground: #5b6472;
+    --accent: #eceef2;
+    --accent-foreground: #1c2129;
+    --destructive: #c23636;
+    --destructive-foreground: #ffffff;
+    --border: #e2e5ea;
+    --input: #e2e5ea;
+    --ring: #3563d4;
+  }
+}
+
+/* No @layer base reset here on purpose: styles.css already sets html/body and
+   a global box-sizing, and a second opinionated reset would fight it. */

@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["renderer/src/*"]
+    },
+    "jsx": "react-jsx",
+    "target": "es2020",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "checkJs": false
+  },
+  "include": ["renderer/src/**/*"],
+  "exclude": ["node_modules", "renderer/dist"]
+}

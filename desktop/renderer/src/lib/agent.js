@@ -1,0 +1,107 @@
+/**
+ * HTTP client for the agent endpoint. This is the only place the renderer
+ * talks to the network -- main.js manages backend processes and never touches
+ * chat traffic.
+ */
+
+const AGENT_BASE = "http://127.0.0.1:8787";
+const MODEL_ID = "enio";
+
+/**
+ * Parses one SSE event block (everything between two blank lines).
+ *
+ *   data: {...}     a normal SSE data field, a JSON chat-completion chunk
+ *   : tool NAME     a bare SSE *comment*, non-standard, announcing a tool call
+ *
+ * A spec-following SSE client drops comment lines silently, which is exactly
+ * why they are parsed by hand here rather than through EventSource.
+ */
+export function parseSseEvent(block) {
+  let data = null;
+  let tool = null;
+  for (const line of block.split("\n")) {
+    if (line.startsWith("data:")) {
+      data = (data ?? "") + line.slice(5).trimStart();
+    } else if (line.startsWith(":")) {
+      const match = /^tool\s+(.+)$/.exec(line.slice(1).trim());
+      if (match) tool = match[1];
+    }
+  }
+  return { data, tool };
+}
+
+/**
+ * The token is fetched lazily and cached, but a null result is NOT cached: on a
+ * cold start the file is written only once the agent server boots, so an early
+ * miss has to be retried rather than remembered.
+ */
+let cachedToken = null;
+async function authHeaders() {
+  if (!cachedToken) {
+    try {
+      cachedToken = await window.maple?.getToken();
+    } catch {
+      cachedToken = null;
+    }
+  }
+  const headers = { "Content-Type": "application/json" };
+  if (cachedToken) headers.Authorization = `Bearer ${cachedToken}`;
+  return headers;
+}
+
+/**
+ * Streams one turn. Yields {type: "delta", text} and {type: "tool", name} as
+ * they arrive, so the caller decides how to render rather than being handed a
+ * finished string.
+ */
+export async function* streamTurn(messages, signal) {
+  const res = await fetch(`${AGENT_BASE}/v1/chat/completions`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ model: MODEL_ID, messages, stream: true }),
+    signal,
+  });
+
+  if (!res.ok || !res.body) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `Agent returned ${res.status}${detail ? `: ${detail.slice(0, 300)}` : ""}`,
+    );
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE events are separated by a blank line.
+    let split;
+    while ((split = buffer.indexOf("\n\n")) !== -1) {
+      const block = buffer.slice(0, split);
+      buffer = buffer.slice(split + 2);
+
+      const { data, tool } = parseSseEvent(block);
+      if (tool) yield { type: "tool", name: tool };
+      if (!data) continue;
+      if (data === "[DONE]") return;
+
+      let parsed;
+      try {
+        parsed = JSON.parse(data);
+      } catch {
+        // Malformed frame -- skip it rather than killing the whole stream.
+        continue;
+      }
+
+      const delta = parsed?.choices?.[0]?.delta?.content;
+      if (typeof delta === "string" && delta.length > 0) {
+        yield { type: "delta", text: delta };
+      }
+    }
+  }
+}
