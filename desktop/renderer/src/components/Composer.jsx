@@ -18,6 +18,15 @@ export function Composer({ value, onChange, onSend, onStop, disabled, streaming 
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [value]);
 
+  // Take focus back whenever the box becomes usable again: once the backends
+  // report ready, and after each answer finishes. The textarea is disabled
+  // while streaming, and a disabled element cannot hold focus -- so without
+  // this, every turn ends with the caret nowhere and the next message needs a
+  // click first.
+  useEffect(() => {
+    if (!streaming && !disabled) ref.current?.focus();
+  }, [streaming, disabled]);
+
   const canSend = !disabled && !streaming && value.trim().length > 0;
 
   return (
