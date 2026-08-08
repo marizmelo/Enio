@@ -20,13 +20,19 @@ export function StatusBar({ phase, message, tools }) {
     // Dragging is restored here too, since with the title bar hidden this
     // strip is the only thing left to move the window by.
     <header
-      className="flex shrink-0 items-center gap-2 border-b py-2.5 pr-4 pl-[86px] text-xs text-muted-foreground [-webkit-app-region:drag]"
+      className="flex shrink-0 items-center gap-3 border-b py-2.5 pr-4 pl-[86px] text-xs text-muted-foreground [-webkit-app-region:drag]"
     >
-      <span className={cn("size-2 shrink-0 rounded-full", DOT[phase] ?? DOT.starting)} />
-      <span className="truncate">{message}</span>
-      {typeof tools === "number" && (
-        <span className="ml-auto shrink-0 tabular-nums">{tools} tools</span>
-      )}
+      <span className="shrink-0 text-sm font-semibold text-foreground">Enio</span>
+
+      {/* Status sits right, and shrinks first: the title is one word and always
+          fits, while the message can be a full sentence about a failure. */}
+      <div className="ml-auto flex min-w-0 items-center gap-2">
+        <span className="truncate">{message}</span>
+        {typeof tools === "number" && (
+          <span className="shrink-0 tabular-nums">· {tools} tools</span>
+        )}
+        <span className={cn("size-2 shrink-0 rounded-full", DOT[phase] ?? DOT.starting)} />
+      </div>
     </header>
   );
 }
