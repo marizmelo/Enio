@@ -110,6 +110,98 @@ async function visionModelAvailable(): Promise<boolean> {
   }
 }
 
+/** mlx-vlm serves an OpenAI-compatible API, so reachability is /v1/models. */
+async function mlxVisionReachable(): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.visionMlxUrl.replace(/\/+$/, "")}/v1/models`, {
+      signal: AbortSignal.timeout(1500),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Which vision server to use for this call, or null if neither is up.
+ *
+ * Resolved per call rather than cached: the mlx server is meant to be started
+ * when it is wanted and stopped when it is not, so a cached "unavailable" from
+ * process start would outlive the thing it described.
+ */
+export async function activeVisionBackend(): Promise<"mlx" | "ollama" | null> {
+  const preference = config.visionBackend.toLowerCase();
+
+  if (preference === "mlx") return (await mlxVisionReachable()) ? "mlx" : null;
+  if (preference === "ollama") {
+    return (await ollamaReachable()) && (await visionModelAvailable()) ? "ollama" : null;
+  }
+
+  // auto: mlx first — it is the same runtime Maple already runs on, so
+  // preferring it means one framework rather than two.
+  if (await mlxVisionReachable()) return "mlx";
+  if ((await ollamaReachable()) && (await visionModelAvailable())) return "ollama";
+  return null;
+}
+
+const VISION_PROMPT =
+  "Describe this image in detail. If it contains text, transcribe it exactly.";
+
+/**
+ * Ask mlx-vlm about an image.
+ *
+ * Same MLX runtime as the chat model, so no second daemon and no second weight
+ * format. The image travels as a data URI inside an OpenAI content part, which
+ * is the shape the server's openai.py expects.
+ *
+ * There is no per-request unload here, unlike Ollama's keep_alive: mlx-vlm
+ * holds the model for as long as its process lives. Memory is managed by
+ * starting and stopping the server (`enio vision --serve`) rather than by a
+ * field on the request.
+ */
+async function describeWithMlx(path: string, question?: string): Promise<string> {
+  const image = (await readFile(path)).toString("base64");
+  const ext = path.split(".").pop()?.toLowerCase() ?? "png";
+  const mime = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
+
+  const res = await fetch(
+    `${config.visionMlxUrl.replace(/\/+$/, "")}/v1/chat/completions`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: config.visionMlxModel,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: question || VISION_PROMPT },
+              {
+                type: "image_url",
+                image_url: { url: `data:${mime};base64,${image}` },
+              },
+            ],
+          },
+        ],
+        max_tokens: 512,
+        temperature: 0.2,
+        stream: false,
+      }),
+      signal: AbortSignal.timeout(config.visionTimeoutMs),
+    },
+  );
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`vision model returned ${res.status}. ${detail.slice(0, 200)}`);
+  }
+
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  return (data.choices?.[0]?.message?.content ?? "").trim();
+}
+
 /**
  * Ask a vision model about an image, then let it go.
  *
@@ -264,14 +356,15 @@ export async function readImage(
     };
   }
 
-  const canUseVlm =
-    mode === "vlm" || mode === "auto"
-      ? (await ollamaReachable()) && (await visionModelAvailable())
-      : false;
+  const backend =
+    mode === "vlm" || mode === "auto" ? await activeVisionBackend() : null;
 
-  if (canUseVlm) {
+  if (backend) {
     try {
-      const description = await describeWithVlm(path, question);
+      const description =
+        backend === "mlx"
+          ? await describeWithMlx(path, question)
+          : await describeWithVlm(path, question);
       if (description) return { text: `${header}\n\n${description}`, method: "vlm" };
     } catch (err) {
       if (mode === "vlm") throw err;
@@ -281,8 +374,9 @@ export async function readImage(
 
   if (mode === "vlm") {
     throw new Error(
-      `Vision model "${config.visionModel}" unavailable.\n` +
-        `  ollama pull ${config.visionModel}\n` +
+      `No vision server reachable.\n` +
+        `  enio vision --serve        (mlx-vlm, same runtime as the chat model)\n` +
+        `  ollama pull ${config.visionModel}   (if you already run Ollama)\n` +
         `Or set ENIO_VISION_MODE=ocr to use text extraction only.`,
     );
   }
@@ -298,10 +392,10 @@ export async function readImage(
         // Actionable, because the person reading it is the only one who can
         // act on it. Nothing is downloaded on their behalf: a 1.7GB pull is
         // not something to start because someone pasted a screenshot.
-        note: canUseVlm
+        note: backend
           ? undefined
           : `Read with OCR — text only, nothing about what the image looks like. ` +
-            `For descriptions: ollama pull ${config.visionModel}`,
+            `For descriptions: enio vision --serve`,
       };
     } catch (err) {
       return {
@@ -326,6 +420,11 @@ export async function readImage(
 /** Reported by `enio vision` so the setup is checkable without guessing. */
 export async function visionStatus(): Promise<{
   mode: string;
+  backend: string;
+  active: "mlx" | "ollama" | null;
+  mlxModel: string;
+  mlxReachable: boolean;
+  mlxInstalled: boolean;
   model: string;
   ollamaReachable: boolean;
   modelPulled: boolean;
@@ -334,9 +433,23 @@ export async function visionStatus(): Promise<{
   const reachable = await ollamaReachable();
   return {
     mode: config.visionMode,
+    backend: config.visionBackend,
+    active: await activeVisionBackend(),
+    mlxModel: config.visionMlxModel,
+    mlxReachable: await mlxVisionReachable(),
+    mlxInstalled: existsSync(join(config.visionVenvDir, "bin", "python")),
     model: config.visionModel,
     ollamaReachable: reachable,
     modelPulled: reachable ? await visionModelAvailable() : false,
     ocrReady: await ocrAvailable(),
   };
+}
+
+/** The port mlx-vlm should bind, taken from the URL enio will call. */
+export function mlxVisionPort(): number {
+  try {
+    return Number(new URL(config.visionMlxUrl).port || 8082);
+  } catch {
+    return 8082;
+  }
 }

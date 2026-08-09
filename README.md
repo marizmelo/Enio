@@ -285,11 +285,22 @@ Two tiers, and it picks by what's actually available:
 
 They're complementary rather than ranked — small VLMs are specifically bad at dense text, which is exactly what OCR is for.
 
+**Two ways to run a vision model.** mlx-vlm is the default because it is the *same framework Maple already runs on* — same MLX runtime, same weight format, no second daemon to install:
+
 ```sh
-ollama pull moondream:v2     # 1.7GB, the default
+enio vision --install     # mlx-vlm into its own venv
+enio vision --serve       # Qwen3-VL-4B-4bit on :8082, leave it running
 ```
 
-`ENIO_VISION_MODEL=gemma3:4b` or `qwen3-vl:4b` describe noticeably better if you have headroom; `ENIO_VISION_MODE=ocr` skips models entirely; `off` reports dimensions only.
+Ollama still works if you already have it:
+
+```sh
+ollama pull moondream:v2     # 1.7GB
+```
+
+`enio vision` reports which backend is live. `ENIO_VISION_BACKEND=mlx|ollama|auto` forces one; `auto` prefers mlx and falls back to Ollama. `ENIO_VISION_MLX_MODEL` takes any `mlx-community` VLM; `ENIO_VISION_MODE=ocr` skips models entirely; `off` reports dimensions only.
+
+The two differ in how memory comes back. Ollama unloads per request (`keep_alive: 0`). mlx-vlm holds the model for as long as its process lives, so `enio vision --serve` runs in the foreground on purpose — stopping it with ctrl-C is how you get the memory back, and that should be visible rather than buried in a daemon.
 
 **OCR never touches the network.** tesseract.js defaults to fetching its language data from a CDN on first use, which is indefensible in something that claims to run entirely on your machine — it fails on a plane, on an air-gapped box, and whenever jsDelivr has a bad day. The data ships as a normal npm dependency (`@tesseract.js-data/eng`, installed once, read from `node_modules`) so no request is ever made at runtime. There's a test that disables `fetch` entirely and asserts OCR still works.
 

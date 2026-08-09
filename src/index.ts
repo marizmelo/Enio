@@ -350,22 +350,82 @@ async function main(): Promise<void> {
         break;
       }
 
+      // mlx-vlm lives in its own venv, deliberately: it depends on mlx-lm, and
+      // installing it beside the Maple runtime risks pip replacing the editable
+      // checkout that carries the tool-parser patch.
+      if (rest.includes("--install")) {
+        const { mkdirSync } = await import("node:fs");
+        mkdirSync(config.visionVenvDir, { recursive: true });
+        console.log(`Installing mlx-vlm into ${config.visionVenvDir}`);
+        const venv = spawn("uv", ["venv", "--python", "3.12", config.visionVenvDir], {
+          stdio: "inherit",
+        });
+        const venvCode: number = await new Promise((r) => venv.on("exit", (c) => r(c ?? 1)));
+        if (venvCode !== 0) {
+          console.error("Could not create the venv. Is uv installed?");
+          process.exit(1);
+        }
+        const pip = spawn("uv", ["pip", "install", "--python", join(config.visionVenvDir, "bin", "python"), "mlx-vlm"], {
+          stdio: "inherit",
+        });
+        const pipCode: number = await new Promise((r) => pip.on("exit", (c) => r(c ?? 1)));
+        if (pipCode !== 0) {
+          console.error("mlx-vlm install failed.");
+          process.exit(1);
+        }
+        console.log(`\nInstalled. Start it with:  enio vision --serve`);
+        console.log(`The model (${config.visionMlxModel}) downloads on first use.`);
+        break;
+      }
+
+      if (rest.includes("--serve")) {
+        const { mlxVisionPort } = await import("./vision.js");
+        const python = join(config.visionVenvDir, "bin", "python");
+        if (!existsSync(python)) {
+          console.error(`mlx-vlm is not installed.\n  enio vision --install`);
+          process.exit(1);
+        }
+        const port = mlxVisionPort();
+        console.log(`Starting mlx-vlm on :${port}`);
+        console.log(`  model ${config.visionMlxModel}`);
+        console.log(`  first run downloads the weights; later runs load from cache\n`);
+        // Foreground on purpose. It holds the model for as long as it runs --
+        // there is no per-request unload the way Ollama has -- so stopping it
+        // is how the memory comes back, and that should be a visible ctrl-C
+        // rather than something buried in a background process.
+        const server = spawn(
+          python,
+          ["-m", "mlx_vlm.server", "--model", config.visionMlxModel, "--port", String(port)],
+          { stdio: "inherit" },
+        );
+        await new Promise((r) => server.on("exit", r));
+        break;
+      }
+
       const status = await visionStatus();
       console.log(`mode           ${status.mode}`);
-      console.log(`model          ${status.model}`);
+      console.log(`backend        ${status.backend}${status.active ? ` (using ${status.active})` : " (none reachable)"}`);
+      console.log(`mlx-vlm        ${status.mlxInstalled ? "installed" : "not installed — enio vision --install"}`);
+      console.log(`mlx server     ${status.mlxReachable ? "reachable" : "not running — enio vision --serve"}`);
+      console.log(`mlx model      ${status.mlxModel}`);
       console.log(`ollama         ${status.ollamaReachable ? "reachable" : "not running"}`);
-      console.log(`model pulled   ${status.modelPulled ? "yes" : "no"}`);
+      console.log(`ollama model   ${status.model}${status.modelPulled ? " (pulled)" : " (not pulled)"}`);
       console.log(`ocr            ${status.ocrReady ? "ready" : "language data not cached"}`);
       console.log("");
-      if (!status.ollamaReachable) {
-        console.log(`Without Ollama, images fall back to OCR — which needs no model at all`);
-        console.log(`and handles screenshots of text well. For descriptions:`);
-        console.log(`  ollama serve && ollama pull ${status.model}`);
-      } else if (!status.modelPulled) {
-        console.log(`  ollama pull ${status.model}     # ~1.7GB, loads only while in use`);
-      } else {
+      if (status.active === "mlx") {
+        console.log(`Ready. Images are described by mlx-vlm — the same runtime as the`);
+        console.log(`chat model. It holds the model while it runs, so stop it when done.`);
+      } else if (status.active === "ollama") {
         console.log(`Ready. Images are described on demand and the model unloads`);
         console.log(`immediately after, so nothing sits alongside your chat model.`);
+      } else {
+        console.log(`No vision server, so images fall back to OCR — no model, no network,`);
+        console.log(`and fine for a screenshot of text. To describe what an image shows:`);
+        console.log("");
+        console.log(`  enio vision --install     # mlx-vlm, same framework as Maple`);
+        console.log(`  enio vision --serve       # then leave it running`);
+        console.log("");
+        console.log(`Or, if you already run Ollama:  ollama pull ${status.model}`);
       }
       break;
     }

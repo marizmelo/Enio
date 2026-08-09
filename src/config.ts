@@ -162,6 +162,36 @@ export const config = {
   visionBaseUrl: env("VISION_URL") ?? "http://127.0.0.1:11434",
 
   /**
+   * Which vision server to talk to: mlx | ollama | auto.
+   *
+   * auto prefers mlx-vlm and falls back to Ollama, because mlx-vlm is the same
+   * runtime Maple already uses — one framework, one set of weights formats, and
+   * no second daemon to install. Ollama remains supported because it is what
+   * anyone already running it will have.
+   */
+  visionBackend: env("VISION_BACKEND") ?? "auto",
+
+  /**
+   * mlx-vlm's OpenAI-compatible server. Port chosen to avoid the four already
+   * in play: 8080 model, 8081 llama.cpp's preset, 8787 agent, 8788 inspector.
+   */
+  visionMlxUrl: env("VISION_MLX_URL") ?? "http://127.0.0.1:8082",
+
+  /**
+   * Qwen3-VL-4B at 4-bit: ~2.5GB, and by a wide margin the most used VLM in
+   * mlx-community, which matters for a format that breaks easily. It sits
+   * beside Maple's 6.9GB without crowding a 16GB machine.
+   */
+  visionMlxModel: env("VISION_MLX_MODEL") ?? "mlx-community/Qwen3-VL-4B-Instruct-4bit",
+
+  /**
+   * Its own venv, deliberately. mlx-vlm depends on mlx-lm, and installing it
+   * next to the Maple runtime risks pip replacing the editable checkout — which
+   * carries the tool-parser patch that makes tool calls work at all.
+   */
+  visionVenvDir: env("VISION_VENV") ?? join(dataDir, "vision-venv"),
+
+  /**
    * Unload the vision model the instant it answers. Ollama's default is 5
    * minutes, which on a 16GB machine means it sits on top of Maple long after
    * it was needed. Set to "5m" if you attach images constantly and would
