@@ -19,7 +19,7 @@ import { ensureToken, isAuthorized } from "./auth.js";
 import { mentionContext, parseMentions } from "./mentions.js";
 import { SPECIALISTS } from "./specialists.js";
 import { loadSkills } from "./skills.js";
-import { synthesize, transcribeWav, whisperInstalled } from "./voice.js";
+import { synthesize, transcribeWav, warmVoice, whisperInstalled } from "./voice.js";
 import type { Message } from "./types.js";
 
 /**
@@ -217,6 +217,20 @@ async function handle(
    * same voice, and so the model is loaded once in one process instead of once
    * per window. A client that cannot play audio simply never calls it.
    */
+  /**
+   * Load the voice model ahead of needing it.
+   *
+   * Called when the desktop turns speech on, so the first sentence of the
+   * first reply is not preceded by a model load. Returns immediately rather
+   * than waiting for the load: the caller has nothing to do with the answer,
+   * and holding the request open would only give it something to time out.
+   */
+  if (req.method === "POST" && url.pathname === "/v1/audio/warm") {
+    void warmVoice();
+    sendJson(res, 202, { warming: true });
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/v1/audio/speech") {
     const body = await readBody(req);
     let text = "";

@@ -12,7 +12,7 @@ import {
   listConversations,
 } from "@/lib/conversations";
 import { HistoryDialog } from "@/components/HistoryDialog";
-import { speak, stopSpeaking, takeSentences } from "@/lib/speech";
+import { speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
 
 export function App() {
   const [status, setStatus] = useState({
@@ -268,6 +268,11 @@ export function App() {
         speakReplies={speakReplies}
         onToggleSpeak={() => {
           if (speakReplies) stopSpeaking();
+          // Switching it on is the earliest moment we know speech will be
+          // wanted, and the user is about to spend a while typing or reading
+          // -- which is exactly the load time we would otherwise spend after
+          // the answer has already arrived.
+          else warmVoice();
           setSpeakReplies((on) => !on);
         }}
       />

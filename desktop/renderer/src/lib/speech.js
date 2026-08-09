@@ -33,6 +33,29 @@ let queue = [];
 let draining = false;
 let generation = 0;
 
+/**
+ * Ask the agent to load the voice model now.
+ *
+ * Fire and forget: the answer is 202 the moment the load starts, and there is
+ * nothing to do with the result. Called when speech is switched on, so the
+ * model is ready by the time there is a sentence to say -- otherwise the first
+ * spoken reply of a session waits about four and a half seconds for a load
+ * that could have happened while the user was still reading.
+ */
+export function warmVoice() {
+  (async () => {
+    try {
+      const token = await window.maple?.getToken();
+      await fetch("http://127.0.0.1:8787/v1/audio/warm", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+    } catch {
+      // The voice still works, it is just cold. Nothing to report.
+    }
+  })();
+}
+
 export function stopSpeaking() {
   // Bumped so anything already synthesising resolves into a queue nobody is
   // draining, instead of starting to talk after being told to stop.

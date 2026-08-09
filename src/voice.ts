@@ -188,6 +188,30 @@ async function loadKokoro(): Promise<any> {
 }
 
 /**
+ * Load the voice model without speaking anything.
+ *
+ * Kokoro loads on first use, which put roughly four and a half seconds in
+ * front of the first spoken sentence of a session -- heard as the assistant
+ * sitting silent after the answer was already on screen. The desktop calls
+ * this when speech is switched on, so the wait happens while the user is
+ * reading rather than while they are waiting to be read to.
+ *
+ * Safe to call repeatedly: loadKokoro caches its promise, so every call after
+ * the first joins the same load rather than starting another.
+ */
+export async function warmVoice(): Promise<boolean> {
+  if (config.ttsEngine !== "kokoro") return false;
+  try {
+    await loadKokoro();
+    return true;
+  } catch {
+    // Warming is an optimisation. Failing it changes nothing the user can see
+    // -- synthesis will try again and fall back on its own terms.
+    return false;
+  }
+}
+
+/**
  * Text to a WAV buffer, or null if synthesis is unavailable.
  *
  * Null rather than throwing: a reply that cannot be spoken has still been
