@@ -5,7 +5,7 @@ import { ensureToken } from "./auth.js";
 import { join } from "node:path";
 import { activeBackend, config, ensureDirs, projectRoot } from "./config.js";
 import { canRunMaple, whyNoMaple } from "./platform.js";
-import { ensureBackend, type RunningBackend } from "./runtime.js";
+import { ensureBackend, modelServerArgs, type RunningBackend } from "./runtime.js";
 import { findSkill, loadSkills, skillContents, skillsDir } from "./skills.js";
 import {
   addTask, getTask, listTasks, removeTask, runTask, runsFor,
@@ -678,13 +678,7 @@ async function main(): Promise<void> {
   }
 }
 
-const MODEL_ARGS = (modelPath: string) => [
-  "-m", "mlx_lm.server",
-  "--model", modelPath,
-  "--trust-remote-code",
-  "--flash-head",
-  "--port", "8080",
-];
+
 
 /** Verify the runtime exists before trying to use it, with an actionable error. */
 function requireRuntime(): string {
@@ -726,7 +720,7 @@ async function startModelServer(): Promise<void> {
   const venvPython = requireRuntime();
   console.log(`Starting mlx_lm.server on ${config.modelBaseUrl} ...`);
 
-  const child = spawn(venvPython, MODEL_ARGS(join(config.runtimeDir, "maple-2bit-mlx")), {
+  const child = spawn(venvPython, modelServerArgs(join(config.runtimeDir, "maple-2bit-mlx")), {
     cwd: config.runtimeDir,
     stdio: "inherit",
   });

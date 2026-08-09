@@ -1,9 +1,45 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, openSync } from "node:fs";
 import { join } from "node:path";
+import { totalmem } from "node:os";
 import { config } from "./config.js";
 import { serverIsUp } from "./model.js";
 import { canRunMaple, isWindows, whyNoMaple } from "./platform.js";
+
+/**
+ * How the model server is launched, in one place because there are two callers
+ * (`enio start` and the desktop backend) and a flag that only one of them
+ * passes is a difference nobody notices until the two behave differently.
+ *
+ * The KV-cache byte cap is the load-bearing one. mlx-lm bounds the prompt
+ * cache by *slot count* (ten) and, unless told otherwise, not by size at all --
+ * `--prompt-cache-bytes` has no default. Ten slots is a fine bound when a slot
+ * is a short chat and a bad one when it is a long thread: Maple's KV runs
+ * 48KB per token, so ten 16k-token conversations is 7.3GB of cache on top of
+ * roughly 5GB of weights. That fits on the 64GB machines these numbers usually
+ * come from and does not fit here.
+ *
+ * Sized from physical RAM rather than hard-coded, since the same build runs on
+ * 16GB and 64GB machines, and clamped at both ends: below ~1GB the cache stops
+ * holding a useful conversation and every turn pays full prefill again, above
+ * 4GB it is competing with the rest of the desktop for no gain a single user
+ * can perceive.
+ */
+export function modelServerArgs(modelPath: string): string[] {
+  const cap = Math.min(4, Math.max(1, Math.round(totalMemoryGb() / 12)));
+  return [
+    "-m", "mlx_lm.server",
+    "--model", modelPath,
+    "--trust-remote-code",
+    "--flash-head",
+    "--prompt-cache-bytes", `${cap}G`,
+    "--port", "8080",
+  ];
+}
+
+function totalMemoryGb(): number {
+  return totalmem() / 1024 ** 3;
+}
 
 /**
  * Bringing the configured backend up.
@@ -73,13 +109,7 @@ async function startMaple(opts: EnsureOptions): Promise<RunningBackend> {
 
   const child = spawn(
     venvPython,
-    [
-      "-m", "mlx_lm.server",
-      "--model", join(config.runtimeDir, "maple-2bit-mlx"),
-      "--trust-remote-code",
-      "--flash-head",
-      "--port", "8080",
-    ],
+    modelServerArgs(join(config.runtimeDir, "maple-2bit-mlx")),
     { cwd: config.runtimeDir, stdio: ["ignore", log, log] },
   );
 

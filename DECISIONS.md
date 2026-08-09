@@ -289,6 +289,20 @@ its own — it would let the vision model and the text model share one process
 and one memory budget, which today is two servers and two copies of the
 problem.
 
+On memory specifically, which is the question a 24GB machine actually asks:
+oMLX's wins there are a tiered cache that spills cold KV to SSD, and
+multi-model auto-swap. Neither is free -- continuous batching *raises* peak
+memory, since concurrent sequences each need their own KV -- and neither
+addresses what was actually wrong here. Measured: `phys_footprint` 7.2GB,
+peak 8.6GB, of which roughly 5GB is weights. Note that RSS reports 2GB and is
+simply wrong for MLX, whose unified-memory allocations it does not count; any
+measurement here has to use `footprint` or `vmmap`.
+
+What was wrong was the missing bound, and it did not need a new server:
+`--prompt-cache-bytes` now ships (see `modelServerArgs`), sized from physical
+RAM. Twelve distinct 10k-token contexts plateau at 1.67GB instead of growing
+to the ~4.8GB ten uncapped slots would have held.
+
 Worth stealing regardless: **the cold tier.** Our prompt cache is RAM-only and
 dies with the process, and conversations now survive restarts, so resuming a
 long one pays full prefill again — about four seconds per 4,000 tokens. The
