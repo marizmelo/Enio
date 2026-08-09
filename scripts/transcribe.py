@@ -63,6 +63,17 @@ def main() -> int:
             print(json.dumps({"text": ""}))
             return 0
 
+        # Whisper hallucinates on silence rather than returning nothing --
+        # given a quiet room it will confidently produce repeated glyphs, and
+        # that lands in the message box as though it were heard. Gate on
+        # loudness before asking: an empty result is the honest answer to an
+        # empty recording.
+        rms = float(np.sqrt(np.mean(np.square(audio))))
+        peak = float(np.max(np.abs(audio)))
+        if rms < 0.005 and peak < 0.05:
+            print(json.dumps({"text": ""}))
+            return 0
+
         result = mlx_whisper.transcribe(audio, path_or_hf_repo=repo, verbose=False)
         print(json.dumps({"text": (result.get("text") or "").strip()}))
         return 0

@@ -53,7 +53,15 @@ export function Composer({
     if (!streaming && !disabled) ref.current?.focus();
   }, [streaming, disabled]);
 
-  const canSend = !disabled && !streaming && value.trim().length > 0;
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const recorderRef = useRef(null);
+
+  // Available while dictating too, even before any text has arrived: pressing
+  // it is how you finish a sentence, so requiring text first would mean
+  // stopping the recording just to enable the button that stops the recording.
+  const canSend =
+    !disabled && !streaming && (recording || transcribing || value.trim().length > 0);
 
   // Files attached during this session. capabilities.files is fetched once at
   // startup, so anything pasted or picked since then is not in it -- without
@@ -129,43 +137,104 @@ export function Composer({
     ref.current?.focus();
   };
 
-  // Recording, then transcribing, are two waits with nothing in common: one
-  // ends when the user says so, the other when whisper finishes. They get
-  // separate states so the button can say which is happening.
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-  const stopRecordingRef = useRef(null);
+  // Recording and transcribing are separate waits: one ends when the speaker
+  // says so, the other when whisper finishes. Separate state so the button can
+  // say which is happening.
+  // What was already in the box when dictation started. Every interim pass
+  // rewrites the dictated part, so the typed part has to be held separately or
+  // it gets overwritten by the first partial.
+  const baseTextRef = useRef("");
+  const partialBusyRef = useRef(false);
+
+  /** Stop, transcribe once more, and return the finished text. */
+  const finishDictation = async () => {
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+    setRecording(false);
+    if (!recorder) return null;
+
+    setTranscribing(true);
+    try {
+      const text = (await transcribe(await recorder.stop())).trim();
+      const base = baseTextRef.current;
+      return text ? (base ? `${base.replace(/\s+$/, "")} ${text}` : text) : base;
+    } catch (err) {
+      console.error("dictation failed:", err);
+      return baseTextRef.current || null;
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
+  // Interim passes while recording. Whisper is not a streaming recogniser, so
+  // each pass re-transcribes everything said so far -- which is why the text
+  // can revise itself mid-sentence rather than only extending. Skipped while a
+  // pass is already in flight, because they take longer than the interval as
+  // the clip grows and would otherwise queue up behind each other.
+  useEffect(() => {
+    if (!recording) return undefined;
+
+    const id = setInterval(async () => {
+      const recorder = recorderRef.current;
+      if (!recorder || partialBusyRef.current) return;
+
+      partialBusyRef.current = true;
+      try {
+        const text = (await transcribe(recorder.snapshot())).trim();
+        // Checked again after the await: the recording may have been stopped
+        // while this was in flight, and overwriting the final text with a
+        // stale partial would undo it.
+        if (text && recorderRef.current) {
+          const base = baseTextRef.current;
+          onChange(base ? `${base.replace(/\s+$/, "")} ${text}` : text);
+        }
+      } catch {
+        // A failed partial is not worth surfacing; the final pass still runs.
+      } finally {
+        partialBusyRef.current = false;
+      }
+    }, 2000);
+
+    return () => clearInterval(id);
+  }, [recording, onChange]);
 
   const toggleDictation = async () => {
     if (recording) {
-      const stop = stopRecordingRef.current;
-      stopRecordingRef.current = null;
-      setRecording(false);
-      if (!stop) return;
-
-      setTranscribing(true);
-      try {
-        const text = (await transcribe(await stop())).trim();
-        // Appended rather than replacing: dictation is often the second half
-        // of a sentence someone started typing.
-        if (text) onChange(value ? `${value.replace(/\s+$/, "")} ${text}` : text);
-      } catch (err) {
-        console.error("dictation failed:", err);
-      } finally {
-        setTranscribing(false);
-        ref.current?.focus();
-      }
+      const text = await finishDictation();
+      if (text !== null) onChange(text);
+      ref.current?.focus();
       return;
     }
 
     try {
-      stopRecordingRef.current = await startRecording();
+      baseTextRef.current = value;
+      recorderRef.current = await startRecording();
       setRecording(true);
     } catch (err) {
-      // Denied or no microphone. Nothing to say here that the OS prompt has
-      // not already said.
+      // Denied, or no microphone. The OS prompt has already said everything
+      // there is to say.
       console.error("microphone unavailable:", err);
     }
+  };
+
+  /**
+   * Send, finishing dictation first if it is running.
+   *
+   * So the send button works mid-sentence: stop talking and press it, or press
+   * it while still talking, and the last words still make it into the message
+   * rather than being cut off at whatever the most recent partial happened to
+   * catch.
+   */
+  const submit = async () => {
+    if (recording || transcribing) {
+      const text = await finishDictation();
+      if (text?.trim()) {
+        onChange(text);
+        onSend(text);
+      }
+      return;
+    }
+    onSend();
   };
 
   const pickFiles = async () => {
@@ -265,7 +334,7 @@ export function Composer({
               pickMention(firstMention);
               return;
             }
-            if (canSend) onSend();
+            if (canSend) submit();
           }
         }}
       />
@@ -301,7 +370,7 @@ export function Composer({
           <Square className="size-4" />
         </Button>
       ) : (
-        <Button size="icon" onClick={onSend} disabled={!canSend} title="Send">
+        <Button size="icon" onClick={submit} disabled={!canSend} title="Send">
           <ArrowUp className="size-4" />
         </Button>
       )}

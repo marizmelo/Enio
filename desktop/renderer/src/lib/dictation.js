@@ -80,11 +80,8 @@ export async function startRecording() {
   source.connect(processor);
   processor.connect(context.destination);
 
-  return async function stop() {
-    processor.disconnect();
-    source.disconnect();
-    for (const track of stream.getTracks()) track.stop();
-
+  /** Everything captured so far, as one array. */
+  function collected() {
     const total = chunks.reduce((n, c) => n + c.length, 0);
     const joined = new Float32Array(total);
     let at = 0;
@@ -92,10 +89,36 @@ export async function startRecording() {
       joined.set(c, at);
       at += c.length;
     }
+    return joined;
+  }
 
-    const rate = context.sampleRate;
-    await context.close();
-    return encodeWav(downsample(joined, rate, TARGET_RATE), TARGET_RATE);
+  return {
+    /**
+     * The audio so far, without stopping.
+     *
+     * Whisper is not a streaming recogniser: it transcribes a whole clip, and
+     * feeding it only the newest slice would lose the sentence's beginning and
+     * with it the context that fixes the words. So each pass re-reads
+     * everything, which is also why the interim text can *change* as you keep
+     * talking rather than only growing.
+     */
+    snapshot() {
+      return encodeWav(downsample(collected(), context.sampleRate, TARGET_RATE), TARGET_RATE);
+    },
+
+    async stop() {
+      processor.disconnect();
+      source.disconnect();
+      // Released explicitly: leaving the track open leaves the operating
+      // system's microphone indicator lit, which is alarming for an app whose
+      // whole claim is that nothing leaves your machine.
+      for (const track of stream.getTracks()) track.stop();
+
+      const audio = collected();
+      const rate = context.sampleRate;
+      await context.close();
+      return encodeWav(downsample(audio, rate, TARGET_RATE), TARGET_RATE);
+    },
   };
 }
 

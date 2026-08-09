@@ -162,7 +162,7 @@ export function App() {
       <Composer
         value={input}
         onChange={setInput}
-        onSend={() => send(input)}
+        onSend={(text) => send(text ?? input)}
         onStop={() => abortRef.current?.abort()}
         disabled={!backendReady}
         streaming={streaming}
