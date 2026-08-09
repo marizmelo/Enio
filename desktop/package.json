@@ -1,6 +1,6 @@
 {
   "name": "enio-desktop",
-  "productName": "Maple",
+  "productName": "Enio",
   "version": "0.1.0",
   "description": "Desktop client for enio, a local AI agent.",
   "main": "main.js",
@@ -8,7 +8,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "build": "node build.mjs",
-    "start": "npm run build && electron .",
+    "start": "node scripts/name-dev-bundle.mjs && npm run build && electron .",
     "dist": "npm run build && electron-builder --mac --arm64"
   },
   "devDependencies": {
