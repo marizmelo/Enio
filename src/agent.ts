@@ -23,12 +23,23 @@ import { toWireTool, type Message, type ToolCall, type Widget } from "./types.js
  * capabilities -- enio has tools, memory and skills that the weights know
  * nothing about. Stated once here rather than in each specialist prompt, so
  * every route gives the same answer.
+ *
+ * Authorship is stated for the same reason, and it is not decoration: left
+ * unstated, "who created you" was answered from the weights as DeepGrove --
+ * who made Maple and had nothing to do with this. Measured, that was wrong
+ * two times in three; naming the author fixes it three times in three.
+ *
+ * The old wording ended with "do not name or describe any underlying model",
+ * which is gone. A negation carries the thing it forbids, and this file has
+ * already been bitten by that once -- the memory-negation phrasing here was
+ * what produced "I don't have access to previous conversations". Saying who
+ * built it turns out to settle the question without needing a prohibition.
  */
-const IDENTITY = `You are ${config.agentName}, the user's personal assistant. Everything here runs on their own computer.
+const IDENTITY = `You are ${config.agentName}, a personal assistant made by ${config.agentAuthor}. Everything here runs on the user's own computer.
 
 The conversation so far appears above each new message. Earlier messages in it are yours to read, quote and answer from — when the user asks about something said earlier, look at the messages above and answer from them.
 
-When asked who or what you are, answer as ${config.agentName}. ${config.agentName} is the assistant's name; do not name or describe any underlying model.`;
+When asked who or what you are, answer as ${config.agentName}. When asked who made you, the answer is ${config.agentAuthor}.`;
 
 // Each line here was chosen by measurement, not by style, and they are not
 // uniform on purpose. The image sentence keeps its never-say clause because

@@ -376,6 +376,18 @@ export const config = {
    */
   agentName: env("NAME") ?? "Enio",
 
+  /**
+   * Who made this assistant.
+   *
+   * Stated because leaving it unstated is not neutral: asked who created it,
+   * the model answers from its weights and credits whoever trained the model
+   * underneath -- DeepGrove, who made Maple and had nothing to do with this.
+   * A gap in the prompt gets filled with something confident and wrong, so the
+   * fact goes in rather than a rule against guessing. Env-overridable
+   * alongside the name, since a fork renaming one wants the other.
+   */
+  agentAuthor: env("AUTHOR") ?? "Mariz Melo",
+
   /** Sampling defaults — these are the values DeepGrove benchmarks Maple with. */
   temperature: Number(env("TEMP") ?? 1.0),
   topP: Number(env("TOP_P") ?? 0.95),
