@@ -13,10 +13,16 @@ export function EmptyState({ onPick, disabled }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6 px-6 text-center">
       <div className="space-y-4">
-        {/* Two-tone and outlined, so it reads on both themes without needing a
-            surface behind it -- the same property that let the app icon drop
-            its container. */}
-        <img src={logo} alt="" className="mx-auto h-24 w-auto" />
+        {/* Inlined rather than an <img> so it renders as vector rather than a
+            rasterised copy scaled to fit — the outlines are hairlines and stair
+            -step otherwise. Two-tone and outlined, so it needs no surface
+            behind it, the same property that let the app icon drop its
+            container. */}
+        <div
+          aria-hidden="true"
+          className="mx-auto [&>svg]:mx-auto [&>svg]:h-24 [&>svg]:w-auto"
+          dangerouslySetInnerHTML={{ __html: logo }}
+        />
         <h1 className="text-2xl font-semibold tracking-tight">Enio</h1>
         <p className="text-sm text-muted-foreground">
           A local agent with tools and memory. Nothing leaves your machine.

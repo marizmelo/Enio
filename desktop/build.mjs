@@ -48,10 +48,11 @@ async function run() {
     loader: {
       ".js": "jsx",
       ".jsx": "jsx",
-      // Inlined as a data URI rather than emitted as a file: the marks are a
-      // couple of kilobytes, the bundle is a single file with no publicPath to
-      // resolve against, and the renderer's CSP already allows data: images.
-      ".svg": "dataurl",
+      // Text, not dataurl. As a data URI in an <img>, the mark is rasterised
+      // at the SVG's own 59x112 and then scaled to fit, which on a 1x display
+      // leaves its hairline outlines visibly stepped. Inlined into the DOM it
+      // stays vector and is rendered at whatever the display actually is.
+      ".svg": "text",
     },
     // shadcn components import through the "@/..." alias its CLI writes. This
     // is the only place that alias is resolved -- jsconfig.json exists solely
