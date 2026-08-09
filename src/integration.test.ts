@@ -445,3 +445,87 @@ describe("conversations", () => {
     assert.equal(found!.messages, 2);
   });
 });
+
+describe("context budget", () => {
+  test("a single huge message folds even though the count is small", async () => {
+    // Four messages, but one is a pasted file. The old count-based check let
+    // this through untouched, which put the model past where it can recall
+    // anything -- and it confabulates rather than admitting that.
+    let summarised = false;
+    globalThis.fetch = (async (_u: unknown, init: { body: string }) => {
+      const body = JSON.parse(init.body);
+      const isSummary = String(body.messages?.[0]?.content ?? "").includes("Summarise");
+      if (isSummary) summarised = true;
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            const enc = new TextEncoder();
+            c.enqueue(
+              enc.encode(
+                `data: ${JSON.stringify({
+                  choices: [{ delta: { content: isSummary ? "Earlier: a big file." : "Done." } }],
+                })}\n\n`,
+              ),
+            );
+            c.enqueue(enc.encode("data: [DONE]\n\n"));
+            c.close();
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const history: Message[] = [
+      { role: "user", content: "here is a file" },
+      { role: "assistant", content: "x".repeat(40_000) },
+    ];
+
+    // Collected rather than assigned: TypeScript will not narrow a variable
+    // written only inside a callback.
+    const seen: Array<{ tokens: number; budget: number }> = [];
+    await runTurn("what did it say?", history, registry, sessionId, {
+      onContext: (u) => seen.push(u),
+    });
+    const usage = seen.at(-1);
+
+    assert.ok(summarised, "an oversized history must be folded, not sent whole");
+    assert.ok(usage, "context usage should be reported");
+    assert.ok(
+      usage.tokens <= usage.budget * 1.5,
+      `history still ${usage.tokens} tokens against a ${usage.budget} budget`,
+    );
+  });
+
+  test("the newest question is never folded away, however large", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream({
+          start(c) {
+            const enc = new TextEncoder();
+            c.enqueue(
+              enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: "ok" } }] })}\n\n`),
+            );
+            c.enqueue(enc.encode("data: [DONE]\n\n"));
+            c.close();
+          },
+        }),
+        { status: 200 },
+      )) as typeof fetch;
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const history: Message[] = [];
+    const huge = "q".repeat(30_000);
+
+    await runTurn(huge, history, registry, sessionId);
+
+    // Summarising the question itself would answer a paraphrase of the user
+    // rather than the user.
+    assert.ok(
+      history.some((m) => m.role === "user" && String(m.content).includes(huge.slice(0, 200))),
+      "the question just asked must survive compaction verbatim",
+    );
+  });
+});

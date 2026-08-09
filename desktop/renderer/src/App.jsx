@@ -34,6 +34,8 @@ export function App() {
   // the server logs every turn under it, which is what makes restarts cheap.
   const [conversationId, setConversationId] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // How full the model's window is, reported by the server after folding.
+  const [context, setContext] = useState(null);
 
   const abortRef = useRef(null);
   const composerRef = useRef(null);
@@ -98,6 +100,7 @@ export function App() {
   const newChat = useCallback(async () => {
     stopSpeaking();
     setMessages([]);
+    setContext(null);
     // Created eagerly so the first turn already has an id to log under. An
     // abandoned empty session never shows in the list — it has no messages.
     setConversationId(await createConversation().catch(() => null));
@@ -148,6 +151,8 @@ export function App() {
             widgets.push(event.widget);
           } else if (event.type === "think") {
             thinking = event.chars;
+          } else if (event.type === "context") {
+            setContext({ tokens: event.tokens, budget: event.budget });
           } else if (event.type === "notice") {
             if (!notices.includes(event.text)) notices.push(event.text);
           } else {
@@ -213,6 +218,7 @@ export function App() {
     <div className="flex h-screen flex-col bg-background">
       <StatusBar
         {...status}
+        context={context}
         onNewChat={newChat}
         onHistory={() => setHistoryOpen(true)}
       />

@@ -388,6 +388,10 @@ async function handle(
           // comment ends at one.
           onNotice: (text) =>
             res.write(`: notice ${text.replace(/\r?\n/g, " ")}\n\n`),
+          // How full the window is after any folding. On the comment channel
+          // like the rest, so a client that does not render it is unaffected
+          // and the CLI needs no fallback.
+          onContext: (usage) => res.write(`: context ${usage.tokens} ${usage.budget}\n\n`),
         },
         overrides,
       );

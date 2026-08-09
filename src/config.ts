@@ -271,6 +271,25 @@ export const config = {
   historyWindow: Number(env("HISTORY_WINDOW") ?? 40),
 
   /**
+   * How many tokens of conversation the model is allowed to carry, system
+   * prompt included.
+   *
+   * Not the model's context limit, which is 128k and misleading. Measured on
+   * Maple with greedy decoding, a fact planted mid-conversation and asked for
+   * at the end is recalled 4/4 at 1.5k tokens, 2/4 at 3k, 1/4 at 6k and 0/4 at
+   * 12k. The window the model *has* is roughly a hundred times the window it
+   * can actually use, and past the edge it does not report losing the thread,
+   * it invents a confident answer -- which is the failure worth designing
+   * against.
+   *
+   * So this is the honest limit rather than the advertised one, set at the top
+   * of the reliable band. Raising it does not buy memory, it buys
+   * confabulation; the way to hold more is to remember it (facts, recall),
+   * not to keep it in the window.
+   */
+  contextBudget: Number(env("CONTEXT_BUDGET") ?? 2000),
+
+  /**
    * Unload the vision model the instant it answers. Ollama's default is 5
    * minutes, which on a 16GB machine means it sits on top of Maple long after
    * it was needed. Set to "5m" if you attach images constantly and would

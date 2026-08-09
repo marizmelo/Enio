@@ -1,4 +1,5 @@
 import { History, MessageSquarePlus } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
 import { cn } from "@/lib/utils";
 
@@ -13,7 +14,7 @@ const DOT = {
  * rather than disappearing once ready, because the one question this window
  * cannot answer on its own is whether the model is actually up.
  */
-export function StatusBar({ phase, message, tools, onNewChat, onHistory }) {
+export function StatusBar({ phase, message, tools, context, onNewChat, onHistory }) {
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
     // lights over the top-left of the page rather than in a title bar of its
@@ -40,6 +41,7 @@ export function StatusBar({ phase, message, tools, onNewChat, onHistory }) {
       {/* Status sits right, and shrinks first: the title is one word and always
           fits, while the message can be a full sentence about a failure. */}
       <div className="ml-auto flex min-w-0 items-center gap-2">
+        <ContextMeter context={context} />
         <span className="truncate">{message}</span>
         {typeof tools === "number" && (
           <span className="shrink-0 tabular-nums">· {tools} tools</span>
@@ -47,5 +49,42 @@ export function StatusBar({ phase, message, tools, onNewChat, onHistory }) {
         <span className={cn("size-2 shrink-0 rounded-full", DOT[phase] ?? DOT.starting)} />
       </div>
     </header>
+  );
+}
+
+/**
+ * How full the model's usable window is.
+ *
+ * The budget is not the model's 128k limit, which it cannot actually use --
+ * measured recall of a planted fact falls from 4/4 at 1.5k tokens to 0/4 at
+ * 12k. It is the band where the model still remembers what it was told, so
+ * "full" here means "about to be summarised", not "about to error". Hidden
+ * until a conversation is underway, since a meter reading zero teaches nobody
+ * anything.
+ */
+function ContextMeter({ context }) {
+  if (!context?.tokens) return null;
+  const pct = Math.min(100, Math.round((context.tokens / context.budget) * 100));
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <div className="h-1.5 w-10 overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                pct >= 90 ? "bg-amber-500" : "bg-muted-foreground/50",
+              )}
+              style={{ width: `${Math.max(pct, 4)}%` }}
+            />
+          </div>
+          <span className="tabular-nums">{pct}%</span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>
+        {context.tokens.toLocaleString()} / {context.budget.toLocaleString()} tokens of
+        working context. Older turns are summarised past this.
+      </TooltipContent>
+    </Tooltip>
   );
 }

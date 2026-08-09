@@ -68,6 +68,8 @@ export interface TurnHandlers {
    *  do not implement this — the tool's text has already been delivered. */
   onWidget?(widget: Widget): void;
   onNotice?(text: string): void;
+  /** Context carried after any folding, so a client can show how full it is. */
+  onContext?(usage: { tokens: number; budget: number }): void;
   onRoute?(specialist: string): void;
 }
 
@@ -106,6 +108,29 @@ function historyKey(messages: Message[]): string {
 }
 
 /**
+ * Rough token count: Maple's tokeniser averages a shade under four characters
+ * per token on English prose. Deliberately an estimate rather than a real
+ * tokenise -- this runs on every message of every turn to decide what to fold,
+ * and being 10% out moves the fold boundary by one message, while calling the
+ * tokeniser would mean a round trip per message.
+ */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 3.6);
+}
+
+function messageTokens(m: Message): number {
+  return estimateTokens(String(m.content ?? "")) + 4;
+}
+
+/** What the model is currently carrying, for the caller to display. */
+export function contextUsage(history: Message[]): { tokens: number; budget: number } {
+  return {
+    tokens: history.reduce((n, m) => n + messageTokens(m), 0),
+    budget: config.contextBudget,
+  };
+}
+
+/**
  * Fold everything older than the window into one summary, keeping recent turns
  * verbatim.
  *
@@ -122,10 +147,32 @@ async function compactHistory(history: Message[]): Promise<Message[]> {
   const system = history[0]?.role === "system" ? history[0] : null;
   const rest = system ? history.slice(1) : history;
 
-  if (rest.length <= config.historyWindow) return history;
+  // Keep the newest messages that fit the token budget, not a fixed count of
+  // them. Forty one-line exchanges and forty messages carrying a pasted file
+  // differ by two orders of magnitude, and only the second one silently pushes
+  // the model past where it can still recall what it was told.
+  //
+  // The system prompt is charged against the budget because the model pays for
+  // it on every turn: a specialist prompt runs 600-1200 tokens, so a third or
+  // more of the usable window is spoken for before the user says anything.
+  const spent = system ? messageTokens(system) : 0;
+  let room = Math.max(config.contextBudget - spent, Math.floor(config.contextBudget / 4));
 
-  const older = rest.slice(0, rest.length - config.historyWindow);
-  const recent = rest.slice(rest.length - config.historyWindow);
+  let keep = 0;
+  for (let i = rest.length - 1; i >= 0; i--) {
+    const cost = messageTokens(rest[i]!);
+    // Always keep one message however large: that is the question just asked,
+    // and summarising it would answer a paraphrase of the user instead of the
+    // user.
+    if (keep > 0 && (cost > room || keep >= config.historyWindow)) break;
+    room -= cost;
+    keep++;
+  }
+
+  if (keep >= rest.length) return history;
+
+  const older = rest.slice(0, rest.length - keep);
+  const recent = rest.slice(rest.length - keep);
   const key = historyKey(older);
 
   let summary = summaryCache.get(key);
@@ -258,10 +305,17 @@ export async function runTurn(
   // Fold older turns before the model sees any of them. Done in place, so the
   // caller's own record shrinks too -- a REPL that kept the full array would
   // send it all back next turn and undo this immediately.
-  if (history.length - 1 > config.historyWindow) {
+  // Either bound can fire: many small messages, or few enormous ones. Checking
+  // only the count let a single pasted file sail past the budget unfolded.
+  if (
+    history.length - 1 > config.historyWindow ||
+    contextUsage(history).tokens > config.contextBudget
+  ) {
     const compacted = await compactHistory(history);
     history.splice(0, history.length, ...compacted);
   }
+
+  handlers.onContext?.(contextUsage(history));
 
   const wireTools = activeTools.map(toWireTool);
   const toolsUsed: string[] = [];
