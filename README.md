@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="desktop/assets/icon.png" alt="" width="88">
+</p>
+
 # enio
 
 A local AI agent. Runs a model on your own machine and gives it tools, MCP servers, and memory that persists across conversations.
