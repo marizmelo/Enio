@@ -107,7 +107,16 @@ describe("routing inside a turn", () => {
     // generic ones — this is what actually changes behaviour.
     const system = String(history[0]?.content ?? "");
     assert.match(system, /research things on the web/i);
-    assert.ok(!/workspace/i.test(system), "should not carry the coder's framing");
+
+    // Matched against the coder's own opening line rather than the word
+    // "workspace". The bare noun was a proxy for the coder's framing, and it
+    // stopped being one when a shared rule started mentioning the workspace
+    // legitimately — the fs tools are scoped to it for every specialist, so
+    // the word belongs to all of them and identifies none.
+    assert.ok(
+      !/you work with code in the user's workspace/i.test(system),
+      "should not carry the coder's framing",
+    );
   });
 
   test("returns the question so the caller can save it as an exemplar", async () => {

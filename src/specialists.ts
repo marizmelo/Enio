@@ -119,7 +119,12 @@ export const SPECIALISTS: Specialist[] = [
       `You are a thoughtful assistant. Answer directly from what you know.\n\n` +
       `Use recall if the user refers to something from a past conversation. ` +
       `Otherwise just answer — not everything needs a tool.`,
-    tools: ["recall", "current_time", "read_skill"],
+    // read_image belongs here as much as it belongs to coder and operator:
+    // "what does this show?" is ordinary conversation, and it is the generalist
+    // that gets routed it. Without the tool it had no way to look, so it said
+    // it could not see images -- which was true of that specialist and false of
+    // the agent.
+    tools: ["recall", "current_time", "read_image", "read_skill"],
   },
 ];
 
