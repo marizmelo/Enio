@@ -51,6 +51,11 @@ contextBridge.exposeInMainWorld("maple", {
     }
   },
 
+  /** A workspace image as a data URL, or null if it is not previewable. */
+  readAttachment(name) {
+    return ipcRenderer.invoke("read-attachment", name);
+  },
+
   /** Copy an already-on-disk file into the workspace. */
   importFile(sourcePath) {
     return ipcRenderer.invoke("import-file", sourcePath);

@@ -208,6 +208,12 @@ async function handle(
     };
 
     emit({ role: "assistant", content: "" });
+
+    // Throttled: a reasoning delta can arrive per token, and a frame each would
+    // be more traffic than the answer.
+    let thoughtChars = 0;
+    let lastThinkAt = 0;
+
     try {
       await runTurn(
         prompt,
@@ -216,6 +222,20 @@ async function handle(
         sessionId,
         {
           onContent: (d) => emit({ content: d }),
+          // Reasoning is stripped before it reaches any client, which is right
+          // -- it is not the answer. But it is also the entire wait: the model
+          // can spend a minute in <think> while the window shows nothing, and
+          // a spinner that cannot say how long it has been spinning is
+          // indistinguishable from one that is stuck. Only the running size is
+          // sent, never the text.
+          onReasoning: (d) => {
+            thoughtChars += d.length;
+            const now = Date.now();
+            if (now - lastThinkAt >= 250) {
+              lastThinkAt = now;
+              res.write(`: think ${thoughtChars}\n\n`);
+            }
+          },
           // Surfaced as a comment frame so clients that don't understand it ignore
           // it, rather than rendering tool chatter as assistant text.
           onToolStart: (name) => res.write(`: tool ${name}\n\n`),

@@ -243,6 +243,7 @@ function createWindow() {
     minWidth: 700,
     minHeight: 500,
     titleBarStyle: "hiddenInset",
+    icon: path.join(__dirname, "assets", "icon.png"),
     backgroundColor: "#1a1a1e",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -324,6 +325,36 @@ ipcMain.handle("pick-files", async () => {
   return result.filePaths.map(copyIntoWorkspace);
 });
 
+const PREVIEWABLE = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"]);
+const PREVIEW_LIMIT = 4 * 1024 * 1024;
+
+/**
+ * A workspace image as a data URL, for showing the user what they attached.
+ *
+ * Resolved against the workspace and rejected if it escapes, because this
+ * reads a path the renderer supplied — the same rule the agent's own file
+ * tools follow, for the same reason.
+ */
+ipcMain.handle("read-attachment", (_event, name) => {
+  try {
+    const full = path.resolve(WORKSPACE, name);
+    if (full !== WORKSPACE && !full.startsWith(WORKSPACE + path.sep)) return null;
+
+    const ext = path.extname(full).toLowerCase();
+    if (!PREVIEWABLE.has(ext)) return null;
+
+    const stat = fs.statSync(full);
+    // A thumbnail is a nicety; inlining megabytes of base64 into the DOM for
+    // one is not. Oversized images simply show as a chip with a name.
+    if (!stat.isFile() || stat.size > PREVIEW_LIMIT) return null;
+
+    const mime = ext === ".jpg" ? "image/jpeg" : `image/${ext.slice(1)}`;
+    return `data:${mime};base64,${fs.readFileSync(full).toString("base64")}`;
+  } catch {
+    return null;
+  }
+});
+
 ipcMain.handle("import-file", (_event, sourcePath) => {
   try {
     return copyIntoWorkspace(sourcePath);
@@ -356,6 +387,18 @@ ipcMain.handle("open-external", (_event, url) => {
 });
 
 app.whenReady().then(() => {
+  // The BrowserWindow `icon` option is ignored on macOS — the dock reads the
+  // app bundle, and an unpackaged `electron .` has Electron's own. Setting it
+  // here is what makes a dev run show Enio in the dock and the switcher.
+  // Packaged builds get it from electron-builder's mac.icon instead.
+  if (process.platform === "darwin") {
+    try {
+      app.dock?.setIcon(path.join(__dirname, "assets", "icon.png"));
+    } catch {
+      // Cosmetic. A missing or unreadable icon must not stop the app booting.
+    }
+  }
+
   createWindow();
   startBackends();
 

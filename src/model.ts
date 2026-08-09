@@ -127,10 +127,21 @@ async function consumeStream(
         if (reasoning) handlers.onReasoning?.(reasoning);
       }
 
-      // Some builds surface reasoning as its own field rather than <think> tags.
-      if (typeof delta.reasoning_content === "string") {
-        think.absorbReasoning(delta.reasoning_content);
-        handlers.onReasoning?.(delta.reasoning_content);
+      // Some builds surface reasoning as its own field rather than <think>
+      // tags, and they disagree on the name: DeepSeek-style servers send
+      // reasoning_content, while the mlx-lm build Maple runs on sends
+      // reasoning. Only the first was handled, so with Maple this branch never
+      // fired -- reasoning was silently dropped, traces recorded none, and
+      // anything watching the model think saw nothing happening at all.
+      const reasoningDelta =
+        typeof delta.reasoning_content === "string"
+          ? delta.reasoning_content
+          : typeof delta.reasoning === "string"
+            ? delta.reasoning
+            : null;
+      if (reasoningDelta) {
+        think.absorbReasoning(reasoningDelta);
+        handlers.onReasoning?.(reasoningDelta);
       }
 
       for (const tc of delta.tool_calls ?? []) {

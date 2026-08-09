@@ -25,10 +25,11 @@
       "output": "build"
     },
     "files": [
+      "assets/**/*",
       "main.js",
+      "package.json",
       "preload.js",
-      "renderer/**/*",
-      "package.json"
+      "renderer/**/*"
     ],
     "mac": {
       "category": "public.app-category.productivity",
@@ -39,7 +40,8 @@
             "arm64"
           ]
         }
-      ]
+      ],
+      "icon": "assets/icon.icns"
     }
   },
   "dependencies": {

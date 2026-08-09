@@ -4,7 +4,7 @@ import { Message } from "@/components/Message";
 import { Composer } from "@/components/Composer";
 import { EmptyState } from "@/components/EmptyState";
 import { streamTurn } from "@/lib/agent";
-import { fetchCapabilities } from "@/lib/capabilities";
+import { attachedFiles, fetchCapabilities } from "@/lib/capabilities";
 
 export function App() {
   const [status, setStatus] = useState({
@@ -15,6 +15,10 @@ export function App() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [capabilities, setCapabilities] = useState({});
+  // Files attached since startup. capabilities.files is fetched once, so
+  // without this a file pasted a moment ago is not recognised as a file --
+  // by the composer's chips or by the thread's previews.
+  const [sessionFiles, setSessionFiles] = useState([]);
 
   const abortRef = useRef(null);
   const scrollRef = useRef(null);
@@ -52,7 +56,10 @@ export function App() {
       if (!trimmed || streaming || !backendReady) return;
 
       setInput("");
-      const history = [...messages, { role: "user", content: trimmed }];
+      // Recorded on the message so the thread can show what was attached
+      // after the composer has been cleared.
+      const files = attachedFiles(trimmed, [...(capabilities.files ?? []), ...sessionFiles]);
+      const history = [...messages, { role: "user", content: trimmed, files }];
       setMessages([...history, { role: "assistant", content: "", tools: [] }]);
       setStreaming(true);
 
@@ -62,6 +69,8 @@ export function App() {
       let assistant = "";
       const tools = [];
       const widgets = [];
+      let thinking = 0;
+      const startedAt = Date.now();
 
       try {
         for await (const event of streamTurn(
@@ -72,6 +81,8 @@ export function App() {
             tools.push(event.name);
           } else if (event.type === "widget") {
             widgets.push(event.widget);
+          } else if (event.type === "think") {
+            thinking = event.chars;
           } else {
             // The model opens with a blank line or two once its <think> block
             // is stripped. Trimmed at the front only, and on the accumulated
@@ -86,6 +97,8 @@ export function App() {
               content: assistant,
               tools: [...tools],
               widgets: [...widgets],
+              thinking,
+              startedAt,
             },
           ]);
         }
@@ -110,7 +123,7 @@ export function App() {
         abortRef.current = null;
       }
     },
-    [backendReady, messages, streaming],
+    [backendReady, capabilities.files, messages, sessionFiles, streaming],
   );
 
   return (
@@ -141,6 +154,10 @@ export function App() {
         disabled={!backendReady}
         streaming={streaming}
         capabilities={capabilities}
+        sessionFiles={sessionFiles}
+        onAttached={(names) =>
+          setSessionFiles((prev) => [...new Set([...prev, ...names])])
+        }
       />
     </div>
   );

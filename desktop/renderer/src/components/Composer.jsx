@@ -1,15 +1,18 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { ArrowUp, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AttachMenu } from "@/components/AttachMenu";
 import { SlashPalette } from "@/components/SlashPalette";
+import { AttachmentChips } from "@/components/AttachmentChips";
 import { MentionPalette } from "@/components/MentionPalette";
 import {
   appendMention,
   applySlash,
+  attachedFiles,
   completeMention,
   mentionQuery,
+  removeMention,
   slashQuery,
 } from "@/lib/capabilities";
 
@@ -25,6 +28,8 @@ export function Composer({
   disabled,
   streaming,
   capabilities = {},
+  sessionFiles = [],
+  onAttached = () => {},
 }) {
   const ref = useRef(null);
 
@@ -46,6 +51,17 @@ export function Composer({
   }, [streaming, disabled]);
 
   const canSend = !disabled && !streaming && value.trim().length > 0;
+
+  // Files attached during this session. capabilities.files is fetched once at
+  // startup, so anything pasted or picked since then is not in it -- without
+  // this, a file attached a second ago is not recognised as a file and gets no
+  // chip. Still only a *known* name becomes a chip: "@researcher" is an agent
+  // and "@notafile" is ordinary text the server will leave alone.
+  const known = useMemo(
+    () => [...new Set([...(capabilities.files ?? []), ...sessionFiles])],
+    [capabilities.files, sessionFiles],
+  );
+  const attached = attachedFiles(value, known);
 
   // The palette is a hint list, not a focus trap: the caret stays in the
   // textarea the whole time, so cmdk never receives a keystroke and its own
@@ -105,6 +121,7 @@ export function Composer({
   const attachAll = (names) => {
     let next = value;
     for (const name of names) next = appendMention(next, name);
+    onAttached(names);
     onChange(next);
     ref.current?.focus();
   };
@@ -155,6 +172,16 @@ export function Composer({
 
   return (
     <footer className="relative flex shrink-0 items-end gap-2 border-t p-3">
+      {attached.length > 0 && slashMatches.length === 0 && mentionGroups.length === 0 && (
+        <AttachmentChips
+          names={attached}
+          onRemove={(name) => {
+            onChange(removeMention(value, name));
+            ref.current?.focus();
+          }}
+        />
+      )}
+
       {slashMatches.length > 0 && (
         <SlashPalette matches={slashMatches} onPick={insertSkill} />
       )}

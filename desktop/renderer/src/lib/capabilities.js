@@ -65,3 +65,38 @@ export function mentionQuery(value) {
 export function completeMention(value, token) {
   return value.replace(/(^|\s)@[\w./-]*$/, `$1@${token} `);
 }
+
+const MENTION = /(^|\s)@([\w./-]+)/g;
+
+/**
+ * Which attached files the message currently refers to.
+ *
+ * Derived from the text rather than tracked alongside it, so there is one
+ * source of truth. Delete "@notes.txt" by hand and the chip goes with it; the
+ * alternative is a list that quietly disagrees with what gets sent.
+ *
+ * Only known workspace files count — @researcher is an agent and @anything
+ * else is just text the server will leave alone.
+ */
+export function attachedFiles(value, files = []) {
+  const known = new Set(files);
+  const found = [];
+  for (const [, , token] of value.matchAll(MENTION)) {
+    if (known.has(token) && !found.includes(token)) found.push(token);
+  }
+  return found;
+}
+
+/** Drop one @mention, leaving the rest of the sentence intact. */
+export function removeMention(value, token) {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value
+    .replace(new RegExp(`(^|\\s)@${escaped}(?![\\w./-])\\s?`, "g"), "$1")
+    .replace(/\s{2,}/g, " ")
+    .trimStart();
+}
+
+/** Images get a thumbnail; everything else gets a name and an icon. */
+export function isImageName(name) {
+  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(name);
+}

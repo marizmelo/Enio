@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
+import { Thinking } from "@/components/Thinking";
 import { Widget } from "@/components/Widget";
+import { AttachmentPreviews } from "@/components/AttachmentPreviews";
 import { cn } from "@/lib/utils";
 import { renderMarkdownish } from "@/lib/markdown";
 
@@ -14,6 +15,9 @@ export function Message({
   content,
   tools = [],
   widgets = [],
+  files = [],
+  thinking = 0,
+  startedAt = null,
   error = false,
   streaming = false,
 }) {
@@ -22,6 +26,7 @@ export function Message({
 
   return (
     <div className={cn("flex flex-col gap-1.5", isUser ? "items-end" : "items-start")}>
+      {isUser && files.length > 0 && <AttachmentPreviews names={files} />}
       {tools.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {tools.map((name, i) => (
@@ -33,14 +38,7 @@ export function Message({
       )}
 
       {waiting ? (
-        // Nothing has arrived yet. The gap before the first visible token is
-        // not dead time -- the model is generating a <think> block that gets
-        // stripped before it ever reaches here, and on a long one that is tens
-        // of seconds of a bubble that would otherwise sit empty.
-        <div className="flex max-w-[85%] items-center gap-2 rounded-lg bg-muted px-3.5 py-2.5 text-sm text-muted-foreground">
-          <Spinner />
-          <span>Thinking…</span>
-        </div>
+        <Thinking startedAt={startedAt} chars={thinking} />
       ) : (
         <div
           className={cn(
