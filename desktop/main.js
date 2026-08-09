@@ -57,7 +57,12 @@ function readToken() {
 const POLL_INTERVAL_MS = 800;
 // Model load reads ~5GB off disk; give it a generous window before we give up
 // and report failure rather than leaving the user staring at "starting".
-const MODEL_TIMEOUT_MS = 120_000;
+// Long enough for the slow path, not just the common one: a cold start reads
+// ~5GB off disk, and if another launcher is already doing that we wait for it
+// (up to 90s) before falling back to starting our own. Timing out first leaves
+// the app "failed" with a model that is about to come up and no agent started,
+// which reads as completely broken rather than merely slow.
+const MODEL_TIMEOUT_MS = 240_000;
 const AGENT_TIMEOUT_MS = 30_000;
 
 /** @type {BrowserWindow | null} */

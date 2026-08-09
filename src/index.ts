@@ -9,6 +9,7 @@ import {
   ensureBackend,
   modelServerArgs,
   modelServerPid,
+  WAIT_FOR_EXISTING_TICKS,
   type RunningBackend,
 } from "./runtime.js";
 import { findSkill, loadSkills, skillContents, skillsDir } from "./skills.js";
@@ -730,7 +731,7 @@ async function startModelServer(): Promise<void> {
   const loading = modelServerPid();
   if (loading !== null) {
     console.log(`A model server is already starting (pid ${loading}) — waiting for it`);
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < WAIT_FOR_EXISTING_TICKS; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       if (await serverIsUp()) {
         console.log(`Ready at ${config.modelBaseUrl}`);

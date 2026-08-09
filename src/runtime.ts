@@ -35,17 +35,38 @@ import { canRunMaple, isWindows, whyNoMaple } from "./platform.js";
  * survive a crash to be worth anything and this needs no cleanup to be
  * correct.
  */
+/**
+ * How long to wait for a model server someone else is starting, in 2s ticks.
+ *
+ * Bounded by the desktop's own patience rather than by how long a load can
+ * take. Waiting longer than the caller will wait is worse than starting a
+ * duplicate: the app reports "Maple did not respond" and never goes on to
+ * start the agent, so nothing works at all -- which is exactly what an
+ * unbounded 180s wait did against a 120s timeout.
+ */
+export const WAIT_FOR_EXISTING_TICKS = 45;
+
 export function modelServerPid(): number | null {
   try {
-    const out = execFileSync("/usr/bin/pgrep", ["-f", "mlx_lm.server"], {
-      encoding: "utf8",
-    });
-    const pid = Number(out.split("\n").filter(Boolean)[0]);
-    return Number.isFinite(pid) ? pid : null;
+    const out = execFileSync("/bin/ps", ["-axo", "pid=,command="], { encoding: "utf8" });
+    for (const line of out.split("\n")) {
+      const match = /^\s*(\d+)\s+(.*)$/.exec(line);
+      if (!match) continue;
+      const pid = Number(match[1]);
+      // Structural match on the actual invocation rather than the bare string
+      // "mlx_lm.server", which also appears in any shell command that mentions
+      // it -- including the diagnostics people run while debugging this. A
+      // false positive costs ninety seconds of waiting for a server that does
+      // not exist.
+      if (pid !== process.pid && /python[\d.]*\s+-m\s+mlx_lm\.server/.test(match[2]!)) {
+        return pid;
+      }
+    }
   } catch {
-    // pgrep exits non-zero when nothing matches, which is the common case.
-    return null;
+    // ps is missing or refused; treat as "cannot tell" and let the HTTP check
+    // decide, which is the behaviour this had before.
   }
+  return null;
 }
 
 export function modelServerArgs(modelPath: string): string[] {
@@ -127,7 +148,7 @@ async function startMaple(opts: EnsureOptions): Promise<RunningBackend> {
   const existing = modelServerPid();
   if (existing !== null) {
     opts.log(`A model server is already starting (pid ${existing}) — waiting for it`);
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < WAIT_FOR_EXISTING_TICKS; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       if (await serverIsUp()) return NOOP;
       if (modelServerPid() === null) break; // it died; fall through and start one
