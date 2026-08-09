@@ -30,7 +30,12 @@ function allowedCommands(): Set<string> {
     .map((s) => s.trim())
     .filter(Boolean);
   const platformCommands = isWindows() ? WINDOWS_COMMANDS : [];
-  return new Set([...DEFAULT_ALLOWED, ...platformCommands, ...extra]);
+  // Desktop control is mostly shell commands the allowlist would otherwise
+  // refuse -- osascript, screencapture, open, shortcuts, mdfind, the
+  // clipboard. Withheld until ENIO_DESKTOP=1 because osascript can do anything
+  // the user can, which is the whole reason the flag exists.
+  const desktopCommands = desktopEnabled() ? DESKTOP_COMMANDS : [];
+  return new Set([...DEFAULT_ALLOWED, ...platformCommands, ...desktopCommands, ...extra]);
 }
 
 const bypass = () => process.env.ENIO_ALLOW_ANY_COMMAND === "1";
