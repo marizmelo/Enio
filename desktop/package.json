@@ -9,7 +9,8 @@
   "scripts": {
     "build": "node build.mjs",
     "start": "node scripts/name-dev-bundle.mjs && npm run build && electron .",
-    "dist": "npm run build && electron-builder --mac --arm64"
+    "dist": "npm run build && electron-builder --mac --arm64",
+    "icon": "electron scripts/make-icon.mjs"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.3",
