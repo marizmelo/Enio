@@ -266,14 +266,20 @@ structure, the model only for prose. That is already the direction here.
 - If a folder can be opened outside the workspace, what stops a prompt-injected
   file in that folder from being read as an instruction? The sandbox currently
   answers this by being small.
-- Why does decoding measure ~75 tok/s here when DeepGrove claims 200+ and a
-  reviewer measured 234 on an M3 Max? The weights we run are `bits: 2, mode:
-  affine`, which is a general low-bit quantisation rather than the ternary
-  representation the speed argument rests on — ternary is fast because
-  multiplication collapses into addition, and an affine 2-bit quant still
-  dequantises and multiplies. If a ternary-native build or kernel exists, it is
-  worth roughly 3x on every number in this repo, and latency is the complaint
-  behind most of the tuning here.
+- ~~Decoding measures ~75 tok/s against a claimed 200+; are we running the wrong
+  build?~~ **Answered, and the first answer was wrong.** `bits: 2, mode: affine`
+  *is* the ternary model: `mlx_lm.ternary`'s own description says it recovers
+  bf16 weights to {-alpha, 0, +alpha} by thresholding and packs them as codes
+  {0,1,2} with per-row scale alpha and bias -alpha, "loadable by stock mlx-lm
+  with no custom kernels". So there is no faster build to switch to, and no
+  multiply-into-add speedup either — that needs kernels this distribution
+  deliberately does not require.
+  The rate gap is the machine. Inference is memory-bound, this is an M4 at
+  roughly 120GB/s, and the 234 tok/s figure came from an M3 Max at three to four
+  times that bandwidth. 73 against 234 is very close to the bandwidth ratio.
+  Which means latency here is a fact to design around, not a bug to fix — and
+  every latency decision in this repo (the token ceiling, sentence-at-a-time
+  speech, the resident whisper worker) was the right shape of answer.
 - On-device adaptation, if it ever arrives, cannot mean updating the weights
   themselves: there is no gradient through a quantiser onto {-1, 0, +1}. It has
   to be an adapter in higher precision over a frozen base, which is also the
