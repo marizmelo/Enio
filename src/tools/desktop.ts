@@ -318,25 +318,52 @@ const proposeTool: ToolDef = {
       summary: {
         type: "string",
         description:
-          "One plain sentence: what this does and what it changes. The user reads this to decide.",
+          "One plain sentence covering the whole plan. The user reads this first.",
       },
-      script: {
-        type: "string",
-        description: "The exact AppleScript to run if approved.",
+      steps: {
+        type: "array",
+        description:
+          "The steps, in order. Keep each one to a single action with its own short AppleScript — one script doing three things is where scripts go wrong.",
+        items: {
+          type: "object",
+          properties: {
+            summary: { type: "string", description: "What this step does, in a few words." },
+            script: { type: "string", description: "The AppleScript for this step alone." },
+          },
+          required: ["summary", "script"],
+        },
       },
     },
-    required: ["summary", "script"],
+    required: ["summary", "steps"],
   },
   async run(args) {
     const summary = String(args.summary ?? "").trim();
-    const script = unescapeQuotes(String(args.script ?? "").trim());
-    if (!summary || !script) return "Error: a plan needs both a summary and a script.";
+
+    // A single script is accepted as a one-step plan. The model will sometimes
+    // reach for the simpler shape whatever the schema says, and rejecting that
+    // wastes a turn over a formatting preference.
+    const raw = Array.isArray(args.steps)
+      ? (args.steps as Array<Record<string, unknown>>)
+      : args.script
+        ? [{ summary, script: args.script }]
+        : [];
+
+    const steps = raw
+      .map((s) => ({
+        summary: String(s?.summary ?? "").trim(),
+        script: unescapeQuotes(String(s?.script ?? "").trim()),
+      }))
+      .filter((s) => s.script);
+
+    if (!summary || steps.length === 0) {
+      return "Error: a plan needs a summary and at least one step with a script.";
+    }
 
     const plan = proposePlan({
       sessionId: currentSessionId || null,
       summary,
       kind: "applescript",
-      payload: script,
+      steps,
     });
 
     // The widget is what the user acts on; the text is what the model reads,
@@ -344,10 +371,10 @@ const proposeTool: ToolDef = {
     return {
       text:
         `Proposed, not run. The user has been shown this plan and must approve it:\n\n` +
-        `${summary}\n\n${script}\n\n` +
-        `Tell them briefly what you are proposing and that it is waiting for them. ` +
+        steps.map((s, i) => `${i + 1}. ${s.summary}`).join("\n") +
+        `\n\nTell them briefly what you are proposing and that it is waiting for them. ` +
         `Do not try to run it yourself and do not call another tool.`,
-      widget: { type: "plan", id: plan.id, summary, script },
+      widget: { type: "plan", id: plan.id, summary, steps },
     };
   },
 };

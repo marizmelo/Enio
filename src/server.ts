@@ -9,7 +9,7 @@ import { claimModelServer } from "./runtime.js";
 import { buildRegistry, type Registry } from "./tools/index.js";
 import { setMemorySession } from "./tools/memory.js";
 import { setPlanSession } from "./tools/desktop.js";
-import { getPlan, saveRecipe, settlePlan } from "./plans.js";
+import { getPlan, planSteps, saveRecipe, settlePlan } from "./plans.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
@@ -299,6 +299,8 @@ async function handle(
       return;
     }
 
+    const steps = planSteps(plan);
+
     let saved: string | null = null;
     if (action === "save") {
       const body = await readBody(req);
@@ -308,7 +310,14 @@ async function handle(
       } catch {
         name = "";
       }
-      const result = saveRecipe({ name, summary: plan.summary, script: plan.payload });
+      // A saved recipe is one script, so a multi-step plan is joined into one.
+      // Steps exist to make a plan readable and to fail in a locatable place;
+      // once approved and named, it is a single thing that worked.
+      const result = saveRecipe({
+        name,
+        summary: plan.summary,
+        script: steps.map((s) => s.script).join("\n"),
+      });
       if (!result.ok) {
         sendJson(res, 400, { error: { message: result.reason } });
         return;
@@ -316,19 +325,45 @@ async function handle(
       saved = result.name;
     }
 
-    try {
-      const { stdout, stderr } = await promisify(execFile)("osascript", ["-e", plan.payload], {
-        timeout: config.shellTimeoutMs,
-        maxBuffer: 4_000_000,
-      });
-      const output = (stdout || stderr).trim() || "(ran successfully, no output)";
-      settlePlan(plan.id, saved ? "saved" : "approved", output);
-      sendJson(res, 200, { status: saved ? "saved" : "approved", savedAs: saved, output });
-    } catch (err) {
-      const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
-      settlePlan(plan.id, saved ? "saved" : "approved", `failed: ${message}`);
-      sendJson(res, 200, { status: "failed", savedAs: saved, output: message });
+    // In order, stopping at the first failure. A plan that half-ran must say so
+    // and say where: reporting only the error would leave the user unable to
+    // tell what had already happened to their machine.
+    const results: Array<{ step: number; summary: string; output: string; ok: boolean }> = [];
+    let failed = false;
+
+    for (const [i, step] of steps.entries()) {
+      try {
+        const { stdout, stderr } = await promisify(execFile)("osascript", ["-e", step.script], {
+          timeout: config.shellTimeoutMs,
+          maxBuffer: 4_000_000,
+        });
+        results.push({
+          step: i + 1,
+          summary: step.summary,
+          output: (stdout || stderr).trim() || "(no output)",
+          ok: true,
+        });
+      } catch (err) {
+        const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
+        results.push({ step: i + 1, summary: step.summary, output: message.trim(), ok: false });
+        failed = true;
+        break;
+      }
     }
+
+    const transcript = results
+      .map((r) => `${r.ok ? "ok" : "failed"} — ${r.step}. ${r.summary}\n${r.output}`)
+      .join("\n\n");
+    settlePlan(plan.id, saved ? "saved" : "approved", transcript);
+
+    sendJson(res, 200, {
+      status: failed ? "failed" : saved ? "saved" : "approved",
+      savedAs: saved,
+      results,
+      ranSteps: results.length,
+      totalSteps: steps.length,
+      output: transcript,
+    });
     return;
   }
 

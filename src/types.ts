@@ -50,7 +50,12 @@ export type Widget =
    * description of it -- a summary the model wrote is not a thing to consent
    * to when the model is the unreliable part.
    */
-  | { type: "plan"; id: string; summary: string; script: string };
+  | {
+      type: "plan";
+      id: string;
+      summary: string;
+      steps: Array<{ summary: string; script: string }>;
+    };
 
 /**
  * What a tool hands back.

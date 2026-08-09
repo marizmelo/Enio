@@ -27,13 +27,17 @@ describe("proposed actions", () => {
     const tool = desktopTools.find((t) => t.name === "propose_plan")!;
     const out = await tool.run({
       summary: "Count the notes",
-      script: 'tell application "Notes" to get count of notes',
+      steps: [
+        { summary: "count", script: 'tell application "Notes" to get count of notes' },
+      ],
     });
     const widget = (out as { widget: { id: string } }).widget;
 
     const stored = plans.getPlan(widget.id)!;
     assert.equal(stored.status, "pending");
-    assert.equal(stored.payload, 'tell application "Notes" to get count of notes');
+    assert.deepEqual(plans.planSteps(stored).map((s) => s.script), [
+      'tell application "Notes" to get count of notes',
+    ]);
 
     // The text handed back to the model must not read as success, or it
     // reports the work as done and the user never sees the approval.
@@ -47,7 +51,7 @@ describe("proposed actions", () => {
     const plan = plans.proposePlan({
       summary: "x",
       kind: "applescript",
-      payload: "return 1",
+      steps: [{ summary: "one", script: "return 1" }],
     });
     plans.settlePlan(plan.id, "approved", "1");
     assert.equal(plans.getPlan(plan.id)!.status, "approved");
@@ -68,5 +72,54 @@ describe("proposed actions", () => {
 
     assert.ok(plans.listSavedRecipes().some((r) => r.name === "note_count"));
     plans.forgetRecipe("note_count");
+  });
+});
+
+describe("multi-step plans", () => {
+  test("steps survive storage, and the old single-script shape still reads", () => {
+    const plan = plans.proposePlan({
+      summary: "two things",
+      kind: "applescript",
+      steps: [
+        { summary: "first", script: "return 1" },
+        { summary: "second", script: "return 2" },
+      ],
+    });
+    assert.deepEqual(
+      plans.planSteps(plans.getPlan(plan.id)!).map((s) => s.script),
+      ["return 1", "return 2"],
+    );
+
+    // A plan written before steps existed holds a bare script. Reading it as a
+    // one-step plan is what lets an approval sitting in the database across an
+    // upgrade still work, rather than throwing on a JSON parse.
+    const legacy = {
+      id: "x",
+      sessionId: null,
+      summary: "old style",
+      kind: "applescript" as const,
+      payload: 'tell application "Notes" to get count of notes',
+      status: "pending" as const,
+      result: null,
+      createdAt: 0,
+    };
+    assert.deepEqual(plans.planSteps(legacy), [
+      { summary: "old style", script: 'tell application "Notes" to get count of notes' },
+    ]);
+  });
+
+  test("a bare script is accepted as a one-step plan", async () => {
+    // The model reaches for the simpler shape whatever the schema says, and
+    // rejecting it would waste a turn over a formatting preference.
+    const tool = desktopTools.find((t) => t.name === "propose_plan")!;
+    const out = await tool.run({ summary: "count", script: "return 1" });
+    const widget = (out as { widget: { steps: unknown[] } }).widget;
+    assert.equal(widget.steps.length, 1);
+  });
+
+  test("a plan with no runnable step is refused", async () => {
+    const tool = desktopTools.find((t) => t.name === "propose_plan")!;
+    const out = await tool.run({ summary: "nothing", steps: [{ summary: "empty", script: "  " }] });
+    assert.match(String(out), /needs a summary and at least one step/);
   });
 });

@@ -11,7 +11,14 @@ import { getDb } from "./memory/db.js";
  * cannot reliably write AppleScript was nonetheless free to run whatever it
  * wrote, and to keep trying variations when they failed.
  *
- * Approving is a one-off. Saving promotes the script to a named recipe, after
+ * A plan is a list of steps rather than one script. Cramming "open Notes, make
+ * a note, set its body" into a single AppleScript is where the model reliably
+ * goes wrong, and a list also gives the user something to read: three sentences
+ * with three scripts under them, rather than one wall to consent to. Steps run
+ * in order and stop at the first failure, so a half-finished plan is visible as
+ * a half-finished plan instead of an error with no account of what already ran.
+ *
+ * Approving is a one-off. Saving promotes the steps to a named recipe, after
  * which it is *selected* rather than re-authored -- so a thing that worked once
  * keeps working, and the model never has to get the same characters right
  * twice.
@@ -22,15 +29,44 @@ import { getDb } from "./memory/db.js";
 
 export type PlanKind = "applescript" | "shell";
 
+export interface PlanStep {
+  summary: string;
+  script: string;
+}
+
 export interface Plan {
   id: string;
   sessionId: string | null;
   summary: string;
   kind: PlanKind;
+  /** JSON-encoded PlanStep[]. Stored as text so the column survives a schema
+   *  that predates steps, and parsed through planSteps() which tolerates the
+   *  old single-script shape. */
   payload: string;
   status: "pending" | "approved" | "declined" | "saved";
   result: string | null;
   createdAt: number;
+}
+
+/**
+ * The steps of a plan, whatever shape it was stored in.
+ *
+ * Plans written before steps existed hold a bare script. Reading those as a
+ * one-step plan costs nothing and means an approval sitting in the database
+ * across an upgrade still works, rather than throwing on a JSON parse.
+ */
+export function planSteps(plan: Plan): PlanStep[] {
+  try {
+    const parsed = JSON.parse(plan.payload);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((s) => s && typeof s.script === "string")
+        .map((s) => ({ summary: String(s.summary ?? "").trim(), script: String(s.script) }));
+    }
+  } catch {
+    // Not JSON: the older single-script form.
+  }
+  return [{ summary: plan.summary, script: plan.payload }];
 }
 
 const now = () => Date.now();
@@ -39,14 +75,14 @@ export function proposePlan(input: {
   sessionId?: string | null;
   summary: string;
   kind: PlanKind;
-  payload: string;
+  steps: PlanStep[];
 }): Plan {
   const plan: Plan = {
     id: randomUUID(),
     sessionId: input.sessionId ?? null,
     summary: input.summary.trim(),
     kind: input.kind,
-    payload: input.payload,
+    payload: JSON.stringify(input.steps),
     status: "pending",
     result: null,
     createdAt: now(),
