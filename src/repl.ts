@@ -3,6 +3,7 @@ import { stdin, stdout } from "node:process";
 import { config } from "./config.js";
 import { runTurn } from "./agent.js";
 import { serverIsUp } from "./model.js";
+import { claimModelServer } from "./runtime.js";
 import { buildRegistry } from "./tools/index.js";
 import { closeMcp } from "./tools/mcp.js";
 import { closeBrowser } from "./tools/browser.js";
@@ -59,6 +60,10 @@ export async function repl(opts: { showThinking: boolean; resume?: string }): Pr
     console.error(unreachableMessage());
     process.exit(1);
   }
+
+  // Count this session among the model server's users, so a desktop quitting
+  // mid-conversation leaves the server up instead of taking it with it.
+  claimModelServer();
 
   const registry = await buildRegistry((m) => console.log(dim(m)));
   /**

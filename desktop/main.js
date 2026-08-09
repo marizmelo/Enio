@@ -34,10 +34,8 @@ const MODEL_HEALTH_URL = "http://127.0.0.1:8080/v1/models";
 const AGENT_PING_URL = "http://127.0.0.1:8787/ping";
 const AGENT_HEALTH_URL = "http://127.0.0.1:8787/health";
 
-const TOKEN_PATH = path.join(
-  process.env.ENIO_DATA_DIR || path.join(os.homedir(), ".enio"),
-  "token",
-);
+const DATA_DIR = process.env.ENIO_DATA_DIR || path.join(os.homedir(), ".enio");
+const TOKEN_PATH = path.join(DATA_DIR, "token");
 
 /**
  * The agent endpoint requires a bearer token. It's generated on first `serve`
@@ -293,9 +291,48 @@ function createTray() {
   }
 }
 
+/**
+ * Live enio processes that still need the model server, other than our own.
+ *
+ * Mirrors src/model-clients.ts, deliberately: this runs during shutdown, where
+ * spawning a node process to ask the question is exactly the sort of thing
+ * that does not finish. The format is one pid per line and the liveness test
+ * is signal 0, so the two implementations cannot drift far.
+ */
+function otherModelClients(ignorePid) {
+  try {
+    const file = path.join(DATA_DIR, "model-clients");
+    return fs.readFileSync(file, "utf8")
+      .split("\n")
+      .map((line) => Number(line.trim()))
+      .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== ignorePid)
+      .filter((pid) => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+  } catch {
+    return [];
+  }
+}
+
 function killChild(child, pid, label) {
   const target = pid ?? child?.pid;
   if (!target) return;
+
+  // Wrapper-only: signal the single process, deliberately sparing the group,
+  // because the model server inside it is still serving somebody.
+  if (label === "model-wrapper-only") {
+    try {
+      process.kill(target, "SIGTERM");
+    } catch {
+      /* gone */
+    }
+    return;
+  }
 
   // Negative pid signals the process group, which is why spawnBackend makes
   // one. Signalling the pid alone leaves the model server orphaned.
@@ -326,7 +363,23 @@ function killChild(child, pid, label) {
 
 function stopBackends() {
   shuttingDown = true;
-  killChild(modelProc, modelPid, "model");
+
+  // The model server is shared. If a CLI session is attached, killing it here
+  // takes the model out from under someone mid-answer -- so leave it, and let
+  // whichever process is genuinely last shut it down. Our own wrapper's pid is
+  // excluded because it is about to exit and is not a reason to keep anything.
+  const stillNeeded = otherModelClients(modelPid);
+  if (stillNeeded.length > 0) {
+    console.log(
+      `[model] leaving the server up — in use by pid ${stillNeeded.join(", ")}`,
+    );
+    // The wrapper still goes, so nothing of ours is left behind; the python
+    // server it started outlives it deliberately and is adopted on next launch.
+    killChild(null, modelPid, "model-wrapper-only");
+  } else {
+    killChild(modelProc, modelPid, "model");
+  }
+
   killChild(agentProc, agentPid, "agent");
   modelProc = null;
   agentProc = null;

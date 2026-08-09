@@ -5,6 +5,7 @@ import { ensureToken } from "./auth.js";
 import { join } from "node:path";
 import { activeBackend, config, ensureDirs, projectRoot } from "./config.js";
 import { canRunMaple, whyNoMaple } from "./platform.js";
+import { registerModelClient, unregisterModelClient } from "./model-clients.js";
 import {
   ensureBackend,
   modelServerArgs,
@@ -744,9 +745,16 @@ async function startModelServer(): Promise<void> {
   const venvPython = requireRuntime();
   console.log(`Starting mlx_lm.server on ${config.modelBaseUrl} ...`);
 
+  // Inheriting is right in a terminal, where the whole point of `enio up` is
+  // watching the log. It is wrong when the desktop launched us, because then
+  // the inherited handles are pipes into that app -- and when the app quits,
+  // the model server dies on SIGPIPE at its next log write, however carefully
+  // everything upstream decided to leave it running for somebody else.
+  const toTerminal = process.stdout.isTTY;
+  const log = toTerminal ? null : openSync(join(config.dataDir, "model-server.log"), "a");
   const child = spawn(venvPython, modelServerArgs(join(config.runtimeDir, "maple-2bit-mlx")), {
     cwd: config.runtimeDir,
-    stdio: "inherit",
+    stdio: toTerminal ? "inherit" : ["ignore", log!, log!],
   });
   child.on("exit", (code) => process.exit(code ?? 0));
 
@@ -755,8 +763,19 @@ async function startModelServer(): Promise<void> {
   // several gigabytes still resident with nothing left that knows about it.
   // Ctrl-C in a terminal happens to work anyway, because the tty signals the
   // whole foreground group; a programmatic kill does not.
+  // This wrapper is what the desktop launches, so it stands in for the app as
+  // a user of the server.
+  registerModelClient();
+
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
     process.on(signal, () => {
+      // Someone else is still using it -- a CLI session, or another window.
+      // Leave it running: it will be adopted by the next launch, and reaped by
+      // whichever process turns out to be last.
+      if (unregisterModelClient().length > 0) {
+        console.log("Leaving the model server up — another enio process is using it");
+        process.exit(0);
+      }
       try {
         child.kill(signal);
       } catch {

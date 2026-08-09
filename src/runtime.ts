@@ -3,6 +3,11 @@ import { existsSync, openSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.js";
 import { serverIsUp } from "./model.js";
+import {
+  otherModelClients,
+  registerModelClient,
+  unregisterModelClient,
+} from "./model-clients.js";
 import { canRunMaple, isWindows, whyNoMaple } from "./platform.js";
 
 /**
@@ -102,10 +107,70 @@ export interface EnsureOptions {
 
 const NOOP: RunningBackend = { stop: () => {} };
 
+/**
+ * A claim on a model server this process did not start.
+ *
+ * Releasing it shuts the server down only if nothing else still wants it --
+ * "last one out", rather than "whoever started it". The process that started
+ * it may well exit first, which is exactly the case that used to kill an
+ * attached CLI mid-answer.
+ */
+function sharedClaim(): RunningBackend {
+  registerModelClient();
+  return { stop: releaseSharedClaim };
+}
+
+function releaseSharedClaim(): void {
+  if (unregisterModelClient().length > 0) return;
+  const pid = modelServerPid();
+  if (pid === null) return;
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    /* already gone */
+  }
+}
+
+/**
+ * Claim the shared model server for the lifetime of this process.
+ *
+ * For the entry points that attach to a server rather than start one --
+ * `enio chat`, `enio serve` -- which previously just probed the port and
+ * carried on. Being invisible to the count is what let the desktop decide it
+ * was the last user and shut the model down mid-session.
+ *
+ * The claim is released on the way out however that happens, and if this turns
+ * out to be the last process using the server, it shuts it down: the process
+ * that started it is not necessarily the one that should end it, and something
+ * has to, or a quit desktop leaves five gigabytes behind.
+ */
+export function claimModelServer(): void {
+  if (config.backendId !== "maple") return; // not ours to manage
+  registerModelClient();
+
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    releaseSharedClaim();
+  };
+
+  process.on("exit", release);
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, () => {
+      release();
+      process.exit(0);
+    });
+  }
+}
+
 export async function ensureBackend(opts: EnsureOptions): Promise<RunningBackend> {
   if (await serverIsUp()) {
     opts.log(`Using the ${config.backendId} server already running on ${config.modelBaseUrl}`);
-    return NOOP;
+    // Ollama is a system service somebody else manages; joining a count that
+    // could decide to shut it down would be overreach. Our own server is
+    // shared, so attaching to it is a claim like any other.
+    return config.backendId === "maple" ? sharedClaim() : NOOP;
   }
 
   switch (config.backendId) {
@@ -166,7 +231,19 @@ async function startMaple(opts: EnsureOptions): Promise<RunningBackend> {
   );
 
   await waitForServer(child, opts, 90, `Starting Maple — first load reads ~5GB`, logPath);
-  return { stop: () => kill(child) };
+
+  // Registered even though we started it: by the time we exit, a CLI or the
+  // desktop may have attached, and starting it does not entitle us to end it.
+  registerModelClient();
+  return {
+    stop: () => {
+      if (unregisterModelClient().length > 0) {
+        opts.log("Leaving the model server up — another enio process is using it");
+        return;
+      }
+      kill(child);
+    },
+  };
 }
 
 /* ---------- ollama ------------------------------------------------------ */

@@ -529,3 +529,36 @@ describe("context budget", () => {
     );
   });
 });
+
+describe("shared model server", () => {
+  test("the last client out is the one that shuts it down", async () => {
+    const clients = await import("./model-clients.js");
+
+    // Two processes using the model: this one, and a live stand-in for the
+    // other. Any real pid that outlives the assertions will do.
+    const other = process.ppid;
+    clients.registerModelClient(other);
+    clients.registerModelClient();
+
+    // The one that started the server leaving first must NOT shut it down --
+    // that is the case that killed an attached CLI mid-answer.
+    const remaining = clients.unregisterModelClient();
+    assert.deepEqual(remaining, [other], "the other client must still be counted");
+
+    // And now the genuine last one out.
+    assert.deepEqual(clients.unregisterModelClient(other), []);
+  });
+
+  test("a dead client does not keep the server alive forever", async () => {
+    const clients = await import("./model-clients.js");
+    // A pid that cannot exist: crashed clients must not pin the server, and
+    // there is no cleanup path to forget to run.
+    clients.registerModelClient(0x7ffffffe);
+    clients.registerModelClient();
+    assert.deepEqual(
+      clients.unregisterModelClient(),
+      [],
+      "a stale pid should be pruned by the liveness check, not counted",
+    );
+  });
+});

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import { runTurn } from "./agent.js";
+import { claimModelServer } from "./runtime.js";
 import { buildRegistry, type Registry } from "./tools/index.js";
 import { setMemorySession } from "./tools/memory.js";
 import {
@@ -32,6 +33,10 @@ import type { Message } from "./types.js";
  */
 
 export async function serve(): Promise<void> {
+  // The agent endpoint is a long-lived user of the model server, so it counts
+  // toward keeping it alive -- and shuts it down if it is the last one out.
+  claimModelServer();
+
   const registry = await buildRegistry((m) => console.log(m));
   const sessionId = startSession();
   setMemorySession(sessionId);
