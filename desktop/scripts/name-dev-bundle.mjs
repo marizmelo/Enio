@@ -17,7 +17,7 @@
  * someone else's binary.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -55,13 +55,39 @@ const set = (key, value) => {
   }
 };
 
-if (read("CFBundleName") === "Enio") {
+const macos = join(dirname(plist), "MacOS");
+const pathTxt = join(here, "..", "node_modules", "electron", "path.txt");
+
+if (read("CFBundleName") === "Enio" && existsSync(join(macos, "Enio"))) {
   process.exit(0);
 }
 
 try {
   set("CFBundleName", "Enio");
   set("CFBundleDisplayName", "Enio");
+
+  // The plist alone is not enough: the dock label falls back to the executable
+  // name, which is why this still said Electron with CFBundleName already set.
+  // The npm launcher resolves its binary through path.txt, so renaming the
+  // executable and rewriting that one line keeps `electron .` working.
+  if (existsSync(join(macos, "Electron")) && !existsSync(join(macos, "Enio"))) {
+    renameSync(join(macos, "Electron"), join(macos, "Enio"));
+  }
+  set("CFBundleExecutable", "Enio");
+  writeFileSync(pathTxt, "Electron.app/Contents/MacOS/Enio");
+
+  // LaunchServices caches bundle identity, so a rename it has already seen is
+  // ignored until the bundle looks new.
+  try {
+    execFileSync(
+      "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+      ["-f", join(here, "..", "node_modules", "electron", "dist", "Electron.app")],
+      { stdio: "ignore" },
+    );
+  } catch {
+    /* Not fatal; the name updates on the next login at worst. */
+  }
+
   console.log("named the dev bundle Enio");
 } catch (err) {
   // Cosmetic. A read-only node_modules or a missing PlistBuddy must not stop
