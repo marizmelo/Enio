@@ -143,6 +143,45 @@ off the server so your phone never sees it again.
 
 ---
 
+### Naming the model rather than hiding it
+
+The identity prompt used to end with "do not name or describe any underlying
+model" — the model was an implementation detail, and the user was talking to
+enio rather than to Maple.
+
+**Reversed.** Hiding it did not produce silence, it produced a different
+falsehood: asked what it ran on, the assistant said "I am not based on any
+other model — I was built from scratch", which is worse than the detail it was
+protecting. And the prompt never said who *did* build it, so "who created you"
+was answered from the weights as DeepGrove — who made Maple and had nothing to
+do with this. Measured on the old wording, two of three phrasings got DeepGrove.
+
+The line that works is the true one: enio is an assistant that *uses* a
+language model and is not the model. Mariz Melo made enio, alone, with no
+company behind it; the model it runs on is called Maple.
+
+**Worth knowing before touching this prompt: whatever it emphasises, the model
+becomes.** Every attempt to be more explicit made it worse, in ways that are
+obvious afterwards and not before:
+
+- Naming DeepGrove more than once — even to deny it — made the assistant answer
+  "DeepGrove made me". Denials are mentions.
+- Instructing it to say "Maple" when asked which model it uses made it
+  introduce *itself* as Maple, created by DeepGrove.
+- Stating the fact plainly, once, with no instruction attached, worked.
+
+Measured three times per question, the shipped wording answers who made it and
+which company did not 3/3, and names the model when asked. It still muddles one
+case: asked specifically which model it uses, it names Maple and DeepGrove
+correctly and then adds that DeepGrove trained *it*. At ~1B active parameters
+that separation does not hold reliably, and further instruction made it worse
+rather than better, so it is left as the best measured wording rather than the
+best-sounding one.
+
+Re-measure before re-wording. Reading better is not the test.
+
+---
+
 ## Bugs that testing found
 
 Recorded because each cost real time and could recur.

@@ -388,6 +388,20 @@ export const config = {
    */
   agentAuthor: env("AUTHOR") ?? "Mariz Melo",
 
+  /**
+   * The language model, named for the prompt rather than for the wire.
+   *
+   * modelName above is an API identifier ("maple-2bit-mlx"); this is what the
+   * assistant should call it when a user asks what it runs on. Separate
+   * because the honest answer to "what model do you use" is a name, not a
+   * quantisation.
+   */
+  modelLabel:
+    env("MODEL_LABEL") ??
+    ((env("BACKEND") ?? defaultBackendId()) === "maple"
+      ? "Maple"
+      : (env("MODEL") ?? backendDefaults(env("BACKEND")).model)),
+
   /** Sampling defaults — these are the values DeepGrove benchmarks Maple with. */
   temperature: Number(env("TEMP") ?? 1.0),
   topP: Number(env("TOP_P") ?? 0.95),

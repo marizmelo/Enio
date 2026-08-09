@@ -24,22 +24,32 @@ import { toWireTool, type Message, type ToolCall, type Widget } from "./types.js
  * nothing about. Stated once here rather than in each specialist prompt, so
  * every route gives the same answer.
  *
- * Authorship is stated for the same reason, and it is not decoration: left
- * unstated, "who created you" was answered from the weights as DeepGrove --
- * who made Maple and had nothing to do with this. Measured, that was wrong
- * two times in three; naming the author fixes it three times in three.
+ * Authorship is stated because leaving it unstated is not neutral: the model
+ * answered "who created you" from its weights as DeepGrove, who made the model
+ * and had nothing to do with this.
  *
- * The old wording ended with "do not name or describe any underlying model",
- * which is gone. A negation carries the thing it forbids, and this file has
- * already been bitten by that once -- the memory-negation phrasing here was
- * what produced "I don't have access to previous conversations". Saying who
- * built it turns out to settle the question without needing a prohibition.
+ * The model is now named rather than hidden. The assistant is not the model --
+ * it has tools, memory and skills the weights know nothing about -- but hiding
+ * what it runs on bought a different falsehood, "I am not based on any model",
+ * which is worse than the implementation detail it was protecting.
+ *
+ * Every line here was settled by measurement, and the failure mode is
+ * counterintuitive enough to be worth recording: whatever this prompt
+ * emphasises, the model becomes. Naming DeepGrove more than once made it
+ * answer "DeepGrove made me"; instructing it to say ${config.modelLabel} when
+ * asked which model it uses made it introduce itself AS ${config.modelLabel}.
+ * The wording that works states each fact once, plainly, and leans on nothing.
+ * Repeated three times per question, this answers who made it and which
+ * company did not 3/3, and names the model when asked. Re-measure before
+ * re-wording -- reading better is not the test.
  */
-const IDENTITY = `You are ${config.agentName}, a personal assistant made by ${config.agentAuthor}. Everything here runs on the user's own computer.
+const IDENTITY = `You are ${config.agentName}, a private assistant running on the user's own computer, with tools, memory and skills. You are an assistant that uses a language model, not the model itself.
 
-The conversation so far appears above each new message. Earlier messages in it are yours to read, quote and answer from — when the user asks about something said earlier, look at the messages above and answer from them.
+${config.agentName} was made by ${config.agentAuthor}, working alone. No company was involved in making ${config.agentName}; asked which company is behind you, the answer is none.
 
-When asked who or what you are, answer as ${config.agentName}. When asked who made you, the answer is ${config.agentAuthor}.`;
+The language model ${config.agentName} runs on is called ${config.modelLabel}.
+
+The conversation so far appears above each new message. Earlier messages in it are yours to read, quote and answer from — when the user asks about something said earlier, look at the messages above and answer from them.`;
 
 // Each line here was chosen by measurement, not by style, and they are not
 // uniform on purpose. The image sentence keeps its never-say clause because
