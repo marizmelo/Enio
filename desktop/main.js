@@ -129,6 +129,14 @@ function spawnBackend(args, label) {
     cwd: PARENT_DIR,
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"],
+    // Its own process group, so shutdown can signal the whole tree.
+    // `enio up` is a wrapper: the thing actually holding ~6GB is the python
+    // mlx_lm.server it spawns underneath. child.kill() reaches the wrapper
+    // only, and the python process was surviving Cmd-Q reparented to launchd
+    // -- invisible, still resident, and still holding port 8080. Quit and
+    // relaunch a couple of times on a 24GB machine and the survivors put the
+    // whole system into swap.
+    detached: true,
   });
 
   child.stdout?.on("data", (chunk) => process.stdout.write(`[${label}] ${chunk}`));
@@ -281,19 +289,34 @@ function createTray() {
 }
 
 function killChild(child, pid, label) {
-  if (!child && !pid) return;
+  const target = pid ?? child?.pid;
+  if (!target) return;
+
+  // Negative pid signals the process group, which is why spawnBackend makes
+  // one. Signalling the pid alone leaves the model server orphaned.
   try {
-    if (child && !child.killed) {
-      child.kill();
-    } else if (pid) {
-      // Fallback: we lost the ChildProcess reference (e.g. after an 'exit'
-      // race) but still recorded the PID, so try to signal it directly.
-      process.kill(pid);
-    }
+    process.kill(-target, "SIGTERM");
   } catch (err) {
-    // ESRCH etc. — process is already gone, which is the outcome we wanted.
-    console.log(`[${label}] kill on shutdown: ${err.message}`);
+    if (err.code === "ESRCH") return; // already gone, which is the goal
+    // No group (spawn failed before setsid, or a platform without them).
+    try {
+      child?.kill() ?? process.kill(target, "SIGTERM");
+    } catch {
+      /* gone */
+    }
   }
+
+  // A model server mid-load ignores a polite signal for a while, and the user
+  // is already watching the app disappear. Follow up with SIGKILL rather than
+  // leaving 6GB resident because shutdown was too courteous to insist.
+  setTimeout(() => {
+    try {
+      process.kill(-target, "SIGKILL");
+      console.log(`[${label}] did not exit on SIGTERM; killed`);
+    } catch {
+      /* exited in the meantime, as expected */
+    }
+  }, 2500).unref?.();
 }
 
 function stopBackends() {

@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { existsSync, openSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.js";
@@ -20,6 +20,34 @@ import { canRunMaple, isWindows, whyNoMaple } from "./platform.js";
  *
  * How the cap is sized, and why, is in config.ts alongside the setting.
  */
+/**
+ * Is a model server already loading, or already up?
+ *
+ * `serverIsUp` asks over HTTP, which is the right question once the server
+ * listens and the wrong one for the ninety seconds it spends reading 5GB of
+ * weights off disk first. During that window a second launch sees a free port
+ * and starts another server, and two of them is roughly 12GB -- enough to put
+ * a 24GB machine into swap, which is what it looks like when the whole
+ * computer stops responding while the app is starting.
+ *
+ * So this asks the other question: is such a process already running at all.
+ * Matched on the command line rather than a pidfile, because a pidfile has to
+ * survive a crash to be worth anything and this needs no cleanup to be
+ * correct.
+ */
+export function modelServerPid(): number | null {
+  try {
+    const out = execFileSync("/usr/bin/pgrep", ["-f", "mlx_lm.server"], {
+      encoding: "utf8",
+    });
+    const pid = Number(out.split("\n").filter(Boolean)[0]);
+    return Number.isFinite(pid) ? pid : null;
+  } catch {
+    // pgrep exits non-zero when nothing matches, which is the common case.
+    return null;
+  }
+}
+
 export function modelServerArgs(modelPath: string): string[] {
   return [
     "-m", "mlx_lm.server",
@@ -92,6 +120,19 @@ async function startMaple(opts: EnsureOptions): Promise<RunningBackend> {
         `Install it with:   bash install.sh\n` +
         `Point elsewhere:   ENIO_DIR=/path/to/runtime\n`,
     );
+  }
+
+  // Already starting under another launcher: wait for it rather than adding a
+  // second copy of a five-gigabyte process.
+  const existing = modelServerPid();
+  if (existing !== null) {
+    opts.log(`A model server is already starting (pid ${existing}) — waiting for it`);
+    for (let i = 0; i < 90; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      if (await serverIsUp()) return NOOP;
+      if (modelServerPid() === null) break; // it died; fall through and start one
+    }
+    if (await serverIsUp()) return NOOP;
   }
 
   const logPath = join(config.dataDir, "model-server.log");

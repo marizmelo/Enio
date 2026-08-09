@@ -5,7 +5,12 @@ import { ensureToken } from "./auth.js";
 import { join } from "node:path";
 import { activeBackend, config, ensureDirs, projectRoot } from "./config.js";
 import { canRunMaple, whyNoMaple } from "./platform.js";
-import { ensureBackend, modelServerArgs, type RunningBackend } from "./runtime.js";
+import {
+  ensureBackend,
+  modelServerArgs,
+  modelServerPid,
+  type RunningBackend,
+} from "./runtime.js";
 import { findSkill, loadSkills, skillContents, skillsDir } from "./skills.js";
 import {
   addTask, getTask, listTasks, removeTask, runTask, runsFor,
@@ -717,6 +722,24 @@ async function startModelServer(): Promise<void> {
     console.log(`Model server already running at ${config.modelBaseUrl}`);
     return;
   }
+
+  // This is the path the desktop app takes, and the one where starting a
+  // duplicate hurts most. A server reading 5GB of weights does not answer HTTP
+  // for a minute or more, so serverIsUp() alone reports "nothing there" and a
+  // second launch adds another five-gigabyte process beside the first.
+  const loading = modelServerPid();
+  if (loading !== null) {
+    console.log(`A model server is already starting (pid ${loading}) — waiting for it`);
+    for (let i = 0; i < 90; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      if (await serverIsUp()) {
+        console.log(`Ready at ${config.modelBaseUrl}`);
+        return;
+      }
+      if (modelServerPid() === null) break; // it died; start our own below
+    }
+  }
+
   const venvPython = requireRuntime();
   console.log(`Starting mlx_lm.server on ${config.modelBaseUrl} ...`);
 
@@ -725,6 +748,22 @@ async function startModelServer(): Promise<void> {
     stdio: "inherit",
   });
   child.on("exit", (code) => process.exit(code ?? 0));
+
+  // Node does not pass its own termination on to children. Without this, a
+  // SIGTERM to this wrapper leaves the model server running and reparented --
+  // several gigabytes still resident with nothing left that knows about it.
+  // Ctrl-C in a terminal happens to work anyway, because the tty signals the
+  // whole foreground group; a programmatic kill does not.
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.on(signal, () => {
+      try {
+        child.kill(signal);
+      } catch {
+        /* already gone */
+      }
+      process.exit(0);
+    });
+  }
 
   // First load pages ~5GB off disk, so allow a generous window.
   for (let i = 0; i < 60; i++) {
