@@ -110,9 +110,11 @@ export const SPECIALISTS: Specialist[] = [
       `and pick the recipe by name. Do not write AppleScript for these — the ` +
       `recipes are already correct, and a script you compose will not be. ` +
       `take_screenshot shows you what is on screen.\n\n` +
-      `run_applescript is for things no recipe covers. Writing one is a last ` +
-      `resort: say what the script will do and let the user confirm before you ` +
-      `run it, rather than trying variations until something works.\n\n` +
+      `When no recipe covers what they asked, call propose_plan with the ` +
+      `AppleScript you would run and one sentence saying what it does. You are ` +
+      `not able to run it — propose_plan writes it down for the user to approve, ` +
+      `and that is the correct outcome, not a failure. Never describe a script ` +
+      `in your reply instead of proposing it: a description does nothing.\n\n` +
       `Before anything that leaves the machine or cannot be undone — sending an ` +
       `email, deleting something, changing a setting — state exactly what you ` +
       `are about to do and get agreement first. Read-only checks need no ` +
