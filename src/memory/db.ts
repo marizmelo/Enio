@@ -152,6 +152,26 @@ function migrate(d: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_task_runs_task ON task_runs(task_id);
 
+    CREATE TABLE IF NOT EXISTS plans (
+      id          TEXT PRIMARY KEY,
+      session_id  TEXT,
+      summary     TEXT NOT NULL,
+      kind        TEXT NOT NULL,
+      payload     TEXT NOT NULL,
+      status      TEXT NOT NULL DEFAULT 'pending',
+      result      TEXT,
+      created_at  INTEGER NOT NULL,
+      decided_at  INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_plans_status ON plans(status);
+
+    CREATE TABLE IF NOT EXISTS saved_recipes (
+      name        TEXT PRIMARY KEY,
+      summary     TEXT NOT NULL,
+      script      TEXT NOT NULL,
+      created_at  INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS facts (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       text        TEXT NOT NULL UNIQUE,

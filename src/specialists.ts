@@ -117,7 +117,11 @@ export const SPECIALISTS: Specialist[] = [
       `email, deleting something, changing a setting — state exactly what you ` +
       `are about to do and get agreement first. Read-only checks need no ` +
       `permission; irreversible ones always do.`,
-    tools: ["mac_recipe", "run_applescript", "take_screenshot", "read_image", "read_skill"],
+    // run_applescript is deliberately absent. It stays in the registry as the
+    // path the approval endpoint executes, but no specialist is given it: the
+    // model proposes a script and a person runs it, so "the model composed
+    // some AppleScript" and "AppleScript ran" are separated by a decision.
+    tools: ["mac_recipe", "propose_plan", "take_screenshot", "read_image", "read_skill"],
   },
   {
     name: "generalist",

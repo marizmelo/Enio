@@ -75,10 +75,19 @@ describe("email", () => {
 });
 
 describe("desktop control", () => {
-  test("off unless explicitly enabled", () => {
-    // AppleScript can do anything the user can, so this stays opt-in.
+  test("nothing that changes the machine is available unless enabled", () => {
+    // The gate is about irreversibility, not about touching apps at all.
+    // AppleScript composed by the model can send, delete and reconfigure, so
+    // it stays opt-in; a fixed read does not, and gating it identically meant
+    // "show my emails" failed by default on a machine that could answer it.
     assert.equal(desktopEnabled(), false);
-    assert.equal(desktopTools.length, 0, "no desktop tools without ENIO_DESKTOP=1");
+
+    const offered = desktopTools.map((t) => t.name);
+    for (const mutating of ["run_applescript", "take_screenshot", "propose_plan"]) {
+      assert.ok(!offered.includes(mutating), `${mutating} must stay behind ENIO_DESKTOP`);
+    }
+    // Whatever is offered must be read-only and closed-list.
+    assert.deepEqual(offered, ["mac_recipe"]);
   });
 
   test("the shell allowlist blocks automation commands while it's off", () => {
@@ -122,7 +131,13 @@ describe("the operator specialist", () => {
   });
 
   test("holds the machine-facing tools and nothing else", () => {
-    assert.ok(operator.tools.includes("run_applescript"));
+    // It proposes AppleScript rather than running it: run_applescript stays in
+    // the registry as the approval endpoint's execution path, and is given to
+    // no specialist, so composing a script and running one are separated by a
+    // person. Handing it back here would undo that silently.
+    assert.ok(!operator.tools.includes("run_applescript"), "the operator proposes, it does not run");
+    assert.ok(operator.tools.includes("propose_plan"));
+    assert.ok(operator.tools.includes("mac_recipe"));
     assert.ok(operator.tools.includes("take_screenshot"));
     // Disjoint tool sets are the entire reason specialists exist.
     assert.ok(!operator.tools.includes("run_command"), "shell belongs to coder");

@@ -5,6 +5,15 @@ import { config } from "../config.js";
 import { detectPlatform } from "../platform.js";
 import { readImage } from "../vision.js";
 import type { ToolDef } from "../types.js";
+import { listSavedRecipes, proposePlan } from "../plans.js";
+
+// Same shape as the memory tools: the turn sets the session, the tool reads it.
+// A plan records which conversation asked for it, which is what lets the
+// approval be traced back to a request.
+let currentSessionId = "";
+export const setPlanSession = (id: string) => {
+  currentSessionId = id;
+};
 
 const run = promisify(execFile);
 
@@ -33,6 +42,23 @@ const run = promisify(execFile);
 
 export const desktopEnabled = () =>
   config.desktopEnabled && detectPlatform().startsWith("macos");
+
+/**
+ * Reading from apps needs no flag; changing them does.
+ *
+ * ENIO_DESKTOP was one switch over things with very different blast radii.
+ * run_applescript composes arbitrary AppleScript, which can send, delete and
+ * reconfigure; mac_recipe runs seven fixed `get` statements with a clamped
+ * integer as the only thing the model influences. Gating them identically made
+ * the safest capability here carry the cost of the most dangerous one, so
+ * "show my emails" failed by default on a machine that could answer it safely.
+ *
+ * The invariant it comes from is that *irreversible* actions are opt-in, and a
+ * read is not one. macOS still gates this independently: Automation access is
+ * prompted per app and granted per launching process, which is the consent
+ * that actually protects the user's data.
+ */
+export const recipesEnabled = () => detectPlatform().startsWith("macos");
 
 /** Commands that become available in the shell when desktop mode is on. */
 export const DESKTOP_COMMANDS = [
@@ -222,19 +248,23 @@ const RECIPES: Record<string, { summary: string; script: (n: number) => string }
 
 const recipeTool: ToolDef = {
   name: "mac_recipe",
-  description:
-    "Read something from a Mac app using a tested script. Use this rather than writing AppleScript. Recipes: " +
-    Object.entries(RECIPES)
-      .map(([name, r]) => `${name} (${r.summary})`)
-      .join("; "),
+  // Rebuilt on read so a recipe saved this session is offered on the next turn
+  // without a restart -- the whole point of saving one.
+  get description(): string {
+    const builtin = Object.entries(RECIPES).map(([name, r]) => `${name} (${r.summary})`);
+    const saved = listSavedRecipes().map((r) => `${r.name} (${r.summary})`);
+    return (
+      "Read something from a Mac app using a tested script. Use this rather than writing AppleScript. Recipes: " +
+      [...builtin, ...saved].join("; ")
+    );
+  },
   origin: "builtin",
   parameters: {
     type: "object",
     properties: {
       recipe: {
         type: "string",
-        enum: Object.keys(RECIPES),
-        description: "Which recipe to run.",
+        description: "Which recipe to run, by name.",
       },
       count: {
         type: "number",
@@ -245,9 +275,11 @@ const recipeTool: ToolDef = {
   },
   async run(args) {
     const name = String(args.recipe ?? "").trim();
-    const recipe = RECIPES[name];
+    const saved = listSavedRecipes().find((r) => r.name === name);
+    const recipe = RECIPES[name] ?? (saved ? { summary: saved.summary, script: () => saved.script } : undefined);
     if (!recipe) {
-      return `No recipe named "${name}". Available: ${Object.keys(RECIPES).join(", ")}`;
+      const all = [...Object.keys(RECIPES), ...listSavedRecipes().map((r) => r.name)];
+      return `No recipe named "${name}". Available: ${all.join(", ")}`;
     }
 
     // Clamped and integer-only: this is the only part of the script the model
@@ -274,6 +306,53 @@ const recipeTool: ToolDef = {
   },
 };
 
-export const desktopTools: ToolDef[] = desktopEnabled()
-  ? [screenshotTool, appleScriptTool, recipeTool]
-  : [];
+
+const proposeTool: ToolDef = {
+  name: "propose_plan",
+  description:
+    "Propose something no recipe covers, for the user to approve before it runs. Use when the user asks for an action on their Mac that mac_recipe cannot do. You are not running this — you are writing down what you would do.",
+  origin: "builtin",
+  parameters: {
+    type: "object",
+    properties: {
+      summary: {
+        type: "string",
+        description:
+          "One plain sentence: what this does and what it changes. The user reads this to decide.",
+      },
+      script: {
+        type: "string",
+        description: "The exact AppleScript to run if approved.",
+      },
+    },
+    required: ["summary", "script"],
+  },
+  async run(args) {
+    const summary = String(args.summary ?? "").trim();
+    const script = unescapeQuotes(String(args.script ?? "").trim());
+    if (!summary || !script) return "Error: a plan needs both a summary and a script.";
+
+    const plan = proposePlan({
+      sessionId: currentSessionId || null,
+      summary,
+      kind: "applescript",
+      payload: script,
+    });
+
+    // The widget is what the user acts on; the text is what the model reads,
+    // and it says the work is not done so the model does not report success.
+    return {
+      text:
+        `Proposed, not run. The user has been shown this plan and must approve it:\n\n` +
+        `${summary}\n\n${script}\n\n` +
+        `Tell them briefly what you are proposing and that it is waiting for them. ` +
+        `Do not try to run it yourself and do not call another tool.`,
+      widget: { type: "plan", id: plan.id, summary, script },
+    };
+  },
+};
+
+export const desktopTools: ToolDef[] = [
+  ...(recipesEnabled() ? [recipeTool] : []),
+  ...(desktopEnabled() ? [screenshotTool, appleScriptTool, proposeTool] : []),
+];

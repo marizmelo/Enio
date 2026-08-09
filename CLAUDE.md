@@ -111,9 +111,24 @@ dimensions. No embeddings → lexical matching. A tool that can only fail is
 limited attention. An attachment must never be able to fail a turn.
 
 **Irreversible actions are opt-in.** Email is dry-run until `ENIO_EMAIL_SEND=1`.
-IMAP opens with `EXAMINE` so the *server* refuses changes. Desktop control is off
-until `ENIO_DESKTOP=1`. The model deciding to do something irreversible is
-exactly the judgement it gets wrong.
+IMAP opens with `EXAMINE` so the *server* refuses changes. Anything that can
+change the machine is off until `ENIO_DESKTOP=1`. The model deciding to do
+something irreversible is exactly the judgement it gets wrong.
+
+The gate is about irreversibility, not about touching apps at all: `mac_recipe`
+runs seven fixed read-only scripts chosen from a closed list, and needs no flag
+— macOS still prompts for Automation access, which is the consent that protects
+the data. Gating a read identically to arbitrary AppleScript made the safest
+capability carry the cost of the most dangerous one.
+
+**The model proposes scripts; it does not run them.** No specialist has
+`run_applescript`. The operator calls `propose_plan`, which stores the script
+and stops; execution happens server-side only after the user approves, and
+approving is one-shot (a settled plan returns 409 rather than running twice).
+Saving promotes it to a named recipe, after which it is *selected* rather than
+re-authored — which is the only way something that worked once keeps working at
+this model size. This exists because the model reliably fails to write correct
+AppleScript and just as reliably keeps trying variations; see DECISIONS.md.
 
 **No network at runtime for local features.** OCR language data ships as an npm
 dependency specifically because tesseract.js defaults to a CDN fetch. There is a

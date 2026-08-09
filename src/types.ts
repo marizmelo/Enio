@@ -43,7 +43,14 @@ export type Widget =
       high: number;
       low: number;
       rainChance: number;
-    };
+    }
+  /**
+   * An action the model wants to take and has not taken. Carries the exact
+   * script so the user approves what will actually run, rather than a
+   * description of it -- a summary the model wrote is not a thing to consent
+   * to when the model is the unreliable part.
+   */
+  | { type: "plan"; id: string; summary: string; script: string };
 
 /**
  * What a tool hands back.

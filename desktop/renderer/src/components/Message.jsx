@@ -55,6 +55,7 @@ export function Message({
             streaming &&
               "after:ml-0.5 after:inline-block after:h-4 after:w-1.5 after:translate-y-0.5 after:animate-pulse after:bg-current",
           )}
+          onClick={copyCodeBlock}
           dangerouslySetInnerHTML={{ __html: renderMarkdownish(content) }}
         />
       )}
@@ -97,4 +98,25 @@ export function Message({
       )}
     </div>
   );
+}
+
+/**
+ * Copy a fenced code block.
+ *
+ * Delegated from the container because the markdown is injected as a string
+ * and there is no element to attach a handler to. Routed through the main
+ * process for the same reason the message-level copy is: the renderer's
+ * clipboard API is blocked under this CSP.
+ */
+async function copyCodeBlock(event) {
+  const button = event.target.closest("[data-copy-code]");
+  if (!button) return;
+  const code = button.closest("div")?.parentElement?.querySelector("code");
+  if (!code) return;
+  await window.maple?.copyText(code.textContent ?? "");
+  const previous = button.textContent;
+  button.textContent = "Copied";
+  setTimeout(() => {
+    button.textContent = previous;
+  }, 1200);
 }

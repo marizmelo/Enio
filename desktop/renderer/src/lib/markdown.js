@@ -31,10 +31,24 @@ export function renderMarkdownish(raw) {
   // Pull fenced code blocks out first so the inline-code and bold passes below
   // cannot reach inside them.
   const codeBlocks = [];
-  let out = escaped.replace(/```[a-zA-Z0-9_+-]*\n?([\s\S]*?)```/g, (_m, code) => {
+  let out = escaped.replace(/```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/g, (_m, lang, code) => {
     const idx = codeBlocks.length;
+    const body = code.replace(/\n$/, "");
+    // A header carrying the language and a copy button. The button is only
+    // markup here -- the click is handled by delegation where this is mounted,
+    // because this function returns a string and has no React to hang a
+    // handler on.
+    const label = lang ? lang.toLowerCase() : "text";
     codeBlocks.push(
-      `<pre class="my-2 overflow-x-auto rounded-md bg-muted p-3 text-[13px] leading-relaxed"><code>${code.replace(/\n$/, "")}</code></pre>`,
+      `<div class="my-2 overflow-hidden rounded-md border bg-muted">` +
+        `<div class="flex items-center justify-between border-b bg-muted/60 px-3 py-1">` +
+          `<span class="font-mono text-[11px] uppercase tracking-wide text-muted-foreground">${label}</span>` +
+          `<button type="button" data-copy-code class="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-background hover:text-foreground">Copy</button>` +
+        `</div>` +
+        // The scroll container is the pre, not the page: a long line of code
+        // must not make the whole conversation scroll sideways.
+        `<pre class="overflow-x-auto p-3 text-[13px] leading-relaxed"><code>${body}</code></pre>` +
+      `</div>`,
     );
     return `${SENTINEL}${idx}${SENTINEL}`;
   });

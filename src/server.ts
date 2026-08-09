@@ -8,6 +8,10 @@ import { runTurn } from "./agent.js";
 import { claimModelServer } from "./runtime.js";
 import { buildRegistry, type Registry } from "./tools/index.js";
 import { setMemorySession } from "./tools/memory.js";
+import { setPlanSession } from "./tools/desktop.js";
+import { getPlan, saveRecipe, settlePlan } from "./plans.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   conversationKnowledge,
   conversationMessages,
@@ -42,6 +46,7 @@ export async function serve(): Promise<void> {
   const registry = await buildRegistry((m) => console.log(m));
   const sessionId = startSession();
   setMemorySession(sessionId);
+  setPlanSession(sessionId);
   const token = ensureToken();
 
   const server = createServer((req, res) => {
@@ -264,6 +269,69 @@ async function handle(
    * is deleted cannot survive a reindex — keeping it means pinning it, and
    * that decision belongs to the user, not to a default.
    */
+  /**
+   * Approving, saving or declining a proposed action.
+   *
+   * Execution lives here rather than in the tool on purpose: the model writes
+   * the script and never runs it, so the only path from "the model composed
+   * some AppleScript" to "AppleScript ran" goes through a person. Approving
+   * runs it once; saving also promotes it to a named recipe, after which it is
+   * selected rather than re-authored.
+   */
+  const planMatch = url.pathname.match(/^\/plans\/([0-9a-f-]{8,})\/(approve|save|decline)$/);
+  if (planMatch && req.method === "POST") {
+    const [, id, action] = planMatch;
+    const plan = getPlan(id!);
+    if (!plan) {
+      sendJson(res, 404, { error: { message: "No such plan." } });
+      return;
+    }
+    if (plan.status !== "pending") {
+      // Re-approving a plan would run it twice, which for anything with a side
+      // effect is the difference between one email and two.
+      sendJson(res, 409, { error: { message: `This plan was already ${plan.status}.` } });
+      return;
+    }
+
+    if (action === "decline") {
+      settlePlan(plan.id, "declined");
+      sendJson(res, 200, { status: "declined" });
+      return;
+    }
+
+    let saved: string | null = null;
+    if (action === "save") {
+      const body = await readBody(req);
+      let name = "";
+      try {
+        name = String(JSON.parse(body || "{}")?.name ?? "");
+      } catch {
+        name = "";
+      }
+      const result = saveRecipe({ name, summary: plan.summary, script: plan.payload });
+      if (!result.ok) {
+        sendJson(res, 400, { error: { message: result.reason } });
+        return;
+      }
+      saved = result.name;
+    }
+
+    try {
+      const { stdout, stderr } = await promisify(execFile)("osascript", ["-e", plan.payload], {
+        timeout: config.shellTimeoutMs,
+        maxBuffer: 4_000_000,
+      });
+      const output = (stdout || stderr).trim() || "(ran successfully, no output)";
+      settlePlan(plan.id, saved ? "saved" : "approved", output);
+      sendJson(res, 200, { status: saved ? "saved" : "approved", savedAs: saved, output });
+    } catch (err) {
+      const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
+      settlePlan(plan.id, saved ? "saved" : "approved", `failed: ${message}`);
+      sendJson(res, 200, { status: "failed", savedAs: saved, output: message });
+    }
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/conversations") {
     sendJson(res, 200, { conversations: listConversations() });
     return;
@@ -345,6 +413,7 @@ async function handle(
       ? payload.conversation_id
       : sessionId;
   setMemorySession(conversationId);
+  setPlanSession(conversationId);
 
   const id = `chatcmpl-${randomUUID()}`;
   const created = Math.floor(Date.now() / 1000);
