@@ -383,12 +383,25 @@ async function main(): Promise<void> {
         break;
       }
 
+      if (rest.includes("--voices")) {
+        const { kokoroVoices } = await import("./voice.js");
+        const voices = await kokoroVoices();
+        if (voices.length === 0) {
+          console.log(`No voices — the model could not be loaded.`);
+          break;
+        }
+        console.log(voices.join("\n"));
+        console.log(`\nENIO_TTS_VOICE picks one. Currently ${config.kokoroVoice}.`);
+        break;
+      }
+
       console.log(`speech in      ${whisperInstalled() ? "ready" : "not installed — enio voice --install"}`);
       console.log(`model          ${config.voiceModel}`);
-      console.log(`speech out     ${process.platform === "darwin" ? "system voice (say)" : "unavailable on this platform"}`);
+      console.log(`speech out     ${config.ttsEngine}${config.ttsEngine === "kokoro" ? ` (${config.kokoroVoice})` : ""}`);
       console.log("");
       console.log(`Dictation runs on demand and nothing stays resident. Replies are`);
       console.log(`only spoken when you turn it on in the desktop app.`);
+      console.log(`enio voice --voices lists the ${config.ttsEngine === "kokoro" ? "28 Kokoro voices" : "system voices"}.`);
       break;
     }
 

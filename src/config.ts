@@ -215,6 +215,33 @@ export const config = {
   voiceName: env("VOICE") ?? "",
 
   /**
+   * How replies are spoken: kokoro | say | off.
+   *
+   * kokoro is an 82M ONNX model that runs in-process through the same
+   * transformers stack the embeddings already use — no venv, no daemon, and
+   * nothing for anyone to install by hand. It sounds like a person; the macOS
+   * default sounds like 2003.
+   *
+   * `say` remains the fallback for when the model cannot be fetched, and
+   * because it is the only option that needs nothing at all.
+   */
+  ttsEngine: env("TTS") ?? "kokoro",
+
+  /**
+   * One of Kokoro's 28 voices. af_heart is its warmest American English one;
+   * `enio voice --voices` lists the rest.
+   */
+  kokoroVoice: env("TTS_VOICE") ?? "af_heart",
+
+  /**
+   * q8 rather than fp32: about a quarter the download and quick enough that
+   * synthesis finishes well before anyone has read the reply. The difference
+   * is audible only next to the full-precision model, not next to a system
+   * voice.
+   */
+  kokoroModel: env("TTS_MODEL") ?? "onnx-community/Kokoro-82M-v1.0-ONNX",
+
+  /**
    * How many messages stay verbatim before older ones are folded into a
    * summary. Roughly twenty exchanges, which is longer than most sessions and
    * short enough that the prompt does not crowd out the answer.

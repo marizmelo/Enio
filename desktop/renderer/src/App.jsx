@@ -5,6 +5,7 @@ import { Composer } from "@/components/Composer";
 import { EmptyState } from "@/components/EmptyState";
 import { streamTurn } from "@/lib/agent";
 import { attachedFiles, fetchCapabilities } from "@/lib/capabilities";
+import { speak, stopSpeaking } from "@/lib/speech";
 
 export function App() {
   const [status, setStatus] = useState({
@@ -113,7 +114,7 @@ export function App() {
         // Spoken once, after the whole answer has arrived. Speaking each delta
         // would stutter, and speaking in the finally block would also announce
         // errors and aborts, which is not what a reply-reading toggle means.
-        if (speakReplies && assistant.trim()) window.maple?.speak(assistant);
+        if (speakReplies && assistant.trim()) speak(assistant);
       } catch (err) {
         if (err?.name === "AbortError") {
           // Keep whatever streamed in as the final turn, so the conversation
@@ -172,7 +173,7 @@ export function App() {
         }
         speakReplies={speakReplies}
         onToggleSpeak={() => {
-          if (speakReplies) window.maple?.stopSpeaking();
+          if (speakReplies) stopSpeaking();
           setSpeakReplies((on) => !on);
         }}
       />

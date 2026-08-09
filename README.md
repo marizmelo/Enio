@@ -302,6 +302,22 @@ ollama pull moondream:v2     # 1.7GB
 
 The two differ in how memory comes back. Ollama unloads per request (`keep_alive: 0`). mlx-vlm holds the model for as long as its process lives, so `enio vision --serve` runs in the foreground on purpose — stopping it with ctrl-C is how you get the memory back, and that should be visible rather than buried in a daemon.
 
+### Voice
+
+Talk to it, and have it talk back — both local, neither needing anything installed by hand.
+
+```sh
+enio voice --install     # mlx-whisper for dictation, into the vision venv
+enio voice               # what's set up
+enio voice --voices      # the 28 Kokoro voices
+```
+
+Dictation is **mlx-whisper** — the same MLX runtime as everything else, spawned per utterance so nothing stays resident. The microphone button appears in the desktop app once it's installed, and not before: a button that fails when pressed is worse than one that isn't there.
+
+Replies are spoken by **Kokoro**, an 82M ONNX model that runs in-process through the transformers stack the embeddings already use. No venv, no daemon, no System Settings trip — it fetches ~90MB once, like the embedding model does, and synthesises a sentence in about two seconds. `ENIO_TTS_VOICE` picks a voice, `ENIO_TTS=say` falls back to the system voice, `ENIO_TTS=off` disables it.
+
+Speaking is off by default and speaks once, after the answer is complete. An assistant that starts talking unprompted is startling in a way a silent one never is.
+
 **OCR never touches the network.** tesseract.js defaults to fetching its language data from a CDN on first use, which is indefensible in something that claims to run entirely on your machine — it fails on a plane, on an air-gapped box, and whenever jsDelivr has a bad day. The data ships as a normal npm dependency (`@tesseract.js-data/eng`, installed once, read from `node_modules`) so no request is ever made at runtime. There's a test that disables `fetch` entirely and asserts OCR still works.
 
 Every path degrades rather than failing: no vision model falls back to OCR, missing OCR data falls back to dimensions. An attachment can never fail the turn.

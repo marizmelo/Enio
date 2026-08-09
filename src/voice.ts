@@ -86,6 +86,66 @@ export async function transcribeWav(path: string): Promise<Transcription> {
 }
 
 /**
+ * Kokoro, loaded once and kept.
+ *
+ * ~90MB at q8 and it stays resident, unlike the vision and dictation models
+ * which are spawned per use. Speech is the one that would be noticed: a reply
+ * arriving three seconds before it can be spoken is worse than the memory it
+ * saves, and 90MB next to Maple's 6.9GB is not the thing worth reclaiming.
+ */
+let kokoro: Promise<any> | null = null;
+
+async function loadKokoro(): Promise<any> {
+  if (!kokoro) {
+    kokoro = (async () => {
+      const { KokoroTTS } = await import("kokoro-js");
+      return KokoroTTS.from_pretrained(config.kokoroModel, {
+        dtype: "q8",
+        device: "cpu",
+      });
+    })();
+  }
+  return kokoro;
+}
+
+/**
+ * Text to a WAV buffer, or null if synthesis is unavailable.
+ *
+ * Null rather than throwing: a reply that cannot be spoken has still been
+ * read, and the caller's job is to fall back quietly, not to surface a failure
+ * about a feature that is decoration.
+ */
+export async function synthesize(text: string): Promise<Buffer | null> {
+  const trimmed = text.trim();
+  if (!trimmed || config.ttsEngine === "off") return null;
+
+  try {
+    const tts = await loadKokoro();
+    // Capped because the first sentence is what anyone actually listens to,
+    // and synthesising four paragraphs nobody waits for costs real seconds.
+    const audio = await tts.generate(trimmed.slice(0, 1200), {
+      voice: config.kokoroVoice,
+    });
+    return Buffer.from(audio.toWav());
+  } catch {
+    // No model, no network on first run, or an unknown voice name. The system
+    // voice still works and needs nothing.
+    kokoro = null;
+    return null;
+  }
+}
+
+/** Which voices this build can speak in. */
+export async function kokoroVoices(): Promise<string[]> {
+  try {
+    const tts = await loadKokoro();
+    return Object.keys(tts.voices);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Speak text aloud through the system voice.
  *
  * Fire and forget, and deliberately not awaited by the turn: a reply that has

@@ -12,7 +12,7 @@ import { ensureToken, isAuthorized } from "./auth.js";
 import { mentionContext, parseMentions } from "./mentions.js";
 import { SPECIALISTS } from "./specialists.js";
 import { loadSkills } from "./skills.js";
-import { transcribeWav, whisperInstalled } from "./voice.js";
+import { synthesize, transcribeWav, whisperInstalled } from "./voice.js";
 import type { Message } from "./types.js";
 
 /**
@@ -147,7 +147,7 @@ async function handle(
       files: ctx.files,
       // So a client can decide whether to offer a microphone at all, rather
       // than offering one that returns 503 when pressed.
-      voice: { transcription: whisperInstalled() },
+      voice: { transcription: whisperInstalled(), speech: config.ttsEngine !== "off" },
     });
     return;
   }
@@ -191,6 +191,36 @@ async function handle(
       // transcription takes and no longer, whatever the outcome.
       await rm(file, { force: true }).catch(() => {});
     }
+    return;
+  }
+
+  /**
+   * Speech. Text in, WAV out.
+   *
+   * Synthesised here rather than in the desktop app so every client gets the
+   * same voice, and so the model is loaded once in one process instead of once
+   * per window. A client that cannot play audio simply never calls it.
+   */
+  if (req.method === "POST" && url.pathname === "/v1/audio/speech") {
+    const body = await readBody(req);
+    let text = "";
+    try {
+      text = String(JSON.parse(body)?.input ?? "");
+    } catch {
+      sendJson(res, 400, { error: { message: "Invalid JSON body" } });
+      return;
+    }
+
+    const wav = await synthesize(text);
+    if (!wav) {
+      // 503 rather than 500: nothing is broken, the voice is just unavailable,
+      // and the caller should fall back rather than retry.
+      sendJson(res, 503, { error: { message: "Speech synthesis unavailable." } });
+      return;
+    }
+
+    res.writeHead(200, { "Content-Type": "audio/wav", "Content-Length": wav.length });
+    res.end(wav);
     return;
   }
 
