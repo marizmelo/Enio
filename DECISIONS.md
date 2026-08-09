@@ -266,3 +266,16 @@ structure, the model only for prose. That is already the direction here.
 - If a folder can be opened outside the workspace, what stops a prompt-injected
   file in that folder from being read as an instruction? The sandbox currently
   answers this by being small.
+- Why does decoding measure ~75 tok/s here when DeepGrove claims 200+ and a
+  reviewer measured 234 on an M3 Max? The weights we run are `bits: 2, mode:
+  affine`, which is a general low-bit quantisation rather than the ternary
+  representation the speed argument rests on — ternary is fast because
+  multiplication collapses into addition, and an affine 2-bit quant still
+  dequantises and multiplies. If a ternary-native build or kernel exists, it is
+  worth roughly 3x on every number in this repo, and latency is the complaint
+  behind most of the tuning here.
+- On-device adaptation, if it ever arrives, cannot mean updating the weights
+  themselves: there is no gradient through a quantiser onto {-1, 0, +1}. It has
+  to be an adapter in higher precision over a frozen base, which is also the
+  only version that keeps `enio reindex` meaningful — raw transcripts stay the
+  source of truth and the adapter is derived, exactly as the graph is.
