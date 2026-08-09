@@ -9,7 +9,24 @@
  * Utterances are queued rather than played as they arrive. Speech is spoken in
  * sentences as the answer streams, and synthesis of sentence two finishes while
  * sentence one is still being read -- without a queue they would overlap.
+ *
+ * Synthesis runs ahead of playback, which is the whole reason the queue holds
+ * pending blobs rather than strings. Draining used to synthesise and play in
+ * lockstep, so every full stop cost a silent round trip to the server -- about
+ * a second and a half each, which on a long answer is most of what you hear.
+ * Now the next sentences are already being made while the current one is being
+ * read, and the gap is whatever is left of the last one when playback ends.
  */
+
+/**
+ * How many sentences to synthesise ahead.
+ *
+ * Two is enough to cover the round trip for anything longer than a few words,
+ * and small enough that stopping mid-answer does not waste much: everything in
+ * flight is discarded, and the server synthesises one at a time regardless, so
+ * queueing the whole reply would only move the wait rather than remove it.
+ */
+const LOOKAHEAD = 2;
 
 let current = null;
 let queue = [];
@@ -47,6 +64,25 @@ async function synthesise(text) {
   return res.ok ? await res.blob() : null;
 }
 
+/**
+ * Start synthesis for the next few queued sentences.
+ *
+ * Idempotent per item -- an item that already has a request in flight keeps it
+ * -- so this is safe to call on every enqueue and on every turn of the drain
+ * loop, which is what keeps the pipeline full without tracking state.
+ */
+function pump(mine) {
+  if (mine !== generation) return;
+  let started = queue.filter((item) => item.blob !== null).length;
+  for (const item of queue) {
+    if (started >= LOOKAHEAD) break;
+    if (item.blob === null) {
+      item.blob = synthesise(item.text);
+      started += 1;
+    }
+  }
+}
+
 /** Resolves when the current run of the queue has finished, not before. */
 let drained = Promise.resolve();
 
@@ -62,8 +98,12 @@ async function drain(mine) {
   drained = new Promise((r) => (release = r));
 
   while (queue.length > 0 && mine === generation) {
-    const text = queue.shift();
-    const blob = await synthesise(text);
+    // Fill the pipeline before waiting on the head of it, so the sentences
+    // after this one are already being synthesised while it plays.
+    pump(mine);
+
+    const item = queue.shift();
+    const blob = await item.blob;
     if (!blob || mine !== generation) continue;
 
     const url = URL.createObjectURL(blob);
@@ -97,7 +137,11 @@ async function drain(mine) {
 export function speak(text) {
   const trimmed = (text ?? "").trim();
   if (!trimmed) return Promise.resolve();
-  queue.push(trimmed);
+  queue.push({ text: trimmed, blob: null });
+  // Kicked off here rather than only in the drain loop, so the first sentence
+  // starts being made the moment it is known, and the second while the first
+  // is still playing.
+  pump(generation);
   // Awaitable, so a "read aloud" button can show a stop icon for exactly as
   // long as there is something to stop.
   return drain(generation);
