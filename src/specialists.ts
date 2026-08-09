@@ -49,7 +49,12 @@ export const SPECIALISTS: Specialist[] = [
       `Cite the URL for anything you assert. If the sources disagree, say so ` +
       `rather than picking one silently. If you could not find something, say ` +
       `that plainly — a confident wrong answer is worse than an admission.`,
-    tools: ["web_search", "web_fetch", "web_fetch_rendered", "recall", "read_skill"],
+    // weather lives here as well as on the generalist because this is where
+    // the router actually sends "what is it like outside" -- it reads as a
+    // question about the world, which is exactly this specialist's description.
+    // Overlap is the lesser evil: a tool on two specialists costs a slot, a
+    // tool on the wrong one costs the answer.
+    tools: ["web_search", "web_fetch", "web_fetch_rendered", "recall", "weather", "read_skill"],
   },
   {
     name: "coder",
@@ -124,7 +129,7 @@ export const SPECIALISTS: Specialist[] = [
     // that gets routed it. Without the tool it had no way to look, so it said
     // it could not see images -- which was true of that specialist and false of
     // the agent.
-    tools: ["recall", "current_time", "read_image", "read_skill"],
+    tools: ["recall", "current_time", "weather", "read_image", "read_skill"],
   },
 ];
 

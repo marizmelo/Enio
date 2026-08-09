@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Thinking } from "@/components/Thinking";
 import { Widget } from "@/components/Widget";
 import { AttachmentPreviews } from "@/components/AttachmentPreviews";
+import { MessageActions } from "@/components/MessageActions";
 import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { renderMarkdownish } from "@/lib/markdown";
@@ -22,6 +23,7 @@ export function Message({
   startedAt = null,
   error = false,
   streaming = false,
+  onDictate = () => {},
 }) {
   const isUser = role === "user";
   const waiting = streaming && !isUser && !error && content.length === 0;
@@ -56,6 +58,12 @@ export function Message({
           )}
           dangerouslySetInnerHTML={{ __html: renderMarkdownish(content) }}
         />
+      )}
+
+      {/* Only once the answer is complete: buttons that appear mid-stream
+          invite copying half a sentence. */}
+      {!isUser && !waiting && !streaming && !error && content.trim() && (
+        <MessageActions content={content} onDictate={onDictate} />
       )}
 
       {/* Addressed to the reader, not the model: how the attachment was read

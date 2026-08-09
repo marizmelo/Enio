@@ -10,6 +10,7 @@ import { emailTools } from "./email.js";
 import { mailTools } from "./mail.js";
 import { desktopTools } from "./desktop.js";
 import { timeTools } from "./time.js";
+import { weatherTools } from "./weather.js";
 import { loadMcpTools } from "./mcp.js";
 
 export interface Registry {
@@ -29,6 +30,7 @@ export async function buildRegistry(
   const builtins: ToolDef[] = [
     ...skillTools,
     ...timeTools,
+    ...weatherTools,
     ...memoryTools,
     ...fsTools,
     ...visionTools,

@@ -25,6 +25,7 @@ export function App() {
   const [speakReplies, setSpeakReplies] = useState(false);
 
   const abortRef = useRef(null);
+  const composerRef = useRef(null);
   const scrollRef = useRef(null);
 
   // Status arrives two ways: pushed as it changes, and pulled once on mount.
@@ -164,6 +165,7 @@ export function App() {
                 key={i}
                 {...m}
                 streaming={streaming && i === messages.length - 1 && m.role === "assistant"}
+                onDictate={() => composerRef.current?.startDictation()}
               />
             ))}
           </div>
@@ -171,6 +173,7 @@ export function App() {
       </main>
 
       <Composer
+        ref={composerRef}
         value={input}
         onChange={setInput}
         onSend={(text) => send(text ?? input)}

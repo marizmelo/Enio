@@ -30,6 +30,8 @@ When asked who or what you are, answer as ${config.agentName}. Do not name or de
 
 const SHARED_RULES = `You can read images. Anything the user attached has already been read and its contents are included below; for any other image in the workspace, call read_image. So never tell the user you are unable to see or view an image — describing what an image contains is something you do, and the answer is either already in front of you or one tool call away.
 
+You can also look things up that you could not know from training alone: the weather where the user is, and the current date and time. Never say you have no access to real-time information or to their location — check with a tool first, and only say what you found.
+
 Call one tool at a time and read the result before deciding what to do next.
 If a tool returns an error, read the error and adapt — do not call it again unchanged.
 When you have enough information, answer directly and concisely.`;

@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ArrowUp, Loader2, Mic, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -6,6 +13,7 @@ import { AttachMenu } from "@/components/AttachMenu";
 import { SlashPalette } from "@/components/SlashPalette";
 import { AttachmentChips } from "@/components/AttachmentChips";
 import { startRecording, transcribe } from "@/lib/dictation";
+import { stopSpeaking } from "@/lib/speech";
 import { MentionPalette } from "@/components/MentionPalette";
 import {
   appendMention,
@@ -21,7 +29,7 @@ import {
  * Input row. Enter sends, shift-Enter inserts a newline -- and the send button
  * stays reachable because a virtual keyboard has no reliable modifier.
  */
-export function Composer({
+export const Composer = forwardRef(function Composer({
   value,
   onChange,
   onSend,
@@ -33,7 +41,7 @@ export function Composer({
   onAttached = () => {},
   speakReplies = false,
   onToggleSpeak = () => {},
-}) {
+}, handle) {
   const ref = useRef(null);
 
   // Grow with the content up to a ceiling, then scroll inside the box.
@@ -207,6 +215,10 @@ export function Composer({
     }
 
     try {
+      // Talking over the answer is the one thing pressing the microphone
+      // clearly does not mean. Cut it off before the mic opens, so the reply
+      // being read aloud does not end up in the recording either.
+      stopSpeaking();
       baseTextRef.current = value;
       recorderRef.current = await startRecording();
       setRecording(true);
@@ -236,6 +248,12 @@ export function Composer({
     }
     onSend();
   };
+
+  useImperativeHandle(handle, () => ({
+    startDictation: () => {
+      if (!recording && !transcribing) toggleDictation();
+    },
+  }));
 
   const pickFiles = async () => {
     const names = (await window.maple?.pickFiles()) ?? [];
@@ -376,4 +394,4 @@ export function Composer({
       )}
     </footer>
   );
-}
+});

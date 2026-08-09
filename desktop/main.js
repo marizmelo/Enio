@@ -8,7 +8,7 @@
 // easiest to consume incrementally.
 "use strict";
 
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require("electron");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
@@ -415,6 +415,19 @@ ipcMain.handle("stop-speaking", () => {
     /* already gone */
   }
   speaking = null;
+});
+
+/**
+ * Copy through Electron's own clipboard rather than the renderer's.
+ *
+ * navigator.clipboard.writeText is gated behind permissions the sandboxed
+ * renderer does not have -- it fails with NotAllowedError. The main process has
+ * no such restriction, and a copy button that silently does nothing is worse
+ * than no copy button.
+ */
+ipcMain.handle("copy-text", (_event, text) => {
+  clipboard.writeText(String(text ?? ""));
+  return true;
 });
 
 ipcMain.handle("open-external", (_event, url) => {

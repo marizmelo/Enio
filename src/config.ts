@@ -211,6 +211,16 @@ export const config = {
   voiceModelFast: env("VOICE_MODEL_FAST") ?? "mlx-community/whisper-tiny",
 
   /**
+   * Where the user is, for anything that depends on it.
+   *
+   * Empty means guess from the machine's time zone, which names a city and
+   * needs no request. An IP lookup would tell a third party roughly where
+   * someone lives every time they asked about the weather, which is a strange
+   * trade for a project whose whole claim is that nothing leaves the machine.
+   */
+  location: env("LOCATION") ?? "",
+
+  /**
    * Which system voice reads replies. Empty means macOS's default, which is
    * Samantha on a stock install and sounds it.
    *

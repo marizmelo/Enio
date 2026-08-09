@@ -1,4 +1,5 @@
 import { ClockWidget } from "@/components/widgets/ClockWidget";
+import { WeatherWidget } from "@/components/widgets/WeatherWidget";
 
 /**
  * Dispatches a widget payload to its renderer.
@@ -11,6 +12,7 @@ import { ClockWidget } from "@/components/widgets/ClockWidget";
  */
 const RENDERERS = {
   clock: ClockWidget,
+  weather: WeatherWidget,
 };
 
 export function Widget({ widget }) {

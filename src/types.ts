@@ -33,7 +33,17 @@ export interface JsonSchema {
  * one here never breaks an older client.
  */
 export type Widget =
-  | { type: "clock"; label: string; iso: string; zone: string };
+  | { type: "clock"; label: string; iso: string; zone: string }
+  | {
+      type: "weather";
+      place: string;
+      condition: string;
+      temperature: number;
+      feelsLike: number;
+      high: number;
+      low: number;
+      rainChance: number;
+    };
 
 /**
  * What a tool hands back.

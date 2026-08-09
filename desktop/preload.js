@@ -61,6 +61,11 @@ contextBridge.exposeInMainWorld("maple", {
     return ipcRenderer.invoke("import-file", sourcePath);
   },
 
+  /** Put text on the system clipboard. */
+  copyText(text) {
+    return ipcRenderer.invoke("copy-text", text);
+  },
+
   /** Speak text through the system voice. macOS only; false elsewhere. */
   speak(text) {
     return ipcRenderer.invoke("speak", text);
