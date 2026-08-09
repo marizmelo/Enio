@@ -378,6 +378,42 @@ ipcMain.handle("save-image", (_event, { name, base64 }) => {
   return file;
 });
 
+/**
+ * Speak a reply through the system voice.
+ *
+ * Spawned with the text as an argument rather than through a shell, so nothing
+ * a model writes can be read as a command. Any previous utterance is stopped
+ * first: two replies talking over each other is worse than missing one.
+ */
+let speaking = null;
+ipcMain.handle("speak", (_event, text) => {
+  const trimmed = String(text ?? "").trim();
+  if (process.platform !== "darwin" || !trimmed) return false;
+
+  try {
+    speaking?.kill();
+  } catch {
+    /* already gone */
+  }
+
+  try {
+    speaking = spawn("say", ["--", trimmed.slice(0, 2000)], { stdio: "ignore" });
+    speaking.on("error", () => {});
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle("stop-speaking", () => {
+  try {
+    speaking?.kill();
+  } catch {
+    /* already gone */
+  }
+  speaking = null;
+});
+
 ipcMain.handle("open-external", (_event, url) => {
   // Only allow http(s) links out — this is the one bit of OS access the
   // renderer gets, and it goes through the main process, never direct.

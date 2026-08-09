@@ -19,6 +19,9 @@ export function App() {
   // without this a file pasted a moment ago is not recognised as a file --
   // by the composer's chips or by the thread's previews.
   const [sessionFiles, setSessionFiles] = useState([]);
+  // Off by default, deliberately. An assistant that starts talking without
+  // being asked is startling in a way a silent one never is.
+  const [speakReplies, setSpeakReplies] = useState(false);
 
   const abortRef = useRef(null);
   const scrollRef = useRef(null);
@@ -106,6 +109,11 @@ export function App() {
             },
           ]);
         }
+
+        // Spoken once, after the whole answer has arrived. Speaking each delta
+        // would stutter, and speaking in the finally block would also announce
+        // errors and aborts, which is not what a reply-reading toggle means.
+        if (speakReplies && assistant.trim()) window.maple?.speak(assistant);
       } catch (err) {
         if (err?.name === "AbortError") {
           // Keep whatever streamed in as the final turn, so the conversation
@@ -127,7 +135,7 @@ export function App() {
         abortRef.current = null;
       }
     },
-    [backendReady, capabilities.files, messages, sessionFiles, streaming],
+    [backendReady, capabilities.files, messages, sessionFiles, speakReplies, streaming],
   );
 
   return (
@@ -162,6 +170,11 @@ export function App() {
         onAttached={(names) =>
           setSessionFiles((prev) => [...new Set([...prev, ...names])])
         }
+        speakReplies={speakReplies}
+        onToggleSpeak={() => {
+          if (speakReplies) window.maple?.stopSpeaking();
+          setSpeakReplies((on) => !on);
+        }}
       />
     </div>
   );

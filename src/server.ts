@@ -1,4 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import { runTurn } from "./agent.js";
@@ -9,6 +12,7 @@ import { ensureToken, isAuthorized } from "./auth.js";
 import { mentionContext, parseMentions } from "./mentions.js";
 import { SPECIALISTS } from "./specialists.js";
 import { loadSkills } from "./skills.js";
+import { transcribeWav, whisperInstalled } from "./voice.js";
 import type { Message } from "./types.js";
 
 /**
@@ -141,7 +145,52 @@ async function handle(
       })),
       servers: ctx.servers,
       files: ctx.files,
+      // So a client can decide whether to offer a microphone at all, rather
+      // than offering one that returns 503 when pressed.
+      voice: { transcription: whisperInstalled() },
     });
+    return;
+  }
+
+  /**
+   * Dictation. Takes raw 16kHz mono WAV bytes and returns the text.
+   *
+   * Raw rather than multipart because both ends are ours and a multipart parser
+   * is a dependency this does not need. WAV rather than the browser's native
+   * webm/opus because decoding webm needs ffmpeg, and a feature that only fails
+   * on machines without it is worse than one that never needs it.
+   */
+  if (req.method === "POST" && url.pathname === "/v1/audio/transcriptions") {
+    if (!whisperInstalled()) {
+      sendJson(res, 503, {
+        error: { message: "Speech recognition is not installed. Run: enio voice --install" },
+      });
+      return;
+    }
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    const audio = Buffer.concat(chunks);
+
+    if (audio.length < 44) {
+      sendJson(res, 400, { error: { message: "No audio received." } });
+      return;
+    }
+
+    const file = join(tmpdir(), `enio-dictation-${randomUUID()}.wav`);
+    try {
+      await writeFile(file, audio);
+      const result = await transcribeWav(file);
+      if (result.error) {
+        sendJson(res, 500, { error: { message: result.error } });
+        return;
+      }
+      sendJson(res, 200, { text: result.text });
+    } finally {
+      // The recording is the user's voice. It exists for as long as one
+      // transcription takes and no longer, whatever the outcome.
+      await rm(file, { force: true }).catch(() => {});
+    }
     return;
   }
 

@@ -336,6 +336,62 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "voice": {
+      const { whisperInstalled } = await import("./voice.js");
+
+      if (rest.includes("--install")) {
+        // Shares the vision venv: both are MLX packages pinned to the same
+        // stack, and a third venv would be a third copy of mlx to update.
+        const { mkdirSync } = await import("node:fs");
+        mkdirSync(config.visionVenvDir, { recursive: true });
+        if (!existsSync(join(config.visionVenvDir, "bin", "python"))) {
+          const venv = spawn("uv", ["venv", "--python", "3.12", config.visionVenvDir], {
+            stdio: "inherit",
+          });
+          const code: number = await new Promise((r) => venv.on("exit", (c) => r(c ?? 1)));
+          if (code !== 0) {
+            console.error("Could not create the venv. Is uv installed?");
+            process.exit(1);
+          }
+        }
+        const pip = spawn(
+          "uv",
+          ["pip", "install", "--python", join(config.visionVenvDir, "bin", "python"), "mlx-whisper"],
+          { stdio: "inherit" },
+        );
+        const code: number = await new Promise((r) => pip.on("exit", (c) => r(c ?? 1)));
+        if (code !== 0) {
+          console.error("mlx-whisper install failed.");
+          process.exit(1);
+        }
+        console.log(`\nInstalled. The microphone button appears in the desktop app.`);
+        console.log(`${config.voiceModel} downloads on first use (~500MB).`);
+        break;
+      }
+
+      const file = rest.find((a) => !a.startsWith("--"));
+      if (file) {
+        const { transcribeWav } = await import("./voice.js");
+        const started = Date.now();
+        const result = await transcribeWav(file);
+        if (result.error) {
+          console.error(result.error);
+          process.exit(1);
+        }
+        console.log(result.text);
+        console.log(`\x1b[2mtranscribed in ${((Date.now() - started) / 1000).toFixed(1)}s\x1b[0m`);
+        break;
+      }
+
+      console.log(`speech in      ${whisperInstalled() ? "ready" : "not installed — enio voice --install"}`);
+      console.log(`model          ${config.voiceModel}`);
+      console.log(`speech out     ${process.platform === "darwin" ? "system voice (say)" : "unavailable on this platform"}`);
+      console.log("");
+      console.log(`Dictation runs on demand and nothing stays resident. Replies are`);
+      console.log(`only spoken when you turn it on in the desktop app.`);
+      break;
+    }
+
     case "vision": {
       const target = rest.find((a) => !a.startsWith("--"));
       if (target) {

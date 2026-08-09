@@ -61,6 +61,16 @@ contextBridge.exposeInMainWorld("maple", {
     return ipcRenderer.invoke("import-file", sourcePath);
   },
 
+  /** Speak text through the system voice. macOS only; false elsewhere. */
+  speak(text) {
+    return ipcRenderer.invoke("speak", text);
+  },
+
+  /** Cut off whatever is being spoken. */
+  stopSpeaking() {
+    return ipcRenderer.invoke("stop-speaking");
+  },
+
   /** Open a link in the user's default browser instead of navigating in-app. */
   openExternal(url) {
     return ipcRenderer.invoke("open-external", url);

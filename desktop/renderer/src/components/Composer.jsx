@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef } from "react";
-import { ArrowUp, Square } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowUp, Loader2, Mic, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AttachMenu } from "@/components/AttachMenu";
 import { SlashPalette } from "@/components/SlashPalette";
 import { AttachmentChips } from "@/components/AttachmentChips";
+import { startRecording, transcribe } from "@/lib/dictation";
 import { MentionPalette } from "@/components/MentionPalette";
 import {
   appendMention,
@@ -30,6 +31,8 @@ export function Composer({
   capabilities = {},
   sessionFiles = [],
   onAttached = () => {},
+  speakReplies = false,
+  onToggleSpeak = () => {},
 }) {
   const ref = useRef(null);
 
@@ -124,6 +127,45 @@ export function Composer({
     onAttached(names);
     onChange(next);
     ref.current?.focus();
+  };
+
+  // Recording, then transcribing, are two waits with nothing in common: one
+  // ends when the user says so, the other when whisper finishes. They get
+  // separate states so the button can say which is happening.
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const stopRecordingRef = useRef(null);
+
+  const toggleDictation = async () => {
+    if (recording) {
+      const stop = stopRecordingRef.current;
+      stopRecordingRef.current = null;
+      setRecording(false);
+      if (!stop) return;
+
+      setTranscribing(true);
+      try {
+        const text = (await transcribe(await stop())).trim();
+        // Appended rather than replacing: dictation is often the second half
+        // of a sentence someone started typing.
+        if (text) onChange(value ? `${value.replace(/\s+$/, "")} ${text}` : text);
+      } catch (err) {
+        console.error("dictation failed:", err);
+      } finally {
+        setTranscribing(false);
+        ref.current?.focus();
+      }
+      return;
+    }
+
+    try {
+      stopRecordingRef.current = await startRecording();
+      setRecording(true);
+    } catch (err) {
+      // Denied or no microphone. Nothing to say here that the OS prompt has
+      // not already said.
+      console.error("microphone unavailable:", err);
+    }
   };
 
   const pickFiles = async () => {
@@ -227,6 +269,32 @@ export function Composer({
           }
         }}
       />
+
+      <Button
+        size="icon"
+        variant="ghost"
+        onClick={onToggleSpeak}
+        title={speakReplies ? "Stop reading replies aloud" : "Read replies aloud"}
+        className={speakReplies ? "text-foreground" : "text-muted-foreground"}
+      >
+        {speakReplies ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+      </Button>
+
+      {capabilities.voice?.transcription && !streaming && (
+        <Button
+          size="icon"
+          variant={recording ? "destructive" : "ghost"}
+          onClick={toggleDictation}
+          disabled={disabled || transcribing}
+          title={recording ? "Stop and transcribe" : "Dictate"}
+        >
+          {transcribing ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Mic className="size-4" />
+          )}
+        </Button>
+      )}
 
       {streaming ? (
         <Button size="icon" variant="secondary" onClick={onStop} title="Stop">

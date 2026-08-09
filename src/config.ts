@@ -192,6 +192,16 @@ export const config = {
   visionVenvDir: env("VISION_VENV") ?? join(dataDir, "vision-venv"),
 
   /**
+   * Whisper for dictation, in the same venv as the vision model.
+   *
+   * small rather than large-v3-turbo: ~500MB against ~1.5GB, and dictation is
+   * short utterances in a quiet room by someone who can see the result and fix
+   * it. The accuracy the larger model buys is mostly on long noisy audio, which
+   * is not this.
+   */
+  voiceModel: env("VOICE_MODEL") ?? "mlx-community/whisper-small-mlx",
+
+  /**
    * Unload the vision model the instant it answers. Ollama's default is 5
    * minutes, which on a 16GB machine means it sits on top of Maple long after
    * it was needed. Set to "5m" if you attach images constantly and would
