@@ -204,11 +204,14 @@ export const config = {
   /**
    * The model used for the interim passes while someone is still speaking.
    *
-   * tiny rather than small: a partial that is a second closer to the speaker is
-   * worth more than a partial that gets a proper noun right, because it will be
-   * replaced by the accurate model's version the moment they stop.
+   * The same one, now. tiny was chosen when every pass paid a second of process
+   * startup and the smaller model was meaningfully quicker; with the worker
+   * resident both answer in well under a tenth of a second, so tiny bought
+   * nothing and cost accuracy — it hallucinated "Old Old Old Old" into the
+   * message box from a half-finished sentence. Kept as a separate setting so a
+   * slower machine can still trade accuracy for speed.
    */
-  voiceModelFast: env("VOICE_MODEL_FAST") ?? "mlx-community/whisper-tiny",
+  voiceModelFast: env("VOICE_MODEL_FAST") ?? "mlx-community/whisper-small-mlx",
 
   /**
    * Where the user is, for anything that depends on it.

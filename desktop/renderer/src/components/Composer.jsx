@@ -8,6 +8,7 @@ import {
 } from "react";
 import { ArrowUp, Loader2, Mic, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TipButton } from "@/components/TipButton";
 import { Textarea } from "@/components/ui/textarea";
 import { AttachMenu } from "@/components/AttachMenu";
 import { SlashPalette } from "@/components/SlashPalette";
@@ -357,40 +358,37 @@ export const Composer = forwardRef(function Composer({
         }}
       />
 
-      <Button
-        size="icon"
-        variant="ghost"
+      <TipButton
+        tip={speakReplies ? "Stop reading replies aloud" : "Read replies aloud"}
         onClick={onToggleSpeak}
-        title={speakReplies ? "Stop reading replies aloud" : "Read replies aloud"}
         className={speakReplies ? "text-foreground" : "text-muted-foreground"}
       >
         {speakReplies ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-      </Button>
+      </TipButton>
 
       {capabilities.voice?.transcription && !streaming && (
-        <Button
-          size="icon"
+        <TipButton
+          tip={recording ? "Stop and transcribe" : "Dictate"}
           variant={recording ? "destructive" : "ghost"}
           onClick={toggleDictation}
           disabled={disabled || transcribing}
-          title={recording ? "Stop and transcribe" : "Dictate"}
         >
           {transcribing ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <Mic className="size-4" />
           )}
-        </Button>
+        </TipButton>
       )}
 
       {streaming ? (
-        <Button size="icon" variant="secondary" onClick={onStop} title="Stop">
+        <TipButton tip="Stop generating" variant="secondary" onClick={onStop}>
           <Square className="size-4" />
-        </Button>
+        </TipButton>
       ) : (
-        <Button size="icon" onClick={submit} disabled={!canSend} title="Send">
+        <TipButton tip="Send" variant="default" onClick={submit} disabled={!canSend}>
           <ArrowUp className="size-4" />
-        </Button>
+        </TipButton>
       )}
     </footer>
   );

@@ -51,6 +51,30 @@ def read_wav(path: str) -> np.ndarray:
     return audio
 
 
+def is_degenerate(text: str) -> bool:
+    """
+    True for the repetition loops whisper produces from noise.
+
+    The failure does not look like a wrong word, it looks like "Old Old Old
+    Old" or one glyph a thousand times, and it lands in the message box as
+    though it had been heard. Real speech has variety; a handful of tokens
+    repeated across a long string does not.
+    """
+    stripped = text.strip()
+    if len(stripped) < 24:
+        return False
+
+    words = stripped.split()
+    if len(words) >= 8 and len(set(words)) <= max(2, len(words) // 8):
+        return True
+
+    # Repeated glyphs with no spaces at all: the same check, one level down.
+    if len(set(stripped.replace(" ", ""))) <= 3:
+        return True
+
+    return False
+
+
 def transcribe(path: str, repo: str) -> dict:
     import mlx_whisper
 
@@ -70,8 +94,19 @@ def transcribe(path: str, repo: str) -> dict:
     # would be read as a response and every answer after it would belong to the
     # previous question. Pushed to stderr, where it is merely noise.
     with contextlib.redirect_stdout(sys.stderr):
-        result = mlx_whisper.transcribe(audio, path_or_hf_repo=repo, verbose=False)
-    return {"text": (result.get("text") or "").strip()}
+        result = mlx_whisper.transcribe(
+            audio,
+            path_or_hf_repo=repo,
+            verbose=False,
+            # Whisper loops when it conditions on its own previous output, and a
+            # loop is exactly what a half-finished utterance invites: it emits
+            # one token, sees it, and emits it again forever. Each interim pass
+            # re-reads the whole clip anyway, so there is nothing to carry over.
+            condition_on_previous_text=False,
+        )
+
+    text = (result.get("text") or "").strip()
+    return {"text": "" if is_degenerate(text) else text}
 
 
 def main() -> int:

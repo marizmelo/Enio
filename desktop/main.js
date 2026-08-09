@@ -8,7 +8,7 @@
 // easiest to consume incrementally.
 "use strict";
 
-const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, shell } = require("electron");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
@@ -18,6 +18,12 @@ const os = require("node:os");
 // The parent project (../ from this folder) is where `node dist/index.js ...`
 // lives. It must already be built (`npm run build` there) — this app is only
 // a client, it doesn't compile TypeScript.
+// Set before anything reads it. An unpackaged Electron app is called
+// "Electron" everywhere it is named -- the menu bar, the About panel, the force
+// quit list -- because there is no bundle to take a name from. Packaged builds
+// get it from productName; this is what makes `npm start` say Enio too.
+app.setName("Enio");
+
 const PARENT_DIR = path.join(__dirname, "..");
 const AGENT_ENTRY = path.join(PARENT_DIR, "dist", "index.js");
 
@@ -450,6 +456,39 @@ app.whenReady().then(() => {
       // Cosmetic. A missing or unreadable icon must not stop the app booting.
     }
   }
+
+  // Without an explicit menu, macOS shows Electron's default one, whose first
+  // item is the process name rather than the app's.
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: "Enio",
+        submenu: [
+          { role: "about" },
+          { type: "separator" },
+          { role: "hide" },
+          { role: "hideOthers" },
+          { role: "unhide" },
+          { type: "separator" },
+          { role: "quit" },
+        ],
+      },
+      {
+        label: "Edit",
+        submenu: [
+          { role: "undo" },
+          { role: "redo" },
+          { type: "separator" },
+          { role: "cut" },
+          { role: "copy" },
+          { role: "paste" },
+          { role: "selectAll" },
+        ],
+      },
+      { label: "View", submenu: [{ role: "reload" }, { role: "togglefullscreen" }] },
+      { label: "Window", submenu: [{ role: "minimize" }, { role: "close" }] },
+    ]),
+  );
 
   createWindow();
   startBackends();

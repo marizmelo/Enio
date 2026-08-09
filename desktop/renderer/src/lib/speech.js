@@ -47,9 +47,19 @@ async function synthesise(text) {
   return res.ok ? await res.blob() : null;
 }
 
+/** Resolves when the current run of the queue has finished, not before. */
+let drained = Promise.resolve();
+
 async function drain(mine) {
-  if (draining) return;
+  // Joining an existing run rather than returning immediately: a caller that
+  // awaits speak() is asking to know when the words have been said, and
+  // answering "already done" while audio is still queued is a lie the UI then
+  // shows as a stuck button.
+  if (draining) return drained;
+
   draining = true;
+  let release;
+  drained = new Promise((r) => (release = r));
 
   while (queue.length > 0 && mine === generation) {
     const text = queue.shift();
@@ -73,6 +83,7 @@ async function drain(mine) {
   }
 
   draining = false;
+  release();
 }
 
 /**
@@ -85,9 +96,11 @@ async function drain(mine) {
  */
 export function speak(text) {
   const trimmed = (text ?? "").trim();
-  if (!trimmed) return;
+  if (!trimmed) return Promise.resolve();
   queue.push(trimmed);
-  drain(generation);
+  // Awaitable, so a "read aloud" button can show a stop icon for exactly as
+  // long as there is something to stop.
+  return drain(generation);
 }
 
 /**

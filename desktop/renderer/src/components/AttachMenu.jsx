@@ -1,5 +1,5 @@
 import { Paperclip, FileText, Folder, Plug, Sparkles, Users } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { TipButton } from "@/components/TipButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,9 +40,9 @@ export function AttachMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="icon" variant="ghost" disabled={disabled} title="Attach">
+        <TipButton tip="Attach a file, skill or agent" disabled={disabled}>
           <Paperclip className="size-4" />
-        </Button>
+        </TipButton>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start" side="top" className="w-64">

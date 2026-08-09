@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { StatusBar } from "@/components/StatusBar";
 import { Message } from "@/components/Message";
 import { Composer } from "@/components/Composer";
@@ -152,6 +153,7 @@ export function App() {
   );
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div className="flex h-screen flex-col bg-background">
       <StatusBar {...status} />
 
@@ -165,7 +167,6 @@ export function App() {
                 key={i}
                 {...m}
                 streaming={streaming && i === messages.length - 1 && m.role === "assistant"}
-                onDictate={() => composerRef.current?.startDictation()}
               />
             ))}
           </div>
@@ -192,5 +193,6 @@ export function App() {
         }}
       />
     </div>
+    </TooltipProvider>
   );
 }

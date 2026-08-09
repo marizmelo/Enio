@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Check, Copy, Mic } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Check, Copy, Square, Volume2 } from "lucide-react";
+import { TipButton } from "@/components/TipButton";
+import { speak, stopSpeaking } from "@/lib/speech";
 
 /**
  * What to do with an answer once it has arrived.
@@ -8,8 +9,9 @@ import { Button } from "@/components/ui/button";
  * Under the message rather than beside it: these act on a finished reply, and
  * putting them inline would put them in the way of reading it.
  */
-export function MessageActions({ content, onDictate }) {
+export function MessageActions({ content, canSpeak = true }) {
   const [copied, setCopied] = useState(false);
+  const [playing, setPlaying] = useState(false);
 
   const copy = async () => {
     try {
@@ -26,24 +28,37 @@ export function MessageActions({ content, onDictate }) {
 
   return (
     <div className="flex items-center gap-1 opacity-60 transition-opacity hover:opacity-100">
-      <Button
-        size="icon"
-        variant="ghost"
-        className="size-7"
-        title={copied ? "Copied" : "Copy"}
-        onClick={copy}
-      >
+      <TipButton tip={copied ? "Copied" : "Copy"} className="size-7" onClick={copy}>
         {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-      </Button>
-      <Button
-        size="icon"
-        variant="ghost"
+      </TipButton>
+      {/* A speaker, not a microphone. Under an answer the obvious question is
+          "read this to me", and a mic here read as "talk to it" -- which is
+          what the composer's button is already for. */}
+      {canSpeak && (
+      <TipButton
+        tip={playing ? "Stop" : "Read aloud"}
         className="size-7"
-        title="Reply by voice"
-        onClick={onDictate}
+        onClick={async () => {
+          if (playing) {
+            stopSpeaking();
+            setPlaying(false);
+            return;
+          }
+          setPlaying(true);
+          try {
+            await speak(content);
+          } finally {
+            // In a finally because speak() can resolve early -- if a drain is
+            // already running the new text is queued and returns at once, and
+            // without this the button would sit on "Stop" forever with nothing
+            // left to stop.
+            setPlaying(false);
+          }
+        }}
       >
-        <Mic className="size-3.5" />
-      </Button>
+        {playing ? <Square className="size-3.5" /> : <Volume2 className="size-3.5" />}
+      </TipButton>
+      )}
     </div>
   );
 }

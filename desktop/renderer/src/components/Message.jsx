@@ -23,7 +23,6 @@ export function Message({
   startedAt = null,
   error = false,
   streaming = false,
-  onDictate = () => {},
 }) {
   const isUser = role === "user";
   const waiting = streaming && !isUser && !error && content.length === 0;
@@ -61,9 +60,12 @@ export function Message({
       )}
 
       {/* Only once the answer is complete: buttons that appear mid-stream
-          invite copying half a sentence. */}
-      {!isUser && !waiting && !streaming && !error && content.trim() && (
-        <MessageActions content={content} onDictate={onDictate} />
+          invite copying half a sentence. A user's own message is always
+          complete, and worth copying too -- a long prompt is often the thing
+          you want to reuse or edit. Reading it back is not, so that button is
+          only on the replies. */}
+      {!waiting && !streaming && !error && content.trim() && (
+        <MessageActions content={content} canSpeak={!isUser} />
       )}
 
       {/* Addressed to the reader, not the model: how the attachment was read
