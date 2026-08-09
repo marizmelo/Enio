@@ -8,7 +8,7 @@
 // easiest to consume incrementally.
 "use strict";
 
-const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, Tray, clipboard, dialog, ipcMain, nativeImage, shell } = require("electron");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
@@ -62,6 +62,16 @@ const AGENT_TIMEOUT_MS = 30_000;
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
+
+/**
+ * Held in module scope, not a local.
+ *
+ * A Tray that only a function's stack refers to is garbage collected the moment
+ * that function returns, and the icon vanishes from the menu bar seconds after
+ * appearing — with nothing in any log to say why.
+ */
+/** @type {Tray | null} */
+let tray = null;
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let modelProc = null;
@@ -216,6 +226,58 @@ async function startBackends() {
   }
 
   sendStatus("ready", modelStartedByUs ? "Ready." : "Ready (reused existing servers).", { tools: toolCount });
+}
+
+/**
+ * The menu bar item.
+ *
+ * A template image: pure black on transparency, which macOS inverts itself for
+ * a light or dark menu bar and again when the bar is selected. Hard-coding a
+ * white icon would look right today and wrong the moment someone switches
+ * appearance.
+ */
+function createTray() {
+  try {
+    const icon = nativeImage.createFromPath(
+      path.join(__dirname, "assets", "trayTemplate.png"),
+    );
+    if (icon.isEmpty()) return;
+    icon.setTemplateImage(true);
+
+    tray = new Tray(icon);
+    tray.setToolTip("Enio");
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        {
+          label: "Show Enio",
+          click: () => {
+            if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+            else mainWindow.show();
+            mainWindow?.focus();
+          },
+        },
+        { type: "separator" },
+        { label: "Quit Enio", click: () => app.quit() },
+      ]),
+    );
+
+    // Left click toggles rather than only showing: the point of a menu bar item
+    // is getting the window out of the way as easily as getting it back.
+    tray.on("click", () => {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        createWindow();
+        return;
+      }
+      if (mainWindow.isVisible() && mainWindow.isFocused()) mainWindow.hide();
+      else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+  } catch (err) {
+    // Cosmetic. No menu bar item is a worse app, not a broken one.
+    console.error("could not create the tray icon:", err.message);
+  }
 }
 
 function killChild(child, pid, label) {
@@ -490,6 +552,7 @@ app.whenReady().then(() => {
     ]),
   );
 
+  createTray();
   createWindow();
   startBackends();
 

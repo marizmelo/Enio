@@ -39,6 +39,19 @@ const BARE = !process.argv.includes("--card");
 const MARK_HEIGHT_BARE = 0.8; // no card to sit inside, so it can fill more
 
 const svg = readFileSync(join(assets, "enio-logo.svg"), "utf8");
+const traySvg = readFileSync(join(assets, "taskicon.svg"), "utf8");
+
+/**
+ * Menu bar icons are template images: pure black on transparency, which macOS
+ * then inverts itself for a light or dark menu bar and for when the bar is
+ * selected. That is why taskicon.svg being single-colour matters — a coloured
+ * icon would be rendered as a flat silhouette and lose its shape.
+ *
+ * 16pt tall, which is the size the menu bar gives you, with @2x alongside for
+ * retina. The mark is roughly half as wide as it is tall, so the canvas is
+ * sized to fit rather than squared off.
+ */
+const TRAY_HEIGHT = 16;
 
 const page = BARE
   ? `
@@ -93,6 +106,31 @@ app.whenReady().then(async () => {
   writeFileSync(join(assets, "icon.png"), image.toPNG());
 
   console.log(`wrote icon.png at ${SIZE}x${SIZE}`);
+
+  // Rendered from the same page in the same window, resized between captures,
+  // so the tray icon cannot drift from its SVG either.
+  for (const scale of [1, 2]) {
+    const h = TRAY_HEIGHT * scale;
+    const w = Math.ceil(h * 0.55);
+    win.setContentSize(w, h);
+    await win.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(`
+        <style>
+          html, body { margin: 0; background: transparent; }
+          #wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+          #wrap svg { height: ${h}px; width: auto; display: block; }
+        </style>
+        <div id="wrap">${traySvg}</div>
+      `)}`,
+    );
+    await new Promise((r) => setTimeout(r, 250));
+    const tray = await win.webContents.capturePage();
+    writeFileSync(
+      join(assets, scale === 1 ? "trayTemplate.png" : "trayTemplate@2x.png"),
+      tray.toPNG(),
+    );
+  }
+  console.log("wrote trayTemplate.png and trayTemplate@2x.png");
 
   // The .icns is what a packaged build ships and what Finder shows. Built here
   // rather than by hand so the two can never drift: every size comes from the
