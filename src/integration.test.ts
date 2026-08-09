@@ -712,3 +712,69 @@ describe("specialist isolation", () => {
     // where the command output would be, which is the proof it never ran.
   });
 });
+
+describe("recovery that needs a tool", () => {
+  test("a turn that thought itself to death before calling a tool still calls it", async () => {
+    // The "show my emails" shape: the first attempt reasons to the ceiling and
+    // returns nothing — no content, no tool call. A no-think retry with no
+    // tools could only narrate ("I'll read your email for you") and stop. The
+    // retry must keep its tools, make the call, and answer from the result.
+    let call = 0;
+    const frames: Array<Record<string, unknown>> = [
+      // 1: thought itself to death — empty, no tool call.
+      { choices: [{ delta: { reasoning: "thinking".repeat(50) } }] },
+      // 2: the no-think retry, which now calls the tool.
+      {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                { index: 0, id: "c1", function: { name: "current_time", arguments: "{}" } },
+              ],
+            },
+          },
+        ],
+      },
+      // 3: answers from the tool result.
+      { choices: [{ delta: { content: "It's 3pm." } }] },
+    ];
+    globalThis.fetch = (async () => {
+      const frame = frames[Math.min(call, frames.length - 1)];
+      call += 1;
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            const enc = new TextEncoder();
+            c.enqueue(enc.encode(`data: ${JSON.stringify(frame)}\n\n`));
+            c.enqueue(enc.encode("data: [DONE]\n\n"));
+            c.close();
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const history: Message[] = [];
+    const result = await runTurn(
+      "what time is it?",
+      history,
+      registry,
+      sessionId,
+      {},
+      { specialist: "generalist" },
+    );
+
+    assert.ok(result.toolsUsed.includes("current_time"), "the recovery must call the tool");
+    assert.equal(result.reply, "It's 3pm.");
+    // The transcript reads as one clean turn: no blank assistant message left
+    // in front of the tool call.
+    assert.ok(
+      !history.some(
+        (m) => m.role === "assistant" && !String(m.content ?? "").trim() && !m.tool_calls,
+      ),
+      "no empty assistant message should survive in history",
+    );
+  });
+});

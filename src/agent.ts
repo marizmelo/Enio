@@ -383,8 +383,40 @@ export async function runTurn(
   const wireTools = activeTools.map(toWireTool);
   // What this route may execute, as opposed to what exists.
   const allowedToolNames = new Set(activeTools.map((t) => t.name));
+
+  /** Run a batch of tool calls, recording each and appending its result to
+   *  history — shared by the main loop and the no-think recovery below, so a
+   *  recovered turn executes tools exactly the way a normal one does. */
+  async function runToolCalls(calls: ToolCall[]): Promise<void> {
+    for (const call of calls) {
+      const toolStartedAt = Date.now();
+      const output = await executeCall(call, registry, handlers, allowedToolNames);
+      toolsUsed.push(call.function.name);
+      steps.push({
+        seq: steps.length,
+        kind: "tool",
+        name: call.function.name,
+        args: call.function.arguments,
+        output,
+        // executeCall converts throws into text, so treat the prefix as the signal.
+        error: output.startsWith("Error:") ? output.slice(0, 300) : null,
+        durationMs: Date.now() - toolStartedAt,
+      });
+      history.push({
+        role: "tool",
+        tool_call_id: call.id,
+        name: call.function.name,
+        content: output,
+      });
+    }
+  }
   const toolsUsed: string[] = [];
   let reply = "";
+  // True when the turn ended with no content and no tool call -- the model
+  // reasoned to the budget before it produced anything, tool call included.
+  // Distinct from ending because it kept calling tools until iterations ran
+  // out, which needs the opposite recovery.
+  let thoughtToDeath = false;
 
   // Diagnostic trace, written once at the end of the turn. Kept out of the hot
   // path -- a failed trace write must never break a working conversation.
@@ -420,6 +452,7 @@ export async function runTurn(
 
     if (result.toolCalls.length === 0) {
       reply = result.content;
+      thoughtToDeath = !result.content.trim();
       history.push({
         role: "assistant",
         content: result.content,
@@ -436,27 +469,7 @@ export async function runTurn(
       reasoning: result.reasoning,
     });
 
-    for (const call of result.toolCalls) {
-      const toolStartedAt = Date.now();
-      const output = await executeCall(call, registry, handlers, allowedToolNames);
-      toolsUsed.push(call.function.name);
-      steps.push({
-        seq: steps.length,
-        kind: "tool",
-        name: call.function.name,
-        args: call.function.arguments,
-        output,
-        // executeCall converts throws into text, so treat the prefix as the signal.
-        error: output.startsWith("Error:") ? output.slice(0, 300) : null,
-        durationMs: Date.now() - toolStartedAt,
-      });
-      history.push({
-        role: "tool",
-        tool_call_id: call.id,
-        name: call.function.name,
-        content: output,
-      });
-    }
+    await runToolCalls(result.toolCalls);
 
     if (isLast) {
       handlers.onNotice?.(
@@ -493,37 +506,67 @@ export async function runTurn(
         ? "That answer got stuck repeating itself — trying again."
         : "The reply budget went entirely on thinking — answering again without it.",
     );
-    const retryStartedAt = Date.now();
+    // Drop the blank assistant turn the main loop left behind, so the retry --
+    // which may now push its own assistant and tool messages -- does not build
+    // on top of an empty one, and the transcript reads as a single clean turn.
+    {
+      const last = history[history.length - 1];
+      if (last?.role === "assistant" && !String(last.content ?? "").trim() && !last.tool_calls) {
+        history.pop();
+      }
+    }
+
     try {
-      const retry = await complete(
-        history,
-        [],
-        { onContent: handlers.onContent },
-        undefined,
-        { enableThinking: false },
-      );
-      steps.push({
-        seq: steps.length,
-        kind: "model",
-        rawContent: retry.rawContent,
-        reasoning: retry.reasoning || null,
-        repaired: retry.repaired,
-        scavenged: retry.scavenged,
-        durationMs: Date.now() - retryStartedAt,
-      });
+      // The retry keeps its tools. The failure this recovers from is often a
+      // turn that thought itself to death BEFORE calling the tool it needed --
+      // "show my emails" reasoned to the ceiling and never reached
+      // run_applescript. A retry with no tools could only narrate the action
+      // it could not take ("I'll read your email content for you") and stop.
+      // With thinking off it makes the call directly; each round after one
+      // that calls tools is still no-think, so it cannot re-enter the loop it
+      // just escaped.
+      // Tools only when the model thought itself to death before reaching one.
+      // If it ended still calling tools, more tool rounds repeat the failure,
+      // so the retry gets none and is forced to answer from what it has.
+      const retryTools = thoughtToDeath ? wireTools : [];
+      const retryRounds = thoughtToDeath ? config.maxToolIterations : 1;
+      let retry = { content: "", rawContent: "", reasoning: "", repaired: false, scavenged: false, toolCalls: [] as ToolCall[] };
+      for (let r = 0; r < retryRounds; r++) {
+        const retryStartedAt = Date.now();
+        retry = await complete(
+          history,
+          retryTools,
+          { onContent: handlers.onContent },
+          undefined,
+          { enableThinking: false },
+        );
+        steps.push({
+          seq: steps.length,
+          kind: "model",
+          rawContent: retry.rawContent,
+          reasoning: retry.reasoning || null,
+          repaired: retry.repaired,
+          scavenged: retry.scavenged,
+          durationMs: Date.now() - retryStartedAt,
+        });
+        // No tools offered but a call emitted anyway is Maple hallucinating one;
+        // executing it would be acting on a tool this recovery deliberately
+        // withheld. Stop and take whatever content came with it.
+        if (retry.toolCalls.length === 0 || retryTools.length === 0) break;
+        history.push({
+          role: "assistant",
+          content: retry.content || null,
+          tool_calls: retry.toolCalls,
+        });
+        await runToolCalls(retry.toolCalls);
+      }
+
       if (looksDegenerate(retry.content)) looped = true;
       // A retry that loops is not an answer either. Rejecting it here is what
       // keeps the recovery from being worse than the failure.
       if (retry.content.trim() && !looksDegenerate(retry.content)) {
         reply = retry.content.trim();
-        // The loop already pushed the empty assistant turn; replace it rather
-        // than leaving a blank message in front of the real one.
-        const last = history[history.length - 1];
-        if (last?.role === "assistant" && !String(last.content ?? "").trim() && !last.tool_calls) {
-          history[history.length - 1] = { role: "assistant", content: reply };
-        } else {
-          history.push({ role: "assistant", content: reply });
-        }
+        history.push({ role: "assistant", content: reply });
         logMessage(sessionId, "assistant", reply);
       }
     } catch {
@@ -552,6 +595,7 @@ export async function runTurn(
     } else {
       history.push({ role: "assistant", content: reply });
     }
+    logMessage(sessionId, "assistant", reply);
   }
 
   try {
