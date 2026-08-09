@@ -320,6 +320,8 @@ Dictation is **mlx-whisper** — the same MLX runtime as everything else, spawne
 
 Replies are spoken by **Kokoro**, an 82M ONNX model that runs in-process through the transformers stack the embeddings already use. No venv, no daemon, no System Settings trip — it fetches ~90MB once, like the embedding model does, and synthesises a sentence in about two seconds. `ENIO_TTS_VOICE` picks a voice, `ENIO_TTS=say` falls back to the system voice, `ENIO_TTS=off` disables it.
 
+The default is `am_fenrir`, an American male voice — chosen to sit apart from Siri rather than beside it. Kokoro grades its voices, and the male ones worth using are `am_fenrir`, `am_michael` and `am_puck` (C+), then `bm_george` and `bm_fable` (British, C). `af_heart` is the best-sounding voice in the set (grade A) if you would rather have quality than contrast. `enio voice --voices` lists all 28.
+
 Speaking is off by default and speaks once, after the answer is complete. An assistant that starts talking unprompted is startling in a way a silent one never is.
 
 **OCR never touches the network.** tesseract.js defaults to fetching its language data from a CDN on first use, which is indefensible in something that claims to run entirely on your machine — it fails on a plane, on an air-gapped box, and whenever jsDelivr has a bad day. The data ships as a normal npm dependency (`@tesseract.js-data/eng`, installed once, read from `node_modules`) so no request is ever made at runtime. There's a test that disables `fetch` entirely and asserts OCR still works.

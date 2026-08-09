@@ -250,10 +250,20 @@ export const config = {
   ttsEngine: env("TTS") ?? "kokoro",
 
   /**
-   * One of Kokoro's 28 voices. af_heart is its warmest American English one;
-   * `enio voice --voices` lists the rest.
+   * One of Kokoro's 28 voices; `enio voice --voices` lists them.
+   *
+   * Male on purpose, to sit apart from Siri rather than beside it -- an
+   * assistant that sounds like the system assistant invites the comparison,
+   * and this one is not trying to be that. Picked by listening to the five
+   * male voices Kokoro grades C or better, not from the table: am_fenrir,
+   * am_michael and am_puck all grade C+, and the British bm_george and
+   * bm_fable a step below at C.
+   *
+   * af_heart, the previous default, is still the best-sounding voice in the
+   * set at grade A -- this trades a little quality for not being mistaken for
+   * something else.
    */
-  kokoroVoice: env("TTS_VOICE") ?? "af_heart",
+  kokoroVoice: env("TTS_VOICE") ?? "am_fenrir",
 
   /**
    * q8 rather than fp32: about a quarter the download and quick enough that
