@@ -10,10 +10,14 @@
  * onto white — which is what put square white corners on the first icon — and
  * rsvg-convert, ImageMagick, Inkscape and cairosvg are all absent.
  *
- * The logo is a white mark on transparency, so it cannot be the icon on its
- * own: white on transparent disappears against a light dock. It is composited
- * onto a rounded square, inset the way macOS expects, which is also what stops
- * the icon looking oversized next to its neighbours.
+ * The mark is the icon, with nothing behind it. That looked risky — it is
+ * two-tone, five black paths and four white, so the obvious worry is that half
+ * of it disappears depending on what is behind the dock. It does not: the white
+ * faces are outlined in black and the black faces read as shadow, so the
+ * silhouette survives on both. Checked at 128px against white and against
+ * #1c1e24 before choosing it, because that is the size an icon is read at.
+ *
+ * `--card` puts it back on a rounded square if that ever stops being true.
  */
 import { app, BrowserWindow } from "electron";
 import { execFileSync } from "node:child_process";
@@ -30,9 +34,25 @@ const INSET = 100; // macOS artwork sits inside ~824 of 1024
 const RADIUS = 185;
 const MARK_HEIGHT = 0.46; // of the full canvas, so the mark breathes
 
+/** `npm run icon -- --card` renders the mark on a rounded square instead. */
+const BARE = !process.argv.includes("--card");
+const MARK_HEIGHT_BARE = 0.8; // no card to sit inside, so it can fill more
+
 const svg = readFileSync(join(assets, "enio-logo.svg"), "utf8");
 
-const page = `
+const page = BARE
+  ? `
+<style>
+  html, body { margin: 0; background: transparent; }
+  #card {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #card svg { height: ${Math.round(SIZE * MARK_HEIGHT_BARE)}px; width: auto; display: block; }
+</style>
+<div id="card">${svg}</div>
+`
+  : `
 <style>
   html, body { margin: 0; background: transparent; }
   #card {
