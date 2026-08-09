@@ -1,4 +1,4 @@
-import { homedir } from "node:os";
+import { homedir, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -373,6 +373,25 @@ export const config = {
    * Raise ENIO_MAX_TOKENS if you would rather wait than be told less.
    */
   maxTokens: Number(env("MAX_TOKENS") ?? 2048),
+
+  /**
+   * Ceiling on the model server's KV cache, in gigabytes.
+   *
+   * mlx-lm bounds that cache by slot count (ten) and not by size unless told
+   * to, and Maple's KV runs 48KB per token -- ten long threads is several GB
+   * on top of the weights. Derived from installed RAM so the same build
+   * behaves on 16GB and 64GB machines, and clamped: below ~1GB the cache stops
+   * holding a useful conversation and every turn re-prefills, above 4GB it
+   * competes with the rest of the desktop for nothing a single user notices.
+   *
+   * Installed rather than free memory, deliberately -- free memory at launch
+   * says nothing about free memory an hour later, and a cache sized against a
+   * momentarily busy machine would stay small for the whole session.
+   */
+  promptCacheGb: Number(
+    env("PROMPT_CACHE_GB") ??
+      Math.min(4, Math.max(1, Math.round(totalmem() / 1024 ** 3 / 12))),
+  ),
 
   /** Safety rails on the agent loop. A small model can loop forever given the chance. */
   maxToolIterations: Number(env("MAX_ITERS") ?? 8),

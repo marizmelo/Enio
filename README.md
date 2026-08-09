@@ -466,6 +466,7 @@ Environment variables, all optional. See `src/config.ts`.
 | `ENIO_BACKEND` | `maple` |
 | `ENIO_ROUTING` | `1` — set `0` for one agent with every tool |
 | `ENIO_MAX_TOOLS` | `16` |
+| `ENIO_PROMPT_CACHE_GB` | 1/12th of installed RAM, clamped to 1–4 |
 | `ENIO_INSPECT_PORT` | `8788` |
 | `SEARXNG_URL` | unset |
 | `ENIO_ALLOW_ANY_COMMAND` | unset — see below |

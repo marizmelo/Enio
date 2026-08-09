@@ -1,7 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, openSync } from "node:fs";
 import { join } from "node:path";
-import { totalmem } from "node:os";
 import { config } from "./config.js";
 import { serverIsUp } from "./model.js";
 import { canRunMaple, isWindows, whyNoMaple } from "./platform.js";
@@ -19,26 +18,17 @@ import { canRunMaple, isWindows, whyNoMaple } from "./platform.js";
  * roughly 5GB of weights. That fits on the 64GB machines these numbers usually
  * come from and does not fit here.
  *
- * Sized from physical RAM rather than hard-coded, since the same build runs on
- * 16GB and 64GB machines, and clamped at both ends: below ~1GB the cache stops
- * holding a useful conversation and every turn pays full prefill again, above
- * 4GB it is competing with the rest of the desktop for no gain a single user
- * can perceive.
+ * How the cap is sized, and why, is in config.ts alongside the setting.
  */
 export function modelServerArgs(modelPath: string): string[] {
-  const cap = Math.min(4, Math.max(1, Math.round(totalMemoryGb() / 12)));
   return [
     "-m", "mlx_lm.server",
     "--model", modelPath,
     "--trust-remote-code",
     "--flash-head",
-    "--prompt-cache-bytes", `${cap}G`,
+    "--prompt-cache-bytes", `${config.promptCacheGb}G`,
     "--port", "8080",
   ];
-}
-
-function totalMemoryGb(): number {
-  return totalmem() / 1024 ** 3;
 }
 
 /**
