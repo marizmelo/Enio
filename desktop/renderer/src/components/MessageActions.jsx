@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check, Copy, Square, Volume2 } from "lucide-react";
 import { TipButton } from "@/components/TipButton";
-import { speak, stopSpeaking } from "@/lib/speech";
+import { speakAll, stopSpeaking } from "@/lib/speech";
 
 /**
  * What to do with an answer once it has arrived.
@@ -46,7 +46,7 @@ export function MessageActions({ content, canSpeak = true }) {
           }
           setPlaying(true);
           try {
-            await speak(content);
+            await speakAll(content);
           } finally {
             // In a finally because speak() can resolve early -- if a drain is
             // already running the new text is queued and returns at once, and

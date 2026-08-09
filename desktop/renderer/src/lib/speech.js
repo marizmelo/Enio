@@ -192,3 +192,27 @@ export function takeSentences(buffer) {
 
   return { ready: ready.filter(Boolean), rest: buffer.slice(consumed) };
 }
+
+/**
+ * Speak a complete piece of text, a sentence at a time.
+ *
+ * For the read-aloud button under an answer, where the whole reply is known up
+ * front. Handing it over as one utterance meant one synthesis request for the
+ * entire thing and silence until it finished -- synthesis runs at roughly a
+ * fifth of real time, so a reply that reads for a minute sat quiet for twelve
+ * seconds before the first word. Split into sentences it uses the same
+ * pipeline as streamed speech: the first sentence starts after its own
+ * synthesis, and the rest are made while it plays.
+ */
+export function speakAll(text) {
+  const { ready, rest } = takeSentences(String(text ?? ""));
+  // takeSentences leaves the final sentence in `rest`, since it only splits on
+  // a terminator followed by whitespace and the last one ends the string.
+  const parts = [...ready, rest].map((part) => part.trim()).filter(Boolean);
+  if (parts.length === 0) return Promise.resolve();
+
+  let done = Promise.resolve();
+  for (const part of parts) done = speak(part);
+  // Every speak() joins the same drain, so the last is as good as all of them.
+  return done;
+}

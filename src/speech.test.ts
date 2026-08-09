@@ -82,4 +82,30 @@ describe("spoken replies", () => {
       `three sentences took ${total}ms, close to the fully serial ${3 * (PLAY_MS + SYNTH_MS)}ms`,
     );
   });
+
+  test("read-aloud splits the reply instead of sending it whole", async () => {
+    const marks: Mark[] = [];
+    let start = 0;
+    installBrowserStubs(marks, () => start);
+    const { speakAll } = (await import(SPEECH)) as any;
+
+    start = Date.now();
+    await speakAll(
+      "The ocean covers most of the surface. It holds nearly all the water. " +
+        "Its trenches reach past eleven kilometres.",
+    );
+
+    // Three requests, not one. Sending the reply whole meant one synthesis for
+    // the entire thing and silence until it finished -- which grows with the
+    // length of the answer, exactly when someone is least willing to wait.
+    const synths = marks.filter((m) => m.kind === "synth");
+    assert.equal(synths.length, 3, "each sentence should be its own utterance");
+
+    // And the first one is audible after a single sentence's synthesis rather
+    // than the whole reply's.
+    assert.ok(
+      marks[0]!.kind === "synth" && marks.find((m) => m.kind === "ended")!.at < 2 * (SYNTH_MS + PLAY_MS),
+      "the first sentence should finish before the whole reply could be synthesised",
+    );
+  });
 });
