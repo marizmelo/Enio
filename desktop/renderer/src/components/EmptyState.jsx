@@ -1,4 +1,7 @@
 import { Button } from "@/components/ui/button";
+// The same file the app icon and the menu bar icon are built from, so the
+// three cannot disagree about what the mark looks like.
+import logo from "../../../assets/enio-logo.svg";
 
 const EXAMPLES = [
   "What tools do you have available right now?",
@@ -9,7 +12,11 @@ const EXAMPLES = [
 export function EmptyState({ onPick, disabled }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6 px-6 text-center">
-      <div className="space-y-1.5">
+      <div className="space-y-3">
+        {/* Two-tone and outlined, so it reads on both themes without needing a
+            surface behind it -- the same property that let the app icon drop
+            its container. */}
+        <img src={logo} alt="" className="mx-auto h-16 w-auto" />
         <h1 className="text-2xl font-semibold tracking-tight">Enio</h1>
         <p className="text-sm text-muted-foreground">
           A local agent with tools and memory. Nothing leaves your machine.

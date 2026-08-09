@@ -45,7 +45,14 @@ async function run() {
     format: "iife",
     outfile: path.join(outdir, "bundle.js"),
     jsx: "automatic",
-    loader: { ".js": "jsx", ".jsx": "jsx" },
+    loader: {
+      ".js": "jsx",
+      ".jsx": "jsx",
+      // Inlined as a data URI rather than emitted as a file: the marks are a
+      // couple of kilobytes, the bundle is a single file with no publicPath to
+      // resolve against, and the renderer's CSP already allows data: images.
+      ".svg": "dataurl",
+    },
     // shadcn components import through the "@/..." alias its CLI writes. This
     // is the only place that alias is resolved -- jsconfig.json exists solely
     // so editors agree with the bundler.
