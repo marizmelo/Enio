@@ -241,6 +241,48 @@ async function compactHistory(history: Message[]): Promise<Message[]> {
 }
 
 /**
+ * Does this reply look like a repetition loop rather than an answer?
+ *
+ * The failure it catches, seen on "show my emails": seven tool iterations
+ * produced nothing, the last attempt spent its whole budget thinking and came
+ * back empty, and the no-think retry then filled 9,478 characters with "Let me
+ * try read_file with the inbox file path." over and over -- which was shipped
+ * to the user as the answer. Recovering from silence into a wall of the same
+ * sentence is worse than the silence.
+ *
+ * Same shape the dictation worker guards against, and the same reasoning: real
+ * writing has variety, a loop does not. Deliberately conservative -- it wants
+ * several long sentences repeated verbatim and forming a large share of the
+ * whole -- because a false positive discards a real answer, which is the one
+ * outcome worse than printing a bad one.
+ */
+export function looksDegenerate(text: string): boolean {
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((line) => line.trim())
+    .filter((line) => line.length >= 25);
+  if (sentences.length < 8) return false;
+
+  const counts = new Map<string, number>();
+  for (const sentence of sentences) {
+    counts.set(sentence, (counts.get(sentence) ?? 0) + 1);
+  }
+
+  // How much of the answer is sentences it has already said.
+  //
+  // Measured on the real failure rather than assumed: the loop cycled through
+  // six sentences twelve times each, so no single sentence was more than a
+  // tenth of the text and a "most repeated sentence" test missed it entirely.
+  // What gives it away is that 78% of the text was repeats and only 37 of 117
+  // sentences were distinct. Prose and lists sit near zero here, because
+  // writing the same full sentence twice is already unusual.
+  let repeated = 0;
+  for (const [, n] of counts) if (n >= 2) repeated += n;
+
+  return repeated / sentences.length >= 0.5;
+}
+
+/**
  * Runs one user turn to completion, including any tool round-trips.
  *
  * `history` is mutated so the caller keeps the full conversation, tool calls
@@ -339,6 +381,8 @@ export async function runTurn(
   handlers.onContext?.(contextUsage(history));
 
   const wireTools = activeTools.map(toWireTool);
+  // What this route may execute, as opposed to what exists.
+  const allowedToolNames = new Set(activeTools.map((t) => t.name));
   const toolsUsed: string[] = [];
   let reply = "";
 
@@ -394,7 +438,7 @@ export async function runTurn(
 
     for (const call of result.toolCalls) {
       const toolStartedAt = Date.now();
-      const output = await executeCall(call, registry, handlers);
+      const output = await executeCall(call, registry, handlers, allowedToolNames);
       toolsUsed.push(call.function.name);
       steps.push({
         seq: steps.length,
@@ -439,8 +483,16 @@ export async function runTurn(
    * Measured directly this answers in under a second where the thinking run
    * burned its whole budget.
    */
-  if (!reply.trim()) {
-    handlers.onNotice?.("The reply budget went entirely on thinking — answering again without it.");
+  // Remembered across the retry, because the fallback needs to say which
+  // failure happened and by then `reply` is empty either way.
+  let looped = looksDegenerate(reply);
+
+  if (!reply.trim() || looped) {
+    handlers.onNotice?.(
+      looped
+        ? "That answer got stuck repeating itself — trying again."
+        : "The reply budget went entirely on thinking — answering again without it.",
+    );
     const retryStartedAt = Date.now();
     try {
       const retry = await complete(
@@ -459,7 +511,10 @@ export async function runTurn(
         scavenged: retry.scavenged,
         durationMs: Date.now() - retryStartedAt,
       });
-      if (retry.content.trim()) {
+      if (looksDegenerate(retry.content)) looped = true;
+      // A retry that loops is not an answer either. Rejecting it here is what
+      // keeps the recovery from being worse than the failure.
+      if (retry.content.trim() && !looksDegenerate(retry.content)) {
         reply = retry.content.trim();
         // The loop already pushed the empty assistant turn; replace it rather
         // than leaving a blank message in front of the real one.
@@ -476,12 +531,20 @@ export async function runTurn(
     }
   }
 
-  // Both attempts came back blank. Say so, visibly: an honest sentence in the
-  // transcript beats an empty bubble that reads as being ignored.
-  if (!reply.trim()) {
-    reply =
-      "I could not produce an answer for this one — the reply ran out of room twice. " +
-      "Try rephrasing, or raise ENIO_MAX_TOKENS.";
+  // Both attempts failed. Say so, visibly: an honest sentence in the transcript
+  // beats an empty bubble that reads as being ignored, and beats a page of the
+  // model talking to itself.
+  if (!reply.trim() || looksDegenerate(reply)) {
+    // Two different failures, and saying which one is the difference between a
+    // user retrying usefully and retrying blindly. Looping usually means the
+    // question needs a tool that is not there; running out of room means the
+    // budget was too small for the reasoning it wanted to do.
+    reply = looped
+      ? "I got stuck repeating myself instead of answering. That usually means " +
+        "the question needs something I do not have a tool for — try rephrasing, " +
+        "or ask me what I can do."
+      : "I could not produce an answer for this one — the reply ran out of room twice. " +
+        "Try rephrasing, or raise ENIO_MAX_TOKENS.";
     handlers.onContent?.(reply);
     const last = history[history.length - 1];
     if (last?.role === "assistant" && !String(last.content ?? "").trim() && !last.tool_calls) {
@@ -579,13 +642,27 @@ async function executeCall(
   call: ToolCall,
   registry: Registry,
   handlers: TurnHandlers,
+  /**
+   * The tools this turn is actually allowed to run.
+   *
+   * Looking the name up in the full registry was a hole in the thing the
+   * specialists exist for: the generalist is offered five tools and could
+   * execute any of thirteen, run_command included, purely by emitting a call
+   * for it. The model only has to hallucinate a name it saw in an error
+   * message -- and the error message used to list every tool in the registry,
+   * which is where it saw them.
+   */
+  allowed: Set<string>,
 ): Promise<string> {
-  const tool = registry.byName.get(call.function.name);
+  const tool = allowed.has(call.function.name)
+    ? registry.byName.get(call.function.name)
+    : undefined;
 
   if (!tool) {
     // Hallucinated tool names are common with small models. Telling the model
-    // exactly what does exist recovers the turn far more often than a bare error.
-    const available = [...registry.byName.keys()].join(", ");
+    // exactly what it has recovers the turn far more often than a bare error --
+    // but only this route's tools, or the suggestion is one it cannot take.
+    const available = [...allowed].join(", ");
     return `No tool named "${call.function.name}". Available tools: ${available}`;
   }
 

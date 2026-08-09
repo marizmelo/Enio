@@ -562,3 +562,153 @@ describe("shared model server", () => {
     );
   });
 });
+
+describe("runaway replies", () => {
+  test("the real repetition loop is caught, and ordinary answers are not", async () => {
+    const { looksDegenerate } = await import("./agent.js");
+
+    // Reconstructed from the failure on "show my emails": the model cycled
+    // through a handful of sentences about a dozen times each. No single
+    // sentence is more than a tenth of the text, which is why a
+    // most-repeated-sentence test missed it -- what gives it away is that most
+    // of the text is sentences it has already said.
+    const cycle = [
+      "Let me try read_file with the inbox file path.",
+      "If read_file cannot read the inbox file, I'll need to explain the limitations.",
+      "Given the current state, I'll attempt read_file with the inbox file path.",
+      "However, the inbox file is actually a system file, and read_file might not be able to read it.",
+      "Actually, the inbox file is part of the Mail application's storage, and it might be accessible.",
+    ];
+    const loop = Array.from({ length: 12 }, () => cycle.join(" ")).join(" ");
+    assert.ok(looksDegenerate(loop), "a cycling repetition loop must be caught");
+
+    // A false positive discards a real answer, which is worse than printing a
+    // bad one, so the ordinary cases matter as much as the failing one.
+    const keep = [
+      "The frontmost application is Enio.",
+      "read_file reads a file from the workspace. write_file writes one to it. " +
+        "list_dir lists a directory. read_image describes an image. run_command " +
+        "runs a shell command. web_fetch fetches a page. recall searches memory. " +
+        "remember stores a fact about the user.",
+      "The cache is bounded by slot count and by bytes. KV runs 48KB per token. " +
+        "Ten long threads is several gigabytes on top of the weights. That fits a " +
+        "64GB machine and not a 24GB one. The cap is sized from installed RAM. It " +
+        "is clamped between one and four gigabytes. Below that every turn " +
+        "re-prefills. Above it competes with the desktop for nothing.",
+    ];
+    for (const text of keep) {
+      assert.ok(!looksDegenerate(text), `should not reject: ${text.slice(0, 40)}`);
+    }
+  });
+
+  test("a looping retry is refused rather than shown as the answer", async () => {
+    // First call: empty, which triggers the no-think retry. Second: a loop.
+    // Shipping that loop is what actually happened, and it is worse than the
+    // silence it replaced.
+    const cycle =
+      "Let me try read_file with the inbox file path. " +
+      "If read_file cannot read it, I'll explain the limitations. " +
+      "Given the current state, I'll attempt read_file with the inbox path. " +
+      "However, the inbox file is a system file and may not be readable. ";
+    let call = 0;
+    globalThis.fetch = (async () => {
+      call += 1;
+      const body =
+        call === 1
+          ? { choices: [{ delta: { reasoning: "thinking" } }] }
+          : { choices: [{ delta: { content: cycle.repeat(12) } }] };
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            const enc = new TextEncoder();
+            c.enqueue(enc.encode(`data: ${JSON.stringify(body)}\n\n`));
+            c.enqueue(enc.encode("data: [DONE]\n\n"));
+            c.close();
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const history: Message[] = [];
+    const result = await runTurn("show my emails", history, registry, sessionId);
+
+    assert.ok(!/Let me try read_file/.test(result.reply), "the loop must not be the reply");
+    assert.match(result.reply, /stuck repeating myself/);
+  });
+});
+
+describe("specialist isolation", () => {
+  test("a route cannot execute a tool it was not given", async () => {
+    // The model emits a call for run_command while routed to the generalist,
+    // which is not given it. Before this was enforced, executeCall looked the
+    // name up in the whole registry and ran it -- so the disjoint tool sets
+    // held only as long as the model played along.
+    let call = 0;
+    globalThis.fetch = (async () => {
+      call += 1;
+      const frame =
+        call === 1
+          ? {
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: "c1",
+                        function: { name: "run_command", arguments: '{"command":"ls"}' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }
+          : { choices: [{ delta: { content: "Understood." } }] };
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            const enc = new TextEncoder();
+            c.enqueue(enc.encode(`data: ${JSON.stringify(frame)}\n\n`));
+            c.enqueue(enc.encode("data: [DONE]\n\n"));
+            c.close();
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const history: Message[] = [];
+    await runTurn(
+      "what time is it?",
+      history,
+      registry,
+      sessionId,
+      {},
+      { specialist: "generalist" },
+    );
+
+    // Asserted on the transcript rather than a handler: what matters is the
+    // message the model is handed back, and a refused call never reaches
+    // onToolEnd because there is no tool to name.
+    const toolResult = history.find((m) => m.role === "tool");
+    const outcome = String(toolResult?.content ?? "");
+    assert.match(
+      outcome,
+      /No tool named "run_command"/,
+      `the generalist must refuse run_command, got: ${outcome.slice(0, 80)}`,
+    );
+    // The refusal must offer only this route's tools, or the model picks
+    // another one it cannot call and loops -- which is how the runaway reply
+    // that prompted all this got started.
+    const offered = outcome.split("Available tools:")[1] ?? "";
+    assert.ok(!/run_command/.test(offered), `offered a tool it cannot run: ${offered}`);
+    assert.ok(/current_time/.test(offered), `should offer its own tools: ${offered}`);
+    // No need to watch for side effects: the transcript carries the refusal
+    // where the command output would be, which is the proof it never ran.
+  });
+});
