@@ -1,4 +1,4 @@
-import { History, SquarePen } from "lucide-react";
+import { History, MessageSquare } from "lucide-react";
 import { TipButton } from "@/components/TipButton";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +30,7 @@ export function StatusBar({ phase, message, tools, onNewChat, onHistory }) {
           a drag region because the title bar is hidden. */}
       <div className="flex shrink-0 items-center gap-0.5 [-webkit-app-region:no-drag]">
         <TipButton tip="New chat" className="size-7" onClick={onNewChat}>
-          <SquarePen className="size-3.5" />
+          <MessageSquare className="size-3.5" />
         </TipButton>
         <TipButton tip="Conversations" className="size-7" onClick={onHistory}>
           <History className="size-3.5" />
