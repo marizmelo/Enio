@@ -189,6 +189,71 @@ the primary target.
 
 ---
 
+## Next: the coder specialist as a real code tool
+
+Recorded before it is built, because each piece collides with something already
+decided and those collisions are the whole discussion.
+
+### Reading a whole codebase
+
+Today `coder` reads one file at a time inside a single workspace. Pointing it at
+a project folder is the ask, and it runs straight into the invariant that every
+filesystem and shell tool is hard-scoped to `~/enio-workspace` — which is what
+makes an agent with `run_command` safe to hand a model that gets judgement calls
+wrong.
+
+So the question is not "how do we read more files", it is **how a second root
+gets opened deliberately**. A per-session opened folder, consented to once and
+scoped to that session, keeps the property that the sandbox is something the
+user grants rather than something the model widens. A permanent list of allowed
+roots does not.
+
+The second constraint is attention, not permission. Sixteen tools is the
+ceiling and `coder` already holds six, so "search the codebase" cannot arrive as
+four new tools. One tool that takes a query and returns ranked locations is the
+shape that fits; a file-tree walker plus a grepper plus a symbol index is not.
+
+Graphify was considered here and not adopted — see below.
+
+### Monaco, and rich code output
+
+Monaco is the editor from VS Code and would give real syntax highlighting, a
+diff view, and eventually editing in place. The costs are concrete: it is
+megabytes rather than kilobytes, it wants web workers, and the renderer is
+currently one esbuild bundle with no code splitting and a CSP that allows no
+remote anything. None of that is prohibitive, but it is a different class of
+front end from what is there now, and the first version should probably be
+read-only — a diff is worth far more than an editor, and costs much less.
+
+The channel for it already exists. Tools can return `{ text, widget }`, and a
+`diff` widget was already the second type on the list after `clock`. That path
+keeps the CLI honest for free: the text stays the answer, and the diff is a
+second view of it for a client that can draw one.
+
+### Graphify
+
+[Graphify](https://github.com/Graphify-Labs/graphify) turns a codebase and its
+docs into a queryable knowledge graph — Tree-sitter for structure, a model for
+prose, no vector store. Apache-2.0, Python, widely used.
+
+**Not adopted, for now.** Two reasons, and neither is about quality. It solves
+navigation of large unfamiliar codebases, and this repo is ninety-nine files
+with four hundred lines of hand-written CLAUDE.md and DECISIONS.md already doing
+the expensive half — recording *why*. And its LLM-driven concept extraction
+assumes a capable model, where memory extraction here is a closed vocabulary of
+nine relations precisely because a ~1B-active model produces `USES` / `uses` /
+`USES_TOOL` as three relations when left open.
+
+**What would change the answer:** pointing enio at a large third-party codebase
+it did not write. Then a code graph is capability rather than restatement, and
+it arrives the way anything external does — as a skill or an MCP server, not as
+a Python stack beside the TypeScript one.
+
+Worth stealing regardless: its no-vector-store stance. Deterministic parsing for
+structure, the model only for prose. That is already the direction here.
+
+---
+
 ## Open questions
 
 - Does LoRA work at all on Maple's architecture? Ten minutes to test, never done.
@@ -198,3 +263,6 @@ the primary target.
   usage answers this.
 - At what point does the knowledge graph become noise? Extraction is imperfect
   by design; there may be a size where pruning stops being worth it.
+- If a folder can be opened outside the workspace, what stops a prompt-injected
+  file in that folder from being read as an instruction? The sandbox currently
+  answers this by being small.
