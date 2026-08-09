@@ -233,3 +233,65 @@ describe("widget channel", () => {
     assert.equal(widgets.length, 0);
   });
 });
+
+describe("history compaction", () => {
+  test("folds older turns into a summary and keeps recent ones verbatim", async () => {
+    // The summariser is the first model call; the answer is the second.
+    scriptModel([
+      { content: "Notes: user is deploying acme-api. Prefers short answers." },
+      { content: "Understood." },
+    ]);
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+
+    // Comfortably past the window, so compaction has to happen.
+    const history: Message[] = [];
+    for (let i = 0; i < 60; i++) {
+      history.push({ role: "user", content: `question ${i}` });
+      history.push({ role: "assistant", content: `answer ${i}` });
+    }
+
+    await runTurn("and now?", history, registry, sessionId);
+
+    // The array the caller owns is compacted in place. Left whole, it would be
+    // sent back in full next turn and undo the work immediately.
+    const summary = history.find(
+      (m) => m.role === "system" && String(m.content).startsWith("Earlier in this conversation:"),
+    );
+    assert.ok(summary, "the older turns should be folded into a summary");
+    assert.match(String(summary!.content), /acme-api/);
+
+    // The most recent exchange has to survive untouched: a summary cannot
+    // resolve what "it" refers to in the next question.
+    assert.ok(
+      history.some((m) => m.content === "answer 59"),
+      "the newest turns must be kept verbatim",
+    );
+    assert.ok(
+      !history.some((m) => m.content === "answer 0"),
+      "the oldest turns should be gone, not merely appended to",
+    );
+  });
+
+  test("keeps a short conversation exactly as it is", async () => {
+    // Nothing to fold means no summariser call, so a single scripted reply is
+    // all this should consume. A second call would mean it compacted anyway.
+    scriptModel([{ content: "Fine." }]);
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const history: Message[] = [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: "hi" },
+    ];
+
+    await runTurn("still there?", history, registry, sessionId);
+
+    assert.ok(
+      !history.some((m) => String(m.content).startsWith("Earlier in this conversation:")),
+      "a short conversation must not be summarised",
+    );
+    assert.ok(history.some((m) => m.content === "hello"));
+  });
+});

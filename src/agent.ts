@@ -11,6 +11,7 @@ import { safePath } from "./tools/fs.js";
 import { readFile } from "node:fs/promises";
 import { isImage, readImage } from "./vision.js";
 import type { Registry } from "./tools/index.js";
+import { createHash } from "node:crypto";
 import { toWireTool, type Message, type ToolCall, type Widget } from "./types.js";
 
 /**
@@ -74,12 +75,97 @@ export interface TurnResult {
 }
 
 /**
+ * Summaries of the older part of a conversation, keyed by what they summarise.
+ *
+ * The server rebuilds history from the client on every request, so without a
+ * cache the same forty messages would be re-summarised every turn -- an extra
+ * model call per turn, growing with the conversation. Keyed by a hash of the
+ * exact messages folded in, so it stays correct when a client edits or
+ * branches history rather than merely appending.
+ */
+const summaryCache = new Map<string, string>();
+
+function historyKey(messages: Message[]): string {
+  return createHash("sha256")
+    .update(messages.map((m) => `${m.role}:${m.content ?? ""}`).join("\u0000"))
+    .digest("hex");
+}
+
+/**
+ * Fold everything older than the window into one summary, keeping recent turns
+ * verbatim.
+ *
+ * A long conversation eventually stops fitting, and what happens then is not a
+ * clean error: the oldest messages fall out of the model's attention silently
+ * and it starts contradicting things it was told. Summarising is lossy, but it
+ * is lossy in a way that is visible in the prompt rather than invisible in the
+ * weights.
+ *
+ * Recent turns are kept whole because that is where pronouns point. A summary
+ * of "the user asked about the deploy script" cannot resolve "run it again".
+ */
+async function compactHistory(history: Message[]): Promise<Message[]> {
+  const system = history[0]?.role === "system" ? history[0] : null;
+  const rest = system ? history.slice(1) : history;
+
+  if (rest.length <= config.historyWindow) return history;
+
+  const older = rest.slice(0, rest.length - config.historyWindow);
+  const recent = rest.slice(rest.length - config.historyWindow);
+  const key = historyKey(older);
+
+  let summary = summaryCache.get(key);
+  if (!summary) {
+    const transcript = older
+      .map((m) => `${m.role}: ${String(m.content ?? "").slice(0, 2000)}`)
+      .join("\n");
+
+    try {
+      const result = await complete(
+        [
+          {
+            role: "system",
+            content:
+              "Summarise this earlier part of a conversation so it can stand in " +
+              "for the messages themselves. Keep names, decisions, numbers, file " +
+              "paths and anything the user asked to be remembered. Drop " +
+              "pleasantries. Write it as notes, not prose, under 200 words.",
+          },
+          { role: "user", content: transcript },
+        ],
+        [],
+        {},
+        undefined,
+        config.maxTokens,
+      );
+      summary = result.content.trim();
+    } catch {
+      summary = "";
+    }
+
+    // An empty summary is not cached: it means the model failed, and the next
+    // turn deserves another attempt rather than a permanent hole.
+    if (summary) summaryCache.set(key, summary);
+  }
+
+  // Without a summary, drop to the window anyway. Losing the old messages is
+  // what was going to happen regardless; doing it deliberately at least keeps
+  // the recent ones intact.
+  const folded: Message[] = summary
+    ? [{ role: "system", content: `Earlier in this conversation:\n\n${summary}` }]
+    : [];
+
+  return [...(system ? [system] : []), ...folded, ...recent];
+}
+
+/**
  * Runs one user turn to completion, including any tool round-trips.
  *
  * `history` is mutated so the caller keeps the full conversation, tool calls
  * included — Maple's chat template expects assistant tool_calls to be followed
  * by matching tool results, and dropping them produces incoherent follow-ups.
  */
+
 export async function runTurn(
   userInput: string,
   history: Message[],
@@ -154,6 +240,14 @@ export async function runTurn(
 
   history.push({ role: "user", content: userInput });
   logMessage(sessionId, "user", userInput);
+
+  // Fold older turns before the model sees any of them. Done in place, so the
+  // caller's own record shrinks too -- a REPL that kept the full array would
+  // send it all back next turn and undo this immediately.
+  if (history.length - 1 > config.historyWindow) {
+    const compacted = await compactHistory(history);
+    history.splice(0, history.length, ...compacted);
+  }
 
   const wireTools = activeTools.map(toWireTool);
   const toolsUsed: string[] = [];

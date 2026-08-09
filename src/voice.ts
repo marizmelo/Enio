@@ -100,7 +100,8 @@ export function speak(text: string): void {
 
   // Passed as an argument rather than through a shell, so nothing in a model's
   // reply can be interpreted as a command.
-  const child = spawn("say", ["--", trimmed.slice(0, 2000)], { stdio: "ignore" });
+  const args = config.voiceName ? ["-v", config.voiceName] : [];
+  const child = spawn("say", [...args, "--", trimmed.slice(0, 2000)], { stdio: "ignore" });
   child.on("error", () => {
     /* No `say` on this machine. Silence is the correct degradation. */
   });

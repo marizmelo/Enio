@@ -397,7 +397,10 @@ ipcMain.handle("speak", (_event, text) => {
   }
 
   try {
-    speaking = spawn("say", ["--", trimmed.slice(0, 2000)], { stdio: "ignore" });
+    // ENIO_VOICE picks a better one; `say -v '?'` lists what is installed.
+    const voice = process.env.ENIO_VOICE || process.env.MAPLE_VOICE || "";
+    const args = voice ? ["-v", voice] : [];
+    speaking = spawn("say", [...args, "--", trimmed.slice(0, 2000)], { stdio: "ignore" });
     speaking.on("error", () => {});
     return true;
   } catch {

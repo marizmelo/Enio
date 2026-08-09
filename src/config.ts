@@ -202,6 +202,26 @@ export const config = {
   voiceModel: env("VOICE_MODEL") ?? "mlx-community/whisper-small-mlx",
 
   /**
+   * Which system voice reads replies. Empty means macOS's default, which is
+   * Samantha on a stock install and sounds it.
+   *
+   * The good ones are downloads, not code: System Settings → Accessibility →
+   * Spoken Content → System Voice → Manage Voices, where the Premium entries
+   * are neural and land in the hundreds of megabytes. `say -v '?'` lists what
+   * is actually installed. Kokoro through mlx-audio would be better still and
+   * needs no download, but in 0.4.7 it builds its pipeline and then writes no
+   * audio at all — through its own API as well as through mlx-vlm's server.
+   */
+  voiceName: env("VOICE") ?? "",
+
+  /**
+   * How many messages stay verbatim before older ones are folded into a
+   * summary. Roughly twenty exchanges, which is longer than most sessions and
+   * short enough that the prompt does not crowd out the answer.
+   */
+  historyWindow: Number(env("HISTORY_WINDOW") ?? 40),
+
+  /**
    * Unload the vision model the instant it answers. Ollama's default is 5
    * minutes, which on a 16GB machine means it sits on top of Maple long after
    * it was needed. Set to "5m" if you attach images constantly and would
