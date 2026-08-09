@@ -22,20 +22,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const plist = join(
-  here,
-  "..",
-  "node_modules",
-  "electron",
-  "dist",
-  "Electron.app",
-  "Contents",
-  "Info.plist",
-);
+const plistFor = (app) => join(app, "Contents", "Info.plist");
 
-if (process.platform !== "darwin" || !existsSync(plist)) {
+if (process.platform !== "darwin") {
   process.exit(0);
 }
+
+let plist;
 
 const read = (key) => {
   try {
@@ -55,12 +48,27 @@ const set = (key, value) => {
   }
 };
 
-const macos = join(dirname(plist), "MacOS");
+const distDir = join(here, "..", "node_modules", "electron", "dist");
+const oldApp = join(distDir, "Electron.app");
+const newApp = join(distDir, "Enio.app");
 const pathTxt = join(here, "..", "node_modules", "electron", "path.txt");
 
-if (read("CFBundleName") === "Enio" && existsSync(join(macos, "Enio"))) {
-  process.exit(0);
+// The bundle directory is the last thing carrying the old name. The Dock
+// labels a running app from the bundle it was launched from, so with the
+// folder still called Electron.app the tooltip stayed Electron even with every
+// plist key and the executable renamed.
+if (existsSync(oldApp) && !existsSync(newApp)) {
+  renameSync(oldApp, newApp);
 }
+
+const appDir = existsSync(newApp) ? newApp : oldApp;
+const contents = join(appDir, "Contents");
+const macos = join(contents, "MacOS");
+
+plist = plistFor(appDir);
+if (!existsSync(plist)) process.exit(0);
+
+const already = read("CFBundleName") === "Enio" && existsSync(join(macos, "Enio"));
 
 try {
   set("CFBundleName", "Enio");
@@ -74,21 +82,31 @@ try {
     renameSync(join(macos, "Electron"), join(macos, "Enio"));
   }
   set("CFBundleExecutable", "Enio");
-  writeFileSync(pathTxt, "Electron.app/Contents/MacOS/Enio");
+  writeFileSync(pathTxt, "Enio.app/Contents/MacOS/Enio");
 
   // LaunchServices caches bundle identity, so a rename it has already seen is
   // ignored until the bundle looks new.
   try {
     execFileSync(
       "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
-      ["-f", join(here, "..", "node_modules", "electron", "dist", "Electron.app")],
+      ["-f", appDir],
       { stdio: "ignore" },
     );
   } catch {
     /* Not fatal; the name updates on the next login at worst. */
   }
 
-  console.log("named the dev bundle Enio");
+  if (!already) {
+    // Only on the run that actually renames. The Dock caches the label per
+    // bundle and will not notice a rename on its own, but restarting it on
+    // every launch would be obnoxious for a one-time fix.
+    try {
+      execFileSync("/usr/bin/killall", ["Dock"], { stdio: "ignore" });
+    } catch {
+      /* No Dock, or it refused. The name is right on next login regardless. */
+    }
+    console.log("named the dev bundle Enio");
+  }
 } catch (err) {
   // Cosmetic. A read-only node_modules or a missing PlistBuddy must not stop
   // the app from starting.
