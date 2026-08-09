@@ -474,6 +474,23 @@ Environment variables, all optional. See `src/config.ts`.
 | `ENIO_EMAIL_SEND` | unset — dry run until set to `1` |
 | `ENIO_VISION_MODEL` | `moondream:v2` |
 
+### What's running
+
+Everything enio starts is named so one search for `Enio` in Activity Monitor
+finds all of it, and each row says which part it is:
+
+| Process | What it is |
+|---|---|
+| `Enio` | the desktop app |
+| `Enio Model` | the model server — this is the multi-gigabyte one |
+| `Enio Agent` | the agent endpoint on `:8787` (tools, memory) |
+| `Enio Launcher` | supervises the model server |
+
+Quitting `Enio Model` from Activity Monitor is safe: the app notices and
+restarts it on next launch. The model server is shared, so it shuts down when
+the last thing using it exits rather than when whichever process started it
+does — quitting the desktop while `enio chat` is open leaves the model up.
+
 ---
 
 ## How it works

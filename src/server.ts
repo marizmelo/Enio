@@ -33,6 +33,8 @@ import type { Message } from "./types.js";
  */
 
 export async function serve(): Promise<void> {
+  process.title = "Enio Agent";
+
   // The agent endpoint is a long-lived user of the model server, so it counts
   // toward keeping it alive -- and shuts it down if it is the last one out.
   claimModelServer();

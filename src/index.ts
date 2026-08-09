@@ -9,7 +9,9 @@ import { registerModelClient, unregisterModelClient } from "./model-clients.js";
 import {
   ensureBackend,
   modelServerArgs,
+  modelServerBinary,
   modelServerPid,
+  venvPythonPath,
   WAIT_FOR_EXISTING_TICKS,
   type RunningBackend,
 } from "./runtime.js";
@@ -704,7 +706,7 @@ function requireRuntime(): string {
     process.exit(1);
   }
 
-  const venvPython = join(config.runtimeDir, ".venv", "bin", "python");
+  const venvPython = venvPythonPath();
   if (!existsSync(venvPython)) {
     console.error(
       `\nNo model runtime found at ${config.runtimeDir}\n\n` +
@@ -752,7 +754,7 @@ async function startModelServer(): Promise<void> {
   // everything upstream decided to leave it running for somebody else.
   const toTerminal = process.stdout.isTTY;
   const log = toTerminal ? null : openSync(join(config.dataDir, "model-server.log"), "a");
-  const child = spawn(venvPython, modelServerArgs(join(config.runtimeDir, "maple-2bit-mlx")), {
+  const child = spawn(modelServerBinary(), modelServerArgs(join(config.runtimeDir, "maple-2bit-mlx")), {
     cwd: config.runtimeDir,
     stdio: toTerminal ? "inherit" : ["ignore", log!, log!],
   });
@@ -763,6 +765,10 @@ async function startModelServer(): Promise<void> {
   // several gigabytes still resident with nothing left that knows about it.
   // Ctrl-C in a terminal happens to work anyway, because the tty signals the
   // whole foreground group; a programmatic kill does not.
+  // Named for Activity Monitor. Everything enio runs is prefixed "Enio" so one
+  // search finds all of it, and each says which part it is.
+  process.title = "Enio Launcher";
+
   // This wrapper is what the desktop launches, so it stands in for the app as
   // a user of the server.
   registerModelClient();

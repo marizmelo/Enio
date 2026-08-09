@@ -1,6 +1,6 @@
 import { spawn, spawnSync, execFileSync } from "node:child_process";
-import { existsSync, openSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, openSync, symlinkSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { config } from "./config.js";
 import { serverIsUp } from "./model.js";
 import {
@@ -63,7 +63,14 @@ export function modelServerPid(): number | null {
       // it -- including the diagnostics people run while debugging this. A
       // false positive costs ninety seconds of waiting for a server that does
       // not exist.
-      if (pid !== process.pid && /python[\d.]*\s+-m\s+mlx_lm\.server/.test(match[2]!)) {
+      // Either interpreter name: "Enio Model" is the symlink we launch under
+      // now, "python" covers a server started by an older build or by hand.
+      // Missing one of them would mean starting a duplicate beside it, or
+      // failing to reap it -- the two failures this whole mechanism exists to
+      // prevent.
+      const isModelServer =
+        /(python[\d.]*|Enio Model)["']?\s+-m\s+mlx_lm\.server/.test(match[2]!);
+      if (pid !== process.pid && isModelServer) {
         return pid;
       }
     }
@@ -73,6 +80,37 @@ export function modelServerPid(): number | null {
   }
   return null;
 }
+
+/**
+ * The model server's python binary, under a name worth reading.
+ *
+ * Activity Monitor's Process Name column is the executable's last path
+ * component, so the process holding six gigabytes showed up as "python" among
+ * whatever else on the machine is also python. A symlink beside the real
+ * interpreter fixes that without touching the venv: CPython resolves its
+ * prefix from the directory the executable lives in, and a sibling symlink is
+ * still in that directory -- verified by importing mlx through it.
+ *
+ * Falls back to plain python if the link cannot be made. A readable name in a
+ * process list is not worth failing a launch over.
+ */
+export function venvPythonPath(): string {
+  return join(config.runtimeDir, ".venv", "bin", "python");
+}
+
+export function modelServerBinary(): string {
+  const real = venvPythonPath();
+  const friendly = join(dirname(real), MODEL_PROCESS_NAME);
+  try {
+    if (!existsSync(friendly)) symlinkSync(real, friendly);
+    return friendly;
+  } catch {
+    return real;
+  }
+}
+
+/** Shown in Activity Monitor. Kept in step with the matcher below. */
+export const MODEL_PROCESS_NAME = "Enio Model";
 
 export function modelServerArgs(modelPath: string): string[] {
   return [
@@ -199,7 +237,7 @@ async function startMaple(opts: EnsureOptions): Promise<RunningBackend> {
     );
   }
 
-  const venvPython = join(config.runtimeDir, ".venv", "bin", "python");
+  const venvPython = venvPythonPath();
   if (!existsSync(venvPython)) {
     throw new Error(
       `No model runtime found at ${config.runtimeDir}\n\n` +
@@ -225,7 +263,7 @@ async function startMaple(opts: EnsureOptions): Promise<RunningBackend> {
   const log = openSync(logPath, "a");
 
   const child = spawn(
-    venvPython,
+    modelServerBinary(),
     modelServerArgs(join(config.runtimeDir, "maple-2bit-mlx")),
     { cwd: config.runtimeDir, stdio: ["ignore", log, log] },
   );
