@@ -180,7 +180,7 @@ export function Composer({
 
       partialBusyRef.current = true;
       try {
-        const text = (await transcribe(recorder.snapshot())).trim();
+        const text = (await transcribe(recorder.snapshot(), { fast: true })).trim();
         // Checked again after the await: the recording may have been stopped
         // while this was in flight, and overwriting the final text with a
         // stale partial would undo it.
@@ -193,7 +193,7 @@ export function Composer({
       } finally {
         partialBusyRef.current = false;
       }
-    }, 2000);
+    }, 900);
 
     return () => clearInterval(id);
   }, [recording, onChange]);

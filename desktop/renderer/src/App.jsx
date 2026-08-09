@@ -5,7 +5,7 @@ import { Composer } from "@/components/Composer";
 import { EmptyState } from "@/components/EmptyState";
 import { streamTurn } from "@/lib/agent";
 import { attachedFiles, fetchCapabilities } from "@/lib/capabilities";
-import { speak, stopSpeaking } from "@/lib/speech";
+import { speak, stopSpeaking, takeSentences } from "@/lib/speech";
 
 export function App() {
   const [status, setStatus] = useState({
@@ -74,6 +74,8 @@ export function App() {
       const tools = [];
       const widgets = [];
       let thinking = 0;
+      // Text streamed but not yet handed to the voice.
+      let unspoken = "";
       const notices = [];
       const startedAt = Date.now();
 
@@ -96,6 +98,16 @@ export function App() {
             // text rather than per delta, because a delta is often a bare
             // space between words and trimming those runs them together.
             assistant = (assistant + event.text).replace(/^\s+/, "");
+
+            // Spoken sentence by sentence as it arrives, so the first words are
+            // audible about a second after they appear rather than after the
+            // whole answer has finished streaming.
+            if (speakReplies) {
+              unspoken += event.text;
+              const { ready, rest } = takeSentences(unspoken);
+              unspoken = rest;
+              for (const sentence of ready) speak(sentence);
+            }
           }
           setMessages([
             ...history,
@@ -111,10 +123,9 @@ export function App() {
           ]);
         }
 
-        // Spoken once, after the whole answer has arrived. Speaking each delta
-        // would stutter, and speaking in the finally block would also announce
-        // errors and aborts, which is not what a reply-reading toggle means.
-        if (speakReplies && assistant.trim()) speak(assistant);
+        // Whatever is left over: a final clause with no full stop, or a reply
+        // short enough that no sentence ever completed mid-stream.
+        if (speakReplies && unspoken.trim()) speak(unspoken);
       } catch (err) {
         if (err?.name === "AbortError") {
           // Keep whatever streamed in as the final turn, so the conversation

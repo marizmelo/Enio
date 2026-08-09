@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { config, projectRoot } from "./config.js";
@@ -41,48 +41,127 @@ export interface Transcription {
  * and holding it between utterances would compete with the chat model for
  * exactly the memory this project spends so much effort not wasting.
  */
-export async function transcribeWav(path: string): Promise<Transcription> {
+/**
+ * The resident worker, and a FIFO of who is waiting for what.
+ *
+ * Starting Python and importing mlx_whisper costs about a second, which live
+ * dictation was paying on every pass -- most of the delay between speaking and
+ * seeing words. One process pays it once and keeps the weights loaded.
+ *
+ * Responses are matched to requests by order, which is safe because the worker
+ * reads one line and answers one line before reading the next. The first
+ * attempt at this attached a listener per request and read up to the first
+ * newline; when two responses arrived in one chunk the second was discarded,
+ * and every answer after that belonged to the previous question. One reader
+ * that owns the buffer is the only version of this that stays in step.
+ */
+let worker: ChildProcessWithoutNullStreams | null = null;
+let workerReady: Promise<void> | null = null;
+const pending: ((result: Transcription) => void)[] = [];
+
+function settleAll(result: Transcription): void {
+  while (pending.length > 0) pending.shift()!(result);
+}
+
+function startWorker(): Promise<void> {
+  if (workerReady) return workerReady;
+
+  workerReady = new Promise<void>((resolve, reject) => {
+    const script = join(projectRoot, "scripts", "transcribe_worker.py");
+    const child = spawn(venvPython(), [script], { stdio: ["pipe", "pipe", "pipe"] });
+    worker = child;
+
+    let buffer = "";
+    let ready = false;
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      buffer += chunk.toString();
+
+      let newline: number;
+      while ((newline = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        if (!line) continue;
+
+        let parsed: { ready?: boolean; text?: string; error?: string };
+        try {
+          parsed = JSON.parse(line);
+        } catch {
+          pending.shift()?.({ text: "", error: "unreadable worker response" });
+          continue;
+        }
+
+        if (!ready && parsed.ready) {
+          ready = true;
+          resolve();
+          continue;
+        }
+
+        pending.shift()?.(
+          parsed.error ? { text: "", error: parsed.error } : { text: parsed.text ?? "" },
+        );
+      }
+    });
+
+    // A dead worker must not leave callers waiting on a promise that will never
+    // settle. Everyone in the queue is told, and the next call starts a fresh
+    // process.
+    child.on("exit", () => {
+      worker = null;
+      workerReady = null;
+      settleAll({ text: "", error: "transcription worker stopped" });
+      if (!ready) reject(new Error("worker exited before it was ready"));
+    });
+
+    child.on("error", (err) => {
+      worker = null;
+      workerReady = null;
+      settleAll({ text: "", error: err.message });
+      reject(err);
+    });
+  });
+
+  return workerReady;
+}
+
+async function ask(path: string, model: string): Promise<Transcription> {
+  try {
+    await startWorker();
+  } catch (err) {
+    return { text: "", error: (err as Error).message };
+  }
+
+  const child = worker;
+  if (!child) return { text: "", error: "worker unavailable" };
+
+  return new Promise<Transcription>((resolve) => {
+    pending.push(resolve);
+    child.stdin.write(`${JSON.stringify({ path, model })}\n`);
+  });
+}
+
+/**
+ * Transcribe a 16kHz mono WAV.
+ *
+ * Spawned rather than kept resident: dictation is bursty, the model is ~500MB,
+ * and holding it between utterances would compete with the chat model for
+ * exactly the memory this project spends so much effort not wasting.
+ */
+/**
+ * Transcribe a 16kHz mono WAV.
+ *
+ * `fast` picks the smaller model, for the interim passes during live dictation
+ * where being a second behind matters more than a perfect noun. The final pass
+ * uses the accurate one, so what gets sent is what the better model heard.
+ */
+export async function transcribeWav(
+  path: string,
+  opts: { fast?: boolean } = {},
+): Promise<Transcription> {
   if (!whisperInstalled()) {
     return { text: "", error: "speech recognition is not installed" };
   }
-
-  const script = join(projectRoot, "scripts", "transcribe.py");
-  const child = spawn(venvPython(), [script, path, config.voiceModel], {
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  let out = "";
-  let err = "";
-  child.stdout.on("data", (d) => (out += d));
-  child.stderr.on("data", (d) => (err += d));
-
-  const code: number = await new Promise((resolve) => {
-    child.on("error", () => resolve(1));
-    child.on("exit", (c) => resolve(c ?? 1));
-  });
-
-  // The last line, not the whole stream: mlx-whisper writes "Detected
-  // language" and a progress bar to stdout regardless of verbose=False, so
-  // parsing everything fails on output that is perfectly fine.
-  const lastLine =
-    out
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l.startsWith("{"))
-      .pop() ?? "";
-
-  try {
-    const parsed = JSON.parse(lastLine) as Transcription;
-    if (parsed.error) return { text: "", error: parsed.error };
-    return { text: parsed.text ?? "" };
-  } catch {
-    // stderr carries the model download progress bars, so it is only worth
-    // reporting when there is no parseable result at all.
-    return {
-      text: "",
-      error: code === 0 ? "no transcription returned" : err.trim().split("\n").pop() || "failed",
-    };
-  }
+  return ask(path, opts.fast ? config.voiceModelFast : config.voiceModel);
 }
 
 /**

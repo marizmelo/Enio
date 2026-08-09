@@ -123,16 +123,19 @@ export async function startRecording() {
 }
 
 /** Send a WAV to the agent and get the text back. */
-export async function transcribe(wav) {
+export async function transcribe(wav, { fast = false } = {}) {
   const token = await window.maple?.getToken();
-  const res = await fetch("http://127.0.0.1:8787/v1/audio/transcriptions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "audio/wav",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  const res = await fetch(
+    `http://127.0.0.1:8787/v1/audio/transcriptions${fast ? "?fast=1" : ""}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "audio/wav",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: wav,
     },
-    body: wav,
-  });
+  );
 
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));

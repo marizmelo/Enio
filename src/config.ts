@@ -202,6 +202,15 @@ export const config = {
   voiceModel: env("VOICE_MODEL") ?? "mlx-community/whisper-small-mlx",
 
   /**
+   * The model used for the interim passes while someone is still speaking.
+   *
+   * tiny rather than small: a partial that is a second closer to the speaker is
+   * worth more than a partial that gets a proper noun right, because it will be
+   * replaced by the accurate model's version the moment they stop.
+   */
+  voiceModelFast: env("VOICE_MODEL_FAST") ?? "mlx-community/whisper-tiny",
+
+  /**
    * Which system voice reads replies. Empty means macOS's default, which is
    * Samantha on a stock install and sounds it.
    *

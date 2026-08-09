@@ -180,7 +180,10 @@ async function handle(
     const file = join(tmpdir(), `enio-dictation-${randomUUID()}.wav`);
     try {
       await writeFile(file, audio);
-      const result = await transcribeWav(file);
+      // Interim passes during live dictation ask for the quicker model: being
+      // a second closer to the speaker is worth more than a proper noun that
+      // the final pass will correct anyway.
+      const result = await transcribeWav(file, { fast: url.searchParams.get("fast") === "1" });
       if (result.error) {
         sendJson(res, 500, { error: { message: result.error } });
         return;
