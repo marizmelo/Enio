@@ -16,7 +16,7 @@ process.env.ENIO_ROUTING = "0";
 const { runTurn } = await import("./agent.js");
 const { buildRegistry } = await import("./tools/index.js");
 const store = await import("./memory/store.js");
-const { closeDb } = await import("./memory/db.js");
+const { closeDb, getDb } = await import("./memory/db.js");
 import type { Message } from "./types.js";
 
 const originalFetch = globalThis.fetch;
@@ -383,5 +383,65 @@ describe("empty-reply recovery", () => {
     const last = history[history.length - 1];
     assert.equal(last?.role, "assistant");
     assert.match(String(last?.content), /ran out of room twice/);
+  });
+});
+
+describe("conversations", () => {
+  test("discard with keep pins the learned facts; forget deletes them", async () => {
+    // Two conversations with one learned (unpinned) fact each, plus one pinned
+    // fact that must survive either path — pinning is the standing that
+    // `enio remember` grants, and discard must not revoke it.
+    const a = store.startSession();
+    const b = store.startSession();
+    store.logMessage(a, "user", "my favourite colour is teal");
+    store.logMessage(a, "assistant", "Noted.");
+    store.logMessage(b, "user", "I deploy on Fridays");
+    store.logMessage(b, "assistant", "Bold.");
+    await store.rememberFact("favourite colour is teal", { sessionId: a });
+    await store.rememberFact("deploys on Fridays", { sessionId: b });
+    await store.rememberFact("name is Mariz", { sessionId: a, pinned: true });
+
+    // The discard dialog's contents: only the facts actually at risk.
+    const atRisk = store.conversationKnowledge(a).map((f) => f.text);
+    assert.deepEqual(atRisk, ["favourite colour is teal"]);
+
+    // Keep: transcript goes, knowledge is promoted to transcript-free standing.
+    const kept = store.discardConversation(a, { keepFacts: true });
+    assert.equal(kept.facts, 1);
+    assert.equal(store.conversationMessages(a).length, 0);
+    const db = getDb();
+    const teal = db
+      .prepare(`SELECT pinned, source FROM facts WHERE text = ?`)
+      .get("favourite colour is teal") as { pinned: number; source: string };
+    assert.equal(teal.pinned, 1, "a kept fact must be pinned or reindex will eat it");
+    assert.equal(teal.source, "kept-on-discard");
+
+    // Forget: transcript and knowledge go together, visibly.
+    store.discardConversation(b, { keepFacts: false });
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS n FROM facts WHERE text = ?`).get("deploys on Fridays") &&
+        (db.prepare(`SELECT COUNT(*) AS n FROM facts WHERE text = ?`).get("deploys on Fridays") as { n: number }).n,
+      0,
+    );
+
+    // The explicitly pinned fact survived its conversation's discard.
+    const pinned = db
+      .prepare(`SELECT COUNT(*) AS n FROM facts WHERE text = ?`)
+      .get("name is Mariz") as { n: number };
+    assert.equal(pinned.n, 1);
+  });
+
+  test("the list titles by first user message and hides empty sessions", () => {
+    const empty = store.startSession();
+    const real = store.startSession();
+    store.logMessage(real, "user", "  help me   plan a trip to Lisbon  ");
+    store.logMessage(real, "assistant", "Gladly.");
+
+    const list = store.listConversations();
+    assert.ok(!list.some((c) => c.id === empty), "an empty session is not a conversation");
+    const found = list.find((c) => c.id === real);
+    assert.ok(found);
+    assert.equal(found!.title, "help me plan a trip to Lisbon");
+    assert.equal(found!.messages, 2);
   });
 });

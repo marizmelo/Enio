@@ -6,6 +6,12 @@ import { Composer } from "@/components/Composer";
 import { EmptyState } from "@/components/EmptyState";
 import { streamTurn } from "@/lib/agent";
 import { attachedFiles, fetchCapabilities } from "@/lib/capabilities";
+import {
+  conversationMessages,
+  createConversation,
+  listConversations,
+} from "@/lib/conversations";
+import { HistoryDialog } from "@/components/HistoryDialog";
 import { speak, stopSpeaking, takeSentences } from "@/lib/speech";
 
 export function App() {
@@ -24,6 +30,10 @@ export function App() {
   // Off by default, deliberately. An assistant that starts talking without
   // being asked is startling in a way a silent one never is.
   const [speakReplies, setSpeakReplies] = useState(false);
+  // Which stored conversation this thread is. Null until resume or first send;
+  // the server logs every turn under it, which is what makes restarts cheap.
+  const [conversationId, setConversationId] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const abortRef = useRef(null);
   const composerRef = useRef(null);
@@ -56,6 +66,43 @@ export function App() {
     if (backendReady) fetchCapabilities().then(setCapabilities);
   }, [backendReady]);
 
+  // Resume the last conversation once the backend is up. The thread you were
+  // in comes back as you left it — that is the literal meaning of persisting
+  // across restarts. A failure here degrades to an empty chat, never an error.
+  useEffect(() => {
+    if (!backendReady || conversationId) return;
+    (async () => {
+      try {
+        const all = await listConversations();
+        if (all.length === 0) return;
+        const latest = all[0];
+        const transcript = await conversationMessages(latest.id);
+        setConversationId(latest.id);
+        setMessages(
+          transcript.map((m) => ({ role: m.role, content: m.content })),
+        );
+      } catch {
+        /* Fresh chat is the fallback for every failure mode here. */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendReady]);
+
+  const openConversation = useCallback(async (conv) => {
+    stopSpeaking();
+    const transcript = await conversationMessages(conv.id).catch(() => []);
+    setConversationId(conv.id);
+    setMessages(transcript.map((m) => ({ role: m.role, content: m.content })));
+  }, []);
+
+  const newChat = useCallback(async () => {
+    stopSpeaking();
+    setMessages([]);
+    // Created eagerly so the first turn already has an id to log under. An
+    // abandoned empty session never shows in the list — it has no messages.
+    setConversationId(await createConversation().catch(() => null));
+  }, []);
+
   const send = useCallback(
     async (text) => {
       const trimmed = text.trim();
@@ -68,6 +115,14 @@ export function App() {
       const history = [...messages, { role: "user", content: trimmed, files }];
       setMessages([...history, { role: "assistant", content: "", tools: [] }]);
       setStreaming(true);
+
+      // First message of a fresh boot with nothing to resume: create the
+      // conversation now so this turn is stored from the start.
+      let convId = conversationId;
+      if (!convId) {
+        convId = await createConversation().catch(() => null);
+        setConversationId(convId);
+      }
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -85,6 +140,7 @@ export function App() {
         for await (const event of streamTurn(
           history.map(({ role, content }) => ({ role, content })),
           controller.signal,
+          convId,
         )) {
           if (event.type === "tool") {
             tools.push(event.name);
@@ -149,13 +205,30 @@ export function App() {
         abortRef.current = null;
       }
     },
-    [backendReady, capabilities.files, messages, sessionFiles, speakReplies, streaming],
+    [backendReady, capabilities.files, conversationId, messages, sessionFiles, speakReplies, streaming],
   );
 
   return (
     <TooltipProvider delayDuration={300}>
     <div className="flex h-screen flex-col bg-background">
-      <StatusBar {...status} />
+      <StatusBar
+        {...status}
+        onNewChat={newChat}
+        onHistory={() => setHistoryOpen(true)}
+      />
+
+      <HistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        currentId={conversationId}
+        onPick={openConversation}
+        onDiscarded={(id) => {
+          if (id === conversationId) {
+            setConversationId(null);
+            setMessages([]);
+          }
+        }}
+      />
 
       <main ref={scrollRef} className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (

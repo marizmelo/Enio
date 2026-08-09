@@ -47,9 +47,35 @@ async function main(): Promise<void> {
       await startEverything(rest.includes("--think"));
       break;
 
-    case "chat":
-      await repl({ showThinking: rest.includes("--think") });
+    case "chat": {
+      const cont = rest.indexOf("--continue");
+      await repl({
+        showThinking: rest.includes("--think"),
+        // Bare --continue resumes the latest; --continue <id-prefix> picks one.
+        resume:
+          cont === -1
+            ? undefined
+            : rest[cont + 1] && !rest[cont + 1]!.startsWith("--")
+              ? rest[cont + 1]
+              : "latest",
+      });
       break;
+    }
+
+    case "chats": {
+      const { listConversations } = await import("./memory/store.js");
+      const all = listConversations();
+      if (all.length === 0) {
+        console.log("No stored conversations yet.");
+        break;
+      }
+      for (const c of all) {
+        const when = new Date(c.lastAt).toISOString().replace("T", " ").slice(0, 16);
+        console.log(`${c.id.slice(0, 8)}  ${when}  ${String(c.messages).padStart(3)} msgs  ${c.title}`);
+      }
+      console.log(`\nContinue one:  enio chat --continue <id>`);
+      break;
+    }
 
     case "serve":
       await serve();

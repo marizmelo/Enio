@@ -448,3 +448,135 @@ export function stats(): MemoryStats {
     unindexed: one(`SELECT COUNT(*) AS n FROM sessions WHERE indexed = 0`),
   };
 }
+
+/* ---------- conversations ------------------------------------------------ */
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  startedAt: number;
+  lastAt: number;
+  messages: number;
+}
+
+/**
+ * Stored conversations, newest activity first.
+ *
+ * Empty sessions are filtered out rather than deleted: every server boot and
+ * every "new chat" opens a session speculatively, and a list that shows each
+ * of those as an untitled row would bury the conversations that matter.
+ *
+ * The title is the first user message rather than a stored column, so it can
+ * never disagree with the transcript it names.
+ */
+export function listConversations(limit = 50): ConversationSummary[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT s.id,
+              s.started_at AS startedAt,
+              MAX(m.ts)    AS lastAt,
+              COUNT(m.id)  AS messages,
+              (SELECT content FROM messages
+                WHERE session_id = s.id AND role = 'user'
+                ORDER BY ts ASC LIMIT 1) AS firstUser
+         FROM sessions s
+         JOIN messages m ON m.session_id = s.id
+        GROUP BY s.id
+        ORDER BY lastAt DESC
+        LIMIT ?`,
+    )
+    .all(limit) as Array<{
+    id: string;
+    startedAt: number;
+    lastAt: number;
+    messages: number;
+    firstUser: string | null;
+  }>;
+
+  return rows.map((r) => ({
+    id: r.id,
+    title: (r.firstUser ?? "(no user message)").replace(/\s+/g, " ").trim().slice(0, 80),
+    startedAt: r.startedAt,
+    lastAt: r.lastAt,
+    messages: r.messages,
+  }));
+}
+
+/** The transcript, oldest first, for restoring a conversation into a client. */
+export function conversationMessages(
+  sessionId: string,
+): Array<{ role: string; content: string; ts: number }> {
+  return getDb()
+    .prepare(
+      `SELECT role, content, ts FROM messages
+        WHERE session_id = ? ORDER BY ts ASC, id ASC`,
+    )
+    .all(sessionId) as Array<{ role: string; content: string; ts: number }>;
+}
+
+/**
+ * What was learned from a conversation: the facts that would lose their
+ * backing transcript if it were discarded.
+ *
+ * Only unpinned facts are listed. A pinned fact already stands on its own —
+ * that is what pinning means, and it is how `enio remember` works — so
+ * discarding the transcript does not endanger it.
+ */
+export function conversationKnowledge(
+  sessionId: string,
+): Array<{ id: number; text: string }> {
+  return getDb()
+    .prepare(
+      `SELECT id, text FROM facts
+        WHERE session_id = ? AND pinned = 0 ORDER BY id ASC`,
+    )
+    .all(sessionId) as Array<{ id: number; text: string }>;
+}
+
+/**
+ * Delete a conversation, deciding the fate of what was learned from it.
+ *
+ * The invariant this protects: transcripts are the source of truth and
+ * everything else is derived. A fact whose transcript is gone cannot survive
+ * `enio reindex`, so leaving it unpinned would be a silent deletion deferred
+ * to whenever someone next reindexes. The two honest options are to promote
+ * it to pinned — the same transcript-free standing `enio remember` grants —
+ * or to delete it now, visibly.
+ *
+ * Edges and traces from the session go with the transcript in both cases:
+ * they are derived and rebuildable by definition, and keeping graph edges
+ * whose evidence is deleted would make the graph assert things nothing can
+ * substantiate.
+ */
+export function discardConversation(
+  sessionId: string,
+  opts: { keepFacts: boolean },
+): { deletedMessages: number; facts: number } {
+  const db = getDb();
+  const facts = conversationKnowledge(sessionId).length;
+
+  const run = db.transaction(() => {
+    if (opts.keepFacts) {
+      db.prepare(
+        `UPDATE facts SET pinned = 1, source = 'kept-on-discard'
+          WHERE session_id = ? AND pinned = 0`,
+      ).run(sessionId);
+    } else {
+      db.prepare(`DELETE FROM facts WHERE session_id = ? AND pinned = 0`).run(sessionId);
+    }
+
+    db.prepare(`DELETE FROM edges WHERE session_id = ?`).run(sessionId);
+    db.prepare(
+      `DELETE FROM turn_steps WHERE turn_id IN (SELECT id FROM turns WHERE session_id = ?)`,
+    ).run(sessionId);
+    db.prepare(`DELETE FROM turns WHERE session_id = ?`).run(sessionId);
+
+    const deleted = db
+      .prepare(`DELETE FROM messages WHERE session_id = ?`)
+      .run(sessionId).changes;
+    db.prepare(`DELETE FROM sessions WHERE id = ?`).run(sessionId);
+    return deleted;
+  });
+
+  return { deletedMessages: run(), facts };
+}

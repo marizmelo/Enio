@@ -7,7 +7,13 @@ import { config } from "./config.js";
 import { runTurn } from "./agent.js";
 import { buildRegistry, type Registry } from "./tools/index.js";
 import { setMemorySession } from "./tools/memory.js";
-import { startSession } from "./memory/store.js";
+import {
+  conversationKnowledge,
+  conversationMessages,
+  discardConversation,
+  listConversations,
+  startSession,
+} from "./memory/store.js";
 import { ensureToken, isAuthorized } from "./auth.js";
 import { mentionContext, parseMentions } from "./mentions.js";
 import { SPECIALISTS } from "./specialists.js";
@@ -227,6 +233,48 @@ async function handle(
     return;
   }
 
+  /**
+   * Stored conversations.
+   *
+   * The desktop app owns its thread in memory but every message is logged
+   * here, so restoring after a restart is a read, not a migration. Discard is
+   * the one write with judgement in it: the caller must say what happens to
+   * the facts learned from the conversation, because a fact whose transcript
+   * is deleted cannot survive a reindex — keeping it means pinning it, and
+   * that decision belongs to the user, not to a default.
+   */
+  if (req.method === "GET" && url.pathname === "/conversations") {
+    sendJson(res, 200, { conversations: listConversations() });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/conversations") {
+    sendJson(res, 200, { id: startSession() });
+    return;
+  }
+
+  const convMatch = url.pathname.match(/^\/conversations\/([0-9a-f-]{8,})(\/(messages|knowledge))?$/);
+  if (convMatch) {
+    const [, id, , sub] = convMatch;
+
+    if (req.method === "GET" && sub === "messages") {
+      sendJson(res, 200, { messages: conversationMessages(id!) });
+      return;
+    }
+    if (req.method === "GET" && sub === "knowledge") {
+      sendJson(res, 200, { facts: conversationKnowledge(id!) });
+      return;
+    }
+    if (req.method === "DELETE" && !sub) {
+      const keepFacts = url.searchParams.get("facts") !== "forget";
+      sendJson(res, 200, { discarded: id, ...discardConversation(id!, { keepFacts }) });
+      return;
+    }
+
+    sendJson(res, 404, { error: { message: "Not found" } });
+    return;
+  }
+
   if (req.method !== "POST" || url.pathname !== "/v1/chat/completions") {
     sendJson(res, 404, { error: { message: "Not found" } });
     return;
@@ -267,6 +315,16 @@ async function handle(
     servers: mentions.servers,
   };
 
+  // A client may pin the turn to a stored conversation. Without it, the boot
+  // session applies — which is what keeps plain OpenAI clients working.
+  // setMemorySession follows so a `remember` during this turn carries the
+  // conversation's provenance rather than the boot session's.
+  const conversationId =
+    typeof payload?.conversation_id === "string" && payload.conversation_id
+      ? payload.conversation_id
+      : sessionId;
+  setMemorySession(conversationId);
+
   const id = `chatcmpl-${randomUUID()}`;
   const created = Math.floor(Date.now() / 1000);
 
@@ -301,7 +359,7 @@ async function handle(
         prompt,
         history,
         registry,
-        sessionId,
+        conversationId,
         {
           onContent: (d) => emit({ content: d }),
           // Reasoning is stripped before it reaches any client, which is right
@@ -350,7 +408,7 @@ async function handle(
     return;
   }
 
-  const result = await runTurn(prompt, history, registry, sessionId, {}, overrides);
+  const result = await runTurn(prompt, history, registry, conversationId, {}, overrides);
 
   sendJson(res, 200, {
     id,

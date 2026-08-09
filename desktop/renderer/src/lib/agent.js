@@ -72,11 +72,18 @@ async function authHeaders() {
  * they arrive, so the caller decides how to render rather than being handed a
  * finished string.
  */
-export async function* streamTurn(messages, signal) {
+export async function* streamTurn(messages, signal, conversationId = null) {
   const res = await fetch(`${AGENT_BASE}/v1/chat/completions`, {
     method: "POST",
     headers: await authHeaders(),
-    body: JSON.stringify({ model: MODEL_ID, messages, stream: true }),
+    body: JSON.stringify({
+      model: MODEL_ID,
+      messages,
+      stream: true,
+      // Pins the turn to a stored conversation so the server logs it there —
+      // which is the entire mechanism behind surviving a restart.
+      ...(conversationId ? { conversation_id: conversationId } : {}),
+    }),
     signal,
   });
 

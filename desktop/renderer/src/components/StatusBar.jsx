@@ -1,3 +1,5 @@
+import { History, SquarePen } from "lucide-react";
+import { TipButton } from "@/components/TipButton";
 import { cn } from "@/lib/utils";
 
 const DOT = {
@@ -11,7 +13,7 @@ const DOT = {
  * rather than disappearing once ready, because the one question this window
  * cannot answer on its own is whether the model is actually up.
  */
-export function StatusBar({ phase, message, tools }) {
+export function StatusBar({ phase, message, tools, onNewChat, onHistory }) {
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
     // lights over the top-left of the page rather than in a title bar of its
@@ -23,6 +25,17 @@ export function StatusBar({ phase, message, tools }) {
       className="flex shrink-0 items-center gap-3 border-b py-2.5 pr-4 pl-[86px] text-xs text-muted-foreground [-webkit-app-region:drag]"
     >
       <span className="shrink-0 text-sm font-semibold text-foreground">Enio</span>
+
+      {/* no-drag, or the click starts a window drag instead: the whole bar is
+          a drag region because the title bar is hidden. */}
+      <div className="flex shrink-0 items-center gap-0.5 [-webkit-app-region:no-drag]">
+        <TipButton tip="New chat" className="size-7" onClick={onNewChat}>
+          <SquarePen className="size-3.5" />
+        </TipButton>
+        <TipButton tip="Conversations" className="size-7" onClick={onHistory}>
+          <History className="size-3.5" />
+        </TipButton>
+      </div>
 
       {/* Status sits right, and shrinks first: the title is one word and always
           fits, while the message can be a full sentence about a failure. */}

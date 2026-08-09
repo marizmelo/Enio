@@ -7,7 +7,7 @@ import { buildRegistry } from "./tools/index.js";
 import { closeMcp } from "./tools/mcp.js";
 import { closeBrowser } from "./tools/browser.js";
 import { setMemorySession } from "./tools/memory.js";
-import { endSession, indexPending, startSession, stats } from "./memory/store.js";
+import { conversationMessages, endSession, indexPending, listConversations, startSession, stats } from "./memory/store.js";
 import { completeMention, mentionContext, parseMentions } from "./mentions.js";
 import {
   addExemplar,
@@ -54,14 +54,45 @@ const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
 const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
 const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
 
-export async function repl(opts: { showThinking: boolean }): Promise<void> {
+export async function repl(opts: { showThinking: boolean; resume?: string }): Promise<void> {
   if (!(await serverIsUp())) {
     console.error(unreachableMessage());
     process.exit(1);
   }
 
   const registry = await buildRegistry((m) => console.log(dim(m)));
-  const sessionId = startSession();
+  /**
+   * --continue picks up a stored conversation instead of opening a new one:
+   * same session id, so new turns log to the same transcript, and the old
+   * messages are loaded as context so "as I said earlier" still resolves.
+   */
+  let sessionId: string;
+  let resumed: Message[] = [];
+  if (opts.resume) {
+    const all = listConversations();
+    const match =
+      opts.resume === "latest"
+        ? all[0]
+        : all.find((c) => c.id.startsWith(opts.resume!));
+    if (!match) {
+      console.error(
+        opts.resume === "latest"
+          ? "Nothing to continue — no stored conversations."
+          : `No conversation starting with "${opts.resume}". Try: enio chats`,
+      );
+      process.exit(1);
+    }
+    sessionId = match.id;
+    resumed = conversationMessages(sessionId).map((m) => ({
+      role: m.role as Message["role"],
+      content: m.content,
+    }));
+    console.log(
+      `[2mcontinuing "${match.title}" — ${resumed.length} earlier messages in context[0m`,
+    );
+  } else {
+    sessionId = startSession();
+  }
   setMemorySession(sessionId);
 
   const s = stats();
@@ -78,7 +109,7 @@ export async function repl(opts: { showThinking: boolean }): Promise<void> {
     output: stdout,
     completer: (line: string) => completeMention(line, mentionContext(registry)),
   });
-  const history: Message[] = [];
+  const history: Message[] = [...resumed];
   let showThinking = opts.showThinking;
   /** Kept so /good can turn the last exchange into a training exemplar. */
   let lastExchange: { question: string; answer: string } | null = null;

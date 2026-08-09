@@ -1,0 +1,40 @@
+/**
+ * Stored conversations, over the agent's API.
+ *
+ * The thread on screen is React state; every message is also logged by the
+ * server. These calls are what turn that log back into a thread after a
+ * restart, and what makes discarding a deliberate act with a named cost.
+ */
+
+const AGENT_BASE = "http://127.0.0.1:8787";
+
+async function call(path, init = {}) {
+  const token = await window.maple?.getToken();
+  const res = await fetch(`${AGENT_BASE}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init.headers ?? {}),
+    },
+  });
+  if (!res.ok) throw new Error(`${path} returned ${res.status}`);
+  return res.json();
+}
+
+export const listConversations = () => call("/conversations").then((d) => d.conversations);
+
+export const createConversation = () =>
+  call("/conversations", { method: "POST" }).then((d) => d.id);
+
+export const conversationMessages = (id) =>
+  call(`/conversations/${id}/messages`).then((d) => d.messages);
+
+/** The facts that die with this conversation unless kept. */
+export const conversationKnowledge = (id) =>
+  call(`/conversations/${id}/knowledge`).then((d) => d.facts);
+
+export const discardConversation = (id, { keepFacts }) =>
+  call(`/conversations/${id}?facts=${keepFacts ? "keep" : "forget"}`, {
+    method: "DELETE",
+  });
