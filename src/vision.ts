@@ -295,7 +295,13 @@ export async function readImage(
       return {
         text: `${header}\n\n${text || "(no text found; no vision model available to describe it)"}`,
         method: "ocr",
-        note: canUseVlm ? undefined : `no vision model — text extraction only`,
+        // Actionable, because the person reading it is the only one who can
+        // act on it. Nothing is downloaded on their behalf: a 1.7GB pull is
+        // not something to start because someone pasted a screenshot.
+        note: canUseVlm
+          ? undefined
+          : `Read with OCR — text only, nothing about what the image looks like. ` +
+            `For descriptions: ollama pull ${config.visionModel}`,
       };
     } catch (err) {
       return {

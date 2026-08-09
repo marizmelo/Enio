@@ -90,6 +90,7 @@ export async function runTurn(
   // rather than paying for three sequential round trips.
   // An explicit @specialist skips the routing call entirely — the user has
   // already made the decision the router exists to make.
+  const attachmentNotes: string[] = [];
   const [routed, memoryBlock, exemplars, attachments] = await Promise.all([
     overrides.specialist
       ? Promise.resolve(overrides.specialist)
@@ -98,9 +99,11 @@ export async function runTurn(
         : Promise.resolve(""),
     buildMemoryBlock(userInput),
     exemplarBlock(userInput),
-    readAttachments(overrides.files ?? []),
+    readAttachments(overrides.files ?? [], attachmentNotes),
   ]);
   const specialistName = routed;
+
+  for (const note of new Set(attachmentNotes)) handlers.onNotice?.(note);
 
   let activeTools = registry.all;
   let roleSystem = BASE_SYSTEM;
@@ -266,7 +269,10 @@ export async function runTurn(
  * naming a file is unambiguous, and spending a round trip for the model to
  * request what it was already handed is pure latency.
  */
-async function readAttachments(files: string[]): Promise<string> {
+async function readAttachments(
+  files: string[],
+  notes: string[] = [],
+): Promise<string> {
   if (files.length === 0) return "";
   const blocks: string[] = [];
 
@@ -279,6 +285,11 @@ async function readAttachments(files: string[]): Promise<string> {
       // all, and it means the vision model is an implementation detail.
       if (isImage(rel)) {
         const reading = await readImage(absolute);
+        // Surfaced to the user, never to the model. Telling the model its own
+        // eyesight is limited is what makes it announce the limitation instead
+        // of answering; the person who can act on it is the one reading the
+        // window.
+        if (reading.note) notes.push(reading.note);
         // Worded to avoid priming a refusal. An earlier version explained that
         // the model "cannot look at images, so the contents were extracted" --
         // and it replied "I am unable to view images" and asked the user to

@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Thinking } from "@/components/Thinking";
 import { Widget } from "@/components/Widget";
 import { AttachmentPreviews } from "@/components/AttachmentPreviews";
+import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { renderMarkdownish } from "@/lib/markdown";
 
@@ -16,6 +17,7 @@ export function Message({
   tools = [],
   widgets = [],
   files = [],
+  notices = [],
   thinking = 0,
   startedAt = null,
   error = false,
@@ -54,6 +56,24 @@ export function Message({
           )}
           dangerouslySetInnerHTML={{ __html: renderMarkdownish(content) }}
         />
+      )}
+
+      {/* Addressed to the reader, not the model: how the attachment was read
+          and what would read it better. Kept out of the prompt on purpose --
+          telling the model its eyesight is limited makes it announce the
+          limitation rather than answer. */}
+      {notices.length > 0 && (
+        <div className="flex w-full max-w-[85%] flex-col gap-1">
+          {notices.map((n, i) => (
+            <div
+              key={i}
+              className="flex items-start gap-2 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground"
+            >
+              <Info className="mt-0.5 size-3.5 shrink-0" />
+              <span className="[&>code]:rounded [&>code]:bg-muted [&>code]:px-1">{n}</span>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Below the text, never instead of it. The sentence is the answer; this

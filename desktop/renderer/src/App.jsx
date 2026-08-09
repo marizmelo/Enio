@@ -70,6 +70,7 @@ export function App() {
       const tools = [];
       const widgets = [];
       let thinking = 0;
+      const notices = [];
       const startedAt = Date.now();
 
       try {
@@ -83,6 +84,8 @@ export function App() {
             widgets.push(event.widget);
           } else if (event.type === "think") {
             thinking = event.chars;
+          } else if (event.type === "notice") {
+            if (!notices.includes(event.text)) notices.push(event.text);
           } else {
             // The model opens with a blank line or two once its <think> block
             // is stripped. Trimmed at the front only, and on the accumulated
@@ -98,6 +101,7 @@ export function App() {
               tools: [...tools],
               widgets: [...widgets],
               thinking,
+              notices: [...notices],
               startedAt,
             },
           ]);

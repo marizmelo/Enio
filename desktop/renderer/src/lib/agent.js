@@ -21,6 +21,7 @@ export function parseSseEvent(block) {
   let tool = null;
   let widget = null;
   let think = null;
+  let notice = null;
   for (const line of block.split("\n")) {
     if (line.startsWith("data:")) {
       data = (data ?? "") + line.slice(5).trimStart();
@@ -28,6 +29,8 @@ export function parseSseEvent(block) {
       const comment = line.slice(1).trim();
       const toolMatch = /^tool\s+(.+)$/.exec(comment);
       if (toolMatch) tool = toolMatch[1];
+      const noticeMatch = /^notice\s+(.+)$/.exec(comment);
+      if (noticeMatch) notice = noticeMatch[1];
       const thinkMatch = /^think\s+(\d+)$/.exec(comment);
       if (thinkMatch) think = Number(thinkMatch[1]);
       const widgetMatch = /^widget\s+(.+)$/.exec(comment);
@@ -42,7 +45,7 @@ export function parseSseEvent(block) {
       }
     }
   }
-  return { data, tool, widget, think };
+  return { data, tool, widget, think, notice };
 }
 
 /**
@@ -100,10 +103,11 @@ export async function* streamTurn(messages, signal) {
       const block = buffer.slice(0, split);
       buffer = buffer.slice(split + 2);
 
-      const { data, tool, widget, think } = parseSseEvent(block);
+      const { data, tool, widget, think, notice } = parseSseEvent(block);
       if (tool) yield { type: "tool", name: tool };
       if (widget) yield { type: "widget", widget };
       if (think !== null) yield { type: "think", chars: think };
+      if (notice) yield { type: "notice", text: notice };
       if (!data) continue;
       if (data === "[DONE]") return;
 

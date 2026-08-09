@@ -243,6 +243,11 @@ async function handle(
           // can draw it; the tool's text has already gone to the model and to
           // every client that cannot, so dropping this loses nothing.
           onWidget: (widget) => res.write(`: widget ${JSON.stringify(widget)}\n\n`),
+          // Addressed to the user, not the model — which is the whole point of
+          // keeping it out of the prompt. Newlines are escaped because an SSE
+          // comment ends at one.
+          onNotice: (text) =>
+            res.write(`: notice ${text.replace(/\r?\n/g, " ")}\n\n`),
         },
         overrides,
       );
