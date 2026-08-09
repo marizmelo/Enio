@@ -49,6 +49,29 @@ export const DESKTOP_COMMANDS = [
   "system_profiler",
 ];
 
+/**
+ * Undo a level of JSON escaping the model applied twice.
+ *
+ * Maple emits tool arguments as JSON, and on AppleScript it routinely escapes
+ * the quotes a second time: the skill's verbatim recipe
+ * `tell application "Mail" to ...` arrives as
+ * `tell application \\"Mail\\" to ...` -- backslashes and all -- and osascript
+ * fails on the unknown token at character 17. The script was right; only the
+ * encoding was wrong, so rejecting it wastes a turn the model actually got
+ * correct.
+ *
+ * Only applied when the script contains no genuine string escape it could be
+ * destroying. A backslash-quote inside AppleScript is legitimate when quoting
+ * within a quoted string, so if the script contains any other backslash escape
+ * it is left exactly as sent rather than guessed at.
+ */
+function unescapeQuotes(script: string): string {
+  if (!script.includes('\\"')) return script;
+  // Any backslash not followed by a quote means real escaping is in play.
+  if (/\\(?!")/.test(script)) return script;
+  return script.replace(/\\"/g, '"');
+}
+
 const screenshotTool: ToolDef = {
   name: "take_screenshot",
   description:
@@ -109,7 +132,7 @@ const appleScriptTool: ToolDef = {
     required: ["script"],
   },
   async run(args) {
-    const script = String(args.script ?? "").trim();
+    const script = unescapeQuotes(String(args.script ?? "").trim());
     if (!script) return "Error: no script given.";
 
     try {
@@ -135,6 +158,122 @@ const appleScriptTool: ToolDef = {
   },
 };
 
+/**
+ * Named, tested AppleScript that the model selects rather than writes.
+ *
+ * Authoring was the failure. Given the skill's verbatim recipe the model still
+ * could not deliver it: it double-escaped the quotes, then misspelled the tool
+ * as run_appLEScriпт with Cyrillic homoglyphs, then emitted __enio_ prefixes,
+ * degrading further with each retry. Every one of those is a generation
+ * problem, and this project's answer to a generation problem is to make it a
+ * choice from a short closed list instead -- which is the one thing a model
+ * this size does reliably.
+ *
+ * So the scripts live here, already correct, and the model picks a name and a
+ * count. Nothing it emits is interpolated into the script except an integer,
+ * which is also why this cannot be talked into running arbitrary AppleScript
+ * by something it reads in a file.
+ *
+ * Every script here was run on a real machine before being added. Adding one
+ * means testing it the same way, not writing what ought to work.
+ */
+const RECIPES: Record<string, { summary: string; script: (n: number) => string }> = {
+  recent_emails: {
+    summary: "Subject and sender of the most recent inbox messages",
+    script: (n) =>
+      `tell application "Mail" to get {subject, sender} of messages 1 thru ${n} of inbox`,
+  },
+  unread_count: {
+    summary: "How many unread messages are in the inbox",
+    script: () => `tell application "Mail" to get unread count of inbox`,
+  },
+  latest_email_body: {
+    summary: "Full text of the single most recent message",
+    script: () => `tell application "Mail" to get content of message 1 of inbox`,
+  },
+  todays_events: {
+    summary: "Calendar events starting today",
+    script: () =>
+      `tell application "Calendar"\n` +
+      `\tset d to current date\n` +
+      `\tset d's hours to 0\n` +
+      `\tset d's minutes to 0\n` +
+      `\tset d's seconds to 0\n` +
+      `\tset out to {}\n` +
+      `\trepeat with e in (every event of calendar 1 whose start date ≥ d and start date < d + 1 * days)\n` +
+      `\t\tset end of out to (summary of e) & " at " & (start date of e as string)\n` +
+      `\tend repeat\n` +
+      `\treturn out\n` +
+      `end tell`,
+  },
+  open_reminders: {
+    summary: "Reminders not yet completed",
+    script: () => `tell application "Reminders" to get name of (reminders whose completed is false)`,
+  },
+  recent_notes: {
+    summary: "Titles of the most recent notes",
+    script: (n) => `tell application "Notes" to get name of notes 1 thru ${n}`,
+  },
+  desktop_files: {
+    summary: "Files on the Desktop",
+    script: () => `tell application "Finder" to get name of items of desktop`,
+  },
+};
+
+const recipeTool: ToolDef = {
+  name: "mac_recipe",
+  description:
+    "Read something from a Mac app using a tested script. Use this rather than writing AppleScript. Recipes: " +
+    Object.entries(RECIPES)
+      .map(([name, r]) => `${name} (${r.summary})`)
+      .join("; "),
+  origin: "builtin",
+  parameters: {
+    type: "object",
+    properties: {
+      recipe: {
+        type: "string",
+        enum: Object.keys(RECIPES),
+        description: "Which recipe to run.",
+      },
+      count: {
+        type: "number",
+        description: "How many items to return, where the recipe takes a count. Defaults to 5.",
+      },
+    },
+    required: ["recipe"],
+  },
+  async run(args) {
+    const name = String(args.recipe ?? "").trim();
+    const recipe = RECIPES[name];
+    if (!recipe) {
+      return `No recipe named "${name}". Available: ${Object.keys(RECIPES).join(", ")}`;
+    }
+
+    // Clamped and integer-only: this is the only part of the script the model
+    // influences, and it should not be able to make it something else.
+    const raw = Number(args.count ?? 5);
+    const count = Number.isFinite(raw) ? Math.min(50, Math.max(1, Math.floor(raw))) : 5;
+
+    try {
+      const { stdout, stderr } = await run("osascript", ["-e", recipe.script(count)], {
+        timeout: config.shellTimeoutMs,
+        maxBuffer: 4_000_000,
+      });
+      return (stdout || stderr).trim() || "(nothing to report)";
+    } catch (err) {
+      const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
+      if (/not authori[sz]ed|1743|-1743/.test(message)) {
+        return (
+          `macOS blocked this.\n${message}\n\n` +
+          `Grant access in System Settings → Privacy & Security → Automation.`
+        );
+      }
+      return `Could not read that: ${message}`;
+    }
+  },
+};
+
 export const desktopTools: ToolDef[] = desktopEnabled()
-  ? [screenshotTool, appleScriptTool]
+  ? [screenshotTool, appleScriptTool, recipeTool]
   : [];

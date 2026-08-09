@@ -682,6 +682,56 @@ async function readAttachments(
   return `The user attached the following. Their contents are given in full below, and you can answer about them directly.\n\n${blocks.join("\n\n")}`;
 }
 
+/**
+ * The one allowed tool a misspelled name is unmistakably close to, or null.
+ *
+ * Deliberately strict. It requires a single candidate within a small edit
+ * distance that scales with name length -- one or two characters on names this
+ * long -- so "run_appletescript" resolves to run_applescript but "read" does
+ * not silently become read_file. Two candidates equally close returns null:
+ * correcting toward the wrong tool is worse than reporting the miss and
+ * letting the model see the real list.
+ */
+function nearestAllowedTool(name: string, allowed: Set<string>): string | null {
+  // Compared lower-case: the model varies capitalisation freely and a case
+  // difference is never a different tool. Seen in the wild as
+  // "run_appLEScriпт" -- wrong case and two Cyrillic homoglyphs -- which is
+  // two edits from run_applescript once case stops counting, and fifteen
+  // before.
+  const target = name.toLowerCase();
+  const budget = name.length <= 6 ? 1 : 2;
+  let best: string | null = null;
+  let bestDistance = Infinity;
+  let tie = false;
+  for (const candidate of allowed) {
+    const d = editDistance(target, candidate.toLowerCase());
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = candidate;
+      tie = false;
+    } else if (d === bestDistance) {
+      tie = true;
+    }
+  }
+  return best !== null && bestDistance <= budget && !tie ? best : null;
+}
+
+/** Levenshtein distance, iterative with a single row. Small inputs, so the
+ *  quadratic cost is nothing and the simplicity is worth more. */
+function editDistance(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0]!;
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const temp = row[j]!;
+      row[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, row[j]!, row[j - 1]!);
+      prev = temp;
+    }
+  }
+  return row[b.length]!;
+}
+
 async function executeCall(
   call: ToolCall,
   registry: Registry,
@@ -698,9 +748,17 @@ async function executeCall(
    */
   allowed: Set<string>,
 ): Promise<string> {
-  const tool = allowed.has(call.function.name)
-    ? registry.byName.get(call.function.name)
-    : undefined;
+  // A small model fat-fingers the tool name itself, separately from
+  // hallucinating one: it wrote "run_appletescript" for run_applescript, one
+  // transposition off, having just used the skill to author a correct script.
+  // Rejecting that wastes the whole turn over a typo. So an unknown name is
+  // matched to the single allowed tool it is unmistakably close to -- and only
+  // a single one, because correcting toward the wrong tool is worse than not
+  // correcting at all.
+  const resolvedName = allowed.has(call.function.name)
+    ? call.function.name
+    : nearestAllowedTool(call.function.name, allowed);
+  const tool = resolvedName ? registry.byName.get(resolvedName) : undefined;
 
   if (!tool) {
     // Hallucinated tool names are common with small models. Telling the model

@@ -182,6 +182,50 @@ Re-measure before re-wording. Reading better is not the test.
 
 ---
 
+### Picking a script, not writing one
+
+**Chose:** `mac_recipe` — named, pre-tested AppleScript the model selects by
+name, with only an integer count interpolated.
+
+**Rejected:** having the model author AppleScript, even with the exact script
+in front of it.
+
+Watched it fail every way it could. Given `run_applescript` alone it wrote two
+broken scripts and then invented tools. Given a skill containing the verbatim
+recipe, it read the skill, produced the *correct* script, and still failed —
+JSON-escaping the quotes twice, so `tell application "Mail"` arrived as
+`tell application \"Mail\"` and osascript died on character 17. Then it
+misspelled the tool as `run_appLEScriпт` (Cyrillic homoglyphs), then emitted
+`__enio_` prefixes, degrading with each retry.
+
+Every one of those is a *generation* failure, and this codebase's answer to a
+generation failure is already written down: turn it into a choice from a short
+closed list. Selecting `recent_emails` is classification, which a ~1B-active
+model does reliably; reproducing 78 characters of AppleScript byte-perfectly is
+not.
+
+Three repairs were made along the way and kept, because they are right
+independently: over-escaped scripts are unescaped when no genuine escape is
+present, misspelled tool names resolve to the single allowed tool they are
+unmistakably close to (case-insensitively — the homoglyph case is two edits
+once case stops counting, fifteen before), and the skill exists for the cases a
+recipe does not cover.
+
+**Still open, and the agreed shape of the answer.** A request no recipe covers
+should not be improvised silently. The model should propose the script, the
+user approves it as a one-off *or* saves it as a new named recipe, and saved
+ones are then selected like any other — never re-authored. That closes the loop:
+the only path to new AppleScript is through a human, and anything approved
+becomes deterministic thereafter. Not built yet; it needs an approval round-trip
+the desktop does not currently have.
+
+**Also observed and not yet fixed:** with `mac_recipe` returning correct data on
+the first call, the model sometimes keeps calling tools instead of answering
+from what it already has. That is not a plumbing problem — the answer was in
+hand — and it is the next thing worth measuring.
+
+---
+
 ## Bugs that testing found
 
 Recorded because each cost real time and could recur.

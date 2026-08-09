@@ -46,3 +46,28 @@ describe("desktop mode opens the shell allowlist", () => {
     }
   });
 });
+
+const { desktopTools } = await import("./tools/desktop.js");
+const applescript = desktopTools.find((t) => t.name === "run_applescript");
+
+describe("AppleScript arguments", () => {
+  test("a double-escaped script is repaired rather than rejected", { skip: !applescript }, async () => {
+    // Maple emits tool arguments as JSON and escapes AppleScript quotes twice,
+    // so the skill's verbatim recipe arrives with literal backslashes and
+    // osascript dies on the unknown token. The script was correct; only the
+    // encoding was wrong. `pwd`-equivalent chosen so the test asserts repair
+    // without depending on Mail being configured.
+    const result = await applescript!.run({ script: 'return \\"ok\\"' });
+    const text = String(typeof result === "string" ? result : result.text);
+    assert.equal(text.trim(), "ok", `expected the repaired script to run, got: ${text}`);
+  });
+
+  test("a script with real escaping is passed through untouched", { skip: !applescript }, async () => {
+    // A backslash that is not part of \" means genuine escaping is in play, and
+    // rewriting it would corrupt a script the model got right. Here the \\n
+    // must survive: repairing quotes here would change what the user asked for.
+    const result = await applescript!.run({ script: 'return "a\\nb"' });
+    const text = String(typeof result === "string" ? result : result.text);
+    assert.match(text, /a\s*b/, `escaping should be preserved, got: ${text}`);
+  });
+});

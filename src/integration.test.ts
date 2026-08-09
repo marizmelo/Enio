@@ -778,3 +778,142 @@ describe("recovery that needs a tool", () => {
     );
   });
 });
+
+describe("tool-name typos", () => {
+  test("a one-transposition typo resolves to the intended tool", async () => {
+    // The real failure: the model authored a correct AppleScript, then wrote
+    // "run_appletescript" for the tool name and the whole turn was thrown away.
+    let call = 0;
+    globalThis.fetch = (async () => {
+      call += 1;
+      const frame =
+        call === 1
+          ? {
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: "c1",
+                        function: { name: "current_timee", arguments: "{}" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }
+          : { choices: [{ delta: { content: "It is noon." } }] };
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            const enc = new TextEncoder();
+            c.enqueue(enc.encode(`data: ${JSON.stringify(frame)}\n\n`));
+            c.enqueue(enc.encode("data: [DONE]\n\n"));
+            c.close();
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const history: Message[] = [];
+    await runTurn("what time is it?", history, registry, sessionId, {}, { specialist: "generalist" });
+
+    const toolMsg = history.find((m) => m.role === "tool");
+    assert.ok(toolMsg, "the misspelled call should have run a tool");
+    assert.ok(
+      !/No tool named/.test(String(toolMsg?.content)),
+      `current_timee should resolve to current_time, got: ${String(toolMsg?.content).slice(0, 60)}`,
+    );
+  });
+
+  test("wrong case and homoglyphs still resolve", async () => {
+    // Seen in the wild: "run_appLEScriпт" — wrong capitalisation plus two
+    // Cyrillic characters that look like p and t. Fifteen edits from the real
+    // name, two once case stops counting.
+    let call = 0;
+    globalThis.fetch = (async () => {
+      call += 1;
+      const frame =
+        call === 1
+          ? {
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      { index: 0, id: "c1", function: { name: "CURRENT_Timе", arguments: "{}" } },
+                    ],
+                  },
+                },
+              ],
+            }
+          : { choices: [{ delta: { content: "noon" } }] };
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            const enc = new TextEncoder();
+            c.enqueue(enc.encode(`data: ${JSON.stringify(frame)}\n\n`));
+            c.enqueue(enc.encode("data: [DONE]\n\n"));
+            c.close();
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const history: Message[] = [];
+    await runTurn("time?", history, registry, sessionId, {}, { specialist: "generalist" });
+    const toolMsg = history.find((m) => m.role === "tool");
+    assert.ok(
+      !/No tool named/.test(String(toolMsg?.content)),
+      `should resolve to current_time, got: ${String(toolMsg?.content).slice(0, 70)}`,
+    );
+  });
+
+  test("a name that is not clearly one tool is still rejected", async () => {
+    // "read" sits between read_file, read_image and read_skill. Correcting
+    // toward any of them would be a guess, so it must not resolve.
+    let call = 0;
+    globalThis.fetch = (async () => {
+      call += 1;
+      const frame =
+        call === 1
+          ? {
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      { index: 0, id: "c1", function: { name: "read", arguments: "{}" } },
+                    ],
+                  },
+                },
+              ],
+            }
+          : { choices: [{ delta: { content: "done" } }] };
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            const enc = new TextEncoder();
+            c.enqueue(enc.encode(`data: ${JSON.stringify(frame)}\n\n`));
+            c.enqueue(enc.encode("data: [DONE]\n\n"));
+            c.close();
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const history: Message[] = [];
+    await runTurn("read something", history, registry, sessionId, {}, { specialist: "coder" });
+
+    const toolMsg = history.find((m) => m.role === "tool");
+    assert.match(String(toolMsg?.content), /No tool named "read"/);
+  });
+});
