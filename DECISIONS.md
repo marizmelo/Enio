@@ -252,6 +252,51 @@ a Python stack beside the TypeScript one.
 Worth stealing regardless: its no-vector-store stance. Deterministic parsing for
 structure, the model only for prose. That is already the direction here.
 
+### oMLX
+
+[oMLX](https://github.com/jundot/omlx) is an Apple-Silicon inference server on
+top of MLX — continuous batching, a tiered RAM+SSD KV cache, multi-model
+serving, an OpenAI-compatible endpoint. Apache-2.0, real and actively
+maintained (18.5k stars, ten contributors, releases most weeks). An article
+benchmarking it reported prefill going from 579 to 2,975 tok/s on an M1 Max and
+1,520 to 8,664 on an M4 Max — roughly 5.7x.
+
+**Not adopted.** The benchmark's baseline is *raw MLX*, the Python library, in
+a one-shot generate loop. That baseline genuinely has no KV cache. But nothing
+here has ever used it: enio has always talked to `mlx_lm.server`, which already
+ships `LRUPromptCache` with `fetch_nearest_cache`, and a `BatchGenerator` — the
+two features the article credits to oMLX. Measured on this machine, a ~4,000
+token prefix reused across three requests:
+
+    cold  4.22s   (3,986 tokens prefilled,  ~945 tok/s)
+    warm  0.17s   (12 tokens prefilled)     = 25x
+
+So the comparison is against something we do not run, and the missing feature
+is not missing. Real turns hit that cache too: the system prompt is stable per
+specialist, byte-identical across consecutive turns of the same route.
+
+The second reason is harder. oMLX pins *upstream* mlx-lm, which has 120 model
+handlers and no `maple.py` — Maple is `model_type: maple` / `MapleForCausalLM`
+and exists only in the deepgrove fork. The model directory does ship its own
+`maple.py`, so `trust_remote_code` might load it, but `--flash-head` and
+`model-flashhead.safetensors` have no upstream equivalent, and the `raw_decode`
+tool-parser patch would need re-applying to a different tree. That is a
+migration with a plausible outcome of "slower, and tool calls silently stop".
+
+**What would change the answer:** switching off Maple to a mainline model, or
+Maple landing upstream. Then oMLX's multi-model serving becomes interesting on
+its own — it would let the vision model and the text model share one process
+and one memory budget, which today is two servers and two copies of the
+problem.
+
+Worth stealing regardless: **the cold tier.** Our prompt cache is RAM-only and
+dies with the process, and conversations now survive restarts, so resuming a
+long one pays full prefill again — about four seconds per 4,000 tokens. The
+runtime already exposes `save_prompt_cache` / `load_prompt_cache`; the missing
+part is deciding when to write and how to invalidate, not the mechanism. Small
+win, no new dependency, and it only matters once conversations are routinely
+long enough to notice.
+
 ---
 
 ## Open questions
