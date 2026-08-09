@@ -160,12 +160,14 @@ describe("agent loop end to end", () => {
     );
 
     const history: Message[] = [];
-    let notice = "";
+    const notices: string[] = [];
     const result = await runTurn("loop forever", history, registry, sessionId, {
-      onNotice: (t) => { notice = t; },
+      onNotice: (t) => notices.push(t),
     });
 
-    assert.match(notice, /Stopped after/);
+    // Collected rather than last-wins: the empty-reply retry may add its own
+    // notice after this one, and both are correct.
+    assert.ok(notices.some((t) => /Stopped after/.test(t)), notices.join(" | "));
     // Bounded, and it returned rather than hanging.
     assert.ok(result.toolsUsed.length <= 8);
   });
@@ -293,5 +295,93 @@ describe("history compaction", () => {
       "a short conversation must not be summarised",
     );
     assert.ok(history.some((m) => m.content === "hello"));
+  });
+});
+
+describe("empty-reply recovery", () => {
+  test("a turn that thought itself to death is retried without thinking", async () => {
+    // First call: the model burned its budget in <think> and produced nothing.
+    // Second call: the retry, which must decline thinking through the template.
+    const bodies: any[] = [];
+    let call = 0;
+    globalThis.fetch = (async (_url: unknown, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body));
+      call += 1;
+      const frames: string[] = [];
+      if (call === 1) {
+        frames.push(
+          `data: ${JSON.stringify({ choices: [{ delta: { reasoning: "thinking forever" } }] })}\n\n`,
+        );
+      } else {
+        frames.push(
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "Here is the answer." } }] })}\n\n`,
+        );
+      }
+      frames.push("data: [DONE]\n\n");
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            const enc = new TextEncoder();
+            for (const f of frames) c.enqueue(enc.encode(f));
+            c.close();
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const history: Message[] = [];
+    const notices: string[] = [];
+
+    const result = await runTurn("a hard question", history, registry, sessionId, {
+      onNotice: (t) => notices.push(t),
+    });
+
+    assert.equal(result.reply, "Here is the answer.");
+    assert.equal(
+      bodies[1]?.chat_template_kwargs?.enable_thinking,
+      false,
+      "the retry must decline thinking through the template",
+    );
+    assert.equal(
+      bodies[0]?.chat_template_kwargs,
+      undefined,
+      "the first attempt must think normally",
+    );
+    assert.ok(notices.length > 0, "the wait for a second attempt should be explained");
+
+    // The empty assistant turn is replaced, not left in front of the answer:
+    // a blank message in history reads as the model having said nothing.
+    const assistants = history.filter((m) => m.role === "assistant");
+    assert.equal(assistants.length, 1);
+    assert.equal(assistants[0]!.content, "Here is the answer.");
+  });
+
+  test("two blank attempts produce an honest sentence, not silence", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream({
+          start(c) {
+            c.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+            c.close();
+          },
+        }),
+        { status: 200 },
+      )) as typeof fetch;
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const history: Message[] = [];
+
+    const result = await runTurn("another hard question", history, registry, sessionId);
+
+    assert.match(result.reply, /ran out of room twice/);
+    // The transcript carries the explanation too, so the next turn's context
+    // shows what happened rather than an inexplicable gap.
+    const last = history[history.length - 1];
+    assert.equal(last?.role, "assistant");
+    assert.match(String(last?.content), /ran out of room twice/);
   });
 });

@@ -35,45 +35,82 @@ const runtimeDir =
   process.env.MAPLE_DIR ??
   join(process.env.ENIO_DATA_DIR ?? join(homedir(), ".enio"), "runtime");
 
-const target = join(runtimeDir, "mlx_lm", "tool_parsers", "json_tools.py");
+/**
+ * Apply one idempotent patch: skip if the marker is present, refuse if the
+ * original text is not, so upstream changes surface as a message rather than
+ * being pattern-matched into a shape they were never in.
+ */
+function applyPatch({ target, label, marker, original, patched, note }) {
+  if (!existsSync(target)) {
+    console.log(`  no ${label} at ${target} — nothing to patch`);
+    return;
+  }
 
-const MARKER = "# enio: tolerate trailing text after the JSON object";
+  const source = readFileSync(target, "utf8");
 
-const ORIGINAL = `def parse_tool_call(text, tools=None):
-    return json.loads(text.strip())`;
+  if (source.includes(marker)) {
+    console.log(`  already patched: ${label}`);
+    return;
+  }
 
-const PATCHED = `def parse_tool_call(text, tools=None):
-    ${MARKER}
-    #
-    # Maple closes its <think> block inside the tool-call block, so the JSON is
-    # frequently followed by a stray "</think>". json.loads rejects the whole
-    # string as "Extra data", the caller drops the call, and the turn comes back
-    # empty -- a valid tool call lost to trailing junk. raw_decode reads the
-    # first complete JSON value and ignores the rest.
-    return json.JSONDecoder().raw_decode(text.strip())[0]`;
+  if (!source.includes(original)) {
+    console.log(
+      `  ${label} does not match the version this patch was written for.\n` +
+        `  Skipping. Check whether it changed upstream:\n    ${target}`,
+    );
+    return;
+  }
 
-if (!existsSync(target)) {
-  console.log(`  no mlx-lm checkout at ${runtimeDir} — nothing to patch`);
-  process.exit(0);
+  writeFileSync(target, source.replace(original, patched));
+  console.log(`  patched: ${note}`);
 }
 
-const source = readFileSync(target, "utf8");
+applyPatch({
+  target: join(runtimeDir, "mlx_lm", "tool_parsers", "json_tools.py"),
+  label: "json_tools.py",
+  marker: "# enio: tolerate trailing text after the JSON object",
+  original: `def parse_tool_call(text, tools=None):
+    return json.loads(text.strip())`,
+  // Maple closes its <think> block inside the tool-call block, so the JSON is
+  // frequently followed by a stray "</think>". json.loads rejects the whole
+  // string as "Extra data", the caller drops the call, and the turn comes back
+  // empty -- a valid tool call lost to trailing junk. raw_decode reads the
+  // first complete JSON value and ignores the rest.
+  patched: `def parse_tool_call(text, tools=None):
+    # enio: tolerate trailing text after the JSON object
+    return json.JSONDecoder().raw_decode(text.strip())[0]`,
+  note: "tool calls now survive a trailing </think>",
+});
 
-if (source.includes(MARKER)) {
-  console.log("  already patched: json_tools.py");
-  process.exit(0);
-}
-
-if (!source.includes(ORIGINAL)) {
-  // Upstream changed. Say so loudly rather than pattern-matching something
-  // else into a shape it was never in.
-  console.log(
-    "  json_tools.py does not match the version this patch was written for.\n" +
-      "  Skipping. Check whether the trailing-text bug is fixed upstream:\n" +
-      `    ${target}`,
-  );
-  process.exit(0);
-}
-
-writeFileSync(target, source.replace(ORIGINAL, PATCHED));
-console.log("  patched: tool calls now survive a trailing </think>");
+/**
+ * Maple's chat template opens a <think> block on every generation with no way
+ * to decline, and on some prompts the model reasons until it hits max_tokens
+ * and never writes an answer at all. The turn comes back empty, which reads as
+ * being ignored.
+ *
+ * This makes thinking declinable per request, the way Qwen3's own template
+ * does it: when chat_template_kwargs carries enable_thinking: false, the
+ * generation prompt PRE-CLOSES the think block, so the model starts where the
+ * answer goes rather than where the reasoning does. Default behaviour is
+ * untouched — thinking stays on unless a request says otherwise.
+ *
+ * Lives in the model directory rather than the git checkout, so a weights
+ * re-download restores the original; install.sh re-runs this script after
+ * both.
+ */
+applyPatch({
+  target: join(runtimeDir, "maple-2bit-mlx", "chat_template.jinja"),
+  label: "chat_template.jinja",
+  marker: "enable_thinking",
+  original: `{%- if add_generation_prompt %}
+    {{- '<|im_start|>assistant\\n<think>\\n' }}
+{%- endif %}`,
+  patched: `{%- if add_generation_prompt %}
+    {%- if enable_thinking is defined and not enable_thinking %}
+        {{- '<|im_start|>assistant\\n<think>\\n\\n</think>\\n\\n' }}
+    {%- else %}
+        {{- '<|im_start|>assistant\\n<think>\\n' }}
+    {%- endif %}
+{%- endif %}`,
+  note: "thinking is now declinable via chat_template_kwargs",
+});

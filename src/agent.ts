@@ -138,7 +138,7 @@ async function compactHistory(history: Message[]): Promise<Message[]> {
         [],
         {},
         undefined,
-        config.maxTokens,
+        { maxTokens: config.maxTokens },
       );
       summary = result.content.trim();
     } catch {
@@ -332,6 +332,75 @@ export async function runTurn(
         `Stopped after ${config.maxToolIterations} tool rounds. ` +
           `Raise ENIO_MAX_ITERS if this was a genuinely long task.`,
       );
+    }
+  }
+
+  /**
+   * The empty answer, which is the worst failure this loop has.
+   *
+   * Maple's template opens a <think> block on every generation and on some
+   * prompts the model reasons to the token ceiling without ever writing the
+   * answer. From the user's side the agent simply said nothing. Raising the
+   * ceiling does not fix it -- 8192 tokens of budget ran out the same way in
+   * testing -- and an earlier retry that merely asked the model not to think
+   * failed, because the template forces the block open regardless of what the
+   * prompt requests.
+   *
+   * So the retry declines thinking structurally: the template pre-closes the
+   * think block (Qwen3's own no-think pattern), and generation starts where
+   * the answer goes. Same history, same attachments, no room to ruminate.
+   * Measured directly this answers in under a second where the thinking run
+   * burned its whole budget.
+   */
+  if (!reply.trim()) {
+    handlers.onNotice?.("The reply budget went entirely on thinking — answering again without it.");
+    const retryStartedAt = Date.now();
+    try {
+      const retry = await complete(
+        history,
+        [],
+        { onContent: handlers.onContent },
+        undefined,
+        { enableThinking: false },
+      );
+      steps.push({
+        seq: steps.length,
+        kind: "model",
+        rawContent: retry.rawContent,
+        reasoning: retry.reasoning || null,
+        repaired: retry.repaired,
+        scavenged: retry.scavenged,
+        durationMs: Date.now() - retryStartedAt,
+      });
+      if (retry.content.trim()) {
+        reply = retry.content.trim();
+        // The loop already pushed the empty assistant turn; replace it rather
+        // than leaving a blank message in front of the real one.
+        const last = history[history.length - 1];
+        if (last?.role === "assistant" && !String(last.content ?? "").trim() && !last.tool_calls) {
+          history[history.length - 1] = { role: "assistant", content: reply };
+        } else {
+          history.push({ role: "assistant", content: reply });
+        }
+        logMessage(sessionId, "assistant", reply);
+      }
+    } catch {
+      // The fallback below still applies; a failed retry must not lose the turn.
+    }
+  }
+
+  // Both attempts came back blank. Say so, visibly: an honest sentence in the
+  // transcript beats an empty bubble that reads as being ignored.
+  if (!reply.trim()) {
+    reply =
+      "I could not produce an answer for this one — the reply ran out of room twice. " +
+      "Try rephrasing, or raise ENIO_MAX_TOKENS.";
+    handlers.onContent?.(reply);
+    const last = history[history.length - 1];
+    if (last?.role === "assistant" && !String(last.content ?? "").trim() && !last.tool_calls) {
+      history[history.length - 1] = { role: "assistant", content: reply };
+    } else {
+      history.push({ role: "assistant", content: reply });
     }
   }
 

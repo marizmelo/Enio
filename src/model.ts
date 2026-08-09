@@ -29,12 +29,23 @@ interface StreamHandlers {
   onReasoning?(delta: string): void;
 }
 
+export interface CompleteOptions {
+  maxTokens?: number;
+  /**
+   * false pre-closes the model's <think> block through the chat template, so
+   * generation starts where the answer goes. The template patch that makes
+   * this possible lives in scripts/patch-runtime.mjs; against an unpatched
+   * template the kwarg is simply unknown and thinking proceeds as before.
+   */
+  enableThinking?: boolean;
+}
+
 export async function complete(
   messages: Message[],
   tools: WireTool[],
   handlers: StreamHandlers = {},
   signal?: AbortSignal,
-  maxTokens: number = config.maxTokens,
+  opts: CompleteOptions = {},
 ): Promise<CompletionResult> {
   const body: Record<string, unknown> = {
     model: config.modelName,
@@ -49,7 +60,10 @@ export async function complete(
   // killing the connection — the caller gets "fetch failed" with no status code
   // and nothing in it points at max_tokens. Every backend accepts a positive
   // value, so there is no longer a reason to vary this per backend.
-  body.max_tokens = maxTokens;
+  body.max_tokens = opts.maxTokens ?? config.maxTokens;
+  if (opts.enableThinking === false) {
+    body.chat_template_kwargs = { enable_thinking: false };
+  }
 
   if (tools.length > 0) body.tools = tools;
 
