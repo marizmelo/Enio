@@ -380,3 +380,34 @@ describe("memory store", () => {
     assert.ok(after.facts > 0, "explicit facts must survive");
   });
 });
+
+describe("fabricated action claims", () => {
+  test("narrated actions with no tool call are flagged", async () => {
+    const { claimsUnperformedAction } = await import("./agent.js");
+    // Verbatim from the failure that prompted this: every sentence claimed a
+    // machine action and the step log showed zero tool calls.
+    for (const line of [
+      "I will now clear the values in the Calculator app.",
+      "The Calculator window has been cleared. You can now enter a new value.",
+      "I've opened Notes for you.",
+      "The note has been created.",
+      "Notes is now open.",
+      "The calculator values are now cleared.",
+    ]) {
+      assert.ok(claimsUnperformedAction(line), `should flag: ${line}`);
+    }
+  });
+
+  test("ordinary answers are not flagged", async () => {
+    const { claimsUnperformedAction } = await import("./agent.js");
+    for (const line of [
+      "4 + 4 is 8.",
+      "TCP is connection-oriented; UDP is not.",
+      "You could clear it yourself with the C button.",
+      "The inbox has three unread messages.",
+      "To open Notes, click its icon in the Dock.",
+    ]) {
+      assert.ok(!claimsUnperformedAction(line), `must not flag: ${line}`);
+    }
+  });
+});

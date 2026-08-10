@@ -256,6 +256,37 @@ async function compactHistory(history: Message[]): Promise<Message[]> {
  * whole -- because a false positive discards a real answer, which is the one
  * outcome worse than printing a bad one.
  */
+/**
+ * A reply claiming machine actions in a turn that performed none.
+ *
+ * Watched happen, verbatim: asked to clear the Calculator, the model wrote "I
+ * will now clear the values… The Calculator window has been cleared" and
+ * called nothing at all. Every sentence was fabricated, and it read exactly
+ * like success. The turn before it opened the app for real, then narrated
+ * typing 4+4 and announced a result it computed in its own weights.
+ *
+ * Fabrication in general is not lintable. This narrow case is: past-tense
+ * machine verbs, or "I will now" promises, in a turn whose step log shows
+ * zero tool calls, are claims about actions that definitionally did not
+ * happen. Only checked when no tool ran, which is what keeps the verb list
+ * from firing on honest replies -- "the file has been created" after a real
+ * write_file is unreachable here.
+ */
+export function claimsUnperformedAction(text: string): boolean {
+  // Past participles only: "cleared" flags, "clear it yourself" does not.
+  // The first probe of this guard missed its own target -- "the values are
+  // now cleared" is neither "has been cleared" nor an I-sentence -- so the
+  // completion claim is matched on any copula, with or without been/now.
+  const verbs =
+    "opened|closed|cleared|created|typed|clicked|pressed|launched|added|saved|deleted|moved|renamed";
+  return (
+    new RegExp(
+      `\\b(?:I(?:'ve| have| just)? (?:now )?(?:${verbs})|(?:has|have|is|are)(?: been| now)? (?:${verbs})|is now open|I (?:will|'ll) now\\b)`,
+      "i",
+    ).test(text)
+  );
+}
+
 export function looksDegenerate(text: string): boolean {
   const sentences = text
     .split(/(?<=[.!?])\s+/)
@@ -636,6 +667,62 @@ export async function runTurn(
       }
     } catch {
       // The fallback below still applies; a failed retry must not lose the turn.
+    }
+  }
+
+  // A reply that narrates actions in a turn that performed none is fabrication
+  // -- watched happen verbatim: "The Calculator window has been cleared", zero
+  // tool calls. One corrective round, with tools, so the model can either do
+  // the thing (open_app, propose_plan) or retract. The correction streams
+  // after the fabricated text; the notice is what tells the user why.
+  const toolRanThisTurn = steps.some((s) => s.kind === "tool");
+  if (reply.trim() && !toolRanThisTurn && claimsUnperformedAction(reply)) {
+    handlers.onNotice?.(
+      "That reply described actions that never ran — nothing was called. Correcting.",
+    );
+    history.push({
+      role: "user",
+      content:
+        "(Nothing you described actually happened: you called no tool this turn. " +
+        "Either make the call that does it — open_app opens apps, propose_plan " +
+        "carries clicks, keys and typing for approval — or tell the user plainly " +
+        "you did not do it. Never describe an action as done.)",
+    });
+    try {
+      handlers.onContent?.("\n\n");
+      for (let round = 0; round < 2; round++) {
+        const startedAt = Date.now();
+        const fix = await complete(history, round === 0 ? wireTools : [], {
+          onReasoning: handlers.onReasoning,
+          onContent: handlers.onContent,
+        });
+        steps.push({
+          seq: steps.length,
+          kind: "model",
+          rawContent: fix.rawContent,
+          reasoning: fix.reasoning || null,
+          repaired: fix.repaired,
+          scavenged: fix.scavenged,
+          durationMs: Date.now() - startedAt,
+        });
+        if (fix.toolCalls.length === 0) {
+          if (fix.content.trim() && !looksDegenerate(fix.content)) {
+            reply = fix.content.trim();
+            history.push({ role: "assistant", content: reply });
+            logMessage(sessionId, "assistant", reply);
+          }
+          break;
+        }
+        history.push({
+          role: "assistant",
+          content: fix.content || null,
+          tool_calls: fix.toolCalls,
+        });
+        await runToolCalls(fix.toolCalls);
+      }
+    } catch {
+      // The fabricated reply stands if the correction fails; the notice has
+      // at least told the user not to trust it.
     }
   }
 
