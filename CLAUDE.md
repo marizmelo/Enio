@@ -154,6 +154,13 @@ just composed always goes to the approval sheet, whatever auto-run says — that
 line is not negotiable by any setting. An unmarked recipe now proposes rather
 than running silently, which is stricter than it used to be.
 
+**A plan can also be revised by prompt** (`POST /plans/:id/revise`). Framed as
+a transformation, not an invention: the current steps go in as JSON and revised
+steps come back, with an instruction to leave untouched anything the request
+did not mention — much closer to the classification this model size is good at
+than "write me a plan". It returns the steps rather than storing them, so a bad
+rewrite costs a glance and one Undo, never an action.
+
 **The approval sheet is editable, and each step can be tested alone.** What the
 user reads is what they consent to, so edits are written back before the run —
 the record, the approval and the execution stay one thing. Testing runs the

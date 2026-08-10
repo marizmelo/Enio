@@ -18,6 +18,7 @@ import { probeAssistiveAccess } from "./tools/ax.js";
 import { availableModels, currentModelId } from "./model-settings.js";
 import { switchModel } from "./runtime.js";
 import { autoRunEnabled, setAutoRun } from "./automation.js";
+import { revisePlan } from "./revise.js";
 import {
   approvePlan,
   forgetRecipe,
@@ -546,6 +547,48 @@ async function handle(
       : (stored.kind ?? "applescript");
     const out = await runScript(script, kind);
     sendJson(res, 200, { ok: out.ok, output: out.output });
+    return;
+  }
+
+  /**
+   * Revise a pending plan by describing the change.
+   *
+   * Returns the revised steps rather than storing them: the user reads them
+   * in the same editor they could have typed, and nothing is committed until
+   * they approve. A bad revision costs a glance, not an action -- which is
+   * what makes it safe to let the model rewrite its own proposal at all.
+   */
+  const reviseMatch = url.pathname.match(/^\/plans\/([0-9a-f-]{8,})\/revise$/);
+  if (reviseMatch && req.method === "POST") {
+    const plan = getPlan(reviseMatch[1]!);
+    if (!plan) {
+      sendJson(res, 404, { error: { message: "No such plan." } });
+      return;
+    }
+    let body: { instruction?: unknown; steps?: unknown } = {};
+    try {
+      body = JSON.parse((await readBody(req)) || "{}");
+    } catch {
+      /* an empty body is caught by the instruction check below */
+    }
+    // Revise what is on screen, including edits not yet approved -- otherwise
+    // "now make it Python" would silently discard the line just typed.
+    const base = Array.isArray(body.steps) && body.steps.length > 0
+      ? (body.steps as Array<Record<string, unknown>>).map((st) => ({
+          summary: String(st?.summary ?? ""),
+          script: String(st?.script ?? ""),
+          kind: PLAN_KINDS.includes(st?.kind as PlanKind)
+            ? (st.kind as PlanKind)
+            : ("applescript" as PlanKind),
+        }))
+      : planSteps(plan);
+
+    const out = await revisePlan(base, String(body.instruction ?? ""), plan.summary);
+    if (!out.ok) {
+      sendJson(res, 400, { error: { message: out.reason ?? "Could not revise that." } });
+      return;
+    }
+    sendJson(res, 200, { steps: out.steps });
     return;
   }
 

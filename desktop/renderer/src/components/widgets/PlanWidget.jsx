@@ -44,6 +44,12 @@ export function PlanWidget({ id, summary, steps: proposed = [] }) {
   const [steps, setSteps] = useState(proposed);
   const [tests, setTests] = useState({});
   const [testing, setTesting] = useState(null);
+  // Revision by prompt. `undo` holds the steps as they were before the last
+  // revision, because a model rewriting six lines you were happy with should
+  // be one click to take back.
+  const [instruction, setInstruction] = useState("");
+  const [revising, setRevising] = useState(false);
+  const [undo, setUndo] = useState(null);
 
   const settled = ["approved", "saved", "declined", "failed"].includes(state);
   const edited = JSON.stringify(steps) !== JSON.stringify(proposed);
@@ -92,6 +98,25 @@ export function PlanWidget({ id, summary, steps: proposed = [] }) {
       setTests((t) => ({ ...t, [i]: { ok: false, output: String(err?.message ?? err) } }));
     } finally {
       setTesting(null);
+    }
+  };
+
+  const revise = async () => {
+    if (!instruction.trim()) return;
+    setRevising(true);
+    setError("");
+    try {
+      // Revising what is on screen, edits included -- otherwise "now make it
+      // Python" would silently discard the line just typed.
+      const data = await post(`/plans/${id}/revise`, { instruction, steps });
+      setUndo(steps);
+      setSteps(data.steps);
+      setTests({});
+      setInstruction("");
+    } catch (err) {
+      setError(String(err?.message ?? err));
+    } finally {
+      setRevising(false);
     }
   };
 
@@ -207,8 +232,43 @@ export function PlanWidget({ id, summary, steps: proposed = [] }) {
                 Stopped at step {results.length} of {steps.length}. Earlier steps already ran.
               </p>
             )}
+            {!settled && (
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  value={instruction}
+                  onChange={(e) => setInstruction(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && instruction.trim() && !revising) revise();
+                  }}
+                  placeholder="Describe a change — “do this in Python”, “add a step to close it”"
+                  className="h-9 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!instruction.trim() || revising || state === "running"}
+                  onClick={revise}
+                >
+                  {revising ? "Rewriting…" : "Rewrite"}
+                </Button>
+                {undo && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={revising}
+                    onClick={() => {
+                      setSteps(undo);
+                      setUndo(null);
+                      setTests({});
+                    }}
+                  >
+                    Undo
+                  </Button>
+                )}
+              </div>
+            )}
             {edited && !settled && (
-              <p className="mt-3 text-xs text-muted-foreground">
+              <p className="mt-2 text-xs text-muted-foreground">
                 Edited. What you see here is what will run.
               </p>
             )}
