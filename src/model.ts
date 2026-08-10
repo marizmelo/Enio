@@ -32,6 +32,16 @@ interface StreamHandlers {
 export interface CompleteOptions {
   maxTokens?: number;
   /**
+   * Override the sampling temperature for this one call.
+   *
+   * The default comes from config and suits open generation. Classification
+   * does not want sampling at all: the router picking a specialist at
+   * temperature 1.0 was measurably a dice roll — the same request routed
+   * differently run to run — and a wrong route sends the request to a
+   * specialist without the tools to serve it. Classifiers pass 0.
+   */
+  temperature?: number;
+  /**
    * false pre-closes the model's <think> block through the chat template, so
    * generation starts where the answer goes. The template patch that makes
    * this possible lives in scripts/patch-runtime.mjs; against an unpatched
@@ -50,7 +60,7 @@ export async function complete(
   const body: Record<string, unknown> = {
     model: config.modelName,
     messages: messages.map(stripInternalFields),
-    temperature: config.temperature,
+    temperature: opts.temperature ?? config.temperature,
     top_p: config.topP,
     stream: true,
   };

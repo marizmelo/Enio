@@ -39,8 +39,11 @@ export interface Specialist {
 export const SPECIALISTS: Specialist[] = [
   {
     name: "researcher",
+    // "announcements and events" is there for things like WWDC: developer
+    // words in a what-happened question routed to the coder, which has no web
+    // access and could only guess.
     description:
-      "Questions about the outside world, current events, documentation, or anything needing a web lookup.",
+      "Questions about the outside world: news, current events, announcements, documentation, or anything needing a web lookup.",
     systemPrompt:
       `You research things on the web and report what you find.\n\n` +
       `Search first, then fetch the most promising result to read it properly — ` +
@@ -102,8 +105,13 @@ export const SPECIALISTS: Specialist[] = [
   },
   {
     name: "operator",
+    // Leads with the concrete verbs people actually say -- "write a note",
+    // "add an event" -- because the router pattern-matches wording, and
+    // "doing something on the machine" matched nothing anyone says. Measured:
+    // "write a note for groceries" routed to the generalist, which cannot do
+    // it, and answered with prose about the note it was not creating.
     description:
-      "Doing something on the machine: checking the screen, controlling Calendar, Notes, Finder, Music, or running a Shortcut.",
+      "Creating or changing things in Mac apps: write a note, add a calendar event, set a reminder, check the screen, control Finder or Music, run a Shortcut.",
     systemPrompt:
       `You operate the user's Mac.\n\n` +
       `For reading Mail, Calendar, Notes, Reminders or Finder, use mac_recipe ` +
@@ -131,8 +139,12 @@ export const SPECIALISTS: Specialist[] = [
   },
   {
     name: "generalist",
+    // "writing" used to be in this list, and it was bait: "write a note"
+    // pattern-matched here instead of the operator, so the specialist with no
+    // Notes tools got the request and narrated the note it could not create.
+    // Composing text in the chat still lands here anyway -- it is the default.
     description:
-      "Conversation, reasoning, explanation, writing, or anything that doesn't fit the others.",
+      "Conversation, reasoning, explanation, or anything that doesn't fit the others.",
     systemPrompt:
       `You are a thoughtful assistant. Answer directly from what you know.\n\n` +
       `Use recall if the user refers to something from a past conversation. ` +
@@ -176,17 +188,28 @@ export async function route(userInput: string): Promise<string> {
         `Route the user's request to exactly one specialist.\n\n${menu}\n\n` +
         `Reply with ONLY this JSON, nothing else:\n` +
         `{"specialist": "name"}\n\n` +
+        // One example per specialist. The model routes by pattern-matching
+        // these far more than the descriptions, so a specialist with no
+        // example effectively does not exist for anything its description's
+        // exact words don't cover -- the operator was unreachable for "write
+        // a note for groceries" until it got one.
         `Examples:\n` +
         `"what's new with the Vision Pro" -> {"specialist": "researcher"}\n` +
         `"why is my test failing" -> {"specialist": "coder"}\n` +
         `"what did I say I was working on" -> {"specialist": "librarian"}\n` +
+        `"did Sam reply about the invoice" -> {"specialist": "mail"}\n` +
+        `"write a note with my grocery list" -> {"specialist": "operator"}\n` +
+        `"add lunch to my calendar for noon" -> {"specialist": "operator"}\n` +
         `"explain monads to me" -> {"specialist": "generalist"}`,
     },
     { role: "user", content: userInput.slice(0, 500) },
   ];
 
   try {
-    const result = await complete(messages, []);
+    // Greedy, not sampled. This is a classification with one right answer,
+    // and at the config temperature the same request measurably routed
+    // differently run to run.
+    const result = await complete(messages, [], {}, undefined, { temperature: 0 });
     const match = /\{[\s\S]*\}/.exec(result.content);
     if (!match) return fuzzyRoute(result.content);
     const parsed = routeSchema.safeParse(JSON.parse(match[0]));

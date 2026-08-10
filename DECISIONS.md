@@ -187,6 +187,36 @@ Re-measure before re-wording. Reading better is not the test.
 
 ---
 
+### The router is greedy, and every specialist has an example
+
+Found by a real failure: "write a note for groceries" routed to the
+generalist, which has no Notes tools, so it answered with prose about the note
+it was not creating — to the user, the agent just did nothing. Probed against
+the live model, three findings, in increasing order of importance:
+
+- **Examples dominate descriptions.** The router prompt had examples for four
+  of six specialists; the four with examples routed correctly and
+  operator-shaped requests never reached the operator. A specialist without an
+  example effectively does not exist except for wording its description covers
+  verbatim. The rule is now one example per specialist, and it is load-bearing.
+- **Words in descriptions are bait.** "writing" in the generalist's
+  description captured "write a note"; developer words like "WWDC" in a
+  what-happened question captured it for the coder, which has no web access.
+  Descriptions are matched on wording, not meaning, at this model size.
+- **The router ran at temperature 1.0.** Classification with sampling is a
+  dice roll, and it measurably was one: the same request routed differently
+  run to run, which also made every prompt tweak look better or worse than it
+  was. `route()` now passes temperature 0, and the probe became deterministic
+  — 8/8 twice, byte-identical. Anything else that is a classification rather
+  than generation (memory extraction, suggestion mining) probably wants the
+  same treatment; not yet measured.
+
+The probe lives in the session scratch, not the repo, because it needs the
+real model server up — but the method is the point: route real phrasings,
+change one variable, re-run. Reading better is still not the test.
+
+---
+
 ### Picking a script, not writing one
 
 **Chose:** `mac_recipe` — named, pre-tested AppleScript the model selects by
