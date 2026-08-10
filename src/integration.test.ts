@@ -534,6 +534,46 @@ describe("context budget", () => {
   });
 });
 
+describe("compaction leaves headroom", () => {
+  test("folding drops well below the budget rather than filling it", async () => {
+    // The meter sat at 94%, 95%, 96% and never fell, because compaction kept
+    // everything that *fit* the budget and so landed at the ceiling every
+    // turn. Worse than the display: tool results and the reply are appended
+    // after this point, so a history filling the window pushes the real
+    // prompt past it.
+    const { contextUsage } = await import("./agent.js");
+    const { config } = await import("./config.js");
+    const { runTurn } = await import("./agent.js");
+    const { buildRegistry } = await import("./tools/index.js");
+
+    scriptModel([{ content: "a summary of the earlier conversation" }, { content: "ok." }]);
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+
+    const history: Message[] = [];
+    for (let i = 0; i < 60; i++) {
+      history.push({ role: "user", content: `Q${i} ` + "some words ".repeat(60) });
+      history.push({ role: "assistant", content: `A${i} ` + "more words ".repeat(60) });
+    }
+
+    const seen: Array<{ tokens: number; budget: number }> = [];
+    await runTurn("and now a new question", history, registry, sessionId, {
+      onContext: (u) => seen.push(u),
+    });
+
+    const reported = seen.at(-1);
+    assert.ok(reported, "a context reading should be reported");
+    const pct = reported.tokens / reported.budget;
+    assert.ok(
+      pct < 0.8,
+      `after folding the window should have headroom, got ${Math.round(pct * 100)}%`,
+    );
+    // And the fold actually happened rather than the history being small.
+    assert.ok(history.length < 30, `history should have been compacted, still ${history.length}`);
+    assert.equal(contextUsage(history).budget, config.contextBudget);
+  });
+});
+
 describe("shared model server", () => {
   test("the last client out is the one that shuts it down", async () => {
     const clients = await import("./model-clients.js");

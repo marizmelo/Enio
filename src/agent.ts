@@ -164,6 +164,15 @@ export function contextUsage(history: Message[]): { tokens: number; budget: numb
  * Recent turns are kept whole because that is where pronouns point. A summary
  * of "the user asked about the deploy script" cannot resolve "run it again".
  */
+/**
+ * How far below the budget a compaction folds.
+ *
+ * The gap between the trigger and the target is the whole point: fire at the
+ * budget, land well under it. Too close and every turn re-folds; too far and
+ * a compaction throws away context it did not need to.
+ */
+const COMPACT_TO = 0.6;
+
 async function compactHistory(history: Message[]): Promise<Message[]> {
   const system = history[0]?.role === "system" ? history[0] : null;
   const rest = system ? history.slice(1) : history;
@@ -176,8 +185,21 @@ async function compactHistory(history: Message[]): Promise<Message[]> {
   // The system prompt is charged against the budget because the model pays for
   // it on every turn: a specialist prompt runs 600-1200 tokens, so a third or
   // more of the usable window is spoken for before the user says anything.
+  // Folded down to a low-water mark, not up to the brim.
+  //
+  // Keeping everything that *fits* the budget looks right and leaves nothing
+  // for the turn itself: tool results and the reply are appended after this,
+  // so a history filling the window pushes the actual prompt past it. It also
+  // means every later turn re-folds and lands at the ceiling again, which is
+  // why the context meter sat at 94%, 95%, 96% and never fell -- measured,
+  // three turns running.
+  //
+  // Folding further than the trigger is what gives the hysteresis: compaction
+  // fires at the budget and drops to well under it, so the next few turns are
+  // free and the meter visibly resets.
   const spent = system ? messageTokens(system) : 0;
-  let room = Math.max(config.contextBudget - spent, Math.floor(config.contextBudget / 4));
+  const target = Math.floor(config.contextBudget * COMPACT_TO);
+  let room = Math.max(target - spent, Math.floor(config.contextBudget / 4));
 
   let keep = 0;
   for (let i = rest.length - 1; i >= 0; i--) {
