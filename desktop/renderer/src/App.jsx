@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StatusBar } from "@/components/StatusBar";
 import { Message } from "@/components/Message";
@@ -16,6 +16,15 @@ import { HistoryDialog } from "@/components/HistoryDialog";
 import { PermissionNotice } from "@/components/PermissionNotice";
 import { RecipesDialog } from "@/components/RecipesDialog";
 import { speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
+
+/** "2h ago", for the divider under restored history. */
+function ago(ts) {
+  const m = Math.round((Date.now() - ts) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  if (m < 60 * 24) return `${Math.round(m / 60)}h ago`;
+  return `${Math.round(m / 1440)}d ago`;
+}
 
 export function App() {
   const [status, setStatus] = useState({
@@ -84,7 +93,14 @@ export function App() {
   // restore — once decided, the card simply stops coming back.
   const restoreThread = useCallback(async (convId) => {
     const transcript = await conversationMessages(convId);
-    const msgs = transcript.map((m) => ({ role: m.role, content: m.content }));
+    // Marked so the thread can draw a line under them. A restored transcript
+    // is pixel-identical to a live reply, and three separate times now a
+    // resumed conversation whose tail happened to be a stalled-looking answer
+    // was read as the model failing to respond -- the fix is for history to
+    // say it is history.
+    const msgs = transcript.map((m) => ({ role: m.role, content: m.content, restored: true }));
+    const lastTs = transcript.length > 0 ? transcript[transcript.length - 1].ts : null;
+    if (lastTs) msgs[msgs.length - 1].restoredAt = lastTs;
     try {
       const waiting = (await pendingPlans()).filter((p) => p.sessionId === convId);
       if (waiting.length > 0) {
@@ -283,11 +299,22 @@ export function App() {
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-5">
             {messages.map((m, i) => (
-              <Message
-                key={i}
-                {...m}
-                streaming={streaming && i === messages.length - 1 && m.role === "assistant"}
-              />
+              <Fragment key={i}>
+                <Message
+                  {...m}
+                  streaming={streaming && i === messages.length - 1 && m.role === "assistant"}
+                />
+                {/* The line under history. Without it a resumed transcript is
+                    pixel-identical to a live reply, and a tail that happens to
+                    read like a stall gets mistaken for one. */}
+                {m.restored && !messages[i + 1]?.restored && (
+                  <div className="flex items-center gap-3 py-1 text-[11px] text-muted-foreground">
+                    <div className="h-px flex-1 bg-border" />
+                    earlier conversation{m.restoredAt ? ` · ${ago(m.restoredAt)}` : ""}
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+                )}
+              </Fragment>
             ))}
           </div>
         )}
