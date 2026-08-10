@@ -229,12 +229,17 @@ export function compileAction(
   if (kind === "open") {
     // The one action whose app need not be running -- opening is how it gets
     // that way -- so the name cannot come from the process list and is model
-    // text. esc() keeps it inside the string literal, the approval sheet
-    // shows exactly what will launch, and a name that matches nothing errors
-    // at run time rather than launching something else.
+    // text. esc() keeps it inside the AppleScript literal and `quoted form
+    // of` makes it one shell word, so it cannot become a second command.
+    //
+    // Launched through `open -a` rather than `tell application to activate`,
+    // which reads like the obvious way and fails with -600 ("Application
+    // isn't running" -- from the verb whose whole job is to change that) in
+    // any context not allowed to launch via Apple Events: sandboxed shells,
+    // SSH sessions, some LaunchAgents. LaunchServices works in all of them.
     return {
       ok: true,
-      script: `tell application "${esc(target)}" to activate`,
+      script: `do shell script "open -a " & quoted form of "${esc(target)}"`,
     };
   }
 

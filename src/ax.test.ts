@@ -143,12 +143,14 @@ describe("compiling an action into AppleScript", () => {
     assert.equal(compileAction("click", "Notes", "   ").ok, false);
   });
 
-  test("open activates by name and stays inside the string literal", () => {
-    // The gap that broke the first real Qwen plan: "open the Calendar app" had
-    // no action to be, so all four steps dropped and the plan was refused.
+  test("open launches through LaunchServices, not an Apple Event", () => {
+    // `tell application to activate` fails with -600 in any context not
+    // allowed to launch via Apple Events -- discovered when the first
+    // approved plan's very first step failed on it. `open -a` works there
+    // and everywhere else.
     const out = compileAction("open", "Calendar", "Calendar");
     assert.ok(out.ok);
-    assert.equal(out.script, 'tell application "Calendar" to activate');
+    assert.equal(out.script, 'do shell script "open -a " & quoted form of "Calendar"');
 
     const sneaky = compileAction("open", "x", 'Cal" & (do shell script "id') ;
     assert.ok(sneaky.ok);

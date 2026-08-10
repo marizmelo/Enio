@@ -191,7 +191,7 @@ describe("named UI actions become scripts at propose time", () => {
     });
     const widget = (out as { widget: { steps: Array<{ script: string }> } }).widget;
     assert.equal(widget.steps.length, 2);
-    assert.match(widget.steps[0]!.script, /tell application "NoSuchAppForThisTest" to activate/);
+    assert.match(widget.steps[0]!.script, /open -a " & quoted form of "NoSuchAppForThisTest"/);
     assert.match(widget.steps[1]!.script, /tell process "NoSuchAppForThisTest"/);
   });
 
