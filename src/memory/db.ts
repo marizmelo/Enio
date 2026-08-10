@@ -32,6 +32,16 @@ export function getDb(): Database.Database {
  *  better-sqlite3, which bundles it, but verify rather than assume. */
 export let ftsAvailable = false;
 
+/** Add a column if it is not there yet. SQLite has no IF NOT EXISTS for
+ *  columns, and re-adding one throws, so the check is a read of the table
+ *  shape -- cheaper than a schema-version table for a handful of additions. */
+function addColumn(d: Database.Database, table: string, column: string, decl: string): void {
+  const cols = d.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === column)) {
+    d.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+  }
+}
+
 function migrate(d: Database.Database): void {
   d.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
@@ -204,6 +214,11 @@ function migrate(d: Database.Database): void {
     // No FTS5 in this build. searchFactsKeyword() degrades to LIKE.
     ftsAvailable = false;
   }
+  // Recipes learned to be more than AppleScript, and to carry whether a person
+  // has vouched for them. Both default to what the old rows already meant.
+  addColumn(d, "saved_recipes", "kind", "TEXT NOT NULL DEFAULT 'applescript'");
+  addColumn(d, "saved_recipes", "safe", "INTEGER NOT NULL DEFAULT 0");
+
 }
 
 /* ---------- vector helpers ---------------------------------------------- */

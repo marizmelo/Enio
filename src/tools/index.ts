@@ -49,6 +49,25 @@ export async function buildRegistry(
     }
   }
 
+  /**
+   * The ceiling protects the *model*, which is why routing changes where it
+   * belongs.
+   *
+   * Past ~16 tool definitions a small model picks at random -- but with
+   * routing on it never sees the registry, only one specialist's ≤6. Capping
+   * the registry as well meant the two limits stacked: adding open_app pushed
+   * the total past 16 and silently truncated the *end* of the list, which is
+   * where the web tools live, leaving the researcher with no web access at
+   * all. The per-specialist limit is the one that governs a prompt, and there
+   * is a test asserting it.
+   *
+   * Single-agent mode still caps, because there the registry is what the
+   * model sees.
+   */
+  const ceiling = config.routingEnabled
+    ? Math.max(config.maxExposedTools, 64)
+    : config.maxExposedTools;
+
   const builtins: ToolDef[] = [
     ...skillTools,
     ...timeTools,
@@ -73,7 +92,7 @@ export async function buildRegistry(
       dropped.push(`${tool.name} (duplicate name)`);
       continue;
     }
-    if (combined.length >= config.maxExposedTools) {
+    if (combined.length >= ceiling) {
       dropped.push(tool.name);
       continue;
     }
@@ -84,7 +103,7 @@ export async function buildRegistry(
   if (dropped.length > 0) {
     onLog(
       `[tools] ${combined.length} exposed, ${dropped.length} withheld to stay under ` +
-        `the ${config.maxExposedTools}-tool budget: ${dropped.join(", ")}`,
+        `the ${ceiling}-tool budget: ${dropped.join(", ")}`,
     );
     onLog(
       `[tools] Raise ENIO_MAX_TOOLS, or add a "tools" allowlist per server in mcp.json.`,

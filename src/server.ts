@@ -17,6 +17,7 @@ import {
 import { probeAssistiveAccess } from "./tools/ax.js";
 import { availableModels, currentModelId } from "./model-settings.js";
 import { switchModel } from "./runtime.js";
+import { autoRunEnabled, setAutoRun } from "./automation.js";
 import {
   approvePlan,
   forgetRecipe,
@@ -24,7 +25,12 @@ import {
   listPendingPlans,
   listSavedRecipes,
   normalizeRecipeName,
+  planSteps,
+  PLAN_KINDS,
+  replacePlanSteps,
   runAppleScript,
+  runScript,
+  type PlanKind,
   saveRecipe,
   settlePlan,
 } from "./plans.js";
@@ -386,6 +392,7 @@ async function handle(
     sendJson(res, 200, {
       builtin: builtinRecipes(),
       saved: listSavedRecipes(),
+      autoRun: autoRunEnabled(),
       // So the editor can say why a saved recipe would not run, rather than
       // letting the user write one that silently never fires.
       desktopActions: desktopEnabled(),
@@ -427,7 +434,7 @@ async function handle(
         return;
       }
 
-      let body: { summary?: unknown; script?: unknown } = {};
+      let body: { summary?: unknown; script?: unknown; kind?: unknown; safe?: unknown } = {};
       try {
         body = JSON.parse((await readBody(req)) || "{}");
       } catch {
@@ -436,6 +443,10 @@ async function handle(
       }
       const script = String(body.script ?? "").trim();
       const summary = String(body.summary ?? "").trim();
+      const kind = PLAN_KINDS.includes(body.kind as PlanKind)
+        ? (body.kind as PlanKind)
+        : ("applescript" as PlanKind);
+      const safe = body.safe === true;
       if (!script || !summary) {
         sendJson(res, 400, { error: { message: "A recipe needs a summary and a script." } });
         return;
@@ -447,8 +458,11 @@ async function handle(
       // is byte-identical to what is already stored, so renaming or reworded
       // summaries do not re-fire something with a side effect.
       const existing = listSavedRecipes().find((r) => r.name === name);
-      if (!existing || existing.script !== script) {
-        const run = await runAppleScript(script);
+      // Marking an unchanged recipe safe must not re-run it: vouching for a
+      // script is a judgement about one already known to work, not a reason
+      // to fire something with a side effect again.
+      if (!existing || existing.script !== script || existing.kind !== kind) {
+        const run = await runScript(script, kind);
         if (!run.ok) {
           sendJson(res, 400, {
             error: { message: "That script failed, so it was not saved." },
@@ -456,15 +470,83 @@ async function handle(
           });
           return;
         }
-        const result = saveRecipe({ name, summary, script });
+        const result = saveRecipe({ name, summary, script, kind, safe });
         sendJson(res, 200, { name: result.ok ? result.name : name, output: run.output, ran: true });
         return;
       }
 
-      saveRecipe({ name, summary, script });
+      saveRecipe({ name, summary, script, kind, safe });
       sendJson(res, 200, { name, ran: false });
       return;
     }
+  }
+
+  /**
+   * Whether a vouched-for recipe may run unattended.
+   *
+   * Separate from ENIO_DESKTOP on purpose: one says whether this can act at
+   * all, the other whether it may act without stopping to ask. Turning both
+   * on in a single gesture would be bundled consent.
+   */
+  if (req.method === "GET" && url.pathname === "/automation") {
+    sendJson(res, 200, { autoRun: autoRunEnabled(), desktopActions: desktopEnabled() });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/automation") {
+    let on = false;
+    try {
+      on = JSON.parse((await readBody(req)) || "{}")?.autoRun === true;
+    } catch {
+      on = false;
+    }
+    setAutoRun(on);
+    sendJson(res, 200, { autoRun: autoRunEnabled() });
+    return;
+  }
+
+  /**
+   * Run one step of a pending plan, without settling it.
+   *
+   * Approving a whole plan to find out whether its third step works is a bad
+   * trade when the steps have side effects, and it is worse now that a step
+   * can be Python. Testing is the same consent as approving, scoped to one
+   * step the user is looking at: it runs what is in the editor, which may not
+   * be what was proposed, and the plan stays pending either way.
+   */
+  const testMatch = url.pathname.match(/^\/plans\/([0-9a-f-]{8,})\/test$/);
+  if (testMatch && req.method === "POST") {
+    const plan = getPlan(testMatch[1]!);
+    if (!plan) {
+      sendJson(res, 404, { error: { message: "No such plan." } });
+      return;
+    }
+    if (!desktopEnabled()) {
+      sendJson(res, 409, {
+        error: { message: "Desktop control is off. Start enio with ENIO_DESKTOP=1." },
+      });
+      return;
+    }
+    let body: { index?: unknown; script?: unknown; kind?: unknown } = {};
+    try {
+      body = JSON.parse((await readBody(req)) || "{}");
+    } catch {
+      /* an empty body just means "the step as stored" */
+    }
+    const steps = planSteps(plan);
+    const index = Number(body.index ?? 0);
+    const stored = steps[index];
+    if (!stored) {
+      sendJson(res, 400, { error: { message: `No step ${index + 1} in this plan.` } });
+      return;
+    }
+    const script = typeof body.script === "string" && body.script.trim() ? body.script : stored.script;
+    const kind = PLAN_KINDS.includes(body.kind as PlanKind)
+      ? (body.kind as PlanKind)
+      : (stored.kind ?? "applescript");
+    const out = await runScript(script, kind);
+    sendJson(res, 200, { ok: out.ok, output: out.output });
+    return;
   }
 
   const planMatch = url.pathname.match(/^\/plans\/([0-9a-f-]{8,})\/(approve|save|decline)$/);
@@ -502,19 +584,41 @@ async function handle(
       return;
     }
 
+    // Both approve and save may carry edited steps: what the user reads in the
+    // sheet is what they are consenting to, so if they changed it, the changed
+    // text is the plan. Stored before running so the record, the approval and
+    // the execution are the same thing rather than three versions of it.
+    let body: { name?: unknown; safe?: unknown; steps?: unknown } = {};
+    try {
+      body = JSON.parse((await readBody(req)) || "{}");
+    } catch {
+      /* no body is the ordinary case: approve exactly what was proposed */
+    }
+
+    if (Array.isArray(body.steps) && body.steps.length > 0) {
+      const edited = (body.steps as Array<Record<string, unknown>>)
+        .map((st) => ({
+          summary: String(st?.summary ?? "").trim(),
+          script: String(st?.script ?? ""),
+          kind: PLAN_KINDS.includes(st?.kind as PlanKind)
+            ? (st.kind as PlanKind)
+            : ("applescript" as PlanKind),
+        }))
+        .filter((st) => st.script.trim());
+      if (edited.length === 0) {
+        sendJson(res, 400, { error: { message: "Every step was emptied." } });
+        return;
+      }
+      replacePlanSteps(plan.id, edited);
+      plan.payload = JSON.stringify(edited);
+    }
+
     // The name is checked before anything runs: execution is one-shot, and
     // discovering the name was invalid after the steps ran would leave a
     // successful run unsaveable.
     let saveAs: string | undefined;
     if (action === "save") {
-      const body = await readBody(req);
-      let raw = "";
-      try {
-        raw = String(JSON.parse(body || "{}")?.name ?? "");
-      } catch {
-        raw = "";
-      }
-      const name = normalizeRecipeName(raw);
+      const name = normalizeRecipeName(String(body.name ?? ""));
       if (!name) {
         sendJson(res, 400, { error: { message: "Name is too short." } });
         return;
@@ -522,7 +626,7 @@ async function handle(
       saveAs = name;
     }
 
-    sendJson(res, 200, await approvePlan(plan, { saveAs }));
+    sendJson(res, 200, await approvePlan(plan, { saveAs, safe: body.safe === true }));
     return;
   }
 

@@ -5,7 +5,8 @@ import { config } from "../config.js";
 import { detectPlatform } from "../platform.js";
 import { readImage } from "../vision.js";
 import type { ToolDef } from "../types.js";
-import { listSavedRecipes, osascriptFailure, proposePlan } from "../plans.js";
+import { listSavedRecipes, osascriptFailure, proposePlan, runScript, type PlanKind } from "../plans.js";
+import { autoRunEnabled } from "../automation.js";
 import {
   assistiveAccessGranted,
   axBridge,
@@ -481,15 +482,48 @@ const recipeTool: ToolDef = {
       return `No recipe named "${name}". Available: ${all.join(", ")}`;
     }
     // A saved recipe is not a built-in. The reason built-ins need no flag is
-    // that they are seven audited reads; a saved one is arbitrary AppleScript
-    // that a person wrote or approved, and since plans can now carry clicks and
-    // keystrokes it may well change something. Running that ungated would put
-    // an irreversible action behind no switch at all.
-    if (saved && !RECIPES[name] && !desktopEnabled()) {
-      return (
-        `"${name}" is a saved recipe, which can change things, so it needs desktop ` +
-        `mode. Start enio with ENIO_DESKTOP=1 to use it.`
-      );
+    // that they are audited reads; a saved one is arbitrary script that a
+    // person wrote or approved, and since plans can carry clicks, keystrokes
+    // and now shell and Python it may well change something. Running that
+    // ungated would put an irreversible action behind no switch at all.
+    if (saved && !RECIPES[name]) {
+      if (!desktopEnabled()) {
+        return (
+          `"${name}" is a saved recipe, which can change things, so it needs desktop ` +
+          `mode. Start enio with ENIO_DESKTOP=1 to use it.`
+        );
+      }
+
+      // Vouched for, and unattended running is switched on: this is the one
+      // path that acts without asking, and it exists because being asked to
+      // re-approve the same script forever is how an approval stops being
+      // read. Everything else -- an unmarked recipe, auto off -- goes to the
+      // sheet instead of running silently, which is stricter than before.
+      if (saved.safe && autoRunEnabled()) {
+        const out = await runScript(saved.script, saved.kind);
+        return out.ok
+          ? capped(out.output) || "(nothing to report)"
+          : `"${name}" failed: ${out.output}`;
+      }
+
+      const plan = proposePlan({
+        sessionId: currentSessionId || null,
+        summary: saved.summary || `Run the ${name} recipe`,
+        kind: saved.kind,
+        steps: [{ summary: saved.summary || name, script: saved.script, kind: saved.kind }],
+      });
+      return {
+        text:
+          `"${name}" is saved but not marked safe to run on its own` +
+          `${autoRunEnabled() ? "" : ", and automatic running is off"}, so it is ` +
+          `waiting for the user to approve it. Tell them briefly and call nothing else.`,
+        widget: {
+          type: "plan",
+          id: plan.id,
+          summary: saved.summary || `Run the ${name} recipe`,
+          steps: [{ summary: saved.summary || name, script: saved.script, kind: saved.kind }],
+        },
+      };
     }
     if (recipe.needsAx && !assistiveAccessGranted()) {
       return (
@@ -664,7 +698,15 @@ const proposeTool: ToolDef = {
             },
             script: {
               type: "string",
-              description: "AppleScript, only when no named action fits.",
+              description: "AppleScript, for driving a Mac app when no named action fits.",
+            },
+            shell: {
+              type: "string",
+              description: "A shell command. Prefer this over AppleScript for files, git, network and anything with a CLI.",
+            },
+            python: {
+              type: "string",
+              description: "A Python script. Prefer this for real work — parsing, APIs, files — it is far more reliable than AppleScript.",
             },
           },
           required: ["summary"],
@@ -698,7 +740,7 @@ const proposeTool: ToolDef = {
       }
     }
 
-    const steps: Array<{ summary: string; script: string }> = [];
+    const steps: Array<{ summary: string; script: string; kind?: PlanKind }> = [];
     // Carried forward so an app named once covers the steps that follow, which
     // is how the model writes them when every step is in the same window.
     let lastApp = String(args.app ?? "");
@@ -744,9 +786,25 @@ const proposeTool: ToolDef = {
         continue;
       }
 
-      const script = unescapeQuotes(String(s?.script ?? "").trim());
-      if (script) {
-        steps.push({ summary: stepSummary, script });
+      // A script step, in whichever language it was written. AppleScript keeps
+      // the double-unescaping repair because that failure is specific to it:
+      // the model escapes its quotes twice and osascript dies on character 17.
+      // Shell and Python are taken verbatim -- a backslash in them is far more
+      // likely to be deliberate than a mangled quote.
+      const written: Array<[key: string, kind: PlanKind]> = [
+        ["script", "applescript"],
+        ["shell", "shell"],
+        ["python", "python"],
+      ];
+      const found = written.find(([key]) => typeof s?.[key] === "string" && String(s[key]).trim());
+      if (found) {
+        const [key, kind] = found;
+        const raw = String(s[key]).trim();
+        steps.push({
+          summary: stepSummary,
+          script: kind === "applescript" ? unescapeQuotes(raw) : raw,
+          kind,
+        });
         continue;
       }
 
@@ -763,7 +821,7 @@ const proposeTool: ToolDef = {
         `{"summary": "Open Notes", "open": "Notes"}\n` +
         `{"summary": "new note", "menu": "File > New Note", "app": "Notes"}\n` +
         `{"summary": "type the items", "type_text": "milk, eggs"}\n` +
-        `Actions: ${STEP_ACTIONS.map(([k]) => k).join(", ")}, or script.`
+        `Actions: ${STEP_ACTIONS.map(([k]) => k).join(", ")}. Or a script: shell, python, script.`
       );
     }
 

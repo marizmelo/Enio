@@ -45,3 +45,10 @@ export const currentModel = () => call("/model");
  *  the new one is serving, so callers can just await it. */
 export const switchModel = (model) =>
   call("/model", { method: "POST", body: JSON.stringify({ model }) });
+
+/** Whether a vouched-for recipe may run unattended. Separate from desktop
+ *  mode: one says whether it can act, the other whether it may act unasked. */
+export const automation = () => call("/automation");
+
+export const setAutoRun = (autoRun) =>
+  call("/automation", { method: "POST", body: JSON.stringify({ autoRun }) });

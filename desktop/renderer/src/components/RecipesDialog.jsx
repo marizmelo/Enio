@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { deleteRecipe, listRecipes, saveRecipe } from "@/lib/recipes";
+import { deleteRecipe, listRecipes, saveRecipe, setAutoRun } from "@/lib/recipes";
 
 const BLANK = { name: "", summary: "", script: "" };
 
@@ -36,6 +36,7 @@ export function RecipesDialog({ open, onOpenChange }) {
   const [builtin, setBuiltin] = useState([]);
   const [saved, setSaved] = useState([]);
   const [canRun, setCanRun] = useState(true);
+  const [autoRun, setAuto] = useState(false);
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -47,6 +48,7 @@ export function RecipesDialog({ open, onOpenChange }) {
       setBuiltin(data.builtin ?? []);
       setSaved(data.saved ?? []);
       setCanRun(data.desktopActions !== false);
+      setAuto(data.autoRun === true);
     } catch {
       setBuiltin([]);
       setSaved([]);
@@ -142,6 +144,37 @@ export function RecipesDialog({ open, onOpenChange }) {
             </div>
           ) : (
             <>
+              {/* One switch for the machine, next to the per-recipe ones it
+                  governs -- a checkbox that does nothing until this is on
+                  should say so where it is ticked. */}
+              <label className="mb-3 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={autoRun}
+                  disabled={busy || !canRun}
+                  className="mt-0.5"
+                  onChange={async (e) => {
+                    setBusy(true);
+                    try {
+                      await setAutoRun(e.target.checked);
+                      setAuto(e.target.checked);
+                    } catch (err) {
+                      setError(String(err?.message ?? err));
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                />
+                <span>
+                  <span className="text-foreground">Run safe recipes automatically</span>
+                  <br />
+                  <span className="text-muted-foreground">
+                    Only recipes you ticked “safe”. A plan Enio has just written always asks
+                    first, whatever this says.
+                  </span>
+                </span>
+              </label>
+
               <p className="mb-1.5 text-xs font-medium text-muted-foreground">Yours</p>
               {saved.length === 0 ? (
                 <p className="mb-4 text-xs text-muted-foreground">
@@ -156,6 +189,33 @@ export function RecipesDialog({ open, onOpenChange }) {
                         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                           {r.summary}
                         </span>
+                        {/* Vouching is per recipe and reversible here: the
+                            checkbox is the whole difference between "this
+                            worked once" and "run it without asking". */}
+                        <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={r.safe === true}
+                            disabled={busy}
+                            onChange={async (e) => {
+                              setBusy(true);
+                              try {
+                                await saveRecipe(r.name, {
+                                  summary: r.summary,
+                                  script: r.script,
+                                  kind: r.kind,
+                                  safe: e.target.checked,
+                                });
+                                await refresh();
+                              } catch (err) {
+                                setError(String(err?.message ?? err));
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                          />
+                          safe
+                        </label>
                         <Button
                           size="sm"
                           variant="ghost"

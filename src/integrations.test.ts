@@ -74,6 +74,33 @@ describe("email", () => {
   });
 });
 
+describe("the tool budget", () => {
+  test("routing means no built-in is dropped for budget", async () => {
+    // The ceiling protects the model, and with routing on the model never
+    // sees the registry -- only one specialist's few. Capping both stacked
+    // the limits: adding one desktop tool pushed the total past 16 and
+    // silently truncated the end of the list, which is where the web tools
+    // are, leaving the researcher with no web access at all.
+    const { buildRegistry } = await import("./tools/index.js");
+    const registry = await buildRegistry();
+    assert.deepEqual(registry.dropped, [], "nothing should be withheld for budget");
+  });
+
+  test("every specialist still sees at most six", async () => {
+    // This is the limit that actually governs a prompt, and the one that
+    // matters now the registry no longer caps itself.
+    const { buildRegistry } = await import("./tools/index.js");
+    const { toolsFor } = await import("./specialists.js");
+    const registry = await buildRegistry();
+    for (const s of SPECIALISTS) {
+      assert.ok(
+        toolsFor(s, registry).length <= 6,
+        `${s.name} sees ${toolsFor(s, registry).length} tools`,
+      );
+    }
+  });
+});
+
 describe("desktop control", () => {
   test("nothing that changes the machine is available unless enabled", () => {
     // The gate is about irreversibility, not about touching apps at all.

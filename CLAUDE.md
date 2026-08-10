@@ -140,6 +140,32 @@ actually runs, and names reaching the shell go through `quoted form of`.
 Actions are compiled at *propose* time so the sheet shows the text that will
 actually run.
 
+**A plan step can be AppleScript, shell or Python** (`kind` on the step,
+missing means AppleScript). The model writes Python far better than it writes
+AppleScript — that asymmetry is the point, since moving work down from GUI
+scripting to a library call improves execution *and* authoring. Approving runs
+each step under its own interpreter; a recipe must be one kind, because it
+becomes a single script.
+
+**Auto-run applies only to recipes a person marked safe.** Two switches:
+`ENIO_DESKTOP` says whether this can act at all, auto-run (`~/.enio/automation.json`)
+says whether a *vouched* recipe may act without asking. A plan the model has
+just composed always goes to the approval sheet, whatever auto-run says — that
+line is not negotiable by any setting. An unmarked recipe now proposes rather
+than running silently, which is stricter than it used to be.
+
+**The approval sheet is editable, and each step can be tested alone.** What the
+user reads is what they consent to, so edits are written back before the run —
+the record, the approval and the execution stay one thing. Testing runs the
+editor's text without settling the plan.
+
+**The tool ceiling belongs per specialist, not to the registry.** With routing
+on the model only ever sees one specialist's ≤6, so capping the registry as
+well stacked two limits: one extra desktop tool pushed the total past 16 and
+silently truncated the end of the list, which is where the web tools live.
+Single-agent mode still caps the registry, because there it *is* what the model
+sees.
+
 **The model proposes scripts; it does not run them.** No specialist has
 `run_applescript`. The operator calls `propose_plan`, which stores the script
 and stops; execution happens server-side only after the user approves, and

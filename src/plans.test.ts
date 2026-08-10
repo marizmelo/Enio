@@ -300,6 +300,107 @@ describe("running an approved plan", () => {
   });
 });
 
+describe("step kinds, vouching and auto-run", () => {
+  const notMac = process.platform !== "darwin";
+
+  test("a step runs under the interpreter its kind names", { skip: notMac }, async () => {
+    // The point of kinds: the model writes Python far better than it writes
+    // AppleScript, so the work should be able to move down the ladder.
+    const py = await plans.runScript("print(6 * 7)", "python");
+    assert.equal(py.ok, true);
+    assert.equal(py.output, "42");
+
+    const sh = await plans.runScript("echo hello from shell", "shell");
+    assert.equal(sh.ok, true);
+    assert.equal(sh.output, "hello from shell");
+
+    const applescript = await plans.runScript("return 1 + 1", "applescript");
+    assert.equal(applescript.ok, true);
+    assert.equal(applescript.output, "2");
+  });
+
+  test("a failing step reports the interpreter's own error", { skip: notMac }, async () => {
+    // stderr is where Python says what was wrong; an exit status alone would
+    // tell the model nothing it could act on.
+    const out = await plans.runScript("raise SystemExit('deliberate')", "python");
+    assert.equal(out.ok, false);
+    assert.match(out.output, /deliberate/);
+  });
+
+  test("a plan runs each step under its own kind", { skip: notMac }, async () => {
+    const plan = plans.proposePlan({
+      summary: "mixed",
+      kind: "shell",
+      steps: [
+        { summary: "shell", script: "echo one", kind: "shell" },
+        { summary: "python", script: "print('two')", kind: "python" },
+      ],
+    });
+    const outcome = await plans.approvePlan(plans.getPlan(plan.id)!);
+    assert.equal(outcome.status, "approved");
+    assert.deepEqual(outcome.results.map((r) => r.output), ["one", "two"]);
+  });
+
+  test("a mixed-kind plan cannot become one recipe", { skip: notMac }, async () => {
+    // A recipe is a single script from here on, and joining AppleScript to
+    // Python produces something no interpreter can read.
+    const plan = plans.proposePlan({
+      summary: "mixed save",
+      kind: "shell",
+      steps: [
+        { summary: "a", script: "echo one", kind: "shell" },
+        { summary: "b", script: "print('two')", kind: "python" },
+      ],
+    });
+    const outcome = await plans.approvePlan(plans.getPlan(plan.id)!, { saveAs: "mixed_recipe" });
+    assert.equal(outcome.savedAs, null, "mixed kinds must not be saved as one recipe");
+    assert.ok(!plans.listSavedRecipes().some((r) => r.name === "mixed_recipe"));
+  });
+
+  test("safe is off unless someone says otherwise, and round-trips", () => {
+    // Saving records that a script *worked*; safe records that a person is
+    // willing to have it repeat unattended. Different judgements.
+    plans.saveRecipe({ name: "vouch_probe", summary: "s", script: "echo x", kind: "shell" });
+    assert.equal(plans.listSavedRecipes().find((r) => r.name === "vouch_probe")!.safe, false);
+
+    plans.saveRecipe({
+      name: "vouch_probe",
+      summary: "s",
+      script: "echo x",
+      kind: "shell",
+      safe: true,
+    });
+    const saved = plans.listSavedRecipes().find((r) => r.name === "vouch_probe")!;
+    assert.equal(saved.safe, true);
+    assert.equal(saved.kind, "shell");
+    plans.forgetRecipe("vouch_probe");
+  });
+
+  test("edited steps replace what was proposed, while it is still pending", () => {
+    // The sheet is editable, so what the user read is what they consented to.
+    const plan = plans.proposePlan({
+      summary: "edit me",
+      kind: "shell",
+      steps: [{ summary: "before", script: "echo before", kind: "shell" }],
+    });
+    plans.replacePlanSteps(plan.id, [
+      { summary: "after", script: "echo after", kind: "shell" },
+    ]);
+    assert.deepEqual(
+      plans.planSteps(plans.getPlan(plan.id)!).map((s) => s.script),
+      ["echo after"],
+    );
+
+    // Settled plans are a record; editing one would rewrite history.
+    plans.settlePlan(plan.id, "approved", "done");
+    plans.replacePlanSteps(plan.id, [{ summary: "x", script: "echo nope", kind: "shell" }]);
+    assert.deepEqual(
+      plans.planSteps(plans.getPlan(plan.id)!).map((s) => s.script),
+      ["echo after"],
+    );
+  });
+});
+
 describe("restoring pending plans", () => {
   test("pending plans are listable with parsed steps, settled ones are not", () => {
     // The approval card only ever travelled over the live stream, so this
@@ -315,7 +416,7 @@ describe("restoring pending plans", () => {
     const found = plans.listPendingPlans().find((p) => p.id === plan.id);
     assert.ok(found, "a fresh proposal must be listed");
     assert.equal(found.sessionId, "conv-restore");
-    assert.deepEqual(found.steps, [{ summary: "s", script: "return 1" }]);
+    assert.deepEqual(found.steps, [{ summary: "s", script: "return 1", kind: "applescript" }]);
 
     plans.settlePlan(plan.id, "declined");
     assert.ok(!plans.listPendingPlans().some((p) => p.id === plan.id));
