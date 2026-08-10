@@ -150,6 +150,30 @@ export function settlePlan(id: string, status: Plan["status"], result?: string):
     .run(status, result ?? null, now(), id);
 }
 
+/**
+ * Run one script, reporting failure rather than throwing.
+ *
+ * Shared by approving a plan and by saving a recipe, because both obey the
+ * same rule: a script is promoted to something reusable only after it has been
+ * seen to work. A recipe is *selected* from then on rather than re-authored,
+ * so one that never ran would be re-run verbatim forever, failing identically,
+ * with nothing in the loop positioned to notice.
+ */
+export async function runAppleScript(
+  script: string,
+): Promise<{ ok: boolean; output: string }> {
+  try {
+    const { stdout, stderr } = await promisify(execFile)("osascript", ["-e", script], {
+      timeout: config.shellTimeoutMs,
+      maxBuffer: 4_000_000,
+    });
+    return { ok: true, output: (stdout || stderr).trim() || "(no output)" };
+  } catch (err) {
+    const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
+    return { ok: false, output: message.trim() };
+  }
+}
+
 export interface StepResult {
   step: number;
   summary: string;

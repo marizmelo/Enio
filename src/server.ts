@@ -8,8 +8,29 @@ import { runTurn } from "./agent.js";
 import { claimModelServer } from "./runtime.js";
 import { buildRegistry, type Registry } from "./tools/index.js";
 import { setMemorySession } from "./tools/memory.js";
-import { desktopEnabled, setPlanSession } from "./tools/desktop.js";
-import { approvePlan, getPlan, listPendingPlans, normalizeRecipeName, settlePlan } from "./plans.js";
+import {
+  builtinRecipes,
+  desktopEnabled,
+  recipesEnabled,
+  setPlanSession,
+} from "./tools/desktop.js";
+import { probeAssistiveAccess } from "./tools/ax.js";
+import {
+  approvePlan,
+  forgetRecipe,
+  getPlan,
+  listPendingPlans,
+  listSavedRecipes,
+  normalizeRecipeName,
+  runAppleScript,
+  saveRecipe,
+  settlePlan,
+} from "./plans.js";
+
+/** Built-in names, so a saved recipe cannot shadow one. */
+const BUILTIN_NAMES: Record<string, true> = Object.fromEntries(
+  builtinRecipes().map((r) => [r.name, true as const]),
+);
 import {
   conversationKnowledge,
   conversationMessages,
@@ -276,12 +297,127 @@ async function handle(
    * runs it once; saving also promotes it to a named recipe, after which it is
    * selected rather than re-authored.
    */
+  /**
+   * Whether macOS will let *this* process read the accessibility tree.
+   *
+   * Answered from the agent, deliberately, because the agent is what runs
+   * osascript. The desktop app can ask Electron the same question, but Electron
+   * answers for Enio.app, and the agent is a child process — those two answers
+   * are usually the same and the one that matters is this one.
+   *
+   * Re-probed on every call rather than served from the cache the tool
+   * descriptions use. The entire purpose is to be asked again after a trip to
+   * System Settings, and a cached "no" would leave the capability dark until a
+   * restart, which is exactly the confusing part of macOS permissions.
+   */
+  if (req.method === "GET" && url.pathname === "/permissions") {
+    sendJson(res, 200, {
+      // null rather than false where the question does not apply, so a client
+      // can tell "not granted" apart from "not a Mac" and stay quiet.
+      accessibility: recipesEnabled() ? await probeAssistiveAccess() : null,
+      desktopActions: desktopEnabled(),
+    });
+    return;
+  }
+
   // The cards a client needs to re-draw after a restart: the approval widget
   // otherwise only ever travelled over the live stream, so a pending plan
   // proposed before a restart had no surface left to decide it from.
   if (req.method === "GET" && url.pathname === "/plans/pending") {
     sendJson(res, 200, { plans: listPendingPlans() });
     return;
+  }
+
+  /**
+   * Recipes: the closed list the model chooses from, managed by a person.
+   *
+   * Built-ins are code and read-only here, but they are still listed — the
+   * whole point of this list is that it is *curated*, and curating a set you
+   * can only see half of is guesswork.
+   */
+  if (req.method === "GET" && url.pathname === "/recipes") {
+    sendJson(res, 200, {
+      builtin: builtinRecipes(),
+      saved: listSavedRecipes(),
+      // So the editor can say why a saved recipe would not run, rather than
+      // letting the user write one that silently never fires.
+      desktopActions: desktopEnabled(),
+    });
+    return;
+  }
+
+  const recipeMatch = url.pathname.match(/^\/recipes\/([A-Za-z0-9_-]{1,64})$/);
+  if (recipeMatch) {
+    const rawName = recipeMatch[1]!;
+
+    if (req.method === "DELETE") {
+      sendJson(res, 200, { removed: forgetRecipe(rawName) });
+      return;
+    }
+
+    if (req.method === "PUT") {
+      if (!desktopEnabled()) {
+        sendJson(res, 409, {
+          error: {
+            message:
+              "Saving a recipe runs it first, and running needs desktop mode. " +
+              "Start enio with ENIO_DESKTOP=1.",
+          },
+        });
+        return;
+      }
+
+      const name = normalizeRecipeName(rawName);
+      if (!name) {
+        sendJson(res, 400, { error: { message: "Name is too short." } });
+        return;
+      }
+      if (Object.prototype.hasOwnProperty.call(BUILTIN_NAMES, name)) {
+        // Shadowing a built-in would make the same name mean two things
+        // depending on which lookup won, which is the kind of ambiguity the
+        // model has no way to see.
+        sendJson(res, 409, { error: { message: `"${name}" is a built-in recipe.` } });
+        return;
+      }
+
+      let body: { summary?: unknown; script?: unknown } = {};
+      try {
+        body = JSON.parse((await readBody(req)) || "{}");
+      } catch {
+        sendJson(res, 400, { error: { message: "Body must be JSON." } });
+        return;
+      }
+      const script = String(body.script ?? "").trim();
+      const summary = String(body.summary ?? "").trim();
+      if (!script || !summary) {
+        sendJson(res, 400, { error: { message: "A recipe needs a summary and a script." } });
+        return;
+      }
+
+      // Run before promoting — the same rule approving a plan obeys. A recipe
+      // is selected rather than re-authored from then on, so one that never
+      // worked would be re-run verbatim forever. Skipped only when the script
+      // is byte-identical to what is already stored, so renaming or reworded
+      // summaries do not re-fire something with a side effect.
+      const existing = listSavedRecipes().find((r) => r.name === name);
+      if (!existing || existing.script !== script) {
+        const run = await runAppleScript(script);
+        if (!run.ok) {
+          sendJson(res, 400, {
+            error: { message: "That script failed, so it was not saved." },
+            output: run.output,
+          });
+          return;
+        }
+        const result = saveRecipe({ name, summary, script });
+        sendJson(res, 200, { name: result.ok ? result.name : name, output: run.output, ran: true });
+        return;
+      }
+
+      saveRecipe({ name, summary, script });
+      sendJson(res, 200, { name, ran: false });
+      return;
+    }
   }
 
   const planMatch = url.pathname.match(/^\/plans\/([0-9a-f-]{8,})\/(approve|save|decline)$/);
