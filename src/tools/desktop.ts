@@ -530,7 +530,7 @@ const STEP_ACTIONS: Array<[key: string, kind: ActionKind]> = [
 const openAppTool: ToolDef = {
   name: "open_app",
   description:
-    "Open a Mac app by name — Spotify, Calendar, Notes. Brings it to the front if already running. For anything beyond opening, use mac_recipe or propose_plan.",
+    "Open a Mac app by name — Spotify, Calendar, Notes. Call it every time the user asks to open or show an app: it is safe when the app is already running (it just comes to the front), and apps open and close outside this conversation, so never answer from memory. For anything beyond opening, use mac_recipe or propose_plan.",
   origin: "builtin",
   parameters: {
     type: "object",
@@ -558,10 +558,28 @@ const openAppTool: ToolDef = {
     if (!resolved.ok) return resolved.reason;
     try {
       await run("open", ["-a", resolved.name], { timeout: 15_000 });
-      return `Opened ${resolved.name}.`;
     } catch (err) {
       return `Could not open ${resolved.name}: ${(err as Error & { stderr?: string }).stderr?.trim() || (err as Error).message}`;
     }
+
+    // `open` exiting 0 means LaunchServices accepted the request, not that
+    // the app came up. The status check is the process table -- matched on
+    // the bundle path, which survives process names that differ from app
+    // names -- because "Opened X" from a tool should mean X is running, not
+    // that a launch was requested.
+    const pattern = `/${resolved.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.app/`;
+    for (let i = 0; i < 6; i++) {
+      try {
+        await run("pgrep", ["-f", pattern], { timeout: 5_000 });
+        return `Opened ${resolved.name} — running.`;
+      } catch {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+    return (
+      `Told macOS to open ${resolved.name}, but its process has not appeared yet. ` +
+      `It may still be starting.`
+    );
   },
 };
 

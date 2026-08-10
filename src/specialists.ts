@@ -115,6 +115,10 @@ export const SPECIALISTS: Specialist[] = [
     systemPrompt:
       `You operate the user's Mac.\n\n` +
       `open_app opens or fronts an app by name; that alone needs no plan. ` +
+      `The machine changes between messages — the user opens and closes ` +
+      `things themselves — so never say an app is open or closed from ` +
+      `memory. Asked to open something, call open_app even if it seems ` +
+      `already open; asked whether something is open, check running_apps. ` +
       `For reading Mail, Calendar, Notes, Reminders or Finder, use mac_recipe ` +
       `and pick the recipe by name. Do not write AppleScript for these — the ` +
       `recipes are already correct, and a script you compose will not be. ` +

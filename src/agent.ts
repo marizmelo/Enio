@@ -12,7 +12,7 @@ import { readFile } from "node:fs/promises";
 import { isImage, readImage } from "./vision.js";
 import type { Registry } from "./tools/index.js";
 import { createHash } from "node:crypto";
-import { toWireTool, type Message, type ToolCall, type Widget } from "./types.js";
+import { toolText, toWireTool, type Message, type ToolCall, type Widget } from "./types.js";
 
 /**
  * Who the assistant is, ahead of everything else in the system message.
@@ -298,6 +298,51 @@ export async function runTurn(
   handlers: TurnHandlers = {},
   overrides: TurnOverrides = {},
 ): Promise<TurnResult> {
+  // "open <app>" runs before the model is consulted at all. The user's own
+  // words select from a closed list -- the installed-apps scan -- which is
+  // grammar, not judgement, the same species as @mention parsing. It exists
+  // because the model measurably cannot be trusted with this: told an app was
+  // opened earlier in the conversation, it answers "it's already open" from
+  // memory instead of acting, and the machine changed since -- the user
+  // closes things themselves. Only an unambiguous match short-circuits;
+  // "open a new note in Notes" resolves nothing and flows to the model.
+  const quickOpen = /^(?:open|launch|start)\s+(?:the\s+)?(.{1,40}?)(?:\s+app)?\s*$/i.exec(
+    userInput.trim(),
+  );
+  const openTool = registry.byName.get("open_app");
+  // An explicit @operator still gets the fast path -- it IS the operator's
+  // behaviour; only a different explicit choice bypasses it.
+  if (quickOpen && openTool && (!overrides.specialist || overrides.specialist === "operator")) {
+    const { installedApps, resolveApp } = await import("./tools/ax.js");
+    const resolved = resolveApp(quickOpen[1]!, await installedApps(), "installed");
+    if (resolved.ok) {
+      handlers.onRoute?.("operator");
+      handlers.onToolStart?.("open_app", { app: resolved.name });
+      const reply = toolText(await openTool.run({ app: resolved.name }));
+      handlers.onContent?.(reply);
+      logMessage(sessionId, "user", userInput);
+      logMessage(sessionId, "assistant", reply);
+      history.push({ role: "user", content: userInput }, { role: "assistant", content: reply });
+      try {
+        recordTurn({
+          sessionId,
+          question: userInput,
+          reply,
+          specialist: "operator",
+          systemPrompt: "(direct command: open_app)",
+          memoryBlock: "",
+          startedAt: Date.now(),
+          durationMs: 0,
+          iterations: 0,
+          steps: [],
+        });
+      } catch {
+        /* Tracing must never break a turn. */
+      }
+      return { reply, messages: history, toolsUsed: ["open_app"], specialist: "operator", question: userInput };
+    }
+  }
+
   // Routing, memory and exemplar lookup are independent — run them together
   // rather than paying for three sequential round trips.
   // An explicit @specialist skips the routing call entirely — the user has
