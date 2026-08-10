@@ -13,6 +13,8 @@ import {
   pendingPlans,
 } from "@/lib/conversations";
 import { HistoryDialog } from "@/components/HistoryDialog";
+import { PermissionNotice } from "@/components/PermissionNotice";
+import { RecipesDialog } from "@/components/RecipesDialog";
 import { speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
 
 export function App() {
@@ -35,8 +37,14 @@ export function App() {
   // the server logs every turn under it, which is what makes restarts cheap.
   const [conversationId, setConversationId] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [recipesOpen, setRecipesOpen] = useState(false);
   // How full the model's window is, reported by the server after folding.
   const [context, setContext] = useState(null);
+
+  // Recipes are AppleScript, so the drawer is unfillable off a Mac. Read from
+  // the user agent rather than an endpoint because it gates a button that
+  // should not flicker into existence a second after the window opens.
+  const isMac = navigator.userAgent.includes("Mac");
 
   const abortRef = useRef(null);
   const composerRef = useRef(null);
@@ -251,7 +259,10 @@ export function App() {
         context={context}
         onNewChat={newChat}
         onHistory={() => setHistoryOpen(true)}
+        onRecipes={isMac ? () => setRecipesOpen(true) : undefined}
       />
+
+      <RecipesDialog open={recipesOpen} onOpenChange={setRecipesOpen} />
 
       <HistoryDialog
         open={historyOpen}
@@ -281,6 +292,12 @@ export function App() {
           </div>
         )}
       </main>
+
+      {/* Above the composer rather than in the thread: it is a property of the
+          app, not of anything that was said, and it must not scroll away. */}
+      <div className="shrink-0 px-4 pb-2">
+        <PermissionNotice backendReady={backendReady} />
+      </div>
 
       <Composer
         ref={composerRef}

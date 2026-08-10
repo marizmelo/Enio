@@ -8,7 +8,10 @@
 // easiest to consume incrementally.
 "use strict";
 
-const { app, BrowserWindow, Menu, Tray, clipboard, dialog, ipcMain, nativeImage, shell } = require("electron");
+const {
+  app, BrowserWindow, Menu, Tray, clipboard, dialog, ipcMain, nativeImage, shell,
+  systemPreferences,
+} = require("electron");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
@@ -88,6 +91,8 @@ let modelPid = null;
 let agentPid = null;
 
 let shuttingDown = false;
+/** Periodic health poll, so a backend that recovers is noticed. */
+let healthTimer = null;
 
 function sendStatus(phase, message, extra) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -197,6 +202,10 @@ async function startBackends() {
         "failed",
         "Model server did not respond in time. Check that Maple is installed (see setup.sh) and that nothing else is using port 8080.",
       );
+      // Watched even though startup failed: a slow first load that finishes a
+      // minute later, or a server started by hand afterwards, should clear
+      // this rather than require relaunching the app.
+      watchBackends(null);
       return;
     }
   }
@@ -217,6 +226,7 @@ async function startBackends() {
         "failed",
         "Agent server did not respond in time. Check the logs in the terminal that launched this app.",
       );
+      watchBackends(null);
       return;
     }
   }
@@ -237,6 +247,49 @@ async function startBackends() {
   }
 
   sendStatus("ready", modelStartedByUs ? "Ready." : "Ready (reused existing servers).", { tools: toolCount });
+  watchBackends(toolCount);
+}
+
+/**
+ * Keep the status honest after startup.
+ *
+ * It was latched: startBackends ran once, and the only thing that could change
+ * the status afterwards was one of *our* children exiting. Two ways that lies.
+ *
+ * A backend that comes back stayed broken on screen — restart the model server
+ * by hand, or from another terminal, and the window still said "stopped
+ * unexpectedly" with no route back short of relaunching the whole app. And a
+ * backend this app did not spawn has no child to exit, so if it died the
+ * window went on claiming everything was fine.
+ *
+ * Polling both endpoints is the only honest answer to "is it up", precisely
+ * because this app is not always what started them. Only transitions are
+ * reported, so a healthy machine sends nothing.
+ */
+function watchBackends(toolCount) {
+  if (healthTimer) clearInterval(healthTimer);
+  healthTimer = setInterval(async () => {
+    // "starting" is someone else's business — a check landing mid-boot would
+    // fight whatever is reporting progress.
+    if (shuttingDown || lastStatus.phase === "starting") return;
+
+    const [model, agent] = await Promise.all([
+      checkHealth(MODEL_HEALTH_URL),
+      checkHealth(AGENT_PING_URL),
+    ]);
+    const healthy = model && agent;
+
+    if (healthy && lastStatus.phase !== "ready") {
+      sendStatus("ready", "Ready (recovered).", { tools: toolCount ?? null });
+    } else if (!healthy && lastStatus.phase === "ready") {
+      sendStatus(
+        "failed",
+        `${!model ? "Model" : "Agent"} server is not responding.`,
+      );
+    }
+  }, 5000);
+  // Never hold the app open on its own account.
+  healthTimer.unref?.();
 }
 
 /**
@@ -363,6 +416,10 @@ function killChild(child, pid, label) {
 
 function stopBackends() {
   shuttingDown = true;
+  if (healthTimer) {
+    clearInterval(healthTimer);
+    healthTimer = null;
+  }
 
   // The model server is shared. If a CLI session is attached, killing it here
   // takes the model out from under someone mid-answer -- so leave it, and let
@@ -585,6 +642,57 @@ ipcMain.handle("open-external", (_event, url) => {
   if (typeof url === "string" && /^https?:\/\//i.test(url)) {
     shell.openExternal(url);
   }
+});
+
+/**
+ * Asking macOS for Accessibility access, which is what clicking by name needs.
+ *
+ * Two mechanisms, and it takes both. `isTrustedAccessibilityClient(true)`
+ * raises the real system dialog — the one with the "Open System Settings"
+ * button — but macOS shows that **once per app, ever**. Dismiss it and it never
+ * appears again, no matter how many times it is called, which is why a button
+ * wired only to the prompt looks broken to precisely the users who need it.
+ *
+ * So the settings pane is opened as well whenever access is still missing. The
+ * URL scheme is the documented way in and lands directly on the Accessibility
+ * list rather than the top of Privacy & Security.
+ *
+ * Note this answers for Enio.app. The process that actually runs osascript is
+ * the agent, spawned as a child; the authoritative answer comes from the
+ * agent's own /permissions endpoint, and this is only how the request is
+ * raised.
+ */
+const ACCESSIBILITY_PANE =
+  "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
+
+ipcMain.handle("accessibility-status", () => {
+  if (process.platform !== "darwin") return null;
+  try {
+    return systemPreferences.isTrustedAccessibilityClient(false);
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle("request-accessibility", () => {
+  if (process.platform !== "darwin") return null;
+  let granted = false;
+  try {
+    granted = systemPreferences.isTrustedAccessibilityClient(true);
+  } catch {
+    granted = false;
+  }
+  // Opened unconditionally when still missing: the prompt above may have been
+  // silently suppressed as already-answered, and leaving the user with nothing
+  // on screen is worse than one extra window.
+  if (!granted) {
+    try {
+      shell.openExternal(ACCESSIBILITY_PANE);
+    } catch {
+      // Nothing to fall back to; the notice in the UI still says where to go.
+    }
+  }
+  return granted;
 });
 
 app.whenReady().then(() => {

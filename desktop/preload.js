@@ -80,4 +80,18 @@ contextBridge.exposeInMainWorld("maple", {
   openExternal(url) {
     return ipcRenderer.invoke("open-external", url);
   },
+
+  /** Whether macOS trusts this app for Accessibility. Null off macOS. */
+  accessibilityStatus() {
+    return ipcRenderer.invoke("accessibility-status");
+  },
+
+  /**
+   * Raise the system permission request, and open the Accessibility pane when
+   * it is still missing. macOS only shows its dialog once per app ever, so the
+   * pane is the part that reliably gives the user somewhere to go.
+   */
+  requestAccessibility() {
+    return ipcRenderer.invoke("request-accessibility");
+  },
 });

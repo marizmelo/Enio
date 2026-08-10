@@ -1,4 +1,4 @@
-import { History, MessageSquarePlus } from "lucide-react";
+import { BookMarked, History, MessageSquarePlus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,7 @@ const DOT = {
  * rather than disappearing once ready, because the one question this window
  * cannot answer on its own is whether the model is actually up.
  */
-export function StatusBar({ phase, message, tools, context, onNewChat, onHistory }) {
+export function StatusBar({ phase, message, tools, context, onNewChat, onHistory, onRecipes }) {
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
     // lights over the top-left of the page rather than in a title bar of its
@@ -36,6 +36,14 @@ export function StatusBar({ phase, message, tools, context, onNewChat, onHistory
         <TipButton tip="Conversations" className="size-7" onClick={onHistory}>
           <History className="size-3.5" />
         </TipButton>
+        {/* Only on a Mac: recipes are AppleScript, so the list is empty and
+            unfillable anywhere else, and a button opening an empty drawer
+            teaches nobody anything. */}
+        {onRecipes && (
+          <TipButton tip="Recipes" className="size-7" onClick={onRecipes}>
+            <BookMarked className="size-3.5" />
+          </TipButton>
+        )}
       </div>
 
       {/* Status sits right, and shrinks first: the title is one word and always
