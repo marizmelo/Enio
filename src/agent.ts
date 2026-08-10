@@ -433,6 +433,22 @@ export async function runTurn(
     iterations = iteration + 1;
     const modelStartedAt = Date.now();
 
+    // Two rounds from the cap, say so. Prompt wording alone does not stop a
+    // model surveying every read tool it has -- measured three runs where the
+    // operator spent all eight rounds reading and never proposed, identically
+    // before and after the prompt tried to forbid it. A budget stated inside
+    // the conversation is harder to ignore than a rule stated above it, and
+    // it converts "ran out of turns mid-survey" into "wrapped up in time".
+    if (iteration === config.maxToolIterations - 2) {
+      history.push({
+        role: "user",
+        content:
+          "(Only two tool calls remain for this turn. Stop gathering. If the task " +
+          "needs an action, make the call that performs or proposes it now; " +
+          "otherwise answer from what you already have.)",
+      });
+    }
+
     const result = await complete(
       history,
       // On the final permitted iteration, withhold tools so the model is forced
