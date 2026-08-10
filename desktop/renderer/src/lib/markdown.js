@@ -59,7 +59,25 @@ export function renderMarkdownish(raw) {
   );
   out = out.replace(/\*\*([^*\n]+)\*\*/g, (_m, txt) => `<strong>${txt}</strong>`);
 
-  const restore = new RegExp(`${SENTINEL}(\\d+)${SENTINEL}`, "g");
+  // Line-level structure. This did not exist at first and the cost was not
+  // subtle: every newline collapsed to a space in HTML, so a model that
+  // answered in tidy headed sections rendered as one unbroken wall — with
+  // its "### Step 1" headings sitting mid-sentence as literal hashes.
+  out = out
+    .split("\n")
+    .map((line) => {
+      const heading = /^(#{1,4})\s+(.*)$/.exec(line);
+      if (heading) return `<strong class="mt-2 block">${heading[2]}</strong>`;
+      const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
+      if (bullet) return `<span class="block pl-3">•&nbsp;${bullet[1]}</span>`;
+      return line;
+    })
+    .join("\n")
+    // Paragraph gaps stay gaps; single newlines stay line breaks.
+    .replace(/\n{2,}/g, '<span class="block h-2"></span>')
+    .replace(/\n/g, "<br>");
+
+  const restore = new RegExp(`(?:<br>)?${SENTINEL}(\\d+)${SENTINEL}(?:<br>)?`, "g");
   out = out.replace(restore, (_m, i) => codeBlocks[Number(i)]);
 
   return out;
