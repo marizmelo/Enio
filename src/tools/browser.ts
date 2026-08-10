@@ -14,6 +14,43 @@ import { config } from "../config.js";
  * model's limited attention on a dead end.
  */
 
+/** The model reads untrusted page content, and that content can tell it to
+ *  fetch things. Loopback, private ranges and cloud metadata stay unreachable. */
+export function isBlockedHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (h === "localhost" || h.endsWith(".localhost") || h === "0.0.0.0") return true;
+  if (h === "169.254.169.254" || h === "metadata.google.internal") return true;
+  if (/^127\./.test(h)) return true;
+  if (/^10\./.test(h)) return true;
+  if (/^192\.168\./.test(h)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
+  if (h === "::1") return true;
+  return false;
+}
+
+/**
+ * The network-layer guard shared by every page.
+ *
+ * Two jobs in one place: drop the bytes that never become text (images,
+ * media, fonts), and refuse any request to a local or internal host. The host
+ * check belongs here rather than only at navigation time because it fires on
+ * every redirect hop and every subresource -- a permitted page that 302s to
+ * the cloud-metadata address, or embeds an iframe pointing at it, is stopped
+ * before the response is ever received, which URL-checking the navigation
+ * target alone cannot do.
+ */
+function routeGuard(route: any): unknown {
+  const req = route.request();
+  const type = req.resourceType();
+  if (type === "image" || type === "media" || type === "font") return route.abort();
+  try {
+    if (isBlockedHost(new URL(req.url()).hostname)) return route.abort();
+  } catch {
+    /* a URL that will not parse cannot resolve to a private host */
+  }
+  return route.continue();
+}
+
 let browserPromise: Promise<any> | null = null;
 let available: boolean | null = null;
 
@@ -75,11 +112,7 @@ export async function renderPage(url: string, opts: RenderOptions = {}): Promise
   try {
     const page = await context.newPage();
 
-    await page.route("**/*", (route: any) => {
-      const type = route.request().resourceType();
-      if (type === "image" || type === "media" || type === "font") return route.abort();
-      return route.continue();
-    });
+    await page.route("**/*", routeGuard);
 
     const timeout = opts.timeoutMs ?? config.browserTimeoutMs;
     await page.goto(url, { waitUntil: "domcontentloaded", timeout });
@@ -124,13 +157,7 @@ export async function getSession(): Promise<any> {
         viewport: { width: 1280, height: 900 },
       });
       const page = await context.newPage();
-      // Images, media and fonts never contribute text and are most of the
-      // bytes; skipping them is a large speedup and costs nothing here.
-      await page.route("**/*", (route: any) => {
-        const type = route.request().resourceType();
-        if (type === "image" || type === "media" || type === "font") return route.abort();
-        return route.continue();
-      });
+      await page.route("**/*", routeGuard);
       return page;
     })();
   }

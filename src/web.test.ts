@@ -161,6 +161,20 @@ describe("browsing as a session", () => {
   const tool = browseTools[0];
   const skip = !tool;
 
+  test("refuses a private or internal host before navigating", { skip }, async () => {
+    // browse takes URLs from page link lists, which are untrusted content, so
+    // the SSRF guard matters more here than for a user-typed fetch. The check
+    // runs before any navigation, so this needs no network.
+    for (const url of [
+      "http://127.0.0.1:8787/",
+      "http://169.254.169.254/latest/meta-data/",
+      "http://192.168.1.1/",
+      "http://localhost/admin",
+    ]) {
+      assert.match(String(await tool!.run({ url })), /not permitted|internal/i);
+    }
+  });
+
   test("asks for a url rather than guessing one", { skip }, async () => {
     assert.match(String(await tool!.run({})), /Give a url/);
   });

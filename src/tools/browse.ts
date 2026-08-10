@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { getSession, playwrightAvailable } from "./browser.js";
+import { isBlockedHost } from "./web.js";
 import type { ToolDef } from "../types.js";
 
 /**
@@ -165,12 +166,43 @@ const browseTool: ToolDef = {
     if (!target) return "Give a url, or a link number from the page you just read.";
     if (!/^https?:\/\//i.test(target)) target = `https://${target}`;
 
+    // The same SSRF guard web_fetch uses, and for a sharper reason: the URL
+    // reaching here often came from a *page's* link list, which is untrusted
+    // content. A malicious page linking to the cloud-metadata address and the
+    // model following "link 3" would read internal credentials straight into
+    // the answer -- and the "cannot act" boundary does not help, because the
+    // reading is itself the exfiltration. Checked before navigating, and again
+    // on the landing URL below, because a permitted host can redirect to a
+    // blocked one.
+    let parsed: URL;
+    try {
+      parsed = new URL(target);
+    } catch {
+      return `"${target}" is not a valid URL.`;
+    }
+    if (isBlockedHost(parsed.hostname)) {
+      return "That host is not permitted — it is a local or internal address.";
+    }
+
     try {
       const page = await getSession();
       await page.goto(target, {
         waitUntil: "domcontentloaded",
         timeout: config.browserTimeoutMs,
       });
+
+      // A redirect can land somewhere the initial check would have refused, so
+      // the address actually reached is checked before a single byte is read.
+      let landed: URL | null = null;
+      try {
+        landed = new URL(page.url());
+      } catch {
+        /* a non-URL current location cannot be a private host */
+      }
+      if (landed && isBlockedHost(landed.hostname)) {
+        return `${target} redirected to a local or internal address, so it was not read.`;
+      }
+
       // SPAs finish loading long before they finish rendering, and a page that
       // never goes idle should still be read rather than lost.
       await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});

@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import type { ToolDef } from "../types.js";
-import { renderPage, playwrightAvailable } from "./browser.js";
+import { isBlockedHost, renderPage, playwrightAvailable } from "./browser.js";
+export { isBlockedHost };
 
 /**
  * Web access.
@@ -178,20 +179,9 @@ function decodeEntities(s: string): string {
 
 /* ---------- host safety ------------------------------------------------- */
 
-/** The model reads untrusted page content, and that content can tell it to
- *  fetch things. Loopback, private ranges and cloud metadata stay unreachable. */
-export function isBlockedHost(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (h === "localhost" || h.endsWith(".localhost") || h === "0.0.0.0") return true;
-  if (h === "169.254.169.254" || h === "metadata.google.internal") return true;
-  if (/^127\./.test(h)) return true;
-  if (/^10\./.test(h)) return true;
-  if (/^192\.168\./.test(h)) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
-  if (h === "::1") return true;
-  return false;
-}
-
+// isBlockedHost lives in browser.ts (the network layer both fetch and the
+// live session share) and is re-exported below, so this module's callers and
+// tests keep importing it from here.
 function parseTarget(raw: string): URL | string {
   let parsed: URL;
   try {
