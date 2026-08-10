@@ -325,6 +325,11 @@ function createTray() {
           },
         },
         { type: "separator" },
+        {
+          label: "Documentation",
+          click: () => shell.openExternal("https://github.com/marizmelo/Enio/tree/master/docs"),
+        },
+        { type: "separator" },
         { label: "Quit Enio", click: () => app.quit() },
       ]),
     );

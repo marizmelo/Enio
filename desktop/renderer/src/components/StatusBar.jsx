@@ -1,8 +1,18 @@
-import { BookMarked, History, MessageSquarePlus } from "lucide-react";
+import { BookMarked, CircleHelp, History, MessageSquarePlus } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
 import { cn } from "@/lib/utils";
+
+/**
+ * The documentation, on GitHub.
+ *
+ * The repository folder rather than a Pages URL: /docs renders there today
+ * whether or not Pages is ever switched on, so the link cannot be dead. If
+ * Pages is enabled, change this to the published site — the pages are the
+ * same files either way.
+ */
+const DOCS_URL = "https://github.com/marizmelo/Enio/tree/master/docs";
 
 const DOT = {
   ready: "bg-emerald-500",
@@ -45,6 +55,16 @@ export function StatusBar({ phase, message, tools, context, onNewChat, onHistory
             <BookMarked className="size-3.5" />
           </TipButton>
         )}
+        {/* Opens in the real browser, not in the app: the renderer has no
+            navigation of its own, and a docs page loading inside the chat
+            window would be a trap with no way back. */}
+        <TipButton
+          tip="Documentation"
+          className="size-7"
+          onClick={() => window.maple?.openExternal(DOCS_URL)}
+        >
+          <CircleHelp className="size-3.5" />
+        </TipButton>
       </div>
 
       {/* Status sits right, and shrinks first: the title is one word and always
@@ -65,12 +85,13 @@ export function StatusBar({ phase, message, tools, context, onNewChat, onHistory
 /**
  * How full the model's usable window is.
  *
- * The budget is not the model's 128k limit, which it cannot actually use --
- * measured recall of a planted fact falls from 4/4 at 1.5k tokens to 0/4 at
- * 12k. It is the band where the model still remembers what it was told, so
- * "full" here means "about to be summarised", not "about to error". Hidden
- * until a conversation is underway, since a meter reading zero teaches nobody
- * anything.
+ * The budget is not the model's advertised context length, which it cannot
+ * actually use -- Maple's measured recall of a planted fact falls from 4/4 at
+ * 1.5k tokens to 0/4 at 12k. It is the band where the model still remembers
+ * what it was told, so "full" here means "about to be summarised", not "about
+ * to error", and it comes from the *selected* model rather than a constant.
+ * Hidden until a conversation is underway, since a meter reading zero teaches
+ * nobody anything.
  */
 function ContextMeter({ context }) {
   if (!context?.tokens) return null;
