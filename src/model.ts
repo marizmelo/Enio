@@ -1,4 +1,5 @@
 import { activeBackend, config } from "./config.js";
+import { requestModelName } from "./model-settings.js";
 import type { Message, ToolCall, WireTool } from "./types.js";
 
 /**
@@ -58,7 +59,9 @@ export async function complete(
   opts: CompleteOptions = {},
 ): Promise<CompletionResult> {
   const body: Record<string, unknown> = {
-    model: config.modelName,
+    // Through the setting, not config: the served model can change at runtime
+    // and requests must name the one actually loaded.
+    model: requestModelName(),
     messages: messages.map(stripInternalFields),
     temperature: opts.temperature ?? config.temperature,
     top_p: config.topP,

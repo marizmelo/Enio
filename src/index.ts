@@ -15,6 +15,7 @@ import {
   WAIT_FOR_EXISTING_TICKS,
   type RunningBackend,
 } from "./runtime.js";
+import { currentModelLabel, currentModelPath } from "./model-settings.js";
 import { findSkill, loadSkills, skillContents, skillsDir } from "./skills.js";
 import {
   addTask, getTask, listTasks, removeTask, runTask, runsFor,
@@ -745,7 +746,7 @@ async function startModelServer(): Promise<void> {
   }
 
   const venvPython = requireRuntime();
-  console.log(`Starting mlx_lm.server on ${config.modelBaseUrl} ...`);
+  console.log(`Starting ${currentModelLabel()} on ${config.modelBaseUrl} ...`);
 
   // Inheriting is right in a terminal, where the whole point of `enio up` is
   // watching the log. It is wrong when the desktop launched us, because then
@@ -754,7 +755,10 @@ async function startModelServer(): Promise<void> {
   // everything upstream decided to leave it running for somebody else.
   const toTerminal = process.stdout.isTTY;
   const log = toTerminal ? null : openSync(join(config.dataDir, "model-server.log"), "a");
-  const child = spawn(modelServerBinary(), modelServerArgs(join(config.runtimeDir, "maple-2bit-mlx")), {
+  // Through the setting, like every other path that spawns the server. This
+  // one had the Maple path written out, so `enio up` -- the path the desktop
+  // takes -- quietly ignored a switched model and booted Maple over it.
+  const child = spawn(modelServerBinary(), modelServerArgs(currentModelPath()), {
     cwd: config.runtimeDir,
     stdio: toTerminal ? "inherit" : ["ignore", log!, log!],
   });

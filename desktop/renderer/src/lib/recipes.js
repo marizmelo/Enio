@@ -37,3 +37,11 @@ export const saveRecipe = (name, { summary, script }) =>
 
 export const deleteRecipe = (name) =>
   call(`/recipes/${encodeURIComponent(name)}`, { method: "DELETE" });
+
+/** The model setting: what runs now, and the closed list of what could. */
+export const currentModel = () => call("/model");
+
+/** Switching restarts the model server under the agent; this resolves once
+ *  the new one is serving, so callers can just await it. */
+export const switchModel = (model) =>
+  call("/model", { method: "POST", body: JSON.stringify({ model }) });

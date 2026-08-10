@@ -1,4 +1,5 @@
 import { BookMarked, History, MessageSquarePlus } from "lucide-react";
+import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,7 @@ export function StatusBar({ phase, message, tools, context, onNewChat, onHistory
       {/* Status sits right, and shrinks first: the title is one word and always
           fits, while the message can be a full sentence about a failure. */}
       <div className="ml-auto flex min-w-0 items-center gap-2">
+        <ModelPicker backendReady={phase === "ready"} />
         <ContextMeter context={context} />
         <span className="truncate">{message}</span>
         {typeof tools === "number" && (

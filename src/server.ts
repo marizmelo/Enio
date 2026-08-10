@@ -15,6 +15,8 @@ import {
   setPlanSession,
 } from "./tools/desktop.js";
 import { probeAssistiveAccess } from "./tools/ax.js";
+import { availableModels, currentModelId } from "./model-settings.js";
+import { switchModel } from "./runtime.js";
 import {
   approvePlan,
   forgetRecipe,
@@ -310,6 +312,51 @@ async function handle(
    * System Settings, and a cached "no" would leave the capability dark until a
    * restart, which is exactly the confusing part of macOS permissions.
    */
+  /**
+   * Which model the machine runs, switchable while everything stays up.
+   *
+   * Switching restarts the model server underneath the agent; the agent
+   * itself never goes down, so the desktop's session, pending plans and
+   * conversations all survive. The list is closed -- the bundled default
+   * plus what is already in the HF cache -- because switching is choosing,
+   * and downloading gigabytes is a different decision made elsewhere.
+   */
+  if (req.method === "GET" && url.pathname === "/model") {
+    sendJson(res, 200, { current: currentModelId(), available: availableModels() });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/model") {
+    let wanted = "";
+    try {
+      wanted = String(JSON.parse((await readBody(req)) || "{}")?.model ?? "").trim();
+    } catch {
+      wanted = "";
+    }
+    if (!availableModels().includes(wanted)) {
+      sendJson(res, 400, {
+        error: { message: `Not an available model. One of: ${availableModels().join(", ")}` },
+      });
+      return;
+    }
+    if (wanted === currentModelId()) {
+      sendJson(res, 200, { current: wanted, switched: false });
+      return;
+    }
+    try {
+      await switchModel(wanted, {
+        log: (m) => console.log(`[model] ${m}`),
+        // The list is pre-downloaded models only, so nothing here should ever
+        // ask; an endpoint has nobody to ask anyway.
+        confirm: async () => false,
+      });
+      sendJson(res, 200, { current: wanted, switched: true });
+    } catch (err) {
+      sendJson(res, 500, { error: { message: (err as Error).message } });
+    }
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/permissions") {
     sendJson(res, 200, {
       // null rather than false where the question does not apply, so a client

@@ -9,6 +9,7 @@ import {
   unregisterModelClient,
 } from "./model-clients.js";
 import { canRunMaple, isWindows, whyNoMaple } from "./platform.js";
+import { currentModelId, currentModelLabel, currentModelPath, setModelId } from "./model-settings.js";
 
 /**
  * How the model server is launched, in one place because there are two callers
@@ -112,6 +113,17 @@ export function modelServerBinary(): string {
 /** Shown in Activity Monitor. Kept in step with the matcher below. */
 export const MODEL_PROCESS_NAME = "Enio Model";
 
+/** The port the configured base URL names, so the server we start is the one
+ *  everything else is pointed at. Hardcoding 8080 here while the agent read
+ *  ENIO_BASE_URL meant an overridden setup started a server nobody would call. */
+export function modelServerPort(): string {
+  try {
+    return new URL(config.modelBaseUrl).port || "8080";
+  } catch {
+    return "8080";
+  }
+}
+
 export function modelServerArgs(modelPath: string): string[] {
   return [
     "-m", "mlx_lm.server",
@@ -119,7 +131,7 @@ export function modelServerArgs(modelPath: string): string[] {
     "--trust-remote-code",
     "--flash-head",
     "--prompt-cache-bytes", `${config.promptCacheGb}G`,
-    "--port", "8080",
+    "--port", modelServerPort(),
   ];
 }
 
@@ -202,6 +214,49 @@ export function claimModelServer(): void {
   }
 }
 
+/**
+ * Swap what the model server is serving, in place.
+ *
+ * Persist first, then stop the running server, then start one -- which reads
+ * the setting just written. Persisting first is what makes a crash mid-swap
+ * self-healing: whatever brings the server up next serves the chosen model,
+ * rather than the machine flip-flopping depending on which process died.
+ *
+ * Only meaningful for our own server; a switched model on Ollama's system
+ * service is Ollama's business.
+ */
+export async function switchModel(id: string, opts: EnsureOptions): Promise<void> {
+  const previous = currentModelId();
+  setModelId(id);
+
+  const pid = modelServerPid();
+  if (pid !== null) {
+    opts.log(`Stopping the model server (pid ${pid}) to switch models`);
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      /* already gone */
+    }
+    // The port has to actually free before the replacement binds it.
+    for (let i = 0; i < 15 && modelServerPid() !== null; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+
+  try {
+    await startMaple(opts);
+  } catch (err) {
+    // The setting persists before the attempt so a crash mid-swap heals
+    // forward -- but a model that will not *load* must not stay chosen, or
+    // every boot from here on serves ninety seconds of failure. Put the old
+    // one back, on disk and running.
+    opts.log(`${id} failed to start; reverting to ${previous}`);
+    setModelId(previous);
+    await startMaple(opts).catch(() => {});
+    throw err;
+  }
+}
+
 export async function ensureBackend(opts: EnsureOptions): Promise<RunningBackend> {
   if (await serverIsUp()) {
     opts.log(`Using the ${config.backendId} server already running on ${config.modelBaseUrl}`);
@@ -262,13 +317,20 @@ async function startMaple(opts: EnsureOptions): Promise<RunningBackend> {
   const logPath = join(config.dataDir, "model-server.log");
   const log = openSync(logPath, "a");
 
+  // The persisted model setting decides what gets served -- which is what
+  // lets the choice survive the restart cycle: quitting the app shuts down
+  // whichever server it was using, and before this the relaunch could only
+  // ever bring Maple back. An HF id resolves from the local HF cache.
+  const modelPath = currentModelPath();
+  const label = currentModelLabel();
+
   const child = spawn(
     modelServerBinary(),
-    modelServerArgs(join(config.runtimeDir, "maple-2bit-mlx")),
+    modelServerArgs(modelPath),
     { cwd: config.runtimeDir, stdio: ["ignore", log, log] },
   );
 
-  await waitForServer(child, opts, 90, `Starting Maple — first load reads ~5GB`, logPath);
+  await waitForServer(child, opts, 90, `Starting ${label} — first load reads the weights`, logPath);
 
   // Registered even though we started it: by the time we exit, a CLI or the
   // desktop may have attached, and starting it does not entitle us to end it.
