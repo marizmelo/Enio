@@ -5,10 +5,12 @@ import { config } from "../config.js";
 import { detectPlatform } from "../platform.js";
 import { readImage } from "../vision.js";
 import type { ToolDef } from "../types.js";
-import { listSavedRecipes, proposePlan } from "../plans.js";
+import { listSavedRecipes, osascriptFailure, proposePlan } from "../plans.js";
 import {
   assistiveAccessGranted,
   AX_DEPTH,
+  AX_PARENT_BUDGET,
+  AX_ROW_BUDGET,
   compileAction,
   KEY_CODES,
   permissionHint,
@@ -179,7 +181,7 @@ const appleScriptTool: ToolDef = {
       const output = (stdout || stderr).trim();
       return output || "(ran successfully, no output)";
     } catch (err) {
-      const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
+      const message = osascriptFailure(err);
       // Automation permission errors are the common failure and the message
       // alone doesn't say what to do about it.
       if (/not authori[sz]ed|1743|-1743/.test(message)) {
@@ -283,28 +285,43 @@ const RECIPES: Record<string, Recipe> = {
     // `button 1 of window 1` is right there. A whose-clause is no good either,
     // since it sees direct children only and every real control is nested in a
     // toolbar or group. Descending a level at a time is the one that works.
+    //
+    // Batched per PARENT -- `name of every UI element` is one Apple Event for
+    // the whole sibling row -- and budgeted. The first walk asked per element,
+    // three events each; a real Notes window has thousands of elements, and
+    // the walk blew the shell timeout and surfaced as an empty error. Events
+    // now scale with parents visited, and the budget makes the worst case a
+    // truncated list rather than a dead tool.
     script: ({ app }) =>
       `tell application "System Events" to tell process "${app}"\n` +
       `\tif not (exists window 1) then return "No window is open in ${app}."\n` +
       `\tset out to {}\n` +
-      `\tset frontier to UI elements of window 1\n` +
+      `\tset frontier to {window 1}\n` +
+      `\tset visited to 0\n` +
       // Bounded: an unbounded descent into a browser's tree is unbounded work,
       // and a control deeper than this is one nobody is naming out loud.
       `\trepeat ${AX_DEPTH} times\n` +
       `\t\tset nextF to {}\n` +
-      `\t\trepeat with e in frontier\n` +
+      `\t\trepeat with p in frontier\n` +
+      `\t\t\tset visited to visited + 1\n` +
+      `\t\t\tif visited > ${AX_PARENT_BUDGET} then exit repeat\n` +
       `\t\t\ttry\n` +
-      `\t\t\t\tset n to name of e\n` +
-      `\t\t\t\tif n is not missing value and n is not "" then\n` +
-      `\t\t\t\t\tset end of out to (role description of e) & ": " & n\n` +
-      `\t\t\t\tend if\n` +
-      `\t\t\tend try\n` +
-      `\t\t\ttry\n` +
-      `\t\t\t\trepeat with k in (UI elements of e)\n` +
-      `\t\t\t\t\tset end of nextF to k\n` +
+      `\t\t\t\tset kids to UI elements of p\n` +
+      `\t\t\t\tset kidNames to name of every UI element of p\n` +
+      `\t\t\t\tset kidRoles to role description of every UI element of p\n` +
+      `\t\t\t\trepeat with i from 1 to count of kids\n` +
+      `\t\t\t\t\ttry\n` +
+      `\t\t\t\t\t\tset n to item i of kidNames\n` +
+      `\t\t\t\t\t\tif n is not missing value and n is not "" then\n` +
+      `\t\t\t\t\t\t\tset end of out to (item i of kidRoles) & ": " & n\n` +
+      `\t\t\t\t\t\tend if\n` +
+      `\t\t\t\t\tend try\n` +
+      `\t\t\t\t\tset end of nextF to item i of kids\n` +
       `\t\t\t\tend repeat\n` +
       `\t\t\tend try\n` +
       `\t\tend repeat\n` +
+      `\t\tif visited > ${AX_PARENT_BUDGET} then exit repeat\n` +
+      `\t\tif (count of out) > ${AX_ROW_BUDGET} then exit repeat\n` +
       `\t\tset frontier to nextF\n` +
       `\t\tif (count of frontier) is 0 then exit repeat\n` +
       `\tend repeat\n` +
@@ -475,7 +492,7 @@ const recipeTool: ToolDef = {
       try {
         running = await runningApps();
       } catch (err) {
-        const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
+        const message = osascriptFailure(err);
         return permissionHint(message) ?? `Could not list running apps: ${message}`;
       }
       const resolved = resolveApp(String(args.app ?? ""), running);
@@ -490,7 +507,7 @@ const recipeTool: ToolDef = {
       });
       return capped((stdout || stderr).trim()) || "(nothing to report)";
     } catch (err) {
-      const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
+      const message = osascriptFailure(err);
       return permissionHint(message) ?? `Could not read that: ${message}`;
     }
   },
@@ -529,7 +546,11 @@ const proposeTool: ToolDef = {
       steps: {
         type: "array",
         description:
-          "The steps, in order. Give each one exactly one action. Prefer a named action over a script: copy the name from what window_controls or menu_items printed.",
+          "The steps, in order. Give each one exactly one action key. " +
+          'Example: [{"summary": "Open Notes", "open": "Notes"}, ' +
+          '{"summary": "new note", "menu": "File > New Note"}, ' +
+          '{"summary": "type the list", "type_text": "milk, eggs"}]. ' +
+          "Copy click/menu names from what window_controls or menu_items printed.",
         items: {
           type: "object",
           properties: {
@@ -583,7 +604,7 @@ const proposeTool: ToolDef = {
       try {
         running = await runningApps();
       } catch (err) {
-        const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
+        const message = osascriptFailure(err);
         return permissionHint(message) ?? `Could not list running apps: ${message}`;
       }
     }
@@ -640,15 +661,20 @@ const proposeTool: ToolDef = {
         continue;
       }
 
-      // A step with neither an action nor a script is refused by name, with
-      // the list. Dropping it silently produced "a plan needs at least one
-      // step with a script" against a plan that visibly had four steps --
-      // which read as nonsense and steered the model toward authoring
-      // AppleScript, the one thing this tool exists to avoid.
+      // A step with neither an action nor a script is refused by name, with a
+      // worked example. The first version of this message listed the key
+      // names -- "give each step one of: open, click, ..." -- and the model
+      // re-sent the same summary-only steps three times in a row: it did not
+      // connect the words in the list to JSON keys on the step object. An
+      // example is the connection. Dropping the step silently was worse
+      // still; see the version before that.
       return (
-        `Cannot propose "${stepSummary || "(unnamed step)"}": it says what to do but not how. ` +
-        `Give each step exactly one of: ` +
-        `${STEP_ACTIONS.map(([k]) => k).join(", ")}, or script.`
+        `Cannot propose "${stepSummary || "(unnamed step)"}": the step describes an action ` +
+        `but does not carry one. Each step needs an action key. Like this:\n` +
+        `{"summary": "Open Notes", "open": "Notes"}\n` +
+        `{"summary": "new note", "menu": "File > New Note", "app": "Notes"}\n` +
+        `{"summary": "type the items", "type_text": "milk, eggs"}\n` +
+        `Actions: ${STEP_ACTIONS.map(([k]) => k).join(", ")}, or script.`
       );
     }
 

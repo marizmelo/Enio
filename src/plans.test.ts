@@ -156,7 +156,7 @@ describe("named UI actions become scripts at propose time", () => {
     assert.equal(widget.steps.length, 1);
     const [step] = widget.steps;
     assert.match(step!.script, /tell process "Finder"/);
-    assert.match(step!.script, /UI elements of window 1/);
+    assert.match(step!.script, /name of every UI element of p/);
 
     // And it is a plan like any other: pending, nothing run.
     assert.equal(plans.getPlan(widget.id)!.status, "pending");

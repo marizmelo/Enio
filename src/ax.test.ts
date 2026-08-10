@@ -13,7 +13,11 @@ describe("reading a window", () => {
     // broken: it returned nothing at all for a real Notes window.
     const s = script("window_controls");
     assert.doesNotMatch(s, /entire contents/);
-    assert.match(s, /UI elements of window 1/);
+    // Batched per parent: one Apple Event per sibling row, not three per
+    // element -- the per-element walk died on the shell timeout against a
+    // real Notes window.
+    assert.match(s, /name of every UI element of p/);
+    assert.match(s, /visited/);
   });
 
   test("menu_items skips the Apple menu", () => {
@@ -95,8 +99,8 @@ describe("compiling an action into AppleScript", () => {
     const out = compileAction("click", "Notes", "Save");
     assert.ok(out.ok);
     assert.doesNotMatch(out.script, /entire contents/);
-    assert.match(out.script, /UI elements of window 1/);
-    assert.match(out.script, /UI elements of e/);
+    assert.match(out.script, /name of every UI element of p/);
+    assert.match(out.script, /visited/);
     assert.match(out.script, /if match is missing value then error/);
   });
 

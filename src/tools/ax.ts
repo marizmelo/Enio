@@ -207,6 +207,14 @@ export type ActionKind = "click" | "menu" | "type" | "key" | "open";
  */
 export const AX_DEPTH = 8;
 
+/** How many parents a walk may expand, and how many rows it may return.
+ *  Budgets, not tuning: a real window can hold thousands of elements, and an
+ *  unbudgeted walk does not come back slow, it comes back never -- the shell
+ *  timeout kills it and the tool reports an empty error. A truncated list
+ *  still says what is truncated; a dead tool says nothing. */
+export const AX_PARENT_BUDGET = 150;
+export const AX_ROW_BUDGET = 250;
+
 /**
  * Turn a named action into the AppleScript that performs it.
  *
@@ -266,32 +274,41 @@ export function compileAction(
     // Walked level by level, for the reason recorded on the window_controls
     // recipe: `entire contents` looks like the way to search a whole window
     // and answers with an empty list on real ones, while a whose-clause sees
-    // direct children only and every real control is nested. Not finding the
-    // name is an explicit error -- a click that matched nothing would
-    // otherwise report success for having done nothing.
+    // direct children only and every real control is nested. Batched per
+    // parent and budgeted for the same reason as the recipe too -- an
+    // unbudgeted per-element walk of a real window dies on the timeout.
+    // Not finding the name is an explicit error: a click that matched nothing
+    // would otherwise report success for having done nothing.
     return {
       ok: true,
       script:
         `tell application "System Events" to tell process "${a}"\n` +
         `\tset frontmost to true\n` +
         `\tset match to missing value\n` +
-        `\tset frontier to UI elements of window 1\n` +
+        `\tset frontier to {window 1}\n` +
+        `\tset visited to 0\n` +
         `\trepeat ${AX_DEPTH} times\n` +
         `\t\tset nextF to {}\n` +
-        `\t\trepeat with e in frontier\n` +
+        `\t\trepeat with p in frontier\n` +
+        `\t\t\tset visited to visited + 1\n` +
+        `\t\t\tif visited > ${AX_PARENT_BUDGET} then exit repeat\n` +
         `\t\t\ttry\n` +
-        `\t\t\t\tif name of e is "${esc(target)}" then\n` +
-        `\t\t\t\t\tset match to e\n` +
-        `\t\t\t\t\texit repeat\n` +
-        `\t\t\t\tend if\n` +
-        `\t\t\tend try\n` +
-        `\t\t\ttry\n` +
-        `\t\t\t\trepeat with k in (UI elements of e)\n` +
-        `\t\t\t\t\tset end of nextF to k\n` +
+        `\t\t\t\tset kids to UI elements of p\n` +
+        `\t\t\t\tset kidNames to name of every UI element of p\n` +
+        `\t\t\t\trepeat with i from 1 to count of kids\n` +
+        `\t\t\t\t\ttry\n` +
+        `\t\t\t\t\t\tif item i of kidNames is "${esc(target)}" then\n` +
+        `\t\t\t\t\t\t\tset match to item i of kids\n` +
+        `\t\t\t\t\t\t\texit repeat\n` +
+        `\t\t\t\t\t\tend if\n` +
+        `\t\t\t\t\tend try\n` +
+        `\t\t\t\t\tset end of nextF to item i of kids\n` +
         `\t\t\t\tend repeat\n` +
         `\t\t\tend try\n` +
+        `\t\t\tif match is not missing value then exit repeat\n` +
         `\t\tend repeat\n` +
         `\t\tif match is not missing value then exit repeat\n` +
+        `\t\tif visited > ${AX_PARENT_BUDGET} then exit repeat\n` +
         `\t\tset frontier to nextF\n` +
         `\t\tif (count of frontier) is 0 then exit repeat\n` +
         `\tend repeat\n` +

@@ -72,6 +72,23 @@ export function planSteps(plan: Plan): PlanStep[] {
   return [{ summary: plan.summary, script: plan.payload }];
 }
 
+/**
+ * The useful part of an osascript failure.
+ *
+ * stderr when there is one; the timeout named plainly when the process was
+ * killed, because a killed process writes no stderr and `stderr ?? message`
+ * passed that emptiness straight through -- the model got "Could not read
+ * that: " with nothing after the colon, which teaches it nothing.
+ */
+export function osascriptFailure(err: unknown): string {
+  const e = err as Error & { stderr?: string; killed?: boolean; signal?: string };
+  if (e.stderr?.trim()) return e.stderr.trim();
+  if (e.killed || e.signal === "SIGTERM") {
+    return "Timed out. The window may be too complex to read; try a more specific request.";
+  }
+  return e.message ?? String(err);
+}
+
 const now = () => Date.now();
 
 export function proposePlan(input: {
@@ -169,8 +186,7 @@ export async function runAppleScript(
     });
     return { ok: true, output: (stdout || stderr).trim() || "(no output)" };
   } catch (err) {
-    const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
-    return { ok: false, output: message.trim() };
+    return { ok: false, output: osascriptFailure(err) };
   }
 }
 
@@ -225,8 +241,7 @@ export async function approvePlan(
         ok: true,
       });
     } catch (err) {
-      const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
-      results.push({ step: i + 1, summary: step.summary, output: message.trim(), ok: false });
+      results.push({ step: i + 1, summary: step.summary, output: osascriptFailure(err), ok: false });
       failed = true;
       break;
     }
