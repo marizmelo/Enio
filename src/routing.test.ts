@@ -80,6 +80,34 @@ describe("router", () => {
     assert.equal(await route("hi"), DEFAULT_SPECIALIST);
     assert.equal(called, false, "a greeting should not cost a routing call");
   });
+
+  test("a short follow-up continues the conversation it is in", async () => {
+    // "try again" after a failed Notes request re-routed to the generalist --
+    // the one specialist with no Notes tools -- which then invented image
+    // paths to read. A follow-up is not a greeting; it continues something.
+    let called = false;
+    globalThis.fetch = (async () => {
+      called = true;
+      return new Response("", { status: 200 });
+    }) as typeof fetch;
+    assert.equal(await route("try again", "operator"), "operator");
+    assert.equal(called, false, "sticking should not cost a routing call either");
+  });
+
+  test("a stale specialist name from the database is not trusted", async () => {
+    // The column outlives renames of the specialists themselves.
+    stubReply('{"specialist": "researcher"}');
+    assert.equal(await route("hm", "assistant_v1"), DEFAULT_SPECIALIST);
+  });
+
+  test("a router error falls back to the conversation, then the default", async () => {
+    globalThis.fetch = (async () => new Response("boom", { status: 500 })) as typeof fetch;
+    assert.equal(
+      await route("a request long enough to trigger routing", "mail"),
+      "mail",
+      "an errored router knows nothing; the history knows something",
+    );
+  });
 });
 
 describe("routing inside a turn", () => {

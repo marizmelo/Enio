@@ -1,7 +1,7 @@
 import { config } from "./config.js";
 import { complete } from "./model.js";
 import { buildMemoryBlock, logMessage } from "./memory/store.js";
-import { recordTurn, type StepRecord } from "./memory/traces.js";
+import { lastSpecialist, recordTurn, type StepRecord } from "./memory/traces.js";
 import { exemplarBlock, preferenceBlock } from "./memory/learning.js";
 import { getSpecialist, route, toolsFor } from "./specialists.js";
 import { skillCatalogue } from "./skills.js";
@@ -307,7 +307,11 @@ export async function runTurn(
     overrides.specialist
       ? Promise.resolve(overrides.specialist)
       : config.routingEnabled
-        ? route(userInput)
+        // The conversation's last specialist rides along so a short follow-up
+        // ("try again") continues where it was, instead of resetting to the
+        // generalist -- which is how a failed Notes request retried into the
+        // one specialist with no Notes tools.
+        ? route(userInput, lastSpecialist(sessionId))
         : Promise.resolve(""),
     buildMemoryBlock(userInput),
     exemplarBlock(userInput),

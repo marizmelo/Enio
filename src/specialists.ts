@@ -174,10 +174,22 @@ const routeSchema = z.object({
  * back to the generalist, which is the safe default because it has almost no
  * tools and cannot do damage.
  */
-export async function route(userInput: string): Promise<string> {
-  // Very short inputs carry almost no routing signal, and a greeting doesn't
-  // deserve a second model call.
-  if (userInput.trim().length < 12) return DEFAULT_SPECIALIST;
+export async function route(
+  userInput: string,
+  previous: string | null = null,
+): Promise<string> {
+  // A known specialist from earlier in the conversation, or nothing. Validated
+  // against the list because it comes from a database column that outlives
+  // renames of the specialists themselves.
+  const sticky = SPECIALISTS.some((s) => s.name === previous) ? previous! : null;
+
+  // Very short inputs carry almost no routing signal of their own -- but they
+  // are usually not greetings, they are follow-ups: "try again", "yes", "go
+  // ahead". Resetting those to the generalist is how "try again" after a
+  // failed Notes request landed on the one specialist with no Notes tools,
+  // which then invented image paths to read. A short message continues the
+  // conversation it is in; only a conversation with no history yet defaults.
+  if (userInput.trim().length < 12) return sticky ?? DEFAULT_SPECIALIST;
 
   const menu = SPECIALISTS.map((s) => `- ${s.name}: ${s.description}`).join("\n");
 
@@ -211,22 +223,24 @@ export async function route(userInput: string): Promise<string> {
     // differently run to run.
     const result = await complete(messages, [], {}, undefined, { temperature: 0 });
     const match = /\{[\s\S]*\}/.exec(result.content);
-    if (!match) return fuzzyRoute(result.content);
+    if (!match) return fuzzyRoute(result.content, sticky);
     const parsed = routeSchema.safeParse(JSON.parse(match[0]));
-    return parsed.success ? parsed.data.specialist : fuzzyRoute(result.content);
+    return parsed.success ? parsed.data.specialist : fuzzyRoute(result.content, sticky);
   } catch {
-    return DEFAULT_SPECIALIST;
+    // A router that errored knows nothing; the conversation's history knows
+    // something. Prefer it.
+    return sticky ?? DEFAULT_SPECIALIST;
   }
 }
 
 /** The model often names the right specialist while failing to produce JSON.
  *  Salvaging that is worth more than a strict parse. */
-function fuzzyRoute(text: string): string {
+function fuzzyRoute(text: string, sticky: string | null = null): string {
   const lower = text.toLowerCase();
   for (const s of SPECIALISTS) {
     if (lower.includes(s.name)) return s.name;
   }
-  return DEFAULT_SPECIALIST;
+  return sticky ?? DEFAULT_SPECIALIST;
 }
 
 export function getSpecialist(name: string): Specialist {

@@ -50,6 +50,30 @@ const MAX_FIELD = 20_000;
 const clip = (s: string | null | undefined): string | null =>
   s == null ? null : s.length > MAX_FIELD ? s.slice(0, MAX_FIELD) + "\n[...truncated]" : s;
 
+/**
+ * The specialist that handled this conversation's last routed turn, or null.
+ *
+ * Read for sticky routing: a short follow-up ("try again", "go ahead")
+ * continues the conversation it is in rather than resetting to the default
+ * specialist. 'single' rows are skipped — that is the no-routing marker, not a
+ * specialist. Failure returns null for the same reason recordTurn is wrapped:
+ * tracing must never decide whether a turn happens, in either direction.
+ */
+export function lastSpecialist(sessionId: string): string | null {
+  try {
+    const row = getDb()
+      .prepare(
+        `SELECT specialist FROM turns
+          WHERE session_id = ? AND specialist != 'single'
+          ORDER BY id DESC LIMIT 1`,
+      )
+      .get(sessionId) as { specialist: string } | undefined;
+    return row?.specialist ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function recordTurn(turn: TurnRecord): number {
   const db = getDb();
 
