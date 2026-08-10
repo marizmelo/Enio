@@ -94,7 +94,7 @@ export async function complete(
     );
   }
 
-  return consumeStream(res.body, handlers);
+  return consumeStream(res.body, handlers, tools);
 }
 
 export class ModelUnreachableError extends Error {}
@@ -111,6 +111,9 @@ function stripInternalFields(m: Message): Record<string, unknown> {
 async function consumeStream(
   stream: ReadableStream<Uint8Array>,
   handlers: StreamHandlers,
+  /** Carried only so a call written out as prose can be matched against the
+   *  tools that actually exist, never against a name the model invented. */
+  tools: WireTool[] = [],
 ): Promise<CompletionResult> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -205,7 +208,7 @@ async function consumeStream(
   // Fallback path: the server didn't parse the tool call, so it came through as
   // literal text. Recover it and strip it out of what the user sees.
   if (toolCalls.length === 0) {
-    const recovered = scavengeToolCalls(content);
+    const recovered = scavengeToolCalls(content, tools);
     if (recovered.calls.length > 0) {
       toolCalls = recovered.calls;
       content = recovered.remaining;
@@ -312,8 +315,28 @@ function partialTagLength(s: string, tag: string): number {
   return 0;
 }
 
-/** Pull <tool_call>{...}</tool_call> blocks out of plain text. */
-function scavengeToolCalls(text: string): { calls: ToolCall[]; remaining: string } {
+/**
+ * Recover tool calls the server handed back as plain text.
+ *
+ * Two shapes, and the second was found the hard way. The first is Maple's
+ * <tool_call> block arriving unparsed. The second is a model that simply
+ * *writes the call out*: a reply that fabricated opening the Calculator ended
+ * with the line `open_app "Calculator"` -- it knew the tool and the argument
+ * and put them in prose, so the intent was complete and only the envelope was
+ * missing.
+ *
+ * The bare form is deliberately strict, because turning prose into actions is
+ * the one mistake here that costs more than missing the call. It matches only
+ * a line that is *nothing but* a known tool name and its argument, so
+ * "you can use open_app to open it" is left alone. A bare quoted string maps
+ * to the schema's single required property and nothing else -- with two
+ * required properties there is no way to know which was meant, so it is not
+ * guessed at.
+ */
+function scavengeToolCalls(
+  text: string,
+  tools: WireTool[] = [],
+): { calls: ToolCall[]; remaining: string } {
   const calls: ToolCall[] = [];
   const remaining = text.replace(
     /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g,
@@ -336,7 +359,52 @@ function scavengeToolCalls(text: string): { calls: ToolCall[]; remaining: string
       return "";
     },
   );
-  return { calls, remaining };
+  if (calls.length > 0) return { calls, remaining };
+
+  return scavengeBareCalls(remaining, tools);
+}
+
+/** A line that is only `tool_name {json}` or `tool_name "arg"`. */
+function scavengeBareCalls(
+  text: string,
+  tools: WireTool[],
+): { calls: ToolCall[]; remaining: string } {
+  if (tools.length === 0) return { calls: [], remaining: text };
+  const byName = new Map(tools.map((t) => [t.function.name, t]));
+  const calls: ToolCall[] = [];
+
+  const kept = text
+    .split("\n")
+    .filter((line) => {
+      const m = /^\s*(?:[-*]\s*)?`?([a-z_][a-z0-9_]*)`?\s*(?:\(\s*)?(\{[\s\S]*\}|"[^"]*")\s*\)?\s*[.;]?\s*$/i.exec(line);
+      const tool = m && byName.get(m[1]!);
+      if (!m || !tool) return true;
+
+      let args: Record<string, unknown>;
+      if (m[2]!.startsWith("{")) {
+        try {
+          args = JSON.parse(repairJson(m[2]!));
+        } catch {
+          return true;
+        }
+      } else {
+        // A bare string only resolves against a single required property.
+        const schema = tool.function.parameters as { required?: unknown };
+        const required = Array.isArray(schema.required) ? schema.required : [];
+        if (required.length !== 1 || typeof required[0] !== "string") return true;
+        args = { [required[0]]: m[2]!.slice(1, -1) };
+      }
+
+      calls.push({
+        id: `call_scavenged_${calls.length}`,
+        type: "function",
+        function: { name: m[1]!, arguments: JSON.stringify(args) },
+      });
+      return false;
+    })
+    .join("\n");
+
+  return { calls, remaining: kept };
 }
 
 /**

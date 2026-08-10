@@ -175,6 +175,77 @@ describe("streaming and <think> handling", () => {
     assert.equal(result.toolCalls[0]!.function.name, "list_dir");
     assert.equal(result.content, "I'll look.");
   });
+
+  const OPEN_APP = [
+    {
+      type: "function" as const,
+      function: {
+        name: "open_app",
+        description: "",
+        parameters: {
+          type: "object" as const,
+          properties: { app: { type: "string" } },
+          required: ["app"],
+        },
+      },
+    },
+  ];
+
+  test("recovers a call the model wrote out as prose", async () => {
+    // Watched happen: a reply fabricating an opened Calculator ended with the
+    // line `open_app "Calculator"`. The tool and the argument were both
+    // right; only the envelope was missing.
+    stubStream(['The Calculator app is open.\n\nopen_app "Calculator"']);
+    const result = await complete([{ role: "user", content: "open it" }], OPEN_APP);
+    assert.equal(result.toolCalls.length, 1);
+    assert.equal(result.toolCalls[0]!.function.name, "open_app");
+    assert.deepEqual(JSON.parse(result.toolCalls[0]!.function.arguments), { app: "Calculator" });
+    // The line is consumed, not left in the bubble as leftover syntax.
+    assert.doesNotMatch(result.content, /open_app/);
+  });
+
+  test("prose that merely mentions a tool is not turned into a call", async () => {
+    // The one mistake here that costs more than missing a call. Only a line
+    // that is nothing but the call is taken.
+    for (const text of [
+      'You can use open_app "Calculator" to open it yourself.',
+      "I could call open_app if you want.",
+      "open_app is the tool that opens apps.",
+    ]) {
+      stubStream([text]);
+      const result = await complete([{ role: "user", content: "?" }], OPEN_APP);
+      assert.equal(result.toolCalls.length, 0, `must not fire on: ${text}`);
+    }
+  });
+
+  test("a name that is not a real tool is left as text", async () => {
+    stubStream(['make_coffee "espresso"']);
+    const result = await complete([{ role: "user", content: "?" }], OPEN_APP);
+    assert.equal(result.toolCalls.length, 0);
+    assert.match(result.content, /make_coffee/);
+  });
+
+  test("a bare argument needs exactly one required property", async () => {
+    // Two required properties and a single quoted string: no way to know which
+    // was meant, so it is not guessed at.
+    const twoRequired = [
+      {
+        type: "function" as const,
+        function: {
+          name: "move_file",
+          description: "",
+          parameters: {
+            type: "object" as const,
+            properties: { from: { type: "string" }, to: { type: "string" } },
+            required: ["from", "to"],
+          },
+        },
+      },
+    ];
+    stubStream(['move_file "notes.txt"']);
+    const result = await complete([{ role: "user", content: "?" }], twoRequired);
+    assert.equal(result.toolCalls.length, 0);
+  });
 });
 
 /* ------------------------------------------------------------------ */

@@ -729,12 +729,15 @@ export async function runTurn(
       // turn.
     }
 
-    // The correction is not trusted either -- measured: asked again, the
+    // The correction is not trusted either -- measured twice. Asked again, the
     // model re-fabricated "The Calculator app is now cleared", still calling
-    // nothing, and a guard that ships its own retry's lie is not a guard.
-    // When no tool has run by now, the reply is written here, by code, and it
-    // names the phrasing that does work.
-    if (!steps.some((st) => st.kind === "tool") && claimsUnperformedAction(reply)) {
+    // nothing; a guard that ships its own retry's lie is not a guard. And the
+    // second time it answered with the bare line `open_app "Calculator"`,
+    // which claims nothing, so re-testing the *replaced* reply let the
+    // fabrication above it stand. The condition is therefore only "did
+    // anything actually run" -- this branch already established the turn
+    // opened with an action claim, and the user can still see it.
+    if (!steps.some((st) => st.kind === "tool")) {
       reply =
         "I described doing that, but I did not actually run anything — nothing " +
         'has changed on your Mac. Say "propose a plan to …" and I will write ' +
