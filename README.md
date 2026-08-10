@@ -286,6 +286,24 @@ This needs **Accessibility** permission, which is *not* the same as Automation: 
 
 Clicking by name also fails better than clicking by coordinate. If the control has moved, the name still finds it; if it's genuinely gone, you get an error instead of a click landing on whatever slid into its place.
 
+### Browsing
+
+`browse` opens a page and reads it, keeping the session between calls — so following a trail across a site is one journey rather than a series of unrelated fetches.
+
+```
+you › what changed in the latest Node release
+  → researcher
+  ⚒ web_search {"query":"node.js release notes"}
+  ⚒ browse {"url":"https://nodejs.org/en/about"}
+  ⚒ browse {"link":2}
+```
+
+A page comes back as readable text plus its links as a **numbered list**, and the agent follows one with `link: 7` rather than composing a URL. That is the same trick as clicking by name: choosing from a short list is something a small model does reliably, while writing a URL from memory is not.
+
+It is read-only. It navigates and reads; it does not click buttons, submit forms or type. Those mutate, and mutations belong in the approval sheet.
+
+Needs Playwright (`npm install playwright && npx playwright install chromium`). Without it the tool isn't offered at all.
+
 ### Images
 
 Attach one with `@`, or let the model reach for it:

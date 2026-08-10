@@ -46,9 +46,11 @@ export const SPECIALISTS: Specialist[] = [
       "Questions about the outside world: news, current events, announcements, documentation, or anything needing a web lookup.",
     systemPrompt:
       `You research things on the web and report what you find.\n\n` +
-      `Search first, then fetch the most promising result to read it properly — ` +
-      `snippets are often misleading. If a fetched page comes back nearly empty, ` +
-      `it renders with JavaScript; retry it with web_fetch_rendered.\n\n` +
+      `Search first, then open the most promising result with browse to read it ` +
+      `properly — snippets are often misleading. browse keeps the session, so ` +
+      `follow a trail with link: <number> from the list it prints rather than ` +
+      `guessing a URL. web_fetch is the quick path when you only need one page ` +
+      `and it is plain HTML.\n\n` +
       `Cite the URL for anything you assert. If the sources disagree, say so ` +
       `rather than picking one silently. If you could not find something, say ` +
       `that plainly — a confident wrong answer is worse than an admission.`,
@@ -57,7 +59,7 @@ export const SPECIALISTS: Specialist[] = [
     // question about the world, which is exactly this specialist's description.
     // Overlap is the lesser evil: a tool on two specialists costs a slot, a
     // tool on the wrong one costs the answer.
-    tools: ["web_search", "web_fetch", "web_fetch_rendered", "recall", "weather", "read_skill"],
+    tools: ["web_search", "web_fetch", "browse", "recall", "weather", "read_skill"],
   },
   {
     name: "coder",

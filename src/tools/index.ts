@@ -3,6 +3,7 @@ import type { ToolDef } from "../types.js";
 import { fsTools } from "./fs.js";
 import { shellTools } from "./shell.js";
 import { buildWebTools } from "./web.js";
+import { browseTools } from "./browse.js";
 import { memoryTools } from "./memory.js";
 import { skillTools } from "./skills.js";
 import { visionTools } from "./vision.js";
@@ -80,6 +81,7 @@ export async function buildRegistry(
     ...desktopTools,
     ...shellTools,
     ...buildWebTools(),
+    ...browseTools,
   ];
   const mcp = await loadMcpTools(onLog);
 

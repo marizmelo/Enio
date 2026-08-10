@@ -97,8 +97,49 @@ export async function renderPage(url: string, opts: RenderOptions = {}): Promise
   }
 }
 
+/**
+ * One page, kept open, so navigation is a path rather than a series of
+ * unrelated visits.
+ *
+ * renderPage deliberately throws its context away each call — a stateless
+ * fetch should carry nothing between URLs. This is the opposite: cookies,
+ * redirects and whatever a site set on the way in all persist, which is what
+ * makes "search, open the third result, follow its docs link" one journey.
+ *
+ * It is also the seam an authenticated browser would grow from: a context
+ * that survives is a context that could have been logged into. Nothing here
+ * does that yet, and nothing here should until mutations go through the
+ * approval sheet.
+ */
+let sessionPromise: Promise<any> | null = null;
+
+export async function getSession(): Promise<any> {
+  if (!sessionPromise) {
+    sessionPromise = (async () => {
+      const browser = await getBrowser();
+      const context = await browser.newContext({
+        userAgent:
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+          "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        viewport: { width: 1280, height: 900 },
+      });
+      const page = await context.newPage();
+      // Images, media and fonts never contribute text and are most of the
+      // bytes; skipping them is a large speedup and costs nothing here.
+      await page.route("**/*", (route: any) => {
+        const type = route.request().resourceType();
+        if (type === "image" || type === "media" || type === "font") return route.abort();
+        return route.continue();
+      });
+      return page;
+    })();
+  }
+  return sessionPromise;
+}
+
 /** Chromium lingers as a child process otherwise. */
 export async function closeBrowser(): Promise<void> {
+  sessionPromise = null;
   if (!browserPromise) return;
   try {
     const browser = await browserPromise;

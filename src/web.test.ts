@@ -149,3 +149,32 @@ describe("fetch safety", () => {
     assert.match(result, /web_fetch_rendered/);
   });
 });
+
+
+const { browseTools } = await import("./tools/browse.js");
+const { playwrightAvailable } = await import("./tools/browser.js");
+
+describe("browsing as a session", () => {
+  // Argument handling only: these paths never touch the network, which is
+  // what keeps the suite offline and fast. Whether a real page parses is a
+  // question only a real page answers, and that is what the probe is for.
+  const tool = browseTools[0];
+  const skip = !tool;
+
+  test("asks for a url rather than guessing one", { skip }, async () => {
+    assert.match(String(await tool!.run({})), /Give a url/);
+  });
+
+  test("a link number with no page open says so", { skip }, async () => {
+    // The numbered list is the closed list this tool exists to offer, so a
+    // reference to one that was never printed has to fail by name rather than
+    // silently fetch something.
+    assert.match(String(await tool!.run({ link: 3 })), /No page open yet/);
+  });
+
+  test("is withheld entirely when playwright is absent", () => {
+    // Same rule as the rendered fetch beside it: a tool that can only fail
+    // still costs the model the attention of choosing it.
+    assert.equal(browseTools.length, playwrightAvailable() ? 1 : 0);
+  });
+});
