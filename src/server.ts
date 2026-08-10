@@ -8,6 +8,7 @@ import { runTurn } from "./agent.js";
 import { claimModelServer } from "./runtime.js";
 import { buildRegistry, type Registry } from "./tools/index.js";
 import { setMemorySession } from "./tools/memory.js";
+import { setBrowseSession } from "./tools/browse.js";
 import {
   builtinRecipes,
   desktopEnabled,
@@ -75,6 +76,7 @@ export async function serve(): Promise<void> {
   const sessionId = startSession();
   setMemorySession(sessionId);
   setPlanSession(sessionId);
+  setBrowseSession(sessionId);
   const token = ensureToken();
 
   const server = createServer((req, res) => {
@@ -755,6 +757,7 @@ async function handle(
       : sessionId;
   setMemorySession(conversationId);
   setPlanSession(conversationId);
+  setBrowseSession(conversationId);
 
   const id = `chatcmpl-${randomUUID()}`;
   const created = Math.floor(Date.now() / 1000);

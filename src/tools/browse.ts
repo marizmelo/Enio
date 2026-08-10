@@ -30,8 +30,22 @@ import type { ToolDef } from "../types.js";
 const MAX_LINKS = 40;
 const MAX_TEXT = 6000;
 
-/** The last page's links, so `link: 7` means something on the next call. */
-let lastLinks: Array<{ text: string; href: string }> = [];
+/**
+ * The last page's links, per conversation, so `link: 7` means what that
+ * conversation just read.
+ *
+ * Same shape as the memory and plan tools: the turn sets the session, the tool
+ * reads it. It was one module-global list, which is fine for one thread and
+ * wrong the moment there are two -- conversation B reading a page would
+ * silently redefine what "link 3" meant in conversation A, and the model would
+ * follow it without anything looking amiss.
+ */
+let currentSessionId = "default";
+export const setBrowseSession = (id: string) => {
+  currentSessionId = id || "default";
+};
+
+const linksBySession = new Map<string, Array<{ text: string; href: string }>>();
 
 export interface PageReading {
   title: string;
@@ -151,6 +165,8 @@ const browseTool: ToolDef = {
     required: [],
   },
   async run(args) {
+    const session = currentSessionId;
+    const lastLinks = linksBySession.get(session) ?? [];
     const wantedLink = Number(args.link);
     let target = String(args.url ?? "").trim();
 
@@ -185,7 +201,7 @@ const browseTool: ToolDef = {
     }
 
     try {
-      const page = await getSession();
+      const page = await getSession(session);
       await page.goto(target, {
         waitUntil: "domcontentloaded",
         timeout: config.browserTimeoutMs,
@@ -208,7 +224,7 @@ const browseTool: ToolDef = {
       await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
 
       const reading = await readPage(page);
-      lastLinks = reading.links;
+      linksBySession.set(session, reading.links);
       const truncated = reading.text.length >= MAX_TEXT;
 
       if (!reading.text.trim() && reading.links.length === 0) {

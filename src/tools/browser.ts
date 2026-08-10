@@ -144,29 +144,79 @@ export async function renderPage(url: string, opts: RenderOptions = {}): Promise
  * does that yet, and nothing here should until mutations go through the
  * approval sheet.
  */
-let sessionPromise: Promise<any> | null = null;
+/**
+ * One profile, one tab per conversation.
+ *
+ * The shape a browser already has, and the reason is that both halves are
+ * load-bearing. The *context* is shared, so cookies and logins are one
+ * identity across the app -- which is what stage three needs, since being
+ * logged in once should not mean logged in only in the conversation where you
+ * did it. The *page* is per conversation, because two conversations browsing
+ * at once would otherwise navigate the same tab and read each other's pages:
+ * A calls goto, B calls goto, A reads B's result.
+ *
+ * Tabs are capped and evicted oldest-first. A page holds a live renderer, so
+ * an unbounded map of them is an unbounded memory leak, and a conversation
+ * nobody has touched in a while is the cheapest one to lose -- the next call
+ * simply opens a fresh tab.
+ */
+const MAX_TABS = 6;
+const tabs = new Map<string, Promise<any>>();
+let contextPromise: Promise<any> | null = null;
 
-export async function getSession(): Promise<any> {
-  if (!sessionPromise) {
-    sessionPromise = (async () => {
+async function getContext(): Promise<any> {
+  if (!contextPromise) {
+    contextPromise = (async () => {
       const browser = await getBrowser();
-      const context = await browser.newContext({
+      return browser.newContext({
         userAgent:
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
           "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
         viewport: { width: 1280, height: 900 },
       });
-      const page = await context.newPage();
-      await page.route("**/*", routeGuard);
-      return page;
     })();
   }
-  return sessionPromise;
+  return contextPromise;
+}
+
+export async function getSession(key = "default"): Promise<any> {
+  const existing = tabs.get(key);
+  if (existing) {
+    // Re-inserted so Map iteration order stays least-recently-used first.
+    tabs.delete(key);
+    tabs.set(key, existing);
+    return existing;
+  }
+
+  const created = (async () => {
+    const context = await getContext();
+    const page = await context.newPage();
+    await page.route("**/*", routeGuard);
+    return page;
+  })();
+  tabs.set(key, created);
+
+  while (tabs.size > MAX_TABS) {
+    const [oldestKey, oldest] = tabs.entries().next().value as [string, Promise<any>];
+    tabs.delete(oldestKey);
+    oldest.then((p) => p.close()).catch(() => {});
+  }
+  return created;
+}
+
+/** Forget one conversation's tab, so a discarded thread does not hold a
+ *  renderer open for the life of the process. */
+export async function closeSession(key: string): Promise<void> {
+  const page = tabs.get(key);
+  if (!page) return;
+  tabs.delete(key);
+  await page.then((p) => p.close()).catch(() => {});
 }
 
 /** Chromium lingers as a child process otherwise. */
 export async function closeBrowser(): Promise<void> {
-  sessionPromise = null;
+  tabs.clear();
+  contextPromise = null;
   if (!browserPromise) return;
   try {
     const browser = await browserPromise;
