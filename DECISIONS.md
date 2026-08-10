@@ -336,6 +336,19 @@ useful gate and not evidence.
 
 Recorded because each cost real time and could recur.
 
+- **The model-server client count lived in a relocatable directory.** The count
+  decides when the shared server is shut down; the server itself is one per
+  machine and is found by scanning the process table, with no path involved. So
+  the two disagreed about scope. Any process started with its own
+  `ENIO_DATA_DIR` — every isolated test, and any script redirecting state to a
+  scratch directory — read an empty registry, concluded it was the only user,
+  and on exit `SIGTERM`ed a server it had never started while the desktop app
+  was still using it. It cost a working model server twice in one session, the
+  second time *after* the cause had been identified and written down, which is
+  the part worth remembering: describing a bug is not fixing it. The registry
+  now lives in `config.machineStateDir`, which ignores `ENIO_DATA_DIR` and has
+  its own separate override so that isolating it is something a test asks for
+  by name rather than gets as a side effect.
 - **Backticks inside a SQL comment inside a JS template literal** terminated the
   string. Silent until tsc complained about something unrelated.
 - **tesseract.js throws from inside a worker event handler** on a failed language

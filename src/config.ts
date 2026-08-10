@@ -45,6 +45,39 @@ function resolveDataDir(): string {
 const dataDir = resolveDataDir();
 
 /**
+ * Where machine-wide state lives, ignoring ENIO_DATA_DIR.
+ *
+ * Almost everything belongs in the data directory and should move with it. The
+ * model server does not: there is one per machine, it is found by scanning the
+ * process table rather than by any path, and the count of who is using it
+ * decides when it gets shut down.
+ *
+ * Putting that count in a relocatable directory made the two disagree. A
+ * process started with a different ENIO_DATA_DIR -- every isolated test, and
+ * any script that redirects state to a scratch directory -- read an empty
+ * registry, concluded it was the only user, and on exit shut down a server it
+ * had never started and that other processes were mid-answer on. Observed
+ * twice, both times taking the desktop app's model down with it.
+ *
+ * There is an explicit override, and it is deliberately a *separate* variable
+ * rather than following ENIO_DATA_DIR. Isolating this is something a test must
+ * ask for by name; getting it as a side effect of redirecting data is exactly
+ * how the bug happened.
+ */
+export const machineStateDir = resolveMachineStateDir();
+
+function resolveMachineStateDir(): string {
+  const explicit = env("MACHINE_STATE_DIR");
+  if (explicit) return explicit;
+
+  const preferred = join(home, ".enio");
+  if (existsSync(preferred)) return preferred;
+  const previous = join(home, ".maple-agent");
+  if (existsSync(previous)) return previous;
+  return preferred;
+}
+
+/**
  * Where the model runtime and weights live.
  *
  * Inside the data directory, alongside the database — machine-local state, not
@@ -109,6 +142,7 @@ export const config = {
 
   /** Everything enio persists lives under here. Delete it to factory-reset. */
   dataDir,
+  machineStateDir,
 
   /**
    * Filesystem + shell tools are hard-scoped to this directory. Nothing outside
@@ -480,6 +514,7 @@ export function activeBackend(): Backend {
 }
 
 export function ensureDirs(): void {
+  mkdirSync(config.machineStateDir, { recursive: true });
   mkdirSync(config.dataDir, { recursive: true });
   mkdirSync(config.workspace, { recursive: true });
 }

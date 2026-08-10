@@ -23,8 +23,17 @@ import { config } from "./config.js";
  * the next time anyone writes. There is no cleanup path to get wrong, because
  * there is no cleanup path.
  */
+/**
+ * Machine-wide, not in the data directory.
+ *
+ * The count has to be scoped the same way the thing it counts is. The model
+ * server is one per machine and is located by scanning the process table, so a
+ * per-data-directory registry meant a process with its own ENIO_DATA_DIR saw
+ * nobody, believed itself the last one out, and reaped a server it had never
+ * started. See machineStateDir for the two occasions that actually happened.
+ */
 function registryPath(): string {
-  return join(config.dataDir, "model-clients");
+  return join(config.machineStateDir, "model-clients");
 }
 
 function isAlive(pid: number): boolean {

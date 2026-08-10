@@ -6,6 +6,10 @@ import { join } from "node:path";
 
 const scratch = mkdtempSync(join(tmpdir(), "enio-int-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// Asked for by name: the client registry is machine-wide on purpose, so a
+// test that registers pids would otherwise read and rewrite the real one --
+// the desktop app's own claim included.
+process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 process.env.ENIO_MCP_CONFIG = join(scratch, "no-such-mcp.json");
 // These exercise the tool loop itself. Routing adds a model call in front of
