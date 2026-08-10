@@ -194,7 +194,7 @@ export const KEY_CODES: Record<string, number> = {
   up: 126,
 };
 
-export type ActionKind = "click" | "menu" | "type" | "key";
+export type ActionKind = "click" | "menu" | "type" | "key" | "open";
 
 /**
  * How many levels down the accessibility tree to walk.
@@ -225,6 +225,18 @@ export function compileAction(
   if (!target) return { ok: false, reason: `A ${kind} step needs something to act on.` };
 
   const a = esc(app);
+
+  if (kind === "open") {
+    // The one action whose app need not be running -- opening is how it gets
+    // that way -- so the name cannot come from the process list and is model
+    // text. esc() keeps it inside the string literal, the approval sheet
+    // shows exactly what will launch, and a name that matches nothing errors
+    // at run time rather than launching something else.
+    return {
+      ok: true,
+      script: `tell application "${esc(target)}" to activate`,
+    };
+  }
 
   if (kind === "menu") {
     // "File > Save" is the shape the menu_items recipe prints, so the model

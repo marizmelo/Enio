@@ -142,6 +142,18 @@ describe("compiling an action into AppleScript", () => {
   test("an empty target is refused", () => {
     assert.equal(compileAction("click", "Notes", "   ").ok, false);
   });
+
+  test("open activates by name and stays inside the string literal", () => {
+    // The gap that broke the first real Qwen plan: "open the Calendar app" had
+    // no action to be, so all four steps dropped and the plan was refused.
+    const out = compileAction("open", "Calendar", "Calendar");
+    assert.ok(out.ok);
+    assert.equal(out.script, 'tell application "Calendar" to activate');
+
+    const sneaky = compileAction("open", "x", 'Cal" & (do shell script "id') ;
+    assert.ok(sneaky.ok);
+    assert.match(sneaky.script, /\\"/, "quotes in the name must be escaped, not literal");
+  });
 });
 
 describe("every shipped script is valid AppleScript", () => {
@@ -172,6 +184,7 @@ describe("every shipped script is valid AppleScript", () => {
     ["menu", "File > New Note"],
     ["type", 'quoted "text" and\na newline'],
     ["key", "return"],
+    ["open", "Calendar"],
   ] as const) {
     test(`${kind} action`, { skip: notMac }, () => {
       const out = compileAction(kind, "Finder", value);

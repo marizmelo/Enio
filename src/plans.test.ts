@@ -128,10 +128,11 @@ describe("multi-step plans", () => {
     assert.equal(widget.steps.length, 1);
   });
 
-  test("a plan with no runnable step is refused", async () => {
+  test("a plan with no runnable step is refused, naming the step", async () => {
     const tool = desktopTools.find((t) => t.name === "propose_plan")!;
     const out = await tool.run({ summary: "nothing", steps: [{ summary: "empty", script: "  " }] });
-    assert.match(String(out), /needs a summary and at least one step/);
+    assert.match(String(out), /"empty"/);
+    assert.match(String(out), /open, click, menu, type_text, press/);
   });
 });
 
@@ -174,6 +175,44 @@ describe("named UI actions become scripts at propose time", () => {
     const widget = (out as { widget: { steps: Array<{ script: string }> } }).widget;
     assert.equal(widget.steps.length, 2);
     for (const step of widget.steps) assert.match(step.script, /"Finder"/);
+  });
+
+  test("an opened app covers the steps after it, running or not", { skip: notMac }, async () => {
+    // The app a plan opens is not in the process list at propose time --
+    // opening it is what puts it there. A later step targeting it must not be
+    // refused for that.
+    const tool = desktopTools.find((t) => t.name === "propose_plan")!;
+    const out = await tool.run({
+      summary: "Open something and press a key in it",
+      steps: [
+        { summary: "open it", open: "NoSuchAppForThisTest" },
+        { summary: "confirm", press: "return", app: "NoSuchAppForThisTest" },
+      ],
+    });
+    const widget = (out as { widget: { steps: Array<{ script: string }> } }).widget;
+    assert.equal(widget.steps.length, 2);
+    assert.match(widget.steps[0]!.script, /tell application "NoSuchAppForThisTest" to activate/);
+    assert.match(widget.steps[1]!.script, /tell process "NoSuchAppForThisTest"/);
+  });
+
+  test("a step with no action is refused by name, with the list", { skip: notMac }, async () => {
+    // Replayed from the first real Qwen plan: four steps, each only a summary
+    // and an app. They were silently dropped, and the error said the plan had
+    // no steps -- nonsense against a plan that visibly had four, and a shove
+    // toward authoring AppleScript.
+    const tool = desktopTools.find((t) => t.name === "propose_plan")!;
+    const out = String(
+      await tool.run({
+        summary: "Open the Calendar app to check events and add a new event.",
+        app: "Calendar",
+        steps: [
+          { summary: "Open the Calendar app.", app: "Calendar" },
+          { summary: "Check for existing events on the calendar.", app: "Calendar" },
+        ],
+      }),
+    );
+    assert.match(out, /"Open the Calendar app\."/, "the refusal must name the step");
+    assert.match(out, /open, click, menu, type_text, press/, "and teach the closed list");
   });
 
   test("a step naming an app that is not running is refused whole", { skip: notMac }, async () => {

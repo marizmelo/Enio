@@ -502,6 +502,7 @@ const recipeTool: ToolDef = {
  *  is -- because a nested discriminated union is exactly the JSON a model this
  *  size gets wrong. */
 const STEP_ACTIONS: Array<[key: string, kind: ActionKind]> = [
+  ["open", "open"],
   ["click", "click"],
   ["menu", "menu"],
   ["type_text", "type"],
@@ -534,6 +535,10 @@ const proposeTool: ToolDef = {
           properties: {
             summary: { type: "string", description: "What this step does, in a few words." },
             app: { type: "string", description: "Which app, if not the plan's app." },
+            open: {
+              type: "string",
+              description: 'Open an app by name, e.g. "Calendar". Use as the first step when the app may not be running.',
+            },
             click: {
               type: "string",
               description: 'A control in the front window, named exactly, e.g. "Save".',
@@ -587,6 +592,10 @@ const proposeTool: ToolDef = {
     // Carried forward so an app named once covers the steps that follow, which
     // is how the model writes them when every step is in the same window.
     let lastApp = String(args.app ?? "");
+    // Apps this plan opens. A later step targeting one is accepted even though
+    // it is not in the process list yet -- by the time that step runs, the
+    // open step before it will have started the app.
+    const opened: string[] = [];
 
     for (const s of raw) {
       const stepSummary = String(s?.summary ?? "").trim();
@@ -594,14 +603,29 @@ const proposeTool: ToolDef = {
 
       if (action) {
         const [key, kind] = action;
-        const wanted = String(s.app ?? lastApp);
-        const resolved = resolveApp(wanted, running);
-        // Refused whole rather than stored with a broken step: a plan the user
-        // is asked to approve should never contain one that cannot work.
-        if (!resolved.ok) return `Cannot propose "${stepSummary}": ${resolved.reason}`;
-        lastApp = resolved.name;
+        let appName: string;
 
-        const compiled = compileAction(kind, resolved.name, String(s[key]));
+        if (kind === "open") {
+          // Opening is the one action whose app need not be running; the name
+          // is taken as written, and the compiled script is what the user
+          // approves.
+          appName = String(s[key]).trim() || String(s.app ?? lastApp).trim();
+          if (appName) opened.push(appName);
+        } else {
+          const wanted = String(s.app ?? lastApp);
+          const resolved = resolveApp(wanted, running);
+          const openedMatch = opened.find((o) => o.toLowerCase() === wanted.trim().toLowerCase());
+          // Refused whole rather than stored with a broken step: a plan the
+          // user is asked to approve should never contain one that cannot
+          // work.
+          if (!resolved.ok && !openedMatch) {
+            return `Cannot propose "${stepSummary}": ${resolved.reason}`;
+          }
+          appName = resolved.ok ? resolved.name : openedMatch!;
+        }
+        lastApp = appName;
+
+        const compiled = compileAction(kind, appName, String(s[key]));
         if (!compiled.ok) return `Cannot propose "${stepSummary}": ${compiled.reason}`;
         steps.push({
           summary: stepSummary || `${key} ${String(s[key])}`,
@@ -611,7 +635,21 @@ const proposeTool: ToolDef = {
       }
 
       const script = unescapeQuotes(String(s?.script ?? "").trim());
-      if (script) steps.push({ summary: stepSummary, script });
+      if (script) {
+        steps.push({ summary: stepSummary, script });
+        continue;
+      }
+
+      // A step with neither an action nor a script is refused by name, with
+      // the list. Dropping it silently produced "a plan needs at least one
+      // step with a script" against a plan that visibly had four steps --
+      // which read as nonsense and steered the model toward authoring
+      // AppleScript, the one thing this tool exists to avoid.
+      return (
+        `Cannot propose "${stepSummary || "(unnamed step)"}": it says what to do but not how. ` +
+        `Give each step exactly one of: ` +
+        `${STEP_ACTIONS.map(([k]) => k).join(", ")}, or script.`
+      );
     }
 
     if (!summary || steps.length === 0) {
