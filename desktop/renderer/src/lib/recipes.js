@@ -38,8 +38,19 @@ export const saveRecipe = (name, { summary, script }) =>
 export const deleteRecipe = (name) =>
   call(`/recipes/${encodeURIComponent(name)}`, { method: "DELETE" });
 
-/** The model setting: what runs now, and the closed list of what could. */
+/** The model setting: what runs now, what is installed, and what could be
+ *  fetched. The two lists are separate because switching is instant and
+ *  downloading is gigabytes. */
 export const currentModel = () => call("/model");
+
+/** Starts the fetch and returns once it is running, not once it is done —
+ *  poll `modelDownload` for the rest. */
+export const downloadModel = (model) =>
+  call("/model/download", { method: "POST", body: JSON.stringify({ model }) });
+
+export const modelDownload = () => call("/model/download");
+
+export const cancelModelDownload = () => call("/model/download", { method: "DELETE" });
 
 /** Switching restarts the model server under the agent; this resolves once
  *  the new one is serving, so callers can just await it. */

@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
+import { CATALOGUE } from "./model-catalogue.js";
 
 /**
  * The documentation, checked against the code it describes.
@@ -151,6 +152,36 @@ describe("the docs describe the code that exists", () => {
         if (clean.startsWith("images/")) continue;
         assert.ok(names.has(clean), `${file} links to missing page: ${target}`);
       }
+    }
+  });
+});
+
+/**
+ * The picker and the page are two lists of the same thing, and the one that
+ * rots is the page: adding a model is a code change, and nothing about it
+ * forces a trip to the docs. A reader who downloads from a table missing two
+ * entries never learns the other two exist.
+ */
+describe("the model catalogue", () => {
+  const models = readFileSync(join(DOCS, "models.md"), "utf8");
+
+  test("every downloadable model is documented", () => {
+    for (const model of CATALOGUE) {
+      assert.ok(models.includes(model.id), `docs/models.md does not mention ${model.id}`);
+    }
+  });
+
+  test("documented sizes match the measured ones", () => {
+    for (const model of CATALOGUE) {
+      // The table writes 2.3GB for 2.28e9 bytes; the check is that nobody
+      // rounded to a different number, not that the text is byte-exact.
+      const expected = `${(model.bytes / 1e9).toFixed(1)}GB`;
+      const row = models.split("\n").find((line) => line.includes(`\`${model.id}\``));
+      assert.ok(row, `no table row for ${model.id}`);
+      assert.ok(
+        row.includes(expected),
+        `docs/models.md lists ${model.id} at a size other than ${expected}: ${row.trim()}`,
+      );
     }
   });
 });

@@ -17,6 +17,13 @@ import {
 } from "./tools/desktop.js";
 import { probeAssistiveAccess } from "./tools/ax.js";
 import { availableModels, currentModelId } from "./model-settings.js";
+import { CATALOGUE, fitFor, machineMemory } from "./model-catalogue.js";
+import {
+  DownloadRefused,
+  cancelDownload,
+  downloadState,
+  startDownload,
+} from "./model-download.js";
 import { switchModel } from "./runtime.js";
 import { autoRunEnabled, setAutoRun } from "./automation.js";
 import { revisePlan } from "./revise.js";
@@ -326,13 +333,71 @@ async function handle(
    *
    * Switching restarts the model server underneath the agent; the agent
    * itself never goes down, so the desktop's session, pending plans and
-   * conversations all survive. The list is closed -- the bundled default
-   * plus what is already in the HF cache -- because switching is choosing,
-   * and downloading gigabytes is a different decision made elsewhere.
+   * conversations all survive.
+   *
+   * Two lists, and the split is the point. `available` is what can be served
+   * right now -- the bundled default plus what is already in the cache -- so
+   * switching stays instant and cannot fail on a download. `catalogue` is what
+   * could be fetched, which is a different and much slower decision, kept
+   * behind its own endpoint so it can never be taken by accident.
+   *
+   * `machineMemory` goes out with them because whether a model fits is a fact
+   * about this machine, not about the model, and the client should not have to
+   * guess at it.
    */
   if (req.method === "GET" && url.pathname === "/model") {
-    sendJson(res, 200, { current: currentModelId(), available: availableModels() });
+    const installed = new Set(availableModels());
+    sendJson(res, 200, {
+      current: currentModelId(),
+      available: availableModels(),
+      machineMemory: machineMemory(),
+      catalogue: CATALOGUE.map((m) => ({
+        ...m,
+        installed: installed.has(m.id),
+        fit: fitFor(m.bytes),
+      })),
+      download: downloadState(),
+    });
     return;
+  }
+
+  /**
+   * Fetching a model that is not here yet.
+   *
+   * Returns as soon as the download is running, because a 17GB transfer
+   * outlives any request worth holding open; the client polls this same path
+   * for progress. Only ids in the catalogue are accepted -- see
+   * model-catalogue.ts for why that is a boundary and not just curation.
+   *
+   * Nothing here switches to what it just downloaded. Finishing a download and
+   * restarting the model server are separate acts, and doing both on one click
+   * would take the machine down mid-conversation as a side effect of "get me
+   * this model".
+   */
+  if (url.pathname === "/model/download") {
+    if (req.method === "GET") {
+      sendJson(res, 200, { download: downloadState() });
+      return;
+    }
+    if (req.method === "DELETE") {
+      sendJson(res, 200, { cancelled: cancelDownload(), download: downloadState() });
+      return;
+    }
+    if (req.method === "POST") {
+      let wanted = "";
+      try {
+        wanted = String(JSON.parse((await readBody(req)) || "{}")?.model ?? "").trim();
+      } catch {
+        wanted = "";
+      }
+      try {
+        sendJson(res, 202, { download: startDownload(wanted) });
+      } catch (err) {
+        const refused = err instanceof DownloadRefused;
+        sendJson(res, refused ? 400 : 500, { error: { message: (err as Error).message } });
+      }
+      return;
+    }
   }
 
   if (req.method === "POST" && url.pathname === "/model") {

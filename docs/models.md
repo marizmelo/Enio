@@ -9,17 +9,16 @@ nav_order: 6
 ## Switching
 
 The model is a **setting**, not a launch flag. The desktop app's status bar has
-a picker showing what this machine can serve: the bundled default plus any MLX
-chat model already in your Hugging Face cache.
+a picker listing what this machine can serve right now: the bundled default plus
+any MLX chat model already in your Hugging Face cache. One click switches.
 
 Switching restarts the model server underneath the agent — your conversation,
 pending approvals and history all stay up. The choice persists in
 `~/.enio/model.json`, so it survives a restart.
 
-The list is closed on purpose: it is scanned from what is present, never typed.
-A model id with a typo in it is ninety seconds of loading followed by a download
-of several gigabytes nobody asked for. Switching is *choosing*; downloading is a
-separate decision made deliberately, elsewhere.
+That menu is deliberately only what is already here, because those switch
+instantly and cannot fail on a network. Anything that would have to be fetched
+lives one item further down, under **Other models…**.
 
 If a model fails to load, the switch reverts — on disk and running — so a bad
 choice cannot become what every boot serves.
@@ -30,50 +29,93 @@ To try one without changing what the machine boots tomorrow:
 ENIO_MODEL=mlx-community/Qwen3-4B-Instruct-2507-4bit node dist/index.js start
 ```
 
-## Adding a model
+## Getting another model
 
-Anything `mlx_lm` can load that is a **chat model** and can **call tools**.
-Download it once and it appears in the picker — the list is scanned from your
-Hugging Face cache, so nothing else is needed.
+**Model ▸ Other models…** lists everything Enio offers to fetch, with its size,
+what it is good for, and whether it fits in this machine's memory. **Get**
+downloads it into your Hugging Face cache with a progress bar, and you can stop
+part-way — the cache resumes rather than starting over.
 
-```sh
-# Downloads on first use, then serves it. Ctrl-C once it has finished
-# fetching; the picker will list it from then on.
-~/.enio/runtime/.venv/bin/python -m mlx_lm.server \
-  --model mlx-community/Qwen3-4B-Instruct-2507-4bit --port 8099
-```
+A finished download does not switch to what it just fetched. Those are separate
+acts on purpose: switching restarts the model server, and doing that as a side
+effect of "get me this one for later" would end a conversation mid-sentence.
+The new model simply appears in **On this machine**.
 
-### Models worth trying
-
-Every entry below was checked against the Hugging Face API — they exist and are
-MLX 4-bit builds. Sizes are the download; resident memory is roughly the same
-plus the prompt cache.
+### The list
 
 | Model | Size | Notes |
 |---|---|---|
-| `deepgrove/maple-preview` | ~5GB | The bundled default. 20B total, ~1B active, ternary. Fastest per token. |
-| `mlx-community/Qwen3-1.7B-4bit` | ~1GB | The small option. Fits anywhere; weakest at multi-step tool use. |
-| `mlx-community/Qwen3-4B-Instruct-2507-4bit` | ~2.3GB | Measured here: routing 8/8, and it produces valid plans. A good default on 16GB. |
-| `mlx-community/Qwen3-8B-4bit` | ~4.5GB | More capable, still comfortable on 16GB. |
-| `mlx-community/Qwen3-14B-4bit` | ~8GB | Wants 24GB or more. |
-| `mlx-community/Qwen3-30B-A3B-4bit` | ~17GB | Mixture-of-experts: 30B total, 3B active. Wants 32GB+. |
-| `mlx-community/Llama-3.2-3B-Instruct-4bit` | ~1.8GB | Small and widely supported. |
-| `mlx-community/Mistral-7B-Instruct-v0.3-4bit` | ~4GB | Solid general model. |
+| `deepgrove/maple-preview` | 5.3GB | The bundled default. 20B total, ~1B active, ternary. Fastest per token. |
+| `mlx-community/Qwen3-1.7B-4bit` | 1.0GB | Smallest that still routes and calls tools. For 8GB machines. |
+| `mlx-community/Llama-3.2-3B-Instruct-4bit` | 1.8GB | Small and quick. Shorter context than the Qwen3 models. |
+| `mlx-community/Qwen3-4B-Instruct-2507-4bit` | 2.3GB | Measured here: routed 8/8 at 426ms median, faster than the default. |
+| `mlx-community/Mistral-7B-Instruct-v0.3-4bit` | 4.1GB | Strong plain prose. Weaker at picking tools than the Qwen3 models. |
+| `mlx-community/Qwen2.5-7B-Instruct-4bit` | 4.3GB | The older generation. Steadier, no thinking mode. |
+| `mlx-community/Qwen3-8B-4bit` | 4.6GB | Better at multi-step tool use, at roughly half the speed of 4B. |
+| `mlx-community/Qwen3-14B-4bit` | 8.3GB | Noticeably better judgement. Wants 24GB and patience. |
+| `mlx-community/Qwen3-30B-A3B-4bit` | 17.2GB | Mixture of experts: 3B active, so quicker than its size suggests. |
+
+Sizes are measured from the repositories, not estimated, so the progress bar
+and the fit warning agree with what actually arrives.
 
 {: .note }
 Only Maple and Qwen3-4B have been measured *in Enio*. The rest are listed
-because they load and speak the right protocol, not because their tool-calling
-was benchmarked here — see [the routing comparison](#which-model-to-run) for
-what "measured" means.
+because they load and call tools, not because their tool use was benchmarked
+here — see [the routing comparison](#which-model-to-run) for what "measured"
+means.
 
-**Whether a model can call tools matters more than its size.** A model that
-cannot will chat happily and never use a single tool, which looks like Enio
-being broken rather than the model being unsuitable. Instruct-tuned models from
-the families above all can; base models generally cannot.
+### Why the list is closed
+
+You cannot type a repository id into the picker. Two reasons, and the second is
+the load-bearing one:
+
+- A model id with a typo is a five-gigabyte download of something that may not
+  load, and no way to tell which until the ninety seconds are up.
+- The download endpoint takes its argument from an HTTP request. Accepting any
+  id would make it a general-purpose downloader pointed at your disk, reachable
+  by anything that can reach the agent.
+
+Every entry was checked against the Hugging Face API: the repository exists, the
+size is its real total, and **its chat template supports tools**. That last
+check is the one you cannot see without doing it — a model without tool support
+loads fine, chats fine, and never calls a single tool, which reads as Enio being
+broken rather than as the wrong model. `gemma-3-4b-it` was dropped from the list
+for exactly that reason.
+
+Anything else `mlx_lm` can load still works; it just has to arrive by other
+means. Download it however you like and it appears in the picker, because that
+list is scanned from your cache:
+
+```sh
+~/.enio/runtime/.venv/bin/python scripts/hf_download.py <org>/<repo>
+```
 
 Vision, speech and embedding models in your cache are filtered out of the
 picker — they have their own servers, and offering one would be offering a
 ninety-second failed load.
+
+## Will it fit?
+
+Every downloadable model is marked against **this machine's** memory, because
+whether a model fits is a fact about the Mac rather than about the model.
+
+| Marking | Meaning |
+|---|---|
+| *(nothing)* | Comfortable. |
+| **tight fit** | Within memory, but close. Expect swapping if much else is open. |
+| **too big for this Mac** | Larger than memory. It will load, by swapping to disk. |
+
+The estimate is the weights plus about a quarter again for the prompt cache and
+runtime, plus 3GB for everything else the machine is doing. On Apple Silicon all
+of it competes for the same unified memory, so a model that fits in RAM on paper
+is one that makes the whole desktop swap.
+
+Nothing is blocked. It is a rule of thumb, and you know things it does not —
+that you will quit everything else, that the machine is headless, that you want
+it anyway. The failure being warned about is gradual rather than loud: a model
+slightly too large does not refuse to load, it just makes tokens arrive every
+few seconds, which reads as Enio being slow rather than as a choice you can
+undo.
 
 ## The context budget
 
