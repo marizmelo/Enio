@@ -58,6 +58,12 @@ export function App() {
   const abortRef = useRef(null);
   const composerRef = useRef(null);
   const scrollRef = useRef(null);
+  // Whether the thread should follow new content. A ref rather than state
+  // because scroll events fire continuously while tokens stream, and the
+  // auto-scroll effect only needs to *read* it -- making it state would
+  // re-render the whole thread on every wheel tick.
+  const followRef = useRef(true);
+  const [showJump, setShowJump] = useState(false);
 
   // Status arrives two ways: pushed as it changes, and pulled once on mount.
   // The pull matters because the main process may finish starting the backends
@@ -72,10 +78,37 @@ export function App() {
     return unsubscribe;
   }, []);
 
+  // Follow the answer as it streams -- but only while the user is at the
+  // bottom. This used to set scrollTop unconditionally on every message
+  // change, and setMessages runs per streamed token, so scrolling up during a
+  // reply was undone within milliseconds: the thread could not be read while
+  // it was being written.
   useEffect(() => {
+    if (!followRef.current) return;
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  // Near the bottom counts as at the bottom. An exact test never matches
+  // during streaming, because content is being appended between the scroll
+  // and the check, and fractional device pixels mean the numbers rarely land
+  // equal even at rest.
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    followRef.current = atBottom;
+    // React bails out when the value is unchanged, so this costs a render
+    // only when crossing the threshold rather than on every tick.
+    setShowJump(!atBottom);
+  }, []);
+
+  const jumpToLatest = useCallback(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    followRef.current = true;
+    setShowJump(false);
+  }, []);
 
   const backendReady = status.phase === "ready";
 
@@ -146,6 +179,8 @@ export function App() {
 
   const openConversation = useCallback(async (conv) => {
     stopSpeaking();
+    followRef.current = true;
+    setShowJump(false);
     const msgs = await restoreThread(conv.id).catch(() => []);
     setConversationId(conv.id);
     setMessages(msgs);
@@ -153,6 +188,8 @@ export function App() {
 
   const newChat = useCallback(async () => {
     stopSpeaking();
+    followRef.current = true;
+    setShowJump(false);
     setMessages([]);
     setContext(null);
     // Created eagerly so the first turn already has an id to log under. An
@@ -166,6 +203,10 @@ export function App() {
       if (!trimmed || streaming || !backendReady) return;
 
       setInput("");
+      // Sending re-follows: whatever you were reading, you want to see your
+      // own message land and the answer that follows it.
+      followRef.current = true;
+      setShowJump(false);
       // Recorded on the message so the thread can show what was attached
       // after the composer has been cleared.
       const files = attachedFiles(trimmed, [...(capabilities.files ?? []), ...sessionFiles]);
@@ -293,7 +334,8 @@ export function App() {
         }}
       />
 
-      <main ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <main ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
           <EmptyState onPick={send} disabled={!backendReady} />
         ) : (
@@ -319,6 +361,18 @@ export function App() {
           </div>
         )}
       </main>
+
+      {/* Only while scrolled away: leaving it up permanently would be a button
+          that does nothing most of the time. */}
+      {showJump && (
+        <button
+          onClick={jumpToLatest}
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border bg-background px-3 py-1 text-xs shadow-sm hover:bg-muted"
+        >
+          Jump to latest ↓
+        </button>
+      )}
+      </div>
 
       {/* Above the composer rather than in the thread: it is a property of the
           app, not of anything that was said, and it must not scroll away. */}
