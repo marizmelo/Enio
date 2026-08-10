@@ -30,7 +30,11 @@ app.setName("Enio");
 const PARENT_DIR = path.join(__dirname, "..");
 const AGENT_ENTRY = path.join(PARENT_DIR, "dist", "index.js");
 
-const MODEL_HEALTH_URL = "http://127.0.0.1:8080/v1/models";
+// Follows ENIO_BASE_URL because the agent does. Hardcoding 8080 here while
+// the agent read the env meant a launch pointed at another model server
+// waited forever for a health check on a port nothing was asked to serve.
+const MODEL_BASE = (process.env.ENIO_BASE_URL ?? process.env.MAPLE_BASE_URL ?? "http://127.0.0.1:8080/v1").replace(/\/$/, "");
+const MODEL_HEALTH_URL = `${MODEL_BASE}/models`;
 // /ping is unauthenticated and returns nothing but {ok:true}; /health needs the
 // API key. Liveness polling therefore uses /ping, because the token file may
 // not exist yet on a first run — the agent server creates it at startup.
