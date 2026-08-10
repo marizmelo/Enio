@@ -96,7 +96,7 @@ export async function serve(): Promise<void> {
       console.log(
         `\n  ${YELLOW}Bound to ${config.agentHost}, so this is reachable from your network.${RESET}` +
           `\n  ${YELLOW}This agent can run shell commands. Keep the key secret, and prefer${RESET}` +
-          `\n  ${YELLOW}a tunnel (see tunnel.md) over exposing the port directly.${RESET}`,
+          `\n  ${YELLOW}a tunnel (see docs/remote-access.md) over exposing the port directly.${RESET}`,
       );
     }
     console.log("");

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Plus, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +38,9 @@ export function RecipesDialog({ open, onOpenChange }) {
   const [canRun, setCanRun] = useState(true);
   const [autoRun, setAuto] = useState(false);
   const [editing, setEditing] = useState(null);
+  // Which row is open. Inline rather than a nested sheet: a sheet on top of a
+  // dialog is two layers to dismiss for something that is just a script.
+  const [openName, setOpenName] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [output, setOutput] = useState("");
@@ -59,6 +62,7 @@ export function RecipesDialog({ open, onOpenChange }) {
     if (open) {
       refresh();
       setEditing(null);
+      setOpenName(null);
       setError("");
       setOutput("");
     }
@@ -185,10 +189,19 @@ export function RecipesDialog({ open, onOpenChange }) {
                   {saved.map((r) => (
                     <li key={r.name} className="rounded-md border px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <code className="text-xs">{r.name}</code>
-                        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                          {r.summary}
-                        </span>
+                        <button
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                          onClick={() => setOpenName(openName === r.name ? null : r.name)}
+                          aria-expanded={openName === r.name}
+                        >
+                          <ChevronRight
+                            className={`size-3 shrink-0 transition-transform ${openName === r.name ? "rotate-90" : ""}`}
+                          />
+                          <code className="text-xs">{r.name}</code>
+                          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                            {r.summary}
+                          </span>
+                        </button>
                         {/* Vouching is per recipe and reversible here: the
                             checkbox is the whole difference between "this
                             worked once" and "run it without asking". */}
@@ -234,6 +247,11 @@ export function RecipesDialog({ open, onOpenChange }) {
                           <Trash2 className="size-3.5" />
                         </Button>
                       </div>
+                      {openName === r.name && (
+                        <pre className="mt-2 overflow-x-auto rounded bg-muted px-2 py-1.5 text-[12px] leading-relaxed">
+                          <code>{r.script}</code>
+                        </pre>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -244,13 +262,23 @@ export function RecipesDialog({ open, onOpenChange }) {
                 {builtin.map((r) => (
                   <li
                     key={r.name}
-                    title="Built into enio — the agent can always use this; it just can't be edited here."
-                    className="flex items-center gap-2 rounded-md border border-dashed px-3 py-2"
+                    className="rounded-md border border-dashed px-3 py-2"
                   >
-                    <code className="text-xs">{r.name}</code>
-                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                      {r.summary}
-                    </span>
+                    <div className="flex items-center gap-2">
+                    <button
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      onClick={() => setOpenName(openName === r.name ? null : r.name)}
+                      aria-expanded={openName === r.name}
+                      title="Built in — the agent can always use this; it just can't be edited here."
+                    >
+                      <ChevronRight
+                        className={`size-3 shrink-0 transition-transform ${openName === r.name ? "rotate-90" : ""}`}
+                      />
+                      <code className="text-xs">{r.name}</code>
+                      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                        {r.summary}
+                      </span>
+                    </button>
                     {r.needsApp && (
                       <Badge variant="secondary" className="text-[10px]">
                         needs app
@@ -263,6 +291,20 @@ export function RecipesDialog({ open, onOpenChange }) {
                       <Badge variant="secondary" className="text-[10px]">
                         needs Accessibility
                       </Badge>
+                    )}
+                    </div>
+                    {openName === r.name && (
+                      <>
+                        {/* Read-only, and the placeholders are honest: the
+                            recipe interpolates the app you name and a clamped
+                            count, so this is the shape rather than a literal. */}
+                        <pre className="mt-2 overflow-x-auto rounded bg-muted px-2 py-1.5 text-[12px] leading-relaxed">
+                          <code>{r.script}</code>
+                        </pre>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Built in, so not editable here. Write your own with “New recipe”.
+                        </p>
+                      </>
                     )}
                   </li>
                 ))}

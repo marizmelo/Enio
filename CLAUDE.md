@@ -18,10 +18,15 @@ running.
 
 | | For | Read it when |
 |---|---|---|
-| `README.md` | Users | Someone asks how to install, run or configure it |
+| `README.md` | Users | The pitch and a quickstart. Keep it short — depth belongs in `docs/`. |
+| `docs/` | Users | How to use any feature. GitHub Pages serves this folder. |
 | `CLAUDE.md` | You, now | Before changing code — it lists what must not be casually undone |
 | `DECISIONS.md` | You, later | Before proposing an architectural change |
-| `tunnel.md` | Users | Reaching the agent from a phone or another network |
+
+`docs/` is checked by `src/docs.test.ts`: every environment variable, tool,
+recipe and agent it names must exist, every page needs Pages front matter, and
+internal links must resolve. Prose drifts silently otherwise — the README
+accumulated four false claims in a single session before that test existed.
 
 **`DECISIONS.md` is the one that is easy to skip and shouldn't be.** It records
 what was *considered and rejected* — which nothing else captures. `git log`
@@ -38,11 +43,11 @@ built, each with the condition under which it would become worth building.
 It also ends with genuinely open questions. Those are open, not rhetorical —
 treat them as unknowns rather than inheriting them as settled.
 
-**`tunnel.md`** covers reaching the HTTP endpoint from outside the machine:
-Tailscale and Cloudflare Tunnel setups, why NAT traversal works the way it does,
-and the bearer-token auth. Relevant to code changes in one respect — anything
-touching `src/server.ts` or auth should keep it accurate, since the security
-model is documented there rather than here.
+**`docs/remote-access.md`** covers reaching the HTTP endpoint from outside the
+machine: Tailscale and Cloudflare Tunnel setups, why NAT traversal works the way
+it does, and the bearer-token auth. Relevant to code changes in one respect —
+anything touching `src/server.ts` or auth should keep it accurate, since the
+security model is documented there rather than here.
 
 ---
 

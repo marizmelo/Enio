@@ -1,3 +1,9 @@
+---
+title: Remote access
+layout: default
+nav_order: 14
+---
+
 # Reaching the agent from anywhere
 
 The agent's HTTP endpoint binds to `127.0.0.1:8787`. To use it from your phone or a laptop elsewhere, you need a way through NAT.

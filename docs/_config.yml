@@ -1,0 +1,33 @@
+# GitHub Pages builds this folder directly — Settings → Pages → Source:
+# "Deploy from a branch", branch master, folder /docs. No action runs, no
+# build step to keep green, and every page stays readable as plain markdown
+# on github.com if Pages is never switched on at all.
+title: Enio
+description: A local AI agent with tools, memory and desktop control. Nothing leaves your computer.
+
+# just-the-docs gives a sidebar, search and anchored headings without a build
+# pipeline. A remote theme rather than a vendored one, so there is no theme
+# source in the repo to fall behind.
+remote_theme: just-the-docs/just-the-docs
+plugins:
+  - jekyll-remote-theme
+
+search_enabled: true
+heading_anchors: true
+
+# Pages under /docs, sources at the repo root.
+aux_links:
+  "Source on GitHub":
+    - "https://github.com/marizmelo/Enio"
+
+color_scheme: dark
+
+# Nothing here is a Jekyll page.
+exclude:
+  - images/README.md
+
+callouts:
+  note:
+    color: blue
+  warning:
+    color: red

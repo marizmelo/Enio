@@ -154,7 +154,7 @@ export const config = {
   agentPort: Number(env("AGENT_PORT") ?? 8787),
 
   /**
-   * Bind address. Loopback by default. Prefer a tunnel (see tunnel.md) over
+   * Bind address. Loopback by default. Prefer a tunnel (see docs/remote-access.md) over
    * changing this — a tunnel needs no open inbound port at all, which is one
    * fewer thing that can be wrong.
    */
