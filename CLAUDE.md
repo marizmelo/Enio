@@ -166,6 +166,22 @@ user reads is what they consent to, so edits are written back before the run —
 the record, the approval and the execution stay one thing. Testing runs the
 editor's text without settling the plan.
 
+**The context budget follows the selected model** (`contextBudget()` in
+`model-settings.ts`, not a constant on config). It is the band where recall
+still holds, not the model's advertised window: Maple measured 4/4 on a
+planted fact near 1.5k tokens and 0/4 by 12k, which is where 2000 came from.
+It must stay a function, because the model is switchable at runtime and a
+constant would keep a large budget after switching *back* to Maple — which
+degrades answers with nothing visible going wrong. Numbers for other models
+are a conservative step up and explicitly not measured; `contextBudgetMeasured()`
+says which is which.
+
+**Compaction folds to 60% of the budget, not to the brim.** Keeping everything
+that fits left nothing for the turn's own work — tool results and the reply are
+appended after the fold — and made every later turn re-fold at the ceiling, so
+the meter sat at 94/95/96% and never fell. The gap between trigger and target
+is the hysteresis.
+
 **The tool ceiling belongs per specialist, not to the registry.** With routing
 on the model only ever sees one specialist's ≤6, so capping the registry as
 well stacked two limits: one extra desktop tool pushed the total past 16 and

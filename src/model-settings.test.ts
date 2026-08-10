@@ -69,3 +69,42 @@ describe("the model setting", () => {
     assert.notEqual(settings.requestModelName(), settings.MAPLE, "the sentinel is not an API id");
   });
 });
+
+describe("the context budget follows the model", () => {
+  test("Maple keeps its measured band, others get more", () => {
+    // 2000 came from a planted-fact test on Maple: 4/4 correct near 1.5k,
+    // 0/4 by 12k. Carrying that number to a dense model wastes most of what
+    // it can hold; carrying a dense model's number back to Maple degrades
+    // answers with nothing visible going wrong.
+    settings.setModelId(settings.MAPLE);
+    assert.equal(settings.contextBudget(), 2000);
+    assert.equal(settings.contextBudgetMeasured(), true);
+
+    settings.setModelId("mlx-community/Qwen3-4B-Instruct-2507-4bit");
+    assert.ok(settings.contextBudget() > 2000);
+    // Honest about provenance: this one is a step up, not a measurement.
+    assert.equal(settings.contextBudgetMeasured(), false);
+  });
+
+  test("an unknown model gets a conservative default, not Maple's", () => {
+    settings.setModelId("mlx-community/some-unknown-model-4bit");
+    const budget = settings.contextBudget();
+    assert.ok(budget > 2000, "an unknown model should not inherit Maple's floor");
+    assert.equal(settings.contextBudgetMeasured(), false);
+  });
+
+  test("the env override wins, and a junk value is ignored", () => {
+    settings.setModelId(settings.MAPLE);
+    process.env.ENIO_CONTEXT_BUDGET = "5000";
+    try {
+      assert.equal(settings.contextBudget(), 5000);
+      process.env.ENIO_CONTEXT_BUDGET = "not-a-number";
+      assert.equal(settings.contextBudget(), 2000, "junk should fall back, not zero the window");
+      process.env.ENIO_CONTEXT_BUDGET = "0";
+      assert.equal(settings.contextBudget(), 2000, "zero would leave no room at all");
+    } finally {
+      delete process.env.ENIO_CONTEXT_BUDGET;
+    }
+    settings.setModelId(settings.MAPLE);
+  });
+});

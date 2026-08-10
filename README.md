@@ -2,13 +2,15 @@
   <img src="desktop/assets/icon.png" alt="" width="88">
 </p>
 
-# enio
+# Enio
 
 A local AI agent. Runs a model on your own machine and gives it tools, MCP servers, and memory that persists across conversations.
 
 No API keys. No account. Nothing leaves your computer.
 
-**enio runs anywhere. [Maple](https://huggingface.co/deepgrove/maple-preview) requires Apple Silicon.** On a Mac with an M-series chip the installer sets up Maple — a 20B-A1B ternary model that decodes at ~218 tok/s. Everywhere else, point it at Ollama; memory, specialists, tools and the inspector are identical.
+**Enio runs anywhere. [Maple](https://huggingface.co/deepgrove/maple-preview) requires Apple Silicon.** On a Mac with an M-series chip the installer sets up Maple — a 20B-A1B ternary model that decodes at ~218 tok/s. Everywhere else, point it at Ollama; memory, specialists, tools and the inspector are identical.
+
+The model is a setting, not a launch flag. The desktop app's status bar has a picker listing Maple plus any MLX chat model already in your Hugging Face cache; switching restarts the model server underneath the agent while your conversation, pending approvals and history stay up. The choice persists, so it survives a restart.
 
 ---
 
@@ -156,7 +158,7 @@ To survive reboots, wrap `enio daemon` in a launchd plist (macOS) or a systemd u
 
 ### Finding what to automate
 
-The usual way automation gets built is deciding in advance what *ought* to be repetitive and being wrong. enio records every turn, so the question is answerable from evidence:
+The usual way automation gets built is deciding in advance what *ought* to be repetitive and being wrong. Enio records every turn, so the question is answerable from evidence:
 
 ```sh
 enio suggest            # what you have actually repeated
@@ -251,10 +253,13 @@ A `mail` specialist owns `search_email`, `read_email` and `send_email` together,
 export ENIO_DESKTOP=1
 ```
 
-This does **not** install a GUI automation library. It opens the shell allowlist to the macOS automation commands, and adds two tools around the awkward parts:
+This does **not** install a GUI automation library. It opens the shell allowlist to the macOS automation commands, and adds the tools that need care:
 
 - `run_applescript` — drives any scriptable app: Mail, Calendar, Notes, Reminders, Finder, Safari, Music
 - `take_screenshot` — captures the screen and reads it through the vision path, so you get text back rather than a file path
+- `propose_plan` — writes down what it *would* do, for you to approve
+
+Reading is not gated: `mac_recipe` and `open_app` work on any Mac without the flag, because the gate is about irreversibility and neither a fixed read nor opening an app is irreversible.
 
 Plus, in the shell: `osascript`, `shortcuts` (anything you can build in Shortcuts), `open`, `mdfind` (Spotlight), `pbcopy`/`pbpaste`, `say`, `networksetup`.
 
@@ -272,19 +277,27 @@ you › tick "Open at Login" in System Settings
 
 Opening an app needs no plan and no flag at all — "open Spotify" just does it. The name resolves against what is actually installed, so a typo is refused rather than guessed at, and quitting the app undoes it, which is the entire test the `ENIO_DESKTOP` gate applies.
 
-Three recipes read the tree, and need no flag because reading is not irreversible:
+Three recipes read it, and need no flag because reading is not irreversible:
 
-- `running_apps` — what is currently open
+- `running_apps` — what is currently open. Needs no Accessibility either; it asks the process list.
 - `window_controls` — the front window's buttons and fields, by name
 - `menu_items` — that app's menu commands, as `File > Save` lines
 
-Acting on what it found goes through the same approval sheet as any other plan, with steps written as names rather than scripts — `click: "Save"`, `menu: "File > Export"`, `press: "return"`, `type_text: "..."`. Each is compiled to AppleScript when proposed, so the sheet shows the exact text that will run.
+Acting on what it found goes through the same approval sheet as any other plan, with steps written as names rather than scripts — `click: "Save"`, `menu: "File > Export"`, `press: "return"`, `type_text: "..."`, `open: "Calendar"`. Each is compiled to a script when proposed — AppleScript, or a call to the bridge below — so the sheet shows the exact text that will run rather than a description of it.
 
 Reading and clicking go through a small Python helper (`scripts/ax_bridge.py`) that talks to the accessibility API directly, falling back to AppleScript when it isn't installed. That matters for more than speed: some apps — Calculator among them — are completely invisible to AppleScript's System Events while exposing every button to the API underneath.
 
-This needs **Accessibility** permission, which is *not* the same as Automation: System Settings → Privacy & Security → Accessibility, for whatever runs enio (the desktop app, or your terminal). Until it's granted the three recipes aren't offered at all — a tool that can only fail is worse than one that isn't there.
+Reading a *window* needs **Accessibility** permission, which is *not* the same as Automation: System Settings → Privacy & Security → Accessibility, for whatever runs Enio (the desktop app, or your terminal). Until it's granted, `window_controls` and `menu_items` aren't offered at all — a tool that can only fail is worse than one that isn't there. `running_apps` and `open_app` keep working without it.
 
 Clicking by name also fails better than clicking by coordinate. If the control has moved, the name still finds it; if it's genuinely gone, you get an error instead of a click landing on whatever slid into its place.
+
+### Plans, and turning one into a recipe
+
+A step can be AppleScript, **shell** or **Python**, and the last is usually the right answer: the model writes Python far better than it writes AppleScript, so moving work down from GUI scripting to a library call improves both what runs and what gets written.
+
+The approval sheet is a review, not a yes/no. Every step shows the exact script; you can **edit** it, **test any step on its own** without running the rest, or **describe a change** ("do this in Python") and have the steps rewritten, with one-click undo. What you approve is the text on screen.
+
+Approve once and you can **save it as a recipe** — from then on the model *selects* it by name instead of writing it again, which is the only thing in the design that turns a one-off into permanent capability. Tick **"safe to run on its own"** and, with **"run safe recipes automatically"** on in the Recipes drawer, Enio uses it without asking. That switch only ever applies to recipes you ticked: a plan Enio has just written always asks first.
 
 ### Browsing
 
@@ -514,13 +527,16 @@ Environment variables, all optional. See `src/config.ts`.
 | `ENIO_INSPECT_PORT` | `8788` |
 | `SEARXNG_URL` | unset |
 | `ENIO_ALLOW_ANY_COMMAND` | unset — see below |
-| `ENIO_DESKTOP` | unset — AppleScript and screenshots, macOS only |
+| `ENIO_DESKTOP` | unset — plans, AppleScript and screenshots, macOS only |
+| `ENIO_AUTO_RUN` | unset — off; overrides the Recipes drawer switch |
+| `ENIO_MODEL` | unset — overrides the saved model choice for one run |
+| `ENIO_CONTEXT_BUDGET` | per model — 2000 for Maple, more for larger ones. The band where recall still holds, not the model's limit. |
 | `ENIO_EMAIL_SEND` | unset — dry run until set to `1` |
 | `ENIO_VISION_MODEL` | `moondream:v2` |
 
 ### What's running
 
-Everything enio starts is named so one search for `Enio` in Activity Monitor
+Everything Enio starts is named so one search for `Enio` in Activity Monitor
 finds all of it, and each row says which part it is:
 
 | Process | What it is |
@@ -608,7 +624,7 @@ The HTTP endpoint requires a bearer token, including on loopback. A web page you
 
 **Tools never fire on Ollama** — your model probably wasn't trained for tool calling. It answers in prose instead of emitting a call, which reads like a bug. Try `qwen3:8b`.
 
-**"Model isn't pulled yet"** — `enio start` checks before connecting, because a missing model 404s in a way that looks like enio is broken. Accept the prompt, or run `ollama pull <name>` yourself. A bare name like `qwen3` matches any tag you already have; `qwen3:32b` is treated as specific and won't be satisfied by `qwen3:8b`.
+**"Model isn't pulled yet"** — `enio start` checks before connecting, because a missing model 404s in a way that looks like Enio is broken. Accept the prompt, or run `ollama pull <name>` yourself. A bare name like `qwen3` matches any tag you already have; `qwen3:32b` is treated as specific and won't be satisfied by `qwen3:8b`.
 
 **Search returns 403** — SearXNG ships with JSON output off. The bundled `settings.yml` enables it; on your own instance, add `json` under `search.formats`.
 

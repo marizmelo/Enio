@@ -105,3 +105,57 @@ export function currentModelLabel(): string {
   const id = currentModelId();
   return id === MAPLE ? "Maple" : id;
 }
+
+/**
+ * How much conversation the *currently selected* model can still recall.
+ *
+ * Not the model's advertised context length, which is a different and much
+ * larger number. This is the band where a planted fact is still answered
+ * correctly -- for Maple that was measured at 4/4 correct around 1.5k tokens
+ * and 0/4 by 12k, which is where the 2000 default came from. Filling a
+ * declared 128k window would not error; it would quietly stop remembering,
+ * and that failure is invisible from the outside.
+ *
+ * It has to be a function rather than a constant on config, because the model
+ * is switchable at runtime: a constant read at import would keep Maple's
+ * budget after switching to something with far more room, and -- worse -- keep
+ * a larger budget after switching back to Maple, which degrades answers
+ * silently.
+ *
+ * Lives here rather than in config because resolving it needs the current
+ * model, and config cannot import this module without a cycle.
+ */
+const MEASURED_BUDGETS: Array<[pattern: RegExp, tokens: number, measured: boolean]> = [
+  // Measured in this project: recall falls off hard past ~2k.
+  [/^maple$|maple/i, 2000, true],
+  // Dense models with real long-context training hold far more than Maple's
+  // 1B active does. NOT measured here -- a conservative step up rather than
+  // the 256k these advertise, and it should be replaced with a number from
+  // the same planted-fact test that produced Maple's.
+  [/qwen3/i, 12000, false],
+];
+
+const DEFAULT_BUDGET = 8000;
+
+export function contextBudget(): number {
+  const env = process.env.ENIO_CONTEXT_BUDGET ?? process.env.MAPLE_CONTEXT_BUDGET;
+  const override = Number(env);
+  if (env != null && Number.isFinite(override) && override > 0) return override;
+
+  const id = currentModelId();
+  for (const [pattern, tokens] of MEASURED_BUDGETS) {
+    if (pattern.test(id)) return tokens;
+  }
+  return DEFAULT_BUDGET;
+}
+
+/** Whether the current model's budget came from a measurement or a guess.
+ *  Surfaced so a client can say so rather than implying more confidence than
+ *  there is. */
+export function contextBudgetMeasured(): boolean {
+  const id = currentModelId();
+  for (const [pattern, , measured] of MEASURED_BUDGETS) {
+    if (pattern.test(id)) return measured;
+  }
+  return false;
+}

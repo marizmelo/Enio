@@ -13,6 +13,7 @@ import { isImage, readImage } from "./vision.js";
 import type { Registry } from "./tools/index.js";
 import { createHash } from "node:crypto";
 import { toolText, toWireTool, type Message, type ToolCall, type Widget } from "./types.js";
+import { contextBudget } from "./model-settings.js";
 
 /**
  * Who the assistant is, ahead of everything else in the system message.
@@ -147,7 +148,7 @@ function messageTokens(m: Message): number {
 export function contextUsage(history: Message[]): { tokens: number; budget: number } {
   return {
     tokens: history.reduce((n, m) => n + messageTokens(m), 0),
-    budget: config.contextBudget,
+    budget: contextBudget(),
   };
 }
 
@@ -198,8 +199,9 @@ async function compactHistory(history: Message[]): Promise<Message[]> {
   // fires at the budget and drops to well under it, so the next few turns are
   // free and the meter visibly resets.
   const spent = system ? messageTokens(system) : 0;
-  const target = Math.floor(config.contextBudget * COMPACT_TO);
-  let room = Math.max(target - spent, Math.floor(config.contextBudget / 4));
+  const budget = contextBudget();
+  const target = Math.floor(budget * COMPACT_TO);
+  let room = Math.max(target - spent, Math.floor(budget / 4));
 
   let keep = 0;
   for (let i = rest.length - 1; i >= 0; i--) {
@@ -474,7 +476,7 @@ export async function runTurn(
   // only the count let a single pasted file sail past the budget unfolded.
   if (
     history.length - 1 > config.historyWindow ||
-    contextUsage(history).tokens > config.contextBudget
+    contextUsage(history).tokens > contextBudget()
   ) {
     const compacted = await compactHistory(history);
     history.splice(0, history.length, ...compacted);
