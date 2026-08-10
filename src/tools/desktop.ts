@@ -295,7 +295,11 @@ const RECIPES: Record<string, Recipe> = {
     // truncated list rather than a dead tool.
     script: ({ app }) =>
       `tell application "System Events" to tell process "${app}"\n` +
-      `\tif not (exists window 1) then return "No window is open in ${app}."\n` +
+      // "No window" is ambiguous from AppleScript: Calculator has a window on
+      // screen and still reports none -- some system apps hide their windows
+      // from scripting entirely. The message says what still works, because
+      // keystrokes go to the frontmost app without touching the window tree.
+      `\tif not (exists window 1) then return "No window is visible to scripting in ${app}. If a window is on screen, this app hides its controls: click steps cannot work, but type_text and press steps still reach it."\n` +
       `\tset out to {}\n` +
       `\tset frontier to {window 1}\n` +
       `\tset visited to 0\n` +

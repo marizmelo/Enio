@@ -683,10 +683,14 @@ export async function runTurn(
     history.push({
       role: "user",
       content:
+        // No retraction offered. The first wording ended with "or tell the
+        // user plainly you did not do it", and the model took that exit every
+        // time -- retracting is one sentence, acting is a tool call. The easy
+        // option has to be the right one.
         "(Nothing you described actually happened: you called no tool this turn. " +
-        "Either make the call that does it — open_app opens apps, propose_plan " +
-        "carries clicks, keys and typing for approval — or tell the user plainly " +
-        "you did not do it. Never describe an action as done.)",
+        "Do it now: open_app opens apps; propose_plan carries clicks, key presses " +
+        "and typing for the user to approve. Only if no tool can possibly do this, " +
+        "say you could not do it. Never describe an action as done.)",
     });
     try {
       handlers.onContent?.("\n\n");
@@ -721,8 +725,23 @@ export async function runTurn(
         await runToolCalls(fix.toolCalls);
       }
     } catch {
-      // The fabricated reply stands if the correction fails; the notice has
-      // at least told the user not to trust it.
+      // The floor below still applies; a failed correction must not lose the
+      // turn.
+    }
+
+    // The correction is not trusted either -- measured: asked again, the
+    // model re-fabricated "The Calculator app is now cleared", still calling
+    // nothing, and a guard that ships its own retry's lie is not a guard.
+    // When no tool has run by now, the reply is written here, by code, and it
+    // names the phrasing that does work.
+    if (!steps.some((st) => st.kind === "tool") && claimsUnperformedAction(reply)) {
+      reply =
+        "I described doing that, but I did not actually run anything — nothing " +
+        'has changed on your Mac. Say "propose a plan to …" and I will write ' +
+        "out the exact steps for you to approve.";
+      handlers.onContent?.("\n\n" + reply);
+      history.push({ role: "assistant", content: reply });
+      logMessage(sessionId, "assistant", reply);
     }
   }
 

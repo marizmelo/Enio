@@ -172,6 +172,23 @@ describe("compiling an action into AppleScript", () => {
   });
 });
 
+describe("permission hints", () => {
+  test("the assistive-access phrase gets a hint; a bare -1719 does not", async () => {
+    const { permissionHint } = await import("./tools/ax.js");
+    assert.match(
+      String(permissionHint("System Events got an error: osascript is not allowed assistive access. (-1719)")),
+      /Accessibility/,
+    );
+    // macOS reuses -1719 for "Invalid index" -- Calculator, which hides its
+    // window from scripting, produced exactly this and was misdiagnosed as a
+    // permission problem the user had already fixed.
+    assert.equal(
+      permissionHint("Can\u2019t get window 1 of process \"Calculator\". Invalid index. (-1719)"),
+      null,
+    );
+  });
+});
+
 describe("every shipped script is valid AppleScript", () => {
   // osacompile parses without executing, so this needs no permission and
   // touches no app. It cannot tell you a recipe returns the right thing --

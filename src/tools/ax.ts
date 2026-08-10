@@ -62,10 +62,16 @@ export async function probeAssistiveAccess(): Promise<boolean> {
   return granted;
 }
 
-/** macOS refuses a tree read with -1719 and an app with -1743. Both are
- *  permission problems the message alone does not explain how to fix. */
+/** macOS refuses a tree read with "not allowed assistive access" and an app
+ *  with -1743. Both are permission problems the message alone does not
+ *  explain how to fix.
+ *
+ *  Matched on the phrase, never the bare number: macOS reuses -1719 for
+ *  "Invalid index" too, and Calculator -- which hides its window from
+ *  scripting entirely -- produced exactly that, misdiagnosed here as a
+ *  missing permission the user had already granted. */
 export function permissionHint(message: string): string | null {
-  if (/not allowed assistive access|-?1719/.test(message)) {
+  if (/not allowed assistive access/.test(message)) {
     granted = false;
     return (
       `macOS has not granted this app Accessibility access, which is what reading ` +
