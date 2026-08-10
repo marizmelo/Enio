@@ -194,7 +194,17 @@ export async function route(
   // failed Notes request landed on the one specialist with no Notes tools,
   // which then invented image paths to read. A short message continues the
   // conversation it is in; only a conversation with no history yet defaults.
-  if (userInput.trim().length < 12) return sticky ?? DEFAULT_SPECIALIST;
+  //
+  // But only *one-word* inputs skip the router now. "open notes" is ten
+  // characters and it is not a follow-up, it is a command -- routed by length
+  // alone it stuck to whatever the conversation was already about and a chat
+  // that had been about TCP answered it with prose about files. One word is a
+  // greeting or an acknowledgement; several words is a small request, and
+  // small requests get routed like any other, with the conversation's
+  // specialist passed along as context for the genuine follow-ups.
+  if (userInput.trim().length < 12 && !/\s/.test(userInput.trim())) {
+    return sticky ?? DEFAULT_SPECIALIST;
+  }
 
   const menu = SPECIALISTS.map((s) => `- ${s.name}: ${s.description}`).join("\n");
 
@@ -203,6 +213,11 @@ export async function route(
       role: "system",
       content:
         `Route the user's request to exactly one specialist.\n\n${menu}\n\n` +
+        (sticky
+          ? `The conversation so far was handled by ${sticky}. Keep follow-ups ` +
+            `("try again", "yes do it", "what about now") with ${sticky}; pick ` +
+            `someone else only when the request clearly starts something new.\n\n`
+          : "") +
         `Reply with ONLY this JSON, nothing else:\n` +
         `{"specialist": "name"}\n\n` +
         // One example per specialist. The model routes by pattern-matching

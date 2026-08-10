@@ -66,9 +66,15 @@ export function availableModels(): string[] {
         // Only chat models the mlx_lm runtime can load. The cache also holds
         // vision models (their own server), speech models (whisper, TTS
         // voices) and embeddings -- offering one of those is offering a
-        // ninety-second failed load. A blocklist, not a guarantee: the switch
-        // reverts on a failed start, which is the real safety net.
-        if (/mlx/i.test(id) && !/-VL-|vision|whisper|kokoro|tts|speech|embed|rerank/i.test(id)) {
+        // ninety-second failed load. Maple's own cache entry is skipped too:
+        // the bundled default already represents those weights, and the same
+        // model twice under two names is a choice with no difference in it.
+        // A blocklist, not a guarantee: the switch reverts on a failed start,
+        // which is the real safety net.
+        if (
+          /mlx/i.test(id) &&
+          !/-VL-|vision|whisper|kokoro|tts|speech|embed|rerank|maple/i.test(id)
+        ) {
           models.push(id);
         }
       }

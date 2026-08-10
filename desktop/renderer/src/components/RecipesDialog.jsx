@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Lock, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -179,14 +179,14 @@ export function RecipesDialog({ open, onOpenChange }) {
                 </ul>
               )}
 
-              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Built in</p>
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Built in — always available, not editable</p>
               <ul className="flex flex-col gap-1.5">
                 {builtin.map((r) => (
                   <li
                     key={r.name}
+                    title="Built into enio — the agent can always use this; it just can't be edited here."
                     className="flex items-center gap-2 rounded-md border border-dashed px-3 py-2"
                   >
-                    <Lock className="size-3 shrink-0 text-muted-foreground" />
                     <code className="text-xs">{r.name}</code>
                     <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                       {r.summary}

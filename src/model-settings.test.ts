@@ -52,6 +52,14 @@ describe("the model setting", () => {
       !models.some((m) => /-VL-|vision/i.test(m)),
       "vision models have their own server and do not belong in this list",
     );
+    // Maple's own HF cache entry must not appear beside the bundled default:
+    // the same weights under two names is a choice with no difference in it,
+    // and it made the picker show "three models" on a two-model machine.
+    assert.equal(
+      models.filter((m) => /maple/i.test(m)).length,
+      1,
+      "maple must appear exactly once — as the bundled default",
+    );
   });
 
   test("requests name the model actually loaded", () => {
