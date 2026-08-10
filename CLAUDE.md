@@ -125,10 +125,13 @@ capability carry the cost of the most dangerous one.
 `run_applescript`. The operator calls `propose_plan`, which stores the script
 and stops; execution happens server-side only after the user approves, and
 approving is one-shot (a settled plan returns 409 rather than running twice).
-Saving promotes it to a named recipe, after which it is *selected* rather than
-re-authored — which is the only way something that worked once keeps working at
-this model size. This exists because the model reliably fails to write correct
-AppleScript and just as reliably keeps trying variations; see DECISIONS.md.
+Saving promotes it to a named recipe — but only after every step ran
+successfully, because a recipe is *selected* rather than re-authored from then
+on, and a script that never worked would be re-run verbatim forever. Pending
+plans survive restarts: `GET /plans/pending` is how the desktop re-draws
+approval cards the live stream would otherwise have been the only carrier of.
+This exists because the model reliably fails to write correct AppleScript and
+just as reliably keeps trying variations; see DECISIONS.md.
 
 **No network at runtime for local features.** OCR language data ships as an npm
 dependency specifically because tesseract.js defaults to a CDN fetch. There is a

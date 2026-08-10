@@ -211,13 +211,32 @@ unmistakably close to (case-insensitively — the homoglyph case is two edits
 once case stops counting, fifteen before), and the skill exists for the cases a
 recipe does not cover.
 
-**Still open, and the agreed shape of the answer.** A request no recipe covers
-should not be improvised silently. The model should propose the script, the
-user approves it as a one-off *or* saves it as a new named recipe, and saved
-ones are then selected like any other — never re-authored. That closes the loop:
-the only path to new AppleScript is through a human, and anything approved
-becomes deterministic thereafter. Not built yet; it needs an approval round-trip
-the desktop does not currently have.
+**Since built: propose → approve → promote.** A request no recipe covers is not
+improvised silently. The model calls `propose_plan` — a summary and a list of
+steps, each one sentence over one short script — and stops; no specialist has
+`run_applescript`. The desktop shows the steps and the exact scripts in a
+sheet, and execution happens server-side (`/plans/:id/approve`) only after the
+user approves. Approval is one-shot — a settled plan returns 409 rather than
+running twice — and steps stop at the first failure so a half-run is visible as
+a half-run. Saving promotes the plan to a named recipe, after which it is
+selected like any other, never re-authored.
+
+Two orderings mattered and were both gotten wrong first:
+
+- **Run before promoting.** "Save and run" originally saved the recipe and then
+  ran it, so a script that failed on its very first execution still became a
+  permanently offered recipe — which the model would keep selecting, failing
+  identically each time, with nothing positioned to notice. Promotion now
+  happens only after every step succeeded.
+- **Pending plans must survive a restart.** The approval card travelled only
+  over the live SSE stream, so a restart orphaned any undecided plan: still in
+  the database, no surface left to decide it from. `GET /plans/pending` lists
+  undecided plans and the desktop re-draws their cards when restoring a
+  conversation.
+
+Execution is also gated on `ENIO_DESKTOP` at approval time, not just proposal
+time: a plan proposed while the flag was on does not run after it is turned
+off. It stays pending rather than settling, so re-enabling the flag revives it.
 
 **Also observed and not yet fixed:** with `mac_recipe` returning correct data on
 the first call, the model sometimes keeps calling tools instead of answering

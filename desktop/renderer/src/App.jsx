@@ -10,6 +10,7 @@ import {
   conversationMessages,
   createConversation,
   listConversations,
+  pendingPlans,
 } from "@/lib/conversations";
 import { HistoryDialog } from "@/components/HistoryDialog";
 import { speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
@@ -68,6 +69,37 @@ export function App() {
     if (backendReady) fetchCapabilities().then(setCapabilities);
   }, [backendReady]);
 
+  // A stored transcript, plus any approval still waiting on this conversation.
+  // The plan card only ever travelled over the live stream, so without asking
+  // the server for pending plans a restart would orphan them: still in the
+  // database, no surface left to approve or decline from. Re-derived on every
+  // restore — once decided, the card simply stops coming back.
+  const restoreThread = useCallback(async (convId) => {
+    const transcript = await conversationMessages(convId);
+    const msgs = transcript.map((m) => ({ role: m.role, content: m.content }));
+    try {
+      const waiting = (await pendingPlans()).filter((p) => p.sessionId === convId);
+      if (waiting.length > 0) {
+        msgs.push({
+          role: "assistant",
+          content:
+            waiting.length === 1
+              ? "This is still waiting for your approval."
+              : "These are still waiting for your approval.",
+          widgets: waiting.map((p) => ({
+            type: "plan",
+            id: p.id,
+            summary: p.summary,
+            steps: p.steps,
+          })),
+        });
+      }
+    } catch {
+      /* The thread is still usable without the cards. */
+    }
+    return msgs;
+  }, []);
+
   // Resume the last conversation once the backend is up. The thread you were
   // in comes back as you left it — that is the literal meaning of persisting
   // across restarts. A failure here degrades to an empty chat, never an error.
@@ -78,11 +110,9 @@ export function App() {
         const all = await listConversations();
         if (all.length === 0) return;
         const latest = all[0];
-        const transcript = await conversationMessages(latest.id);
+        const msgs = await restoreThread(latest.id);
         setConversationId(latest.id);
-        setMessages(
-          transcript.map((m) => ({ role: m.role, content: m.content })),
-        );
+        setMessages(msgs);
       } catch {
         /* Fresh chat is the fallback for every failure mode here. */
       }
@@ -92,10 +122,10 @@ export function App() {
 
   const openConversation = useCallback(async (conv) => {
     stopSpeaking();
-    const transcript = await conversationMessages(conv.id).catch(() => []);
+    const msgs = await restoreThread(conv.id).catch(() => []);
     setConversationId(conv.id);
-    setMessages(transcript.map((m) => ({ role: m.role, content: m.content })));
-  }, []);
+    setMessages(msgs);
+  }, [restoreThread]);
 
   const newChat = useCallback(async () => {
     stopSpeaking();

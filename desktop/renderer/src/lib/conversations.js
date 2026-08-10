@@ -38,3 +38,7 @@ export const discardConversation = (id, { keepFacts }) =>
   call(`/conversations/${id}?facts=${keepFacts ? "keep" : "forget"}`, {
     method: "DELETE",
   });
+
+/** Plans still waiting on a decision — the approval cards to re-draw after a
+ *  restart, since the widget only ever travelled over the live stream. */
+export const pendingPlans = () => call("/plans/pending").then((d) => d.plans);

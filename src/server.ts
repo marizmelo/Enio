@@ -8,10 +8,8 @@ import { runTurn } from "./agent.js";
 import { claimModelServer } from "./runtime.js";
 import { buildRegistry, type Registry } from "./tools/index.js";
 import { setMemorySession } from "./tools/memory.js";
-import { setPlanSession } from "./tools/desktop.js";
-import { getPlan, planSteps, saveRecipe, settlePlan } from "./plans.js";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { desktopEnabled, setPlanSession } from "./tools/desktop.js";
+import { approvePlan, getPlan, listPendingPlans, normalizeRecipeName, settlePlan } from "./plans.js";
 import {
   conversationKnowledge,
   conversationMessages,
@@ -278,6 +276,14 @@ async function handle(
    * runs it once; saving also promotes it to a named recipe, after which it is
    * selected rather than re-authored.
    */
+  // The cards a client needs to re-draw after a restart: the approval widget
+  // otherwise only ever travelled over the live stream, so a pending plan
+  // proposed before a restart had no surface left to decide it from.
+  if (req.method === "GET" && url.pathname === "/plans/pending") {
+    sendJson(res, 200, { plans: listPendingPlans() });
+    return;
+  }
+
   const planMatch = url.pathname.match(/^\/plans\/([0-9a-f-]{8,})\/(approve|save|decline)$/);
   if (planMatch && req.method === "POST") {
     const [, id, action] = planMatch;
@@ -299,71 +305,41 @@ async function handle(
       return;
     }
 
-    const steps = planSteps(plan);
+    // The flag gates execution, not just proposal. A plan proposed while
+    // ENIO_DESKTOP was on must not run after the user turns it off — the plan
+    // stays pending rather than settling, so re-enabling the flag revives it.
+    if (!desktopEnabled()) {
+      sendJson(res, 409, {
+        error: {
+          message:
+            "Desktop control is switched off, so this plan cannot run. " +
+            "Start enio with ENIO_DESKTOP=1 to approve it.",
+        },
+      });
+      return;
+    }
 
-    let saved: string | null = null;
+    // The name is checked before anything runs: execution is one-shot, and
+    // discovering the name was invalid after the steps ran would leave a
+    // successful run unsaveable.
+    let saveAs: string | undefined;
     if (action === "save") {
       const body = await readBody(req);
-      let name = "";
+      let raw = "";
       try {
-        name = String(JSON.parse(body || "{}")?.name ?? "");
+        raw = String(JSON.parse(body || "{}")?.name ?? "");
       } catch {
-        name = "";
+        raw = "";
       }
-      // A saved recipe is one script, so a multi-step plan is joined into one.
-      // Steps exist to make a plan readable and to fail in a locatable place;
-      // once approved and named, it is a single thing that worked.
-      const result = saveRecipe({
-        name,
-        summary: plan.summary,
-        script: steps.map((s) => s.script).join("\n"),
-      });
-      if (!result.ok) {
-        sendJson(res, 400, { error: { message: result.reason } });
+      const name = normalizeRecipeName(raw);
+      if (!name) {
+        sendJson(res, 400, { error: { message: "Name is too short." } });
         return;
       }
-      saved = result.name;
+      saveAs = name;
     }
 
-    // In order, stopping at the first failure. A plan that half-ran must say so
-    // and say where: reporting only the error would leave the user unable to
-    // tell what had already happened to their machine.
-    const results: Array<{ step: number; summary: string; output: string; ok: boolean }> = [];
-    let failed = false;
-
-    for (const [i, step] of steps.entries()) {
-      try {
-        const { stdout, stderr } = await promisify(execFile)("osascript", ["-e", step.script], {
-          timeout: config.shellTimeoutMs,
-          maxBuffer: 4_000_000,
-        });
-        results.push({
-          step: i + 1,
-          summary: step.summary,
-          output: (stdout || stderr).trim() || "(no output)",
-          ok: true,
-        });
-      } catch (err) {
-        const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
-        results.push({ step: i + 1, summary: step.summary, output: message.trim(), ok: false });
-        failed = true;
-        break;
-      }
-    }
-
-    const transcript = results
-      .map((r) => `${r.ok ? "ok" : "failed"} — ${r.step}. ${r.summary}\n${r.output}`)
-      .join("\n\n");
-    settlePlan(plan.id, saved ? "saved" : "approved", transcript);
-
-    sendJson(res, 200, {
-      status: failed ? "failed" : saved ? "saved" : "approved",
-      savedAs: saved,
-      results,
-      ranSteps: results.length,
-      totalSteps: steps.length,
-      output: transcript,
-    });
+    sendJson(res, 200, await approvePlan(plan, { saveAs }));
     return;
   }
 
