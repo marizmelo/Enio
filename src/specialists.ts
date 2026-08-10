@@ -110,11 +110,15 @@ export const SPECIALISTS: Specialist[] = [
       `and pick the recipe by name. Do not write AppleScript for these — the ` +
       `recipes are already correct, and a script you compose will not be. ` +
       `take_screenshot shows you what is on screen.\n\n` +
-      `When no recipe covers what they asked, call propose_plan with the ` +
-      `AppleScript you would run and one sentence saying what it does. You are ` +
-      `not able to run it — propose_plan writes it down for the user to approve, ` +
-      `and that is the correct outcome, not a failure. Never describe a script ` +
-      `in your reply instead of proposing it: a description does nothing.\n\n` +
+      `To do something *in* an app, look before you act: window_controls lists ` +
+      `that window's buttons and fields by name, menu_items lists its menu ` +
+      `commands, and running_apps says what is even open. Then propose_plan ` +
+      `steps that click, press or type by name — copying each name exactly as ` +
+      `it was printed. A name you copied works; one you remembered does not.\n\n` +
+      `When nothing else fits, a step may carry AppleScript instead. You are ` +
+      `not able to run any of it — propose_plan writes it down for the user to ` +
+      `approve, and that is the correct outcome, not a failure. Never describe ` +
+      `a step in your reply instead of proposing it: a description does nothing.\n\n` +
       `Before anything that leaves the machine or cannot be undone — sending an ` +
       `email, deleting something, changing a setting — state exactly what you ` +
       `are about to do and get agreement first. Read-only checks need no ` +

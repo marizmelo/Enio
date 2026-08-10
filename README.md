@@ -262,6 +262,26 @@ Plus, in the shell: `osascript`, `shortcuts` (anything you can build in Shortcut
 
 Off by default because AppleScript can do anything you can do, which genuinely raises the cost of a wrong tool call. macOS only — the flag does nothing elsewhere, since these commands don't exist there. First use will prompt for Screen Recording and Automation permissions; both errors are detected and explained rather than surfacing as raw failures.
 
+### Clicking things
+
+The gap scripting leaves is apps with no AppleScript dictionary. That is closed by the macOS accessibility tree rather than by pixels — it already names every button, field and menu command in every window:
+
+```
+you › tick "Open at Login" in System Settings
+```
+
+Three recipes read it, and need no flag because reading is not irreversible:
+
+- `running_apps` — what is currently open
+- `window_controls` — the front window's buttons and fields, by name
+- `menu_items` — that app's menu commands, as `File > Save` lines
+
+Acting on what it found goes through the same approval sheet as any other plan, with steps written as names rather than scripts — `click: "Save"`, `menu: "File > Export"`, `press: "return"`, `type_text: "..."`. Each is compiled to AppleScript when proposed, so the sheet shows the exact text that will run.
+
+This needs **Accessibility** permission, which is *not* the same as Automation: System Settings → Privacy & Security → Accessibility, for whatever runs enio (the desktop app, or your terminal). Until it's granted the three recipes aren't offered at all — a tool that can only fail is worse than one that isn't there.
+
+Clicking by name also fails better than clicking by coordinate. If the control has moved, the name still finds it; if it's genuinely gone, you get an error instead of a click landing on whatever slid into its place.
+
 ### Images
 
 Attach one with `@`, or let the model reach for it:

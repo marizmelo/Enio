@@ -90,6 +90,25 @@ describe("desktop control", () => {
     assert.deepEqual(offered, ["mac_recipe"]);
   });
 
+  test("a saved recipe will not run with desktop mode off", async () => {
+    // Built-ins need no flag because they are audited reads. A saved recipe is
+    // neither: it is arbitrary AppleScript a person wrote or approved, and now
+    // that plans carry clicks and keystrokes it may well change something.
+    // Running it ungated would leave an irreversible action behind no switch,
+    // which is the one thing this whole gate exists to prevent.
+    const { saveRecipe, forgetRecipe } = await import("./plans.js");
+    saveRecipe({ name: "gate_probe", summary: "probe", script: "return 1" });
+
+    const tool = desktopTools.find((t) => t.name === "mac_recipe")!;
+    const out = String(await tool.run({ recipe: "gate_probe" }));
+    assert.match(out, /ENIO_DESKTOP/);
+
+    // And it is not advertised either — a name in the description the model
+    // cannot use is a dead end that costs a turn to discover.
+    assert.ok(!tool.description.includes("gate_probe"));
+    forgetRecipe("gate_probe");
+  });
+
   test("the shell allowlist blocks automation commands while it's off", () => {
     // This is what was actually stopping shell-based computer use, rather than
     // any missing library.

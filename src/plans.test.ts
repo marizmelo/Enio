@@ -135,6 +135,63 @@ describe("multi-step plans", () => {
   });
 });
 
+describe("named UI actions become scripts at propose time", () => {
+  // Resolving an app talks to System Events, so these need a real Mac. They
+  // only *list* processes -- nothing is clicked and no window is touched.
+  const notMac = process.platform !== "darwin";
+
+  test("a click step is compiled, stored and shown as a script", { skip: notMac }, async () => {
+    // Compiled when proposed rather than when approved, so the text in the
+    // approval sheet is the text that runs. Consenting to a description of a
+    // script is not the same as consenting to the script.
+    const tool = desktopTools.find((t) => t.name === "propose_plan")!;
+    const out = await tool.run({
+      summary: "Save the note",
+      app: "Finder",
+      steps: [{ summary: "click Save", click: "Save" }],
+    });
+
+    const widget = (out as { widget: { id: string; steps: Array<{ script: string }> } }).widget;
+    assert.equal(widget.steps.length, 1);
+    const [step] = widget.steps;
+    assert.match(step!.script, /tell process "Finder"/);
+    assert.match(step!.script, /UI elements of window 1/);
+
+    // And it is a plan like any other: pending, nothing run.
+    assert.equal(plans.getPlan(widget.id)!.status, "pending");
+  });
+
+  test("an app named once carries to the steps after it", { skip: notMac }, async () => {
+    const tool = desktopTools.find((t) => t.name === "propose_plan")!;
+    const out = await tool.run({
+      summary: "Two steps, one app",
+      app: "Finder",
+      steps: [
+        { summary: "menu", menu: "File > New Window" },
+        { summary: "then press escape", press: "escape" },
+      ],
+    });
+    const widget = (out as { widget: { steps: Array<{ script: string }> } }).widget;
+    assert.equal(widget.steps.length, 2);
+    for (const step of widget.steps) assert.match(step.script, /"Finder"/);
+  });
+
+  test("a step naming an app that is not running is refused whole", { skip: notMac }, async () => {
+    // Not stored with a broken step: the user should never be handed a plan to
+    // approve that contains one which cannot work.
+    const tool = desktopTools.find((t) => t.name === "propose_plan")!;
+    const out = await tool.run({
+      summary: "Act on something absent",
+      steps: [{ summary: "click", click: "Save", app: "NoSuchApplication" }],
+    });
+    assert.match(String(out), /not running/);
+    assert.ok(
+      !plans.listPendingPlans().some((p) => p.summary === "Act on something absent"),
+      "a refused proposal must not be stored",
+    );
+  });
+});
+
 describe("running an approved plan", () => {
   // These execute real osascript, which only exists on a Mac. `return`
   // statements touch no app, so no Automation prompt is ever triggered.

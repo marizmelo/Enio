@@ -126,6 +126,11 @@ coordinates — which small local VLMs cannot do.
 nut.js is also no longer freely installable; its packaged builds moved to a paid
 private registry in 2025.
 
+The gap this left — apps with no scripting dictionary — was closed later
+without pixels, by the accessibility tree. See "Clicking by name, not by pixel"
+below; the conclusion here did not change, but it turned out not to be the
+whole story.
+
 ### Vision that never stays resident
 
 **Chose:** images converted to text before the chat model sees them; the vision
@@ -242,6 +247,88 @@ off. It stays pending rather than settling, so re-enabling the flag revives it.
 the first call, the model sometimes keeps calling tools instead of answering
 from what it already has. That is not a plumbing problem — the answer was in
 hand — and it is the next thing worth measuring.
+
+---
+
+### Clicking by name, not by pixel
+
+**Chose:** the macOS accessibility tree. `window_controls` and `menu_items`
+list a window's controls and commands *by name*; a plan step then says
+`click: "Save"` or `menu: "File > Save"`, which is compiled into AppleScript
+and approved like any other plan.
+
+**Rejected, still:** pixel automation. Nothing about that changed — it needs a
+vision model that can ground coordinates and small local VLMs cannot.
+
+What changed is the realisation that the coordinate problem was never
+necessary. macOS already publishes every button, field and menu item of every
+window as named, queryable structure. Reading it produces exactly the artefact
+this project keeps converting things into: a short closed list. Acting on it is
+copying a line back out of that list — selection, not generation, which is the
+one thing a ~1B-active model does reliably. So the same argument that rejected
+pixels *requires* this.
+
+It also fails in the right direction, which is the part worth keeping in mind.
+A click by coordinate lands on whatever is at those pixels now; after a scroll
+or a relayout that is a different control, and it is wrong silently. A click by
+name either finds the name or errors, so a stale plan does nothing rather than
+something unintended.
+
+**Two permissions, not one.** Automation (error -1743) is what `mac_recipe`
+already needed. The tree additionally needs Accessibility (error -1719), which
+is granted per launching process and cannot be granted from code. Absent it,
+the AX recipes are *withheld* rather than offered — the same rule OCR follows,
+for the same reason: a tool that can only fail still costs the model the
+attention of choosing it, and the failure arrives too late to try another way.
+
+**Decisions inside it worth not re-litigating:**
+
+- **Scripts are compiled when the plan is proposed, not when it is approved.**
+  So the text stored, shown in the approval sheet, and executed are the same
+  text. Building the script at approval time would mean the user consented to a
+  description of a script rather than to the script.
+- **Action keys are flat and single-valued** (`click`, `menu`, `type_text`,
+  `press`) rather than a nested `{kind, target}` object. The nested form is
+  precisely the JSON a model this size gets wrong.
+- **App names are resolved against the running process list, and only the
+  resolved name is interpolated.** That preserves what made `mac_recipe` safe:
+  the string reaching AppleScript comes from the system, never from the model,
+  so nothing the model read in a file can steer it. Matching is substring and
+  prefix, not edit distance — the model says "Chrome" for "Google Chrome",
+  which is seven edits away and an unambiguous substring. Ambiguity is refused
+  rather than guessed.
+- **No modifier key combinations.** `press` takes one named key from a closed
+  list. Anything worth a shortcut has a menu item, and `File > Save` reads
+  better in an approval sheet than `cmd+s` does.
+- **The tree is walked breadth-first, a level at a time. Not `entire
+  contents`.** This was written the other way first and it was wrong.
+  `entire contents of window 1` reads like the obvious way to get a whole
+  window and *silently returns an empty list* on real ones: Notes answers 0 for
+  it while `button 1 of window 1` is sitting right there. A whose-clause is no
+  better — it sees direct children only, and every real control is nested in a
+  toolbar or group. Descending one level at a time is the only one of the three
+  that works, and it is fast (~0.5s on Notes). Depth is bounded at
+  `AX_DEPTH`, shared by the reader and the click compiler so that what can be
+  *seen* and what can be *acted on* are the same set.
+- **The Apple menu is skipped.** It is identical for every app, is not the
+  app's own commands, and is where Shut Down and Restart live. Including it
+  padded a closed list meant for choosing from with a dozen irrelevant entries,
+  two of which end the user's session.
+
+**Verified, finally, on a real machine.** Every generated script goes through
+`osacompile` in the test suite, which catches a malformed one without needing
+permission — but that is syntax, not semantics, and it happily passed the
+`entire contents` version that could never have matched anything. What found
+that was running it against a real window. Confirmed working: `running_apps`,
+`window_controls` (finds a nested Continue button in Notes), `menu_items` (95+
+commands in `File > New Note` shape), a real click through
+propose → approve → execute, a real menu command, and the failure path — a name
+that is not there errors with `No control named X` rather than reporting
+success for having done nothing.
+
+The lesson is the one already written down for OCR and for tool-name repair:
+this project's scripts are *tried*, not reasoned about. `osacompile` is a
+useful gate and not evidence.
 
 ---
 

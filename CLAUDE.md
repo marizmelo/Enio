@@ -116,10 +116,20 @@ change the machine is off until `ENIO_DESKTOP=1`. The model deciding to do
 something irreversible is exactly the judgement it gets wrong.
 
 The gate is about irreversibility, not about touching apps at all: `mac_recipe`
-runs seven fixed read-only scripts chosen from a closed list, and needs no flag
-— macOS still prompts for Automation access, which is the consent that protects
+runs fixed read-only scripts chosen from a closed list, and needs no flag —
+macOS still prompts for Automation access, which is the consent that protects
 the data. Gating a read identically to arbitrary AppleScript made the safest
 capability carry the cost of the most dangerous one.
+
+**Clicking is by name, never by coordinate.** `window_controls` and
+`menu_items` read the macOS accessibility tree, so a plan step says
+`click: "Save"` rather than a pixel. This is the same closed-list
+transformation as everything else here, and it fails safely: a name that is no
+longer there errors, where a coordinate would quietly hit whatever moved into
+it. The tree needs Accessibility permission (error -1719) — separate from
+Automation (-1743) — and the AX recipes are withheld until it is granted.
+Actions are compiled to AppleScript at *propose* time so the sheet shows the
+text that will actually run.
 
 **The model proposes scripts; it does not run them.** No specialist has
 `run_applescript`. The operator calls `propose_plan`, which stores the script

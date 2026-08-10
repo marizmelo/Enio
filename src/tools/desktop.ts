@@ -6,6 +6,16 @@ import { detectPlatform } from "../platform.js";
 import { readImage } from "../vision.js";
 import type { ToolDef } from "../types.js";
 import { listSavedRecipes, proposePlan } from "../plans.js";
+import {
+  assistiveAccessGranted,
+  AX_DEPTH,
+  compileAction,
+  KEY_CODES,
+  permissionHint,
+  resolveApp,
+  runningApps,
+  type ActionKind,
+} from "./ax.js";
 
 // Same shape as the memory tools: the turn sets the session, the tool reads it.
 // A plan records which conversation asked for it, which is what lets the
@@ -203,11 +213,20 @@ const appleScriptTool: ToolDef = {
  * Every script here was run on a real machine before being added. Adding one
  * means testing it the same way, not writing what ought to work.
  */
-const RECIPES: Record<string, { summary: string; script: (n: number) => string }> = {
+interface Recipe {
+  summary: string;
+  script: (ctx: { count: number; app: string }) => string;
+  /** Needs an app; the *resolved* name is interpolated, never the raw input. */
+  needsApp?: true;
+  /** Reads the accessibility tree, so it is withheld until macOS allows that. */
+  needsAx?: true;
+}
+
+const RECIPES: Record<string, Recipe> = {
   recent_emails: {
     summary: "Subject and sender of the most recent inbox messages",
-    script: (n) =>
-      `tell application "Mail" to get {subject, sender} of messages 1 thru ${n} of inbox`,
+    script: ({ count }) =>
+      `tell application "Mail" to get {subject, sender} of messages 1 thru ${count} of inbox`,
   },
   unread_count: {
     summary: "How many unread messages are in the inbox",
@@ -238,21 +257,156 @@ const RECIPES: Record<string, { summary: string; script: (n: number) => string }
   },
   recent_notes: {
     summary: "Titles of the most recent notes",
-    script: (n) => `tell application "Notes" to get name of notes 1 thru ${n}`,
+    script: ({ count }) => `tell application "Notes" to get name of notes 1 thru ${count}`,
   },
   desktop_files: {
     summary: "Files on the Desktop",
     script: () => `tell application "Finder" to get name of items of desktop`,
   },
+
+  /* The accessibility tier: what is on screen, by name. These are what turn
+     "click the Save button" from a coordinate-grounding problem into picking a
+     line out of a list. */
+
+  running_apps: {
+    summary: "Which apps are open, by name — check here before acting on one",
+    script: () =>
+      `tell application "System Events" to get name of every process whose background only is false`,
+  },
+  window_controls: {
+    summary: "Buttons and fields in an app's front window, by name (needs app)",
+    needsApp: true,
+    needsAx: true,
+    // Walked breadth-first, level by level, rather than with `entire contents`.
+    // That reads like the obvious way to get the whole tree and silently
+    // returns an empty list for real windows -- Notes answers 0 for it while
+    // `button 1 of window 1` is right there. A whose-clause is no good either,
+    // since it sees direct children only and every real control is nested in a
+    // toolbar or group. Descending a level at a time is the one that works.
+    script: ({ app }) =>
+      `tell application "System Events" to tell process "${app}"\n` +
+      `\tif not (exists window 1) then return "No window is open in ${app}."\n` +
+      `\tset out to {}\n` +
+      `\tset frontier to UI elements of window 1\n` +
+      // Bounded: an unbounded descent into a browser's tree is unbounded work,
+      // and a control deeper than this is one nobody is naming out loud.
+      `\trepeat ${AX_DEPTH} times\n` +
+      `\t\tset nextF to {}\n` +
+      `\t\trepeat with e in frontier\n` +
+      `\t\t\ttry\n` +
+      `\t\t\t\tset n to name of e\n` +
+      `\t\t\t\tif n is not missing value and n is not "" then\n` +
+      `\t\t\t\t\tset end of out to (role description of e) & ": " & n\n` +
+      `\t\t\t\tend if\n` +
+      `\t\t\tend try\n` +
+      `\t\t\ttry\n` +
+      `\t\t\t\trepeat with k in (UI elements of e)\n` +
+      `\t\t\t\t\tset end of nextF to k\n` +
+      `\t\t\t\tend repeat\n` +
+      `\t\t\tend try\n` +
+      `\t\tend repeat\n` +
+      `\t\tset frontier to nextF\n` +
+      `\t\tif (count of frontier) is 0 then exit repeat\n` +
+      `\tend repeat\n` +
+      `\tset AppleScript's text item delimiters to linefeed\n` +
+      `\treturn out as text\n` +
+      `end tell`,
+  },
+  menu_items: {
+    summary: "An app's menu commands as 'File > Save' lines (needs app)",
+    needsApp: true,
+    needsAx: true,
+    // Printed in the exact shape a menu action is written in, so acting on one
+    // is copying a line back rather than composing it from two halves.
+    //
+    // Menu bar item 1 is the Apple menu, and it is skipped. It is not the
+    // app's own commands, it is identical for every app, and it is where Shut
+    // Down and Restart live -- so including it padded a closed list meant for
+    // choosing from with a dozen irrelevant entries, two of which end the
+    // user's session.
+    script: ({ app }) =>
+      `tell application "System Events" to tell process "${app}"\n` +
+      `\tset out to {}\n` +
+      `\tset bar to menu bar items of menu bar 1\n` +
+      `\trepeat with idx from 2 to (count of bar)\n` +
+      `\t\tset m to item idx of bar\n` +
+      `\t\tset mn to name of m\n` +
+      `\t\ttry\n` +
+      `\t\t\trepeat with i in menu items of menu 1 of m\n` +
+      `\t\t\t\tset n to name of i\n` +
+      `\t\t\t\tif n is not missing value and n is not "" then set end of out to mn & " > " & n\n` +
+      `\t\t\tend repeat\n` +
+      `\t\tend try\n` +
+      `\tend repeat\n` +
+      `\tset AppleScript's text item delimiters to linefeed\n` +
+      `\treturn out as text\n` +
+      `end tell`,
+  },
 };
+
+/**
+ * Every recipe's script, filled in with a stand-in app and count.
+ *
+ * Exported for the test that runs each one through osacompile. That does not
+ * prove a recipe returns the right thing -- only a real machine does, which is
+ * the standing rule for adding one -- but it does catch the failure that would
+ * otherwise surface as the model being blamed for a tool that was malformed
+ * before it ever chose it.
+ */
+export const recipeScripts = (): Array<[string, string]> =>
+  Object.entries(RECIPES).map(([name, r]) => [name, r.script({ count: 5, app: "Finder" })]);
+
+/**
+ * The built-in recipes, described for a person rather than for the model.
+ *
+ * These are code and cannot be edited, but they must still be *visible*: the
+ * recipe list is the closed set the model chooses from, and curating a set you
+ * can only see half of is guesswork. The script is included because it is the
+ * honest answer to "what does this actually do".
+ */
+export const builtinRecipes = (): Array<{
+  name: string;
+  summary: string;
+  script: string;
+  needsApp: boolean;
+  needsAx: boolean;
+  available: boolean;
+}> =>
+  Object.entries(RECIPES).map(([name, r]) => ({
+    name,
+    summary: r.summary,
+    script: r.script({ count: 5, app: "<app>" }),
+    needsApp: r.needsApp === true,
+    needsAx: r.needsAx === true,
+    available: !r.needsAx || assistiveAccessGranted(),
+  }));
+
+/** Saved recipes are only offered when desktop mode is on, because that is the
+ *  switch that governs running one — a name in the description the model
+ *  cannot actually use is a dead end that costs it a turn to discover. */
+const savedRecipesAvailable = () => (desktopEnabled() ? listSavedRecipes() : []);
+
+/** Recipes reading the accessibility tree are hidden until macOS permits it.
+ *  A tool the model can only fail with still costs it the attention of
+ *  choosing, and the failure comes too late to try another way. */
+const availableRecipes = (): Array<[string, Recipe]> =>
+  Object.entries(RECIPES).filter(([, r]) => !r.needsAx || assistiveAccessGranted());
+
+/** Long trees are truncated rather than left to fill the window: the point of
+ *  the list is to be chosen from, and a list past a few hundred lines has
+ *  stopped being one. */
+function capped(text: string, limit = 6000): string {
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}\n… truncated. Narrow it down or ask about one part of the window.`;
+}
 
 const recipeTool: ToolDef = {
   name: "mac_recipe",
   // Rebuilt on read so a recipe saved this session is offered on the next turn
   // without a restart -- the whole point of saving one.
   get description(): string {
-    const builtin = Object.entries(RECIPES).map(([name, r]) => `${name} (${r.summary})`);
-    const saved = listSavedRecipes().map((r) => `${r.name} (${r.summary})`);
+    const builtin = availableRecipes().map(([name, r]) => `${name} (${r.summary})`);
+    const saved = savedRecipesAvailable().map((r) => `${r.name} (${r.summary})`);
     return (
       "Read something from a Mac app using a tested script. Use this rather than writing AppleScript. Recipes: " +
       [...builtin, ...saved].join("; ")
@@ -266,6 +420,11 @@ const recipeTool: ToolDef = {
         type: "string",
         description: "Which recipe to run, by name.",
       },
+      app: {
+        type: "string",
+        description:
+          "Which app, for recipes that say they need one. Must be running — use running_apps to see.",
+      },
       count: {
         type: "number",
         description: "How many items to return, where the recipe takes a count. Defaults to 5.",
@@ -276,41 +435,83 @@ const recipeTool: ToolDef = {
   async run(args) {
     const name = String(args.recipe ?? "").trim();
     const saved = listSavedRecipes().find((r) => r.name === name);
-    const recipe = RECIPES[name] ?? (saved ? { summary: saved.summary, script: () => saved.script } : undefined);
+    const recipe: Recipe | undefined =
+      RECIPES[name] ?? (saved ? { summary: saved.summary, script: () => saved.script } : undefined);
     if (!recipe) {
-      const all = [...Object.keys(RECIPES), ...listSavedRecipes().map((r) => r.name)];
+      const all = [...availableRecipes().map(([n]) => n), ...savedRecipesAvailable().map((r) => r.name)];
       return `No recipe named "${name}". Available: ${all.join(", ")}`;
     }
+    // A saved recipe is not a built-in. The reason built-ins need no flag is
+    // that they are seven audited reads; a saved one is arbitrary AppleScript
+    // that a person wrote or approved, and since plans can now carry clicks and
+    // keystrokes it may well change something. Running that ungated would put
+    // an irreversible action behind no switch at all.
+    if (saved && !RECIPES[name] && !desktopEnabled()) {
+      return (
+        `"${name}" is a saved recipe, which can change things, so it needs desktop ` +
+        `mode. Start enio with ENIO_DESKTOP=1 to use it.`
+      );
+    }
+    if (recipe.needsAx && !assistiveAccessGranted()) {
+      return (
+        `"${name}" needs Accessibility access, which macOS has not granted this app.\n\n` +
+        `Turn it on in System Settings → Privacy & Security → Accessibility, for the ` +
+        `app running enio.`
+      );
+    }
 
-    // Clamped and integer-only: this is the only part of the script the model
-    // influences, and it should not be able to make it something else.
+    // Clamped and integer-only: with an app name this is no longer the *only*
+    // thing the model influences, but it is still the only thing it influences
+    // freely.
     const raw = Number(args.count ?? 5);
     const count = Number.isFinite(raw) ? Math.min(50, Math.max(1, Math.floor(raw))) : 5;
 
+    // The resolved name goes into the script, never what the model wrote. That
+    // is what keeps the interpolation safe: the string comes from the system's
+    // own process list, so no text the model read can steer it elsewhere.
+    let app = "";
+    if (recipe.needsApp) {
+      let running: string[];
+      try {
+        running = await runningApps();
+      } catch (err) {
+        const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
+        return permissionHint(message) ?? `Could not list running apps: ${message}`;
+      }
+      const resolved = resolveApp(String(args.app ?? ""), running);
+      if (!resolved.ok) return resolved.reason;
+      app = resolved.name;
+    }
+
     try {
-      const { stdout, stderr } = await run("osascript", ["-e", recipe.script(count)], {
+      const { stdout, stderr } = await run("osascript", ["-e", recipe.script({ count, app })], {
         timeout: config.shellTimeoutMs,
         maxBuffer: 4_000_000,
       });
-      return (stdout || stderr).trim() || "(nothing to report)";
+      return capped((stdout || stderr).trim()) || "(nothing to report)";
     } catch (err) {
       const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
-      if (/not authori[sz]ed|1743|-1743/.test(message)) {
-        return (
-          `macOS blocked this.\n${message}\n\n` +
-          `Grant access in System Settings → Privacy & Security → Automation.`
-        );
-      }
-      return `Could not read that: ${message}`;
+      return permissionHint(message) ?? `Could not read that: ${message}`;
     }
   },
 };
 
 
+/** The action keys a step may carry, and the compiler verb each maps to.
+ *  Named as verbs and kept flat -- one key whose presence says what the step
+ *  is -- because a nested discriminated union is exactly the JSON a model this
+ *  size gets wrong. */
+const STEP_ACTIONS: Array<[key: string, kind: ActionKind]> = [
+  ["click", "click"],
+  ["menu", "menu"],
+  ["type_text", "type"],
+  ["press", "key"],
+];
+
 const proposeTool: ToolDef = {
   name: "propose_plan",
   description:
-    "Propose something no recipe covers, for the user to approve before it runs. Use when the user asks for an action on their Mac that mac_recipe cannot do. You are not running this — you are writing down what you would do.",
+    "Propose something no recipe covers, for the user to approve before it runs. Use when the user asks for an action on their Mac that mac_recipe cannot do. Prefer click/menu/press/type_text steps, copying names exactly from window_controls or menu_items. You are not running this — you are writing down what you would do.",
   origin: "builtin",
   parameters: {
     type: "object",
@@ -320,17 +521,38 @@ const proposeTool: ToolDef = {
         description:
           "One plain sentence covering the whole plan. The user reads this first.",
       },
+      app: {
+        type: "string",
+        description: "The app the steps act on, if they all act on the same one.",
+      },
       steps: {
         type: "array",
         description:
-          "The steps, in order. Keep each one to a single action with its own short AppleScript — one script doing three things is where scripts go wrong.",
+          "The steps, in order. Give each one exactly one action. Prefer a named action over a script: copy the name from what window_controls or menu_items printed.",
         items: {
           type: "object",
           properties: {
             summary: { type: "string", description: "What this step does, in a few words." },
-            script: { type: "string", description: "The AppleScript for this step alone." },
+            app: { type: "string", description: "Which app, if not the plan's app." },
+            click: {
+              type: "string",
+              description: 'A control in the front window, named exactly, e.g. "Save".',
+            },
+            menu: {
+              type: "string",
+              description: 'A menu command as printed by menu_items, e.g. "File > Save".',
+            },
+            type_text: { type: "string", description: "Text to type into the app." },
+            press: {
+              type: "string",
+              description: `One key: ${Object.keys(KEY_CODES).join(", ")}.`,
+            },
+            script: {
+              type: "string",
+              description: "AppleScript, only when no named action fits.",
+            },
           },
-          required: ["summary", "script"],
+          required: ["summary"],
         },
       },
     },
@@ -348,12 +570,49 @@ const proposeTool: ToolDef = {
         ? [{ summary, script: args.script }]
         : [];
 
-    const steps = raw
-      .map((s) => ({
-        summary: String(s?.summary ?? "").trim(),
-        script: unescapeQuotes(String(s?.script ?? "").trim()),
-      }))
-      .filter((s) => s.script);
+    // Fetched once, and only when something actually needs it -- a plan of
+    // plain scripts should not pay for a process spawn.
+    const wantsApp = raw.some((s) => STEP_ACTIONS.some(([key]) => s?.[key]));
+    let running: string[] = [];
+    if (wantsApp) {
+      try {
+        running = await runningApps();
+      } catch (err) {
+        const message = (err as Error & { stderr?: string }).stderr ?? (err as Error).message;
+        return permissionHint(message) ?? `Could not list running apps: ${message}`;
+      }
+    }
+
+    const steps: Array<{ summary: string; script: string }> = [];
+    // Carried forward so an app named once covers the steps that follow, which
+    // is how the model writes them when every step is in the same window.
+    let lastApp = String(args.app ?? "");
+
+    for (const s of raw) {
+      const stepSummary = String(s?.summary ?? "").trim();
+      const action = STEP_ACTIONS.find(([key]) => typeof s?.[key] === "string" && s[key]);
+
+      if (action) {
+        const [key, kind] = action;
+        const wanted = String(s.app ?? lastApp);
+        const resolved = resolveApp(wanted, running);
+        // Refused whole rather than stored with a broken step: a plan the user
+        // is asked to approve should never contain one that cannot work.
+        if (!resolved.ok) return `Cannot propose "${stepSummary}": ${resolved.reason}`;
+        lastApp = resolved.name;
+
+        const compiled = compileAction(kind, resolved.name, String(s[key]));
+        if (!compiled.ok) return `Cannot propose "${stepSummary}": ${compiled.reason}`;
+        steps.push({
+          summary: stepSummary || `${key} ${String(s[key])}`,
+          script: compiled.script,
+        });
+        continue;
+      }
+
+      const script = unescapeQuotes(String(s?.script ?? "").trim());
+      if (script) steps.push({ summary: stepSummary, script });
+    }
 
     if (!summary || steps.length === 0) {
       return "Error: a plan needs a summary and at least one step with a script.";
