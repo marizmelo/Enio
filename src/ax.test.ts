@@ -172,6 +172,52 @@ describe("compiling an action into AppleScript", () => {
   });
 });
 
+describe("the accessibility bridge", () => {
+  const notMac = process.platform !== "darwin";
+
+  test("a click compiles to the bridge when it is available", { skip: notMac }, async () => {
+    const ax = await import("./tools/ax.js");
+    await ax.probeAxBridge();
+    const out = ax.compileAction("click", "Calculator", "Delete");
+    assert.ok(out.ok);
+    if (ax.axBridgeAvailable()) {
+      // Still a script, so the approval sheet keeps its meaning: the text
+      // shown is the text that runs.
+      assert.match(out.script, /do shell script/);
+      assert.match(out.script, /ax_bridge\.py/);
+      assert.match(out.script, /" press "/);
+    } else {
+      // Without it, the AppleScript walk -- nothing that worked stops working.
+      assert.match(out.script, /System Events/);
+    }
+  });
+
+  test("a control name cannot become a second shell command", { skip: notMac }, async () => {
+    // The name reaches a shell here, which the AppleScript path never did.
+    // `quoted form of` is what keeps it one argument; this is the test that
+    // fails loudly if that is ever dropped.
+    const ax = await import("./tools/ax.js");
+    await ax.probeAxBridge();
+    if (!ax.axBridgeAvailable()) return;
+    const out = ax.compileAction("click", "Calculator", '"; touch /tmp/enio-pwned; echo "');
+    assert.ok(out.ok);
+    assert.match(out.script, /quoted form of/);
+    // Every interpolated value sits inside an AppleScript literal that is then
+    // shell-quoted -- never bare in the command string.
+    assert.doesNotMatch(out.script, /do shell script "[^"]*touch/);
+  });
+
+  test("the bridge answers with JSON rather than throwing", { skip: notMac }, async () => {
+    const ax = await import("./tools/ax.js");
+    await ax.probeAxBridge();
+    if (!ax.axBridgeAvailable()) return;
+    // A failure is a result, because every caller has a fallback to choose.
+    const out = await ax.axBridge(["tree", "NoSuchApplication9917"]);
+    assert.equal(out.ok, false);
+    assert.match(String(out.error), /not running/);
+  });
+});
+
 describe("permission hints", () => {
   test("the assistive-access phrase gets a hint; a bare -1719 does not", async () => {
     const { permissionHint } = await import("./tools/ax.js");

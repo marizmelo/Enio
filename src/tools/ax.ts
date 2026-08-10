@@ -1,5 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { config } from "../config.js";
 
 const run = promisify(execFile);
 
@@ -87,6 +91,88 @@ export function permissionHint(message: string): string | null {
     );
   }
   return null;
+}
+
+/* ---------- the direct accessibility bridge ------------------------------ */
+
+/**
+ * The same tree, reached without System Events.
+ *
+ * AppleScript is the obvious door to the accessibility tree and not the only
+ * one, and for some apps it is a locked one: Calculator reports zero windows
+ * to System Events while sitting on screen, so no click could ever land, and
+ * the error it returns shares its code with a missing permission -- a wall
+ * that also misdiagnoses itself. The AXUIElement API answers the same
+ * question immediately, with every button named and a press that works.
+ *
+ * So this is not a second way of doing the same thing; it is the ceiling
+ * lifting. AppleScript stays as the fallback, because it is what has been
+ * tested against every app that already works, and because a capability here
+ * degrades rather than fails.
+ */
+let bridgeReady: boolean | null = null;
+
+export function axBridgePath(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), "..", "..", "scripts", "ax_bridge.py");
+}
+
+export function axBridgePython(): string {
+  return join(config.runtimeDir, ".venv", "bin", "python");
+}
+
+export const axBridgeAvailable = (): boolean => bridgeReady === true;
+
+/**
+ * Whether the bridge can run at all: an interpreter, pyobjc inside it, and
+ * the script itself. Probed once, up front, for the reason OCR is -- a path
+ * that can only fail should never be offered, and finding out at call time
+ * is finding out too late to choose differently.
+ */
+export async function probeAxBridge(): Promise<boolean> {
+  try {
+    if (!existsSync(axBridgePath()) || !existsSync(axBridgePython())) {
+      bridgeReady = false;
+      return false;
+    }
+    await promisify(execFile)(axBridgePython(), ["-c", "import ApplicationServices, AppKit"], {
+      timeout: 15_000,
+    });
+    bridgeReady = true;
+  } catch {
+    bridgeReady = false;
+  }
+  return bridgeReady;
+}
+
+export interface AxBridgeResult {
+  ok: boolean;
+  rows?: string[];
+  truncated?: boolean;
+  error?: string;
+}
+
+/** Run the bridge. Always resolves -- a failure is a result, not a throw,
+ *  because every caller has an AppleScript path to fall back to. */
+export async function axBridge(args: string[]): Promise<AxBridgeResult> {
+  try {
+    const { stdout } = await promisify(execFile)(axBridgePython(), [axBridgePath(), ...args], {
+      timeout: 30_000,
+      maxBuffer: 4_000_000,
+    });
+    return JSON.parse(stdout) as AxBridgeResult;
+  } catch (err) {
+    // A non-zero exit still prints JSON on stdout; anything else is the
+    // interpreter itself failing.
+    const out = (err as { stdout?: string }).stdout;
+    if (out) {
+      try {
+        return JSON.parse(out) as AxBridgeResult;
+      } catch {
+        /* fall through */
+      }
+    }
+    return { ok: false, error: (err as Error).message };
+  }
 }
 
 /* ---------- resolving an app name ---------------------------------------- */
@@ -310,6 +396,23 @@ export function compileAction(
   }
 
   if (kind === "click") {
+    // Through the bridge when it is available, because System Events cannot
+    // reach some apps at all -- and still as a *script*, so the approval
+    // sheet keeps the property that matters: the text shown is the text that
+    // runs. `quoted form of` keeps the app and control names as single shell
+    // words, so a name is an argument and can never be a second command. A
+    // control that is not there exits non-zero and the step fails, which is
+    // the same honest failure the AppleScript walk gives.
+    if (axBridgeAvailable()) {
+      const q = (v: string) => `quoted form of "${esc(v)}"`;
+      return {
+        ok: true,
+        script:
+          `do shell script ${q(axBridgePython())} & " " & ${q(axBridgePath())} & ` +
+          `" press " & ${q(a)} & " " & ${q(target)}`,
+      };
+    }
+
     // Walked level by level, for the reason recorded on the window_controls
     // recipe: `entire contents` looks like the way to search a whole window
     // and answers with an empty list on real ones, while a whose-clause sees

@@ -8,6 +8,8 @@ import type { ToolDef } from "../types.js";
 import { listSavedRecipes, osascriptFailure, proposePlan } from "../plans.js";
 import {
   assistiveAccessGranted,
+  axBridge,
+  axBridgeAvailable,
   AX_DEPTH,
   AX_PARENT_BUDGET,
   AX_ROW_BUDGET,
@@ -223,6 +225,9 @@ interface Recipe {
   needsApp?: true;
   /** Reads the accessibility tree, so it is withheld until macOS allows that. */
   needsAx?: true;
+  /** Preferred over the AppleScript when the direct bridge is available: it
+   *  reaches apps System Events cannot see at all. */
+  direct?: (ctx: { count: number; app: string }) => Promise<string | null>;
 }
 
 const RECIPES: Record<string, Recipe> = {
@@ -280,6 +285,18 @@ const RECIPES: Record<string, Recipe> = {
     summary: "Buttons and fields in an app's front window, by name (needs app)",
     needsApp: true,
     needsAx: true,
+    // Tried through the direct AX bridge first. Not a preference -- a
+    // capability difference: Calculator answers System Events with zero
+    // windows and the bridge with twenty-three named buttons. Null falls
+    // through to the AppleScript below, which is what every app that already
+    // worked has been tested against.
+    direct: async ({ app }) => {
+      if (!axBridgeAvailable()) return null;
+      const out = await axBridge(["tree", app]);
+      if (!out.ok || !out.rows) return null;
+      const rows = out.rows.join("\n");
+      return out.truncated ? `${rows}\n… truncated.` : rows;
+    },
     // Walked breadth-first, level by level, rather than with `entire contents`.
     // That reads like the obvious way to get the whole tree and silently
     // returns an empty list for real windows -- Notes answers 0 for it while
@@ -299,7 +316,7 @@ const RECIPES: Record<string, Recipe> = {
       // screen and still reports none -- some system apps hide their windows
       // from scripting entirely. The message says what still works, because
       // keystrokes go to the frontmost app without touching the window tree.
-      `\tif not (exists window 1) then return "No window is visible to scripting in ${app}. If a window is on screen, this app hides its controls: click steps cannot work, but type_text and press steps still reach it."\n` +
+      `\tif not (exists window 1) then return "No window is visible to scripting in ${app}. If a window is on screen, this app is one System Events cannot see; the accessibility bridge reaches it, and type_text and press steps work regardless."\n` +
       `\tset out to {}\n` +
       `\tset frontier to {window 1}\n` +
       `\tset visited to 0\n` +
@@ -503,6 +520,17 @@ const recipeTool: ToolDef = {
       const resolved = resolveApp(String(args.app ?? ""), running);
       if (!resolved.ok) return resolved.reason;
       app = resolved.name;
+    }
+
+    // The direct path first when the recipe has one and the bridge is up; a
+    // null answer means "could not", not "nothing", and falls through.
+    if (recipe.direct) {
+      try {
+        const direct = await recipe.direct({ count, app });
+        if (direct !== null) return capped(direct) || "(nothing to report)";
+      } catch {
+        /* fall through to AppleScript */
+      }
     }
 
     try {

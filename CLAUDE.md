@@ -126,10 +126,19 @@ capability carry the cost of the most dangerous one.
 `click: "Save"` rather than a pixel. This is the same closed-list
 transformation as everything else here, and it fails safely: a name that is no
 longer there errors, where a coordinate would quietly hit whatever moved into
-it. The tree needs Accessibility permission (error -1719) — separate from
-Automation (-1743) — and the AX recipes are withheld until it is granted.
-Actions are compiled to AppleScript at *propose* time so the sheet shows the
-text that will actually run.
+it. The tree needs Accessibility permission — separate from Automation (-1743) —
+and the AX recipes are withheld until it is granted. Match on the *phrase*
+"not allowed assistive access", never the bare -1719: macOS reuses that code
+for "Invalid index".
+
+Reading and pressing go through `scripts/ax_bridge.py` (pyobjc) when it is
+available, with AppleScript as the fallback. This is not a preference but a
+capability difference — Calculator reports zero windows to System Events and
+twenty-three named buttons to the AX API — and it is faster besides. A click
+still compiles to a script so the approval sheet keeps showing the text that
+actually runs, and names reaching the shell go through `quoted form of`.
+Actions are compiled at *propose* time so the sheet shows the text that will
+actually run.
 
 **The model proposes scripts; it does not run them.** No specialist has
 `run_applescript`. The operator calls `propose_plan`, which stores the script

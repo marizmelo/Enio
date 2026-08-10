@@ -9,7 +9,7 @@ import { visionTools } from "./vision.js";
 import { emailTools } from "./email.js";
 import { mailTools } from "./mail.js";
 import { desktopTools, recipesEnabled } from "./desktop.js";
-import { probeAssistiveAccess } from "./ax.js";
+import { probeAssistiveAccess, probeAxBridge } from "./ax.js";
 import { timeTools } from "./time.js";
 import { weatherTools } from "./weather.js";
 import { loadMcpTools } from "./mcp.js";
@@ -32,11 +32,19 @@ export async function buildRegistry(
   // process read the accessibility tree decides which recipes mac_recipe
   // offers, and offering one that can only fail wastes the model's attention.
   if (recipesEnabled()) {
-    const ax = await probeAssistiveAccess();
+    // Both probed together: one decides whether the tree can be read at all,
+    // the other which door it is read through.
+    const [ax, bridge] = await Promise.all([probeAssistiveAccess(), probeAxBridge()]);
     if (!ax) {
       onLog(
         `[tools] No Accessibility access, so reading windows and clicking by name are ` +
           `withheld. Grant it in System Settings → Privacy & Security → Accessibility.`,
+      );
+    } else if (!bridge) {
+      onLog(
+        `[tools] Accessibility bridge unavailable, falling back to AppleScript — ` +
+          `apps that hide their windows from System Events will not be clickable. ` +
+          `Re-run install.sh to add it.`,
       );
     }
   }

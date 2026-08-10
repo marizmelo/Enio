@@ -345,6 +345,36 @@ attention of choosing it, and the failure arrives too late to try another way.
   padded a closed list meant for choosing from with a dozen irrelevant entries,
   two of which end the user's session.
 
+**The intermediary was the ceiling, not the tree.** AppleScript's System
+Events is the obvious door to the accessibility tree and for some apps it is a
+locked one: Calculator reports **zero windows** to System Events while sitting
+on screen, so no click could ever land, and the -1719 it returns is the same
+code System Events uses for a missing permission — a wall that also
+misdiagnoses itself. The same question asked through the `AXUIElement` API
+returns one window and twenty-three named buttons, and a press that works.
+
+Found by evaluating `browser-use/macOS-use`, which was worth reading and not
+worth adopting. It reaches macOS the same way this does — `AXUIElement`,
+`AXPress`, `AXSetValue`, not vision or coordinates — which is independent
+validation of the approach. But it requires cloud models (OpenAI or Anthropic;
+local MLX is roadmap, not feature), has no approval step and warns against
+unsupervised use, and its last commit was March 2025. The idea was the
+valuable part.
+
+So `scripts/ax_bridge.py` reads and presses through pyobjc, and AppleScript
+stays as the fallback — nothing that already worked changes, and the apps
+System Events cannot see become reachable. It is measurably better on the apps
+that *did* work too: Finder's 111 controls in 0.6s against 26s for the
+AppleScript walk.
+
+Two properties were deliberately preserved. A click still compiles to a
+**script**, `do shell script … ax_bridge.py press …`, so the approval sheet
+keeps the property that the text shown is the text that runs — consenting to a
+description of an action was rejected earlier and is still rejected. And every
+interpolated name goes through `quoted form of`, so a control name reaching a
+shell for the first time is an argument and never a second command; there is a
+test that tries to inject one.
+
 **Verified, finally, on a real machine.** Every generated script goes through
 `osacompile` in the test suite, which catches a malformed one without needing
 permission — but that is syntax, not semantics, and it happily passed the

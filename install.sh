@@ -162,6 +162,12 @@ else
 fi
 ( cd "$ENIO_DIR" && uv pip install -e . rich >/dev/null ) || die "Could not install mlx-lm."
 
+# The accessibility bridge. Non-fatal on purpose: without it enio falls back to
+# AppleScript, which is what every app that already worked has been tested
+# against -- it only loses the apps System Events cannot see at all.
+( cd "$ENIO_DIR" && uv pip install pyobjc-framework-ApplicationServices >/dev/null 2>&1 ) \
+  || warn "Could not install pyobjc — clicking will use AppleScript only."
+
 # Re-applied after every pull, because a pull is exactly what reverts it. The
 # script is idempotent and refuses to touch a file it does not recognise, so
 # running it against a fixed upstream is a no-op rather than damage.
