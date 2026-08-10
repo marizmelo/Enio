@@ -61,7 +61,7 @@ cd desktop && npm start
 ```
 
 To let it change things on your Mac, launch it with the desktop flag — see
-[Controlling your Mac](mac-control):
+[Controlling your Mac](mac-control.md):
 
 ```sh
 cd desktop && ENIO_DESKTOP=1 npm start

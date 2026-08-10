@@ -40,7 +40,7 @@ forms or type. Those mutate, and mutations belong in the approval sheet.
 Page text is labelled as data where it enters the model, and is never edited to
 remove instruction-shaped sentences — silently rewriting what a page said would
 make the trace a lie. The real defence is that the agent reading it cannot act;
-see [Agents and routing](agents).
+see [Agents and routing](agents.md).
 
 Local and internal addresses are refused before any request: loopback, private
 ranges, and the cloud-metadata address. That guard matters more here than for a

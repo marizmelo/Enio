@@ -127,6 +127,22 @@ describe("the docs describe the code that exists", () => {
     }
   });
 
+  test("the index links to every page", () => {
+    // Browsing /docs on GitHub renders README.md, so it is the only way in
+    // for anyone who has not enabled Pages. A page missing from it is a page
+    // nobody finds — and adding a page without touching the index is the
+    // easiest possible mistake.
+    const index = pages.find((p) => p.file === "README.md");
+    assert.ok(index, "docs/README.md is the index GitHub renders");
+    for (const { file } of pages) {
+      if (file === "README.md") continue;
+      assert.ok(
+        index.text.includes(`(${file})`),
+        `${file} is not linked from the index`,
+      );
+    }
+  });
+
   test("internal doc links point at pages that exist", () => {
     const names = new Set(pages.map((p) => p.file.replace(/\.md$/, "")));
     for (const { file, text } of pages) {

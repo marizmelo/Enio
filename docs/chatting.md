@@ -65,7 +65,7 @@ summary and the meter drops back down.
 Recent turns are kept whole, because that is where pronouns point: a summary of
 "the user asked about the deploy script" cannot resolve "run it again".
 
-See [Models](models) for how the size of that window is chosen.
+See [Models](models.md) for how the size of that window is chosen.
 
 ## Conversations
 

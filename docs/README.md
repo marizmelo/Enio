@@ -2,6 +2,7 @@
 title: Home
 layout: default
 nav_order: 1
+permalink: /
 ---
 
 # Enio
@@ -18,24 +19,24 @@ No API keys. No account. Nothing leaves your computer.
 
 | | |
 |---|---|
-| [Getting started](getting-started) | Install it, run it, grant the permissions |
-| [Chatting](chatting) | The conversation loop, `/skill`, `@mention`, commands |
-| [Controlling your Mac](mac-control) | Open apps, read windows, propose and approve plans |
-| [Models](models) | Switching models, and what the context budget means |
+| [Getting started](getting-started.md) | Install it, run it, grant the permissions |
+| [Chatting](chatting.md) | The conversation loop, `/skill`, `@mention`, commands |
+| [Controlling your Mac](mac-control.md) | Open apps, read windows, propose and approve plans |
+| [Models](models.md) | Switching models, and what the context budget means |
 
 ## Everything else
 
 | | |
 |---|---|
-| [Memory](memory) | Facts, preferences, examples, and the knowledge graph |
-| [Agents and routing](agents) | Why there are six specialists and how one gets picked |
-| [Browsing](browsing) | Reading the web as a session |
-| [Skills](skills) | Teaching it know-how, in markdown, with no code |
-| [Scheduled tasks](tasks) | Cron-driven runs through the ordinary turn path |
-| [MCP servers](mcp) | Adding third-party tools |
-| [Configuration](configuration) | Every environment variable |
-| [Remote access](remote-access) | Reaching it from a phone or another network |
-| [Troubleshooting](troubleshooting) | When something does not work |
+| [Memory](memory.md) | Facts, preferences, examples, and the knowledge graph |
+| [Agents and routing](agents.md) | Why there are six specialists and how one gets picked |
+| [Browsing](browsing.md) | Reading the web as a session |
+| [Skills](skills.md) | Teaching it know-how, in markdown, with no code |
+| [Scheduled tasks](tasks.md) | Cron-driven runs through the ordinary turn path |
+| [MCP servers](mcp.md) | Adding third-party tools |
+| [Configuration](configuration.md) | Every environment variable |
+| [Remote access](remote-access.md) | Reaching it from a phone or another network |
+| [Troubleshooting](troubleshooting.md) | When something does not work |
 
 ---
 

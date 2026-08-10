@@ -11,6 +11,11 @@ description: A local AI agent with tools, memory and desktop control. Nothing le
 remote_theme: just-the-docs/just-the-docs
 plugins:
   - jekyll-remote-theme
+  # Rewrites links written as `page.md` to the URL Jekyll generates. Without
+  # it a link that works when browsing the repo 404s on the published site,
+  # and writing them the other way breaks the repo instead. GitHub Pages
+  # enables this by default; naming it keeps a local `jekyll serve` honest.
+  - jekyll-relative-links
 
 search_enabled: true
 heading_anchors: true
@@ -25,6 +30,12 @@ color_scheme: dark
 # Nothing here is a Jekyll page.
 exclude:
   - images/README.md
+
+# README.md is the site root via its own permalink, so Jekyll should not also
+# publish it at /README.
+defaults:
+  - scope: { path: "" }
+    values: { layout: default }
 
 callouts:
   note:

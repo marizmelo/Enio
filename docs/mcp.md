@@ -7,7 +7,7 @@ nav_order: 11
 # MCP servers
 
 Third-party tools over the Model Context Protocol. Use these for **capability**
-Enio does not have; use a [skill](skills) for know-how.
+Enio does not have; use a [skill](skills.md) for know-how.
 
 ```sh
 enio mcp-init        # writes a starter ~/.enio/mcp.json

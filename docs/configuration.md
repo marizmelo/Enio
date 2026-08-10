@@ -35,7 +35,7 @@ and old variables still work.
 | `ENIO_TEMP` | `1.0` — classifiers override this to 0 themselves |
 | `ENIO_TOP_P` | backend default |
 | `ENIO_MAX_TOKENS` | reply cap |
-| `ENIO_CONTEXT_BUDGET` | per model — see [Models](models) |
+| `ENIO_CONTEXT_BUDGET` | per model — see [Models](models.md) |
 | `ENIO_HISTORY_WINDOW` | `40` messages before folding |
 | `ENIO_PROMPT_CACHE_GB` | 1/12th of RAM, clamped 1–4 |
 
@@ -90,4 +90,4 @@ and old variables still work.
 Binding the agent to anything other than loopback exposes an endpoint that can
 run shell commands. Auth applies on loopback too — a web page you have open can
 POST to `127.0.0.1`, and origin checks are not a boundary. Prefer a tunnel; see
-[Remote access](remote-access).
+[Remote access](remote-access.md).
