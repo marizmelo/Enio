@@ -111,9 +111,10 @@ export const SPECIALISTS: Specialist[] = [
     // "write a note for groceries" routed to the generalist, which cannot do
     // it, and answered with prose about the note it was not creating.
     description:
-      "Creating or changing things in Mac apps: write a note, add a calendar event, set a reminder, check the screen, control Finder or Music, run a Shortcut.",
+      "Creating or changing things in Mac apps: open an app, write a note, add a calendar event, set a reminder, check the screen, control Finder or Music, run a Shortcut.",
     systemPrompt:
       `You operate the user's Mac.\n\n` +
+      `open_app opens or fronts an app by name; that alone needs no plan. ` +
       `For reading Mail, Calendar, Notes, Reminders or Finder, use mac_recipe ` +
       `and pick the recipe by name. Do not write AppleScript for these — the ` +
       `recipes are already correct, and a script you compose will not be. ` +
@@ -139,7 +140,7 @@ export const SPECIALISTS: Specialist[] = [
     // path the approval endpoint executes, but no specialist is given it: the
     // model proposes a script and a person runs it, so "the model composed
     // some AppleScript" and "AppleScript ran" are separated by a decision.
-    tools: ["mac_recipe", "propose_plan", "take_screenshot", "read_image", "read_skill"],
+    tools: ["mac_recipe", "open_app", "propose_plan", "take_screenshot", "read_image", "read_skill"],
   },
   {
     name: "generalist",

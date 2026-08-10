@@ -71,6 +71,16 @@ describe("resolving an app name", () => {
     assert.match(out.reason, /Google Chrome/);
   });
 
+  test("resolving against the installed list says installed, not running", () => {
+    // open_app's whole point is launching what is NOT running; an error
+    // claiming the app "is not running" would be telling the user the tool's
+    // own precondition is the problem.
+    const out = resolveApp("Photoshop", ["Calendar", "Spotify"], "installed");
+    assert.equal(out.ok, false);
+    assert.match(out.reason, /not installed/);
+    assert.match(out.reason, /Installed apps: Calendar, Spotify/);
+  });
+
   test("an empty app asks, rather than defaulting to something", () => {
     assert.equal(resolveApp("", RUNNING).ok, false);
   });

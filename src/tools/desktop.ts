@@ -12,6 +12,7 @@ import {
   AX_PARENT_BUDGET,
   AX_ROW_BUDGET,
   compileAction,
+  installedApps,
   KEY_CODES,
   permissionHint,
   resolveApp,
@@ -526,6 +527,44 @@ const STEP_ACTIONS: Array<[key: string, kind: ActionKind]> = [
   ["press", "key"],
 ];
 
+const openAppTool: ToolDef = {
+  name: "open_app",
+  description:
+    "Open a Mac app by name — Spotify, Calendar, Notes. Brings it to the front if already running. For anything beyond opening, use mac_recipe or propose_plan.",
+  origin: "builtin",
+  parameters: {
+    type: "object",
+    properties: {
+      app: {
+        type: "string",
+        description: 'The app\'s name, e.g. "Spotify". Partial names resolve: "chrome" finds Google Chrome.',
+      },
+    },
+    required: ["app"],
+  },
+  /**
+   * Direct, not via propose_plan, and ungated like mac_recipe. The gate is
+   * about irreversibility, and opening an app is the most reversible action
+   * there is -- quitting it undoes it. What keeps it safe is the same thing
+   * that keeps recipes safe: the name handed to `open` comes from resolving
+   * against the system's own installed-apps list, never from the model, so
+   * text the model read somewhere cannot steer this into running anything
+   * else. LaunchServices rather than an Apple Event, for the -600 reason
+   * recorded on the `open` plan action.
+   */
+  async run(args) {
+    const apps = await installedApps();
+    const resolved = resolveApp(String(args.app ?? ""), apps, "installed");
+    if (!resolved.ok) return resolved.reason;
+    try {
+      await run("open", ["-a", resolved.name], { timeout: 15_000 });
+      return `Opened ${resolved.name}.`;
+    } catch (err) {
+      return `Could not open ${resolved.name}: ${(err as Error & { stderr?: string }).stderr?.trim() || (err as Error).message}`;
+    }
+  },
+};
+
 const proposeTool: ToolDef = {
   name: "propose_plan",
   description:
@@ -703,6 +742,8 @@ const proposeTool: ToolDef = {
 };
 
 export const desktopTools: ToolDef[] = [
-  ...(recipesEnabled() ? [recipeTool] : []),
+  // open_app sits with the recipes, not behind the flag: the gate is about
+  // irreversibility, and opening an app is undone by quitting it.
+  ...(recipesEnabled() ? [recipeTool, openAppTool] : []),
   ...(desktopEnabled() ? [screenshotTool, appleScriptTool, proposeTool] : []),
 ];

@@ -124,9 +124,12 @@ export async function runningApps(): Promise<string[]> {
 export function resolveApp(
   raw: string,
   apps: string[],
+  /** What the list is a list of — "running" for the process list, "installed"
+   *  when resolving against what is on disk. Only the error wording changes. */
+  what: "running" | "installed" = "running",
 ): { ok: true; name: string } | { ok: false; reason: string } {
   const want = raw.trim().toLowerCase();
-  const listed = `Running apps: ${apps.join(", ")}`;
+  const listed = `${what === "running" ? "Running" : "Installed"} apps: ${apps.join(", ")}`;
   if (!want) return { ok: false, reason: `Which app? ${listed}` };
 
   const exact = apps.filter((a) => a.toLowerCase() === want);
@@ -143,7 +146,37 @@ export function resolveApp(
     }
   }
 
-  return { ok: false, reason: `"${raw}" is not running. ${listed}` };
+  return { ok: false, reason: `"${raw}" is not ${what}. ${listed}` };
+}
+
+/**
+ * Every app on disk, by the name `open -a` accepts.
+ *
+ * The closed list open_app chooses from. Scanned rather than typed for the
+ * same reason the model-switch list is: a name with a typo in it should be
+ * refused against what actually exists, not attempted. The running-process
+ * list is folded in because an app launched from a non-standard location is
+ * still openable by name once running.
+ */
+export async function installedApps(): Promise<string[]> {
+  const { readdirSync } = await import("node:fs");
+  const { homedir } = await import("node:os");
+  const names = new Set<string>();
+  for (const dir of ["/Applications", "/System/Applications", `${homedir()}/Applications`]) {
+    try {
+      for (const entry of readdirSync(dir)) {
+        if (entry.endsWith(".app")) names.add(entry.slice(0, -4));
+      }
+    } catch {
+      /* A missing directory contributes nothing. */
+    }
+  }
+  try {
+    for (const name of await runningApps()) names.add(name);
+  } catch {
+    /* Automation may be ungranted; the disk scan alone is still a list. */
+  }
+  return [...names].sort();
 }
 
 /* ---------- compiling an action into a script ---------------------------- */

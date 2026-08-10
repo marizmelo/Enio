@@ -86,8 +86,11 @@ describe("desktop control", () => {
     for (const mutating of ["run_applescript", "take_screenshot", "propose_plan"]) {
       assert.ok(!offered.includes(mutating), `${mutating} must stay behind ENIO_DESKTOP`);
     }
-    // Whatever is offered must be read-only and closed-list.
-    assert.deepEqual(offered, ["mac_recipe"]);
+    // Whatever is offered must be reversible and closed-list. open_app sits
+    // here deliberately: the gate is about irreversibility, and opening an
+    // app is undone by quitting it -- while the name it launches resolves
+    // against the system's installed-apps list, never model text.
+    assert.deepEqual(offered, ["mac_recipe", "open_app"]);
   });
 
   test("a saved recipe will not run with desktop mode off", async () => {

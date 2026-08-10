@@ -270,7 +270,9 @@ The gap scripting leaves is apps with no AppleScript dictionary. That is closed 
 you › tick "Open at Login" in System Settings
 ```
 
-Three recipes read it, and need no flag because reading is not irreversible:
+Opening an app needs no plan and no flag at all — "open Spotify" just does it. The name resolves against what is actually installed, so a typo is refused rather than guessed at, and quitting the app undoes it, which is the entire test the `ENIO_DESKTOP` gate applies.
+
+Three recipes read the tree, and need no flag because reading is not irreversible:
 
 - `running_apps` — what is currently open
 - `window_controls` — the front window's buttons and fields, by name
