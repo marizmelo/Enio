@@ -12,7 +12,7 @@ Everywhere: **Node.js 22+** and **git**.
 
 | Platform | Model | Disk | Notes |
 |---|---|---|---|
-| **macOS, Apple Silicon** | Maple, local | ~15GB | The fast path. 16GB RAM recommended; 8GB swaps. |
+| **macOS, Apple Silicon** | local, via MLX | ~15GB | The fast path. 16GB RAM recommended; 8GB swaps. |
 | **macOS, Intel** | Ollama | ~2GB | MLX needs Apple Silicon. |
 | **Linux** | Ollama | ~2GB | Fully supported. |
 | **Windows** | Ollama | ~2GB | Use WSL2 — `install.ps1` isn't written yet. |
@@ -42,6 +42,10 @@ else.
 
 **First run takes a while** on Apple Silicon — mostly the weights. Later runs
 start in about 30 seconds.
+
+The installer sets up Maple to give you something that works immediately. It is
+not the only option and not a commitment: see [Models](models.md) for what else
+runs and how to switch, which takes one click.
 
 ## Run it
 

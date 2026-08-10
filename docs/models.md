@@ -32,17 +32,48 @@ ENIO_MODEL=mlx-community/Qwen3-4B-Instruct-2507-4bit node dist/index.js start
 
 ## Adding a model
 
-Anything `mlx_lm` can load and that speaks tool calls. Download it once and it
-appears in the picker:
+Anything `mlx_lm` can load that is a **chat model** and can **call tools**.
+Download it once and it appears in the picker — the list is scanned from your
+Hugging Face cache, so nothing else is needed.
 
 ```sh
+# Downloads on first use, then serves it. Ctrl-C once it has finished
+# fetching; the picker will list it from then on.
 ~/.enio/runtime/.venv/bin/python -m mlx_lm.server \
   --model mlx-community/Qwen3-4B-Instruct-2507-4bit --port 8099
 ```
 
-Vision, speech and embedding models in the cache are filtered out — they have
-their own servers, and offering one here would be offering a ninety-second
-failed load.
+### Models worth trying
+
+Every entry below was checked against the Hugging Face API — they exist and are
+MLX 4-bit builds. Sizes are the download; resident memory is roughly the same
+plus the prompt cache.
+
+| Model | Size | Notes |
+|---|---|---|
+| `deepgrove/maple-preview` | ~5GB | The bundled default. 20B total, ~1B active, ternary. Fastest per token. |
+| `mlx-community/Qwen3-1.7B-4bit` | ~1GB | The small option. Fits anywhere; weakest at multi-step tool use. |
+| `mlx-community/Qwen3-4B-Instruct-2507-4bit` | ~2.3GB | Measured here: routing 8/8, and it produces valid plans. A good default on 16GB. |
+| `mlx-community/Qwen3-8B-4bit` | ~4.5GB | More capable, still comfortable on 16GB. |
+| `mlx-community/Qwen3-14B-4bit` | ~8GB | Wants 24GB or more. |
+| `mlx-community/Qwen3-30B-A3B-4bit` | ~17GB | Mixture-of-experts: 30B total, 3B active. Wants 32GB+. |
+| `mlx-community/Llama-3.2-3B-Instruct-4bit` | ~1.8GB | Small and widely supported. |
+| `mlx-community/Mistral-7B-Instruct-v0.3-4bit` | ~4GB | Solid general model. |
+
+{: .note }
+Only Maple and Qwen3-4B have been measured *in Enio*. The rest are listed
+because they load and speak the right protocol, not because their tool-calling
+was benchmarked here — see [the routing comparison](#which-model-to-run) for
+what "measured" means.
+
+**Whether a model can call tools matters more than its size.** A model that
+cannot will chat happily and never use a single tool, which looks like Enio
+being broken rather than the model being unsuitable. Instruct-tuned models from
+the families above all can; base models generally cannot.
+
+Vision, speech and embedding models in your cache are filtered out of the
+picker — they have their own servers, and offering one would be offering a
+ninety-second failed load.
 
 ## The context budget
 

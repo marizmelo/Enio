@@ -14,7 +14,7 @@ No API keys. No account. Nothing leaves your computer.
 
 ## Install
 
-Requires **Node.js 22+** and **git**. On Apple Silicon it sets up [Maple](https://huggingface.co/deepgrove/maple-preview) locally — a 20B-A1B ternary model that decodes at ~218 tok/s. Everywhere else it points at Ollama; memory, agents, tools and the inspector are identical.
+Requires **Node.js 22+** and **git**. On Apple Silicon the installer sets up a local model to get you started; everywhere else it points at Ollama. Memory, agents, tools and the inspector are identical either way.
 
 ```sh
 git clone https://github.com/marizmelo/Enio enio
@@ -60,13 +60,13 @@ See **[Getting started](docs/getting-started.md)** for permissions, the workspac
 
 **Learns your know-how.** Skills are markdown, not code — a tool lets it send email, a skill tells it how *you* want emails written. → [Skills](docs/skills.md)
 
-**Swaps models.** Maple, or any MLX chat model in your Hugging Face cache, switched from the status bar without losing your conversation. → [Models](docs/models.md)
+**Runs the model you choose.** Any MLX chat model that can call tools — switched from the status bar without losing your conversation, and the context budget follows the model rather than being fixed. Ships with [Maple](https://huggingface.co/deepgrove/maple-preview) (20B-A1B ternary, ~218 tok/s) and works well with the Qwen3 family. → [Models](docs/models.md)
 
 ---
 
 ## How it's built
 
-**One constraint drives the design: the model is small.** Maple runs ~1B active parameters. A model that size picks tools badly once it can see more than a handful, emits malformed JSON often enough that repair is a normal path, and is far better at *choosing from a short list* than at generating freely.
+**One constraint drives the design: the model is small.** Enio is built to run well on a few billion parameters, not a few hundred. A model that size picks tools badly once it can see more than a handful, emits malformed JSON often enough that repair is a normal path, and is far better at *choosing from a short list* than at generating freely.
 
 So nearly everything turns generation into selection. A router picks one of six agents, each with at most six tools. Clicks are names read from the accessibility tree. Memory extraction uses a closed vocabulary of nine relations. Recipes are tested scripts selected rather than written.
 
