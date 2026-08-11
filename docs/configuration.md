@@ -75,7 +75,7 @@ and old variables still work.
 | `ENIO_VISION_KEEP_ALIVE` | `0` — unload immediately after answering |
 | `ENIO_VOICE` / `_MODEL` / `_MODEL_FAST` | dictation |
 | `ENIO_TTS` / `_MODEL` / `_VOICE` | speech |
-| `SEARXNG_URL` | unset — keyless web search |
+| `SEARXNG_URL` | unset — falls back to DuckDuckGo |
 | `ENIO_BROWSER_TIMEOUT` | page load timeout |
 
 ## Network

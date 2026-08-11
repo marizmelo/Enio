@@ -7,14 +7,23 @@ export { isBlockedHost };
  * Web access.
  *
  * Search resolves through providers in priority order: a self-hosted SearXNG
- * instance first, then Brave, then Tavily. SearXNG is preferred because it needs
- * no key and no account — it aggregates ~70 engines behind one local API, and
- * absorbs the maintenance burden of engines changing their markup, which is the
- * part you really don't want to own yourself.
+ * instance, then Brave, then Tavily, then DuckDuckGo's own no-JavaScript
+ * endpoint. The first three are chosen deliberately and win when configured;
+ * the last needs nothing at all, which is the point of it.
  *
- * Scraping Google or Bing directly is deliberately not offered. It violates
- * their terms, it breaks constantly because they actively defend against it, and
- * a headless browser only delays that rather than solving it.
+ * DuckDuckGo is last but not optional, because the alternative was worse than
+ * a fragile provider: with no key and no Docker, `web_search` was withheld
+ * entirely and the model was left to reach the web through `web_fetch` and
+ * `browse` -- which means guessing a URL. Watching a 4B model guess
+ * cnet.com/best-products/best-bluetooth-speakers-under-150-dollars, land on a
+ * 404 and report that the page does not exist is what this exists to stop. A
+ * search that sometimes fails beats a URL that is always a guess.
+ *
+ * Scraping Google or Bing is still deliberately not offered. They actively
+ * defend against it and a headless browser only delays the breakage. DDG
+ * publishes this endpoint for clients without JavaScript, it is plain HTML
+ * over a plain fetch with no browser involved, and when it does break the
+ * failure is one provider returning nothing rather than a wrong answer.
  */
 
 interface SearchHit {
@@ -85,13 +94,89 @@ async function tavilySearch(query: string, count: number): Promise<SearchHit[]> 
   }));
 }
 
-export type SearchProvider = "searxng" | "brave" | "tavily" | null;
+export type SearchProvider = "searxng" | "brave" | "tavily" | "duckduckgo";
 
 export function activeProvider(): SearchProvider {
   if (config.searxngUrl) return "searxng";
   if (config.braveApiKey) return "brave";
   if (config.tavilyApiKey) return "tavily";
-  return null;
+  return "duckduckgo";
+}
+
+/**
+ * DuckDuckGo's HTML-only endpoint, which exists for clients that cannot run
+ * JavaScript and is therefore a plain document rather than an app.
+ *
+ * Parsed with regular expressions on purpose. A DOM parser here would be more
+ * correct and no more durable -- the thing that breaks is the class names, not
+ * the nesting -- and this is one page shape, not arbitrary HTML.
+ *
+ * Sponsored rows are dropped. They are marked as such in the markup, and an
+ * advert presented to a model as a search result is an advert it will
+ * summarise as a recommendation.
+ */
+const DDG_LITE = "https://lite.duckduckgo.com/lite/";
+const RESULT_LINK = /<a[^>]+href=["']([^"']+)["'][^>]*class=['"]result-link['"][^>]*>([\s\S]*?)<\/a>/i;
+const RESULT_SNIPPET = /<td[^>]*class=['"]result-snippet['"][^>]*>([\s\S]*?)<\/td>/i;
+
+async function duckduckgoSearch(query: string, count: number): Promise<SearchHit[]> {
+  const res = await fetch(`${DDG_LITE}?${new URLSearchParams({ q: query })}`, {
+    headers: {
+      // A real browser string. The endpoint serves a different, emptier page
+      // to something that announces itself as a script.
+      "user-agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+      "accept-language": "en-US,en;q=0.9",
+    },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) throw new Error(`DuckDuckGo returned HTTP ${res.status}`);
+  return parseDuckDuckGo(await res.text(), count);
+}
+
+/** Exported for tests: the parse is the fragile half, and it should be
+ *  checkable against a saved page rather than against the live web. */
+export function parseDuckDuckGo(html: string, count: number): SearchHit[] {
+  const hits: SearchHit[] = [];
+  let pending: SearchHit | null = null;
+  for (const row of html.split(/<tr\b/i)) {
+    const sponsored = /class=["']?result-sponsored/.test(row);
+    const link = RESULT_LINK.exec(row);
+    if (link) {
+      pending = null;
+      if (sponsored) continue;
+      const url = unwrapRedirect(decodeEntities(link[1]!));
+      // Everything DDG links to itself is navigation, help or an ad.
+      if (!/^https?:\/\//.test(url) || /(^|\.)duckduckgo\.com/.test(hostOf(url))) continue;
+      pending = { title: decodeEntities(stripTags(link[2]!)), url, snippet: "" };
+      hits.push(pending);
+      continue;
+    }
+    // The snippet is in a sibling row, so it attaches to the link just seen.
+    const snippet = RESULT_SNIPPET.exec(row);
+    if (snippet && pending && !sponsored) {
+      pending.snippet = decodeEntities(stripTags(snippet[1]!));
+      pending = null;
+    }
+  }
+  return hits.slice(0, count);
+}
+
+/** DDG wraps outbound links as /l/?uddg=<encoded>. The real URL is the point. */
+function unwrapRedirect(href: string): string {
+  const wrapped = /[?&]uddg=([^&]+)/.exec(href);
+  const url = wrapped ? decodeURIComponent(wrapped[1]!) : href;
+  return url.startsWith("//") ? `https:${url}` : url;
+}
+
+/** The host, or "" when the string is not a URL at all. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
 }
 
 async function runSearch(query: string, count: number): Promise<SearchHit[]> {
@@ -99,7 +184,7 @@ async function runSearch(query: string, count: number): Promise<SearchHit[]> {
     case "searxng": return searxngSearch(query, count);
     case "brave":   return braveSearch(query, count);
     case "tavily":  return tavilySearch(query, count);
-    default:        throw new Error("No search provider configured.");
+    default:        return duckduckgoSearch(query, count);
   }
 }
 
@@ -303,9 +388,9 @@ const renderedFetchTool: ToolDef = {
 };
 
 export function buildWebTools(): ToolDef[] {
-  const tools: ToolDef[] = [];
-  if (activeProvider()) tools.push(searchTool);
-  tools.push(fetchTool);
+  // Always offered now: there is a provider that needs no configuration, so
+  // there is no state in which searching is impossible while fetching is not.
+  const tools: ToolDef[] = [searchTool, fetchTool];
   if (playwrightAvailable()) tools.push(renderedFetchTool);
   return tools;
 }

@@ -139,7 +139,15 @@ export function App() {
     // resumed conversation whose tail happened to be a stalled-looking answer
     // was read as the model failing to respond -- the fix is for history to
     // say it is history.
-    const msgs = transcript.map((m) => ({ role: m.role, content: m.content, restored: true }));
+    const msgs = transcript.map((m) => ({
+      role: m.role,
+      content: m.content,
+      // Rebuilt server-side from the trace, so a resumed reply keeps the
+      // badges and the pages it read rather than arriving as bare text.
+      tools: m.tools ?? [],
+      sources: m.sources ?? [],
+      restored: true,
+    }));
     const lastTs = transcript.length > 0 ? transcript[transcript.length - 1].ts : null;
     if (lastTs) msgs[msgs.length - 1].restoredAt = lastTs;
     try {

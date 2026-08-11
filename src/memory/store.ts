@@ -4,6 +4,7 @@ import { cosine, fromBlob, ftsAvailable, getDb, toBlob } from "./db.js";
 import { embed, embedBatch } from "./embed.js";
 import { chunkTranscript, extractTriples, summarize } from "./extract.js";
 import type { Triple } from "./schema.js";
+import { extractSources, type Source } from "../sources.js";
 
 const now = () => Date.now();
 
@@ -502,16 +503,79 @@ export function listConversations(limit = 50): ConversationSummary[] {
   }));
 }
 
-/** The transcript, oldest first, for restoring a conversation into a client. */
-export function conversationMessages(
-  sessionId: string,
-): Array<{ role: string; content: string; ts: number }> {
-  return getDb()
+export interface StoredMessage {
+  role: string;
+  content: string;
+  ts: number;
+  /** Tools this reply ran, in order, repeats included. */
+  tools?: string[];
+  /** Pages those tools read, grouped by the tool that read them. */
+  sources?: Array<{ tool: string; items: Source[] }>;
+}
+
+/**
+ * The transcript, oldest first, for restoring a conversation into a client.
+ *
+ * The reply is in `messages`; what produced it is in the trace. Restoring only
+ * the text made a resumed conversation quietly poorer than a live one -- the
+ * tool badges and the list of pages read were on screen a moment before the
+ * restart and gone after it, which reads as the app having lost them rather
+ * than as never having stored them.
+ *
+ * Reconstructed from `turn_steps` rather than by adding columns here. The
+ * trace already records every tool call with its arguments and its output, so
+ * a new column would be a second copy of that, kept in step by hand; deriving
+ * instead means conversations recorded before any of this existed come back
+ * with their badges too. It also holds the invariant that raw records are the
+ * source of truth and everything else is derived.
+ */
+export function conversationMessages(sessionId: string): StoredMessage[] {
+  const db = getDb();
+  const messages = db
     .prepare(
       `SELECT role, content, ts FROM messages
         WHERE session_id = ? ORDER BY ts ASC, id ASC`,
     )
-    .all(sessionId) as Array<{ role: string; content: string; ts: number }>;
+    .all(sessionId) as StoredMessage[];
+
+  let steps: Array<{ startedAt: number; name: string; args: string; output: string }>;
+  try {
+    steps = db
+      .prepare(
+        `SELECT t.started_at AS startedAt, s.name, s.args, s.output
+           FROM turns t JOIN turn_steps s ON s.turn_id = t.id
+          WHERE t.session_id = ? AND s.kind = 'tool' AND s.name IS NOT NULL
+          ORDER BY t.started_at ASC, s.seq ASC`,
+      )
+      .all(sessionId) as typeof steps;
+  } catch {
+    // Losing decoration must never cost the transcript, which is the same rule
+    // recordTurn follows in the other direction.
+    return messages;
+  }
+  if (steps.length === 0) return messages;
+
+  // Matched by time rather than by counting turns off against replies. A turn
+  // whose trace insert failed would shift every later pairing by one, and
+  // silently attaching one reply's tools to another is worse than showing
+  // none: it is a wrong answer to "where did this come from".
+  const assistants = messages.filter((m) => m.role === "assistant");
+  for (const step of steps) {
+    const target = assistants.find((m) => m.ts >= step.startedAt);
+    if (!target) continue;
+    (target.tools ??= []).push(step.name);
+
+    let args: Record<string, unknown> = {};
+    try {
+      args = JSON.parse(step.args || "{}");
+    } catch {
+      /* an unparseable argument record still leaves the tool name usable */
+    }
+    const items = extractSources(step.name, args, step.output ?? "");
+    if (items.length > 0) (target.sources ??= []).push({ tool: step.name, items });
+  }
+
+  return messages;
 }
 
 /**

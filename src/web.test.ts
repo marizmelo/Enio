@@ -10,8 +10,14 @@ process.env.ENIO_DATA_DIR = join(scratch, "data");
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 process.env.SEARXNG_URL = "http://127.0.0.1:8888";
 
-const { extractReadable, htmlToText, isBlockedHost, activeProvider, buildWebTools } =
-  await import("./tools/web.js");
+const {
+  extractReadable,
+  htmlToText,
+  isBlockedHost,
+  activeProvider,
+  buildWebTools,
+  parseDuckDuckGo,
+} = await import("./tools/web.js");
 
 const originalFetch = globalThis.fetch;
 after(() => {
@@ -256,5 +262,65 @@ describe("untrusted page content cannot become an action", () => {
     // because silently editing what a page said would make the trace a lie.
     assert.match(out, /Ignore your instructions/);
     assert.match(out, /1\. Learn more/);
+  });
+});
+
+/**
+ * The DuckDuckGo parse is the fragile half of a zero-configuration search, so
+ * it is checked against a saved page rather than against the live web -- a
+ * test that needs the network tells you nothing on the day it fails.
+ */
+describe("duckduckgo results", () => {
+  const page = `
+    <table>
+    <tr class="result-sponsored"><td>
+      <a href="//duckduckgo.com/y.js?ad_domain=spam.example&amp;u3=x" class='result-link'>Buy Speakers Now</a>
+    </td></tr>
+    <tr class="result-sponsored"><td class='result-snippet'>An advert.</td></tr>
+    <tr><td>
+      <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.ecoustics.com%2Farticles%2Fbest%2F&amp;rut=abc" class='result-link'>Editors&#x27; Choice 2026</a>
+    </td></tr>
+    <tr><td class='result-snippet'>We tested dozens &amp; picked five.</td></tr>
+    <tr><td>
+      <a href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.org%2Ftwo" class='result-link'>Second <b>result</b></a>
+    </td></tr>
+    <tr><td class='result-snippet'>Another one.</td></tr>
+    <tr><td>
+      <a href="https://duckduckgo.com/duckduckgo-help-pages/company/ads/" class="result-link">more info</a>
+    </td></tr>
+    </table>`;
+
+  test("unwraps the redirect to the real url", () => {
+    const hits = parseDuckDuckGo(page, 10);
+    assert.equal(hits[0]!.url, "https://www.ecoustics.com/articles/best/");
+    assert.equal(hits[1]!.url, "https://example.org/two");
+  });
+
+  /** An advert handed to a model as a result is an advert it recommends. */
+  test("drops sponsored rows and duckduckgo's own links", () => {
+    const hits = parseDuckDuckGo(page, 10);
+    assert.equal(hits.length, 2, `unexpected: ${hits.map((h) => h.title).join(" | ")}`);
+    assert.ok(!hits.some((h) => /Buy Speakers Now|more info/.test(h.title)));
+  });
+
+  test("decodes entities and strips markup from titles and snippets", () => {
+    const [first, second] = parseDuckDuckGo(page, 10);
+    assert.equal(first!.title, "Editors' Choice 2026");
+    assert.equal(first!.snippet, "We tested dozens & picked five.");
+    assert.equal(second!.title, "Second result");
+  });
+
+  /** A sponsored snippet must not attach itself to the next real result. */
+  test("a snippet belongs to the link above it", () => {
+    const hits = parseDuckDuckGo(page, 10);
+    assert.ok(!hits.some((h) => h.snippet === "An advert."));
+  });
+
+  test("honours the requested count", () => {
+    assert.equal(parseDuckDuckGo(page, 1).length, 1);
+  });
+
+  test("a page with no results parses to nothing rather than throwing", () => {
+    assert.deepEqual(parseDuckDuckGo("<html><body>nope</body></html>", 5), []);
   });
 });

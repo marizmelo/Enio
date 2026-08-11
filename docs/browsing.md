@@ -10,7 +10,7 @@ Three ways to reach the web, in increasing order of involvement.
 
 | Tool | For |
 |---|---|
-| `web_search` | Finding pages. Keyless via a local SearXNG, or Brave/Tavily with a key. |
+| `web_search` | Finding pages. Works with no setup; better with a provider. |
 | `web_fetch` | One page, plain HTML, no session. The quick path. |
 | `browse` | Reading a page and following links, keeping the session between calls. |
 
@@ -54,11 +54,40 @@ npm install playwright && npx playwright install chromium
 
 Without it, `browse` isn't offered at all.
 
-## Search without a key
+## Search
+
+**Search works out of the box.** With nothing configured, `web_search` uses
+DuckDuckGo's HTML-only endpoint — the page it serves to clients that cannot run
+JavaScript. Plain HTML over a plain fetch, no browser, no key, no container.
+Sponsored rows are dropped before the model sees them: an advert handed to a
+model as a result is an advert it will summarise as a recommendation.
+
+That is last in the order, not first. Anything configured wins:
+
+| Order | Provider | Set |
+|---|---|---|
+| 1 | SearXNG | `SEARXNG_URL` |
+| 2 | Brave | `BRAVE_API_KEY` |
+| 3 | Tavily | `TAVILY_API_KEY` |
+| 4 | DuckDuckGo | nothing — the default |
 
 ```sh
 docker run -d --name searxng -p 8888:8080 searxng/searxng
 export SEARXNG_URL=http://localhost:8888
 ```
 
-Or set a `BRAVE_API_KEY` / `TAVILY_API_KEY` instead.
+SearXNG is still the one to run if you search a lot. It aggregates ~70 engines
+behind one local API and absorbs the maintenance burden of engines changing
+their markup — which is exactly the burden the DuckDuckGo path carries itself.
+
+**Why have the fragile one at all?** Because the alternative was worse. With no
+key and no Docker, `web_search` used to be withheld entirely, which left the
+model reaching for `web_fetch` and `browse` — and that means *guessing a URL*. A
+4B model guessing `cnet.com/best-products/best-bluetooth-speakers-under-150-dollars`,
+landing on a 404 and reporting that no such page exists is the failure this
+removes. A search that occasionally breaks beats a URL that is always a guess,
+and when it does break the result is one provider returning nothing rather than
+a confident wrong answer.
+
+Scraping Google or Bing is still not offered. They actively defend against it
+and a headless browser only delays the breakage.
