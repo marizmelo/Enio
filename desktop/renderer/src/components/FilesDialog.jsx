@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useThumbnail } from "@/components/AttachmentChips";
+import { FileViewer } from "@/components/FileViewer";
 import { listFiles, removeConversationFiles, removeFile } from "@/lib/recipes";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +41,10 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse }) {
   const [expanded, setExpanded] = useState({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  // Which set the arrows walk. Opening from a conversation should step through
+  // that conversation, not through every file on disk — so the set is captured
+  // at the moment of opening rather than derived from one global list.
+  const [viewing, setViewing] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -89,17 +94,28 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse }) {
   const others = conversations.filter((c) => c.id !== conversationId);
   const workspace = data?.workspace ?? [];
 
-  const row = (file, { canReuse }) => (
+  const row = (file, siblings) => (
     <FileRow
       key={file.path}
       file={file}
       busy={busy === file.path}
-      onReuse={canReuse ? () => onReuse([file.path]) : null}
+      onOpen={() => setViewing({ files: siblings, index: siblings.indexOf(file) })}
+      onReuse={() => onReuse([file.path])}
       onRemove={() => drop(file.path)}
     />
   );
 
   return (
+    <>
+    {viewing && (
+      <FileViewer
+        open
+        files={viewing.files}
+        index={viewing.index}
+        onIndex={(index) => setViewing((v) => ({ ...v, index }))}
+        onOpenChange={(next) => !next && setViewing(null)}
+      />
+    )}
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[80vh] gap-0 overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
@@ -120,7 +136,7 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse }) {
         <section className="mt-4">
           <h3 className="text-xs font-medium text-muted-foreground">This conversation</h3>
           {mine ? (
-            <ul className="mt-2 space-y-1">{mine.files.map((f) => row(f, { canReuse: true }))}</ul>
+            <ul className="mt-2 space-y-1">{mine.files.map((f) => row(f, mine.files))}</ul>
           ) : (
             <p className="mt-2 text-xs text-muted-foreground">
               Nothing attached yet. Files you attach here stay with this conversation.
@@ -177,7 +193,7 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse }) {
                   </div>
                   {expanded[conv.id] && (
                     <ul className="space-y-1 border-t p-2">
-                      {conv.files.map((f) => row(f, { canReuse: true }))}
+                      {conv.files.map((f) => row(f, conv.files))}
                     </ul>
                   )}
                 </li>
@@ -193,32 +209,43 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse }) {
               Files you or the agent put in <code>~/enio-workspace</code>, rather than
               attached to a conversation.
             </p>
-            <ul className="mt-2 space-y-1">{workspace.map((f) => row(f, { canReuse: true }))}</ul>
+            <ul className="mt-2 space-y-1">{workspace.map((f) => row(f, workspace))}</ul>
           </section>
         )}
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
-function FileRow({ file, busy, onReuse, onRemove }) {
+function FileRow({ file, busy, onOpen, onReuse, onRemove }) {
   const thumb = useThumbnail(file.image ? file.path : "");
 
   return (
     <li className="flex items-center gap-2.5 rounded border p-2 text-sm">
-      {thumb ? (
-        <img src={thumb} alt="" className="size-9 shrink-0 rounded object-cover" />
-      ) : (
-        <span className="flex size-9 shrink-0 items-center justify-center rounded bg-muted">
-          <FileText className="size-4 text-muted-foreground" />
+      {/* The name and the thumbnail open it. That is what clicking a file
+          means everywhere else, and the row's other four actions are icons
+          precisely so this one can be the whole rest of the row. */}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 flex-1 items-center gap-2.5 text-left hover:opacity-80"
+        title={`Open ${file.name}`}
+      >
+        {thumb ? (
+          <img src={thumb} alt="" className="size-9 shrink-0 rounded object-cover" />
+        ) : (
+          <span className="flex size-9 shrink-0 items-center justify-center rounded bg-muted">
+            <FileText className="size-4 text-muted-foreground" />
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate">{file.name}</span>
+          <span className="block text-xs text-muted-foreground tabular-nums">
+            {size(file.bytes)}
+          </span>
         </span>
-      )}
-      <span className="min-w-0 flex-1">
-        <span className="block truncate">{file.name}</span>
-        <span className="block text-xs text-muted-foreground tabular-nums">
-          {size(file.bytes)}
-        </span>
-      </span>
+      </button>
       {onReuse && (
         <Button
           size="icon"

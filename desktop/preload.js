@@ -48,6 +48,17 @@ contextBridge.exposeInMainWorld("maple", {
     return ipcRenderer.invoke("reveal-file", relPath);
   },
 
+  /** A file's contents for the viewer: an image data URL, decoded text, or a
+   *  kind saying why neither is on offer. */
+  readFilePreview(relPath) {
+    return ipcRenderer.invoke("read-file-preview", relPath);
+  },
+
+  /** Open a PDF in its own window, which is where Chromium's viewer lives. */
+  openPdf(relPath) {
+    return ipcRenderer.invoke("open-pdf", relPath);
+  },
+
   /**
    * The real path behind a dropped File. Electron removed File.path from the
    * renderer, and webUtils is the supported replacement — it must be called

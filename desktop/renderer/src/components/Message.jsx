@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Thinking } from "@/components/Thinking";
 import { Widget } from "@/components/Widget";
 import { AttachmentPreviews } from "@/components/AttachmentPreviews";
+import { SearchResults, SourcesFooter } from "@/components/Sources";
 import { MessageActions } from "@/components/MessageActions";
 import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,28 +18,36 @@ export function Message({
   content,
   tools = [],
   widgets = [],
+  sources = [],
   files = [],
   notices = [],
   thinking = 0,
   startedAt = null,
   error = false,
   streaming = false,
+  onOpenFile,
 }) {
   const isUser = role === "user";
   const waiting = streaming && !isUser && !error && content.length === 0;
 
   return (
     <div className={cn("flex flex-col gap-1.5", isUser ? "items-end" : "items-start")}>
-      {isUser && files.length > 0 && <AttachmentPreviews names={files} />}
+      {isUser && files.length > 0 && <AttachmentPreviews names={files} onOpen={onOpenFile} />}
       {tools.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {tools.map((name, i) => (
-            <Badge key={`${name}-${i}`} variant="secondary" className="font-mono text-[11px]">
+          {countCalls(tools).map(({ name, calls }) => (
+            <Badge key={name} variant="secondary" className="font-mono text-[11px]">
               {name}
+              {calls > 1 && <span className="ml-1 opacity-60">×{calls}</span>}
             </Badge>
           ))}
         </div>
       )}
+
+      {/* What the searches returned, above the answer written from them. A
+          model this size summarises loosely, and the hits are both the check
+          on that and often the thing actually wanted. */}
+      {searchHits(sources).length > 0 && <SearchResults items={searchHits(sources)} />}
 
       {waiting ? (
         <Thinking startedAt={startedAt} chars={thinking} />
@@ -68,6 +77,8 @@ export function Message({
       {!waiting && !streaming && !error && content.trim() && (
         <MessageActions content={content} canSpeak={!isUser} />
       )}
+
+      <SourcesFooter sources={sources} />
 
       {/* Addressed to the reader, not the model: how the attachment was read
           and what would read it better. Kept out of the prompt on purpose --
@@ -119,4 +130,28 @@ async function copyCodeBlock(event) {
   setTimeout(() => {
     button.textContent = previous;
   }, 1200);
+}
+
+/**
+ * One badge per tool, with how many times it ran.
+ *
+ * A turn that searches four times used to print four identical badges, which
+ * says nothing the first one did not and pushes everything else down the
+ * screen. Ordered by first use, so the row still reads as the sequence of what
+ * happened rather than as an alphabetised inventory.
+ */
+function countCalls(tools) {
+  const order = [];
+  const counts = new Map();
+  for (const name of tools) {
+    if (!counts.has(name)) order.push(name);
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return order.map((name) => ({ name, calls: counts.get(name) }));
+}
+
+/** Hits from searches only. A fetched page is a source but not a result --
+ *  it was already chosen, so listing it as something to choose is noise. */
+function searchHits(sources) {
+  return (sources ?? []).filter((s) => s.tool === "web_search").flatMap((s) => s.items ?? []);
 }

@@ -637,6 +637,107 @@ ipcMain.handle("read-attachment", (_event, name) => {
   }
 });
 
+/**
+ * A file's contents, for the in-app viewer.
+ *
+ * Deliberately separate from read-attachment, which exists to paint a 32px
+ * chip and refuses anything over 4MB. A viewer is the opposite trade: it is
+ * showing one file at full size because the user asked to look at it, so the
+ * ceiling is high enough for a photo and the text limit is generous enough for
+ * a log.
+ *
+ * The *kind* is decided here rather than in the renderer, because it is
+ * decided from the bytes as well as the name -- a file has to be readable as
+ * UTF-8 to be shown as text, and extension alone does not know that.
+ */
+const VIEW_IMAGE = /\.(png|jpe?g|gif|webp|bmp|avif|svg)$/i;
+const VIEW_TEXT =
+  /\.(txt|md|markdown|json|jsonl|csv|tsv|log|ya?ml|toml|ini|conf|xml|html?|css|js|jsx|ts|tsx|py|rb|go|rs|java|c|h|cpp|sh|zsh|sql|env|gitignore)$/i;
+const VIEW_IMAGE_LIMIT = 20 * 1024 * 1024;
+const VIEW_TEXT_LIMIT = 512 * 1024;
+
+ipcMain.handle("read-file-preview", (_event, relPath) => {
+  const full = resolveInWorkspace(relPath);
+  if (!full) return { kind: "denied" };
+
+  let stat;
+  try {
+    stat = fs.statSync(full);
+  } catch {
+    return { kind: "missing" };
+  }
+  if (!stat.isFile()) return { kind: "missing" };
+
+  const ext = path.extname(full).toLowerCase();
+  const base = { bytes: stat.size, name: path.basename(full) };
+
+  if (ext === ".pdf") return { ...base, kind: "pdf" };
+
+  if (VIEW_IMAGE.test(ext)) {
+    if (stat.size > VIEW_IMAGE_LIMIT) return { ...base, kind: "too-big" };
+    const mime =
+      ext === ".jpg" ? "image/jpeg" : ext === ".svg" ? "image/svg+xml" : `image/${ext.slice(1)}`;
+    return { ...base, kind: "image", url: `data:${mime};base64,${fs.readFileSync(full).toString("base64")}` };
+  }
+
+  if (VIEW_TEXT.test(ext) || ext === "") {
+    // Read a bounded prefix rather than the whole file: readFileSync has no
+    // length option, and a log someone left running is not a reason to pull
+    // 400MB into the renderer.
+    const buffer = Buffer.alloc(Math.min(stat.size, VIEW_TEXT_LIMIT));
+    const fd = fs.openSync(full, "r");
+    try {
+      fs.readSync(fd, buffer, 0, buffer.length, 0);
+    } finally {
+      fs.closeSync(fd);
+    }
+    // A NUL byte in the first half-megabyte means this is not text, whatever
+    // the extension claimed. Rendering a binary as UTF-8 produces a screen of
+    // replacement characters, which looks like a corrupted file rather than
+    // like the wrong viewer.
+    if (buffer.includes(0)) return { ...base, kind: "binary" };
+    return {
+      ...base,
+      kind: "text",
+      text: buffer.toString("utf8"),
+      truncated: stat.size > VIEW_TEXT_LIMIT,
+    };
+  }
+
+  return { ...base, kind: "binary" };
+});
+
+/**
+ * PDFs, in a window of their own.
+ *
+ * Chromium's PDF viewer needs `plugins`, and the chat window does not have it
+ * on. Turning it on there would widen what the whole app renders for the sake
+ * of one file type; a separate window keeps the setting scoped to the thing
+ * that needs it, and gets the real viewer -- selectable text, search, page
+ * navigation -- rather than an approximation of one.
+ *
+ * loadFile with a path already inside the workspace, checked before we get
+ * here, so no renderer-supplied string ever becomes a URL.
+ */
+let pdfWindows = [];
+ipcMain.handle("open-pdf", (_event, relPath) => {
+  const full = resolveInWorkspace(relPath);
+  if (!full || !fs.existsSync(full)) return false;
+
+  const win = new BrowserWindow({
+    width: 900,
+    height: 1000,
+    title: path.basename(full),
+    webPreferences: { plugins: true, sandbox: true, contextIsolation: true, nodeIntegration: false },
+  });
+  pdfWindows.push(win);
+  win.on("closed", () => {
+    pdfWindows = pdfWindows.filter((w) => w !== win);
+  });
+  win.loadFile(full);
+  return true;
+});
+
 ipcMain.handle("import-file", (_event, sourcePath, conversationId) => {
   try {
     return copyIntoWorkspace(sourcePath, conversationId);

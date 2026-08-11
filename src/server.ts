@@ -65,6 +65,7 @@ import {
 import { ensureToken, isAuthorized } from "./auth.js";
 import { mentionContext, parseMentions } from "./mentions.js";
 import { SPECIALISTS } from "./specialists.js";
+import { extractSources } from "./sources.js";
 import { loadSkills } from "./skills.js";
 import { synthesize, transcribeWav, warmVoice, whisperInstalled } from "./voice.js";
 import type { Message } from "./types.js";
@@ -901,6 +902,7 @@ async function handle(
     // be more traffic than the answer.
     let thoughtChars = 0;
     let lastThinkAt = 0;
+    let lastArgs: Record<string, unknown> = {};
 
     try {
       await runTurn(
@@ -926,7 +928,20 @@ async function handle(
           },
           // Surfaced as a comment frame so clients that don't understand it ignore
           // it, rather than rendering tool chatter as assistant text.
-          onToolStart: (name) => res.write(`: tool ${name}\n\n`),
+          onToolStart: (name, args) => {
+            lastArgs = args;
+            res.write(`: tool ${name}\n\n`);
+          },
+          // The pages this turn actually read. Recovered from the tool's own
+          // output, so what is cited is exactly what the model was given --
+          // see sources.ts. Tool calls run one at a time, which is what makes
+          // pairing the end with the args from the start safe.
+          onToolEnd: (name, result) => {
+            const found = extractSources(name, lastArgs, result);
+            if (found.length > 0) {
+              res.write(`: sources ${JSON.stringify({ tool: name, items: found })}\n\n`);
+            }
+          },
           // Same channel, same reason. A widget is decoration for a client that
           // can draw it; the tool's text has already gone to the model and to
           // every client that cannot, so dropping this loses nothing.

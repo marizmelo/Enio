@@ -23,6 +23,7 @@ export function parseSseEvent(block) {
   let think = null;
   let notice = null;
   let context = null;
+  let sources = null;
   for (const line of block.split("\n")) {
     if (line.startsWith("data:")) {
       data = (data ?? "") + line.slice(5).trimStart();
@@ -38,6 +39,16 @@ export function parseSseEvent(block) {
       if (contextMatch) {
         context = { tokens: Number(contextMatch[1]), budget: Number(contextMatch[2]) };
       }
+      const sourcesMatch = /^sources\s+(.+)$/.exec(comment);
+      if (sourcesMatch) {
+        try {
+          sources = JSON.parse(sourcesMatch[1]);
+        } catch {
+          // Same rule as widgets: a citation list is a nicety on top of an
+          // answer that already arrived, so a bad frame is dropped, not thrown.
+          sources = null;
+        }
+      }
       const widgetMatch = /^widget\s+(.+)$/.exec(comment);
       if (widgetMatch) {
         try {
@@ -50,7 +61,7 @@ export function parseSseEvent(block) {
       }
     }
   }
-  return { data, tool, widget, think, notice, context };
+  return { data, tool, widget, think, notice, context, sources };
 }
 
 /**
@@ -115,8 +126,9 @@ export async function* streamTurn(messages, signal, conversationId = null) {
       const block = buffer.slice(0, split);
       buffer = buffer.slice(split + 2);
 
-      const { data, tool, widget, think, notice, context } = parseSseEvent(block);
+      const { data, tool, widget, think, notice, context, sources } = parseSseEvent(block);
       if (tool) yield { type: "tool", name: tool };
+      if (sources) yield { type: "sources", ...sources };
       if (widget) yield { type: "widget", widget };
       if (think !== null) yield { type: "think", chars: think };
       if (notice) yield { type: "notice", text: notice };

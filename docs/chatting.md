@@ -48,6 +48,28 @@ of the catalogue, run only when you name them.
 | `/clear` | forget this conversation (not what's on disk) |
 | `/quit` | exit and fold this conversation into memory |
 
+## Tool calls and sources
+
+Tools that ran appear as badges above the reply. A tool called more than once
+in a turn is one badge with a count — `browse ×3` — rather than three identical
+badges saying nothing the first did not.
+
+When a turn reads the web, the pages it read are listed under the answer as
+**Sources**, deduped: searching and then fetching the top hit is the normal
+path, and citing it twice would misstate how much was consulted. Search results
+are also shown as they arrive, with titles, snippets and links.
+
+This is worth the space specifically because the model is small. It reads
+titles and snippets and writes a paragraph, and in the paragraph a summary and
+an invention look identical. The list puts the check one glance away — and
+often answers the question outright, since the right link beats a description
+of it. Links open in your real browser.
+
+Sources come from what the tools returned, so they are the evidence the model
+saw rather than a separate account of it. A fetch that failed is not cited: an
+answer that looks sourced when the source is an error message is worse than one
+that cites nothing.
+
 ## Reading a reply as it arrives
 
 The thread follows the answer while you are at the bottom, and stops following
@@ -78,6 +100,18 @@ four screenshots are indistinguishable by name and obvious by picture.
 because the filesystem tools are scoped there and a file outside it cannot be
 read at all; the subfolder is what keeps the workspace from becoming a drawer of
 `screenshot-7.png` with nothing recording which question any of them went with.
+
+Clicking any attachment — in the thread, or in the Files dialog — opens it.
+Images get a viewer with arrow-key navigation through the rest of that
+conversation's files, and a fit/actual-size toggle. Documents get a reader:
+markdown rendered, CSV and TSV as a table, everything else as monospace text.
+PDFs open in a window of their own, because that is where Chromium's real
+viewer lives — selectable text, search and page navigation, rather than an
+imitation of them.
+
+The set the arrows walk is the set you opened from. Open a screenshot from a
+conversation and you step through that conversation; open one from the
+workspace list and you step through the workspace.
 
 The **Files** button in the status bar is where storage is managed. It shows
 what this conversation attached, what every other conversation attached —

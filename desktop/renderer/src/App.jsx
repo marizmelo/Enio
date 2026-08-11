@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { streamTurn } from "@/lib/agent";
 import { appendMention, attachedFiles, fetchCapabilities } from "@/lib/capabilities";
 import { FilesDialog } from "@/components/FilesDialog";
+import { FileViewer } from "@/components/FileViewer";
 import {
   conversationMessages,
   createConversation,
@@ -51,6 +52,9 @@ export function App() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  // A file opened from the thread. The arrows walk that message's attachments,
+  // because those are the ones the question was about.
+  const [viewing, setViewing] = useState(null);
   // How full the model's window is, reported by the server after folding.
   const [context, setContext] = useState(null);
 
@@ -245,6 +249,10 @@ export function App() {
       // Text streamed but not yet handed to the voice.
       let unspoken = "";
       const notices = [];
+      // Pages the tools read, in the order they were read. Deduped at render
+      // time rather than here, so the search hit that carried a snippet is the
+      // one kept when the same page is later fetched in full.
+      const sources = [];
       const startedAt = Date.now();
 
       try {
@@ -255,6 +263,8 @@ export function App() {
         )) {
           if (event.type === "tool") {
             tools.push(event.name);
+          } else if (event.type === "sources") {
+            sources.push({ tool: event.tool, items: event.items });
           } else if (event.type === "widget") {
             widgets.push(event.widget);
           } else if (event.type === "think") {
@@ -287,6 +297,7 @@ export function App() {
               content: assistant,
               tools: [...tools],
               widgets: [...widgets],
+              sources: sources.map((s) => ({ ...s })),
               thinking,
               notices: [...notices],
               startedAt,
@@ -335,6 +346,16 @@ export function App() {
 
       <RecipesDialog open={recipesOpen} onOpenChange={setRecipesOpen} />
 
+      {viewing && (
+        <FileViewer
+          open
+          files={viewing.files}
+          index={viewing.index}
+          onIndex={(index) => setViewing((v) => ({ ...v, index }))}
+          onOpenChange={(next) => !next && setViewing(null)}
+        />
+      )}
+
       <FilesDialog
         open={filesOpen}
         onOpenChange={setFilesOpen}
@@ -369,6 +390,9 @@ export function App() {
                 <Message
                   {...m}
                   streaming={streaming && i === messages.length - 1 && m.role === "assistant"}
+                  onOpenFile={(names, index) =>
+                    setViewing({ files: names.map((path) => ({ path })), index })
+                  }
                 />
                 {/* The line under history. Without it a resumed transcript is
                     pixel-identical to a live reply, and a tail that happens to
