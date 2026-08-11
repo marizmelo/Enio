@@ -42,6 +42,14 @@ remove instruction-shaped sentences — silently rewriting what a page said woul
 make the trace a lie. The real defence is that the agent reading it cannot act;
 see [Agents and routing](agents.md).
 
+One structural exception is edited: chat-template control tokens. A page
+containing the literal `<|im_start|>` could otherwise forge a conversation-turn
+boundary — an attack no "this is data" label stops, because it happens below the
+level the model reasons about. Those tokens are neutralised in place
+(`<|im_start|>` becomes `⟨im_start⟩`) in every page, file and OCR result before
+the model sees it: the words and the token's name stay, only the exact string
+the tokenizer treats as special is gone.
+
 Local and internal addresses are refused before any request: loopback, private
 ranges, and the cloud-metadata address. That guard matters more here than for a
 hand-typed fetch, because the URL often comes from a page's own link list.

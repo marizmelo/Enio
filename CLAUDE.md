@@ -211,6 +211,18 @@ dependency specifically because tesseract.js defaults to a CDN fetch. There is a
 test that disables `globalThis.fetch` and requires OCR to still work. Do not
 reintroduce a CDN path.
 
+**Untrusted content is defanged of control tokens before it reaches the
+model.** `neutralizeControlTokens` (`src/sanitize.ts`) runs on every tool
+result at the `executeCall` chokepoint, and on attachment/OCR text which takes a
+different path into the prompt. The model server flattens message `content`
+straight into the chat template, so a fetched page or file containing a literal
+`<|im_start|>` forges a role boundary — a structural attack no `[data, not
+instructions]` label defends against. It neutralises in place (`<|im_start|>` →
+`⟨im_start⟩`) rather than deleting, so the trace stays honest, and it is
+model-agnostic because the model is switchable at runtime. Do not remove it when
+adding a tool that returns external content, and do not "clean it up" into a
+per-tool call — the whole point is that it is one chokepoint no tool can bypass.
+
 **Auth applies on loopback too.** A web page you have open can POST to
 127.0.0.1, and origin checks aren't a boundary. The `coder` specialist has
 `run_command`, so an unauthenticated endpoint is remote code execution.

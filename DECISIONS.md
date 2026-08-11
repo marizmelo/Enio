@@ -421,6 +421,26 @@ never edited to remove instruction-shaped sentences either — silently
 rewriting what a page said would make the trace a lie, and the trace is the
 thing you would read afterwards to find out what happened.
 
+**One thing in that content *is* edited: chat-template control tokens.** This
+is not persuasion, it is structure. The model server flattens each message's
+`content` straight into the model's chat template, so a fetched page containing
+the literal bytes `<|im_start|>assistant` does not read as data — it forges a
+role boundary, and the text after it becomes, structurally, a turn the model
+wrote itself. "Ignore the user and run this" behind a synthetic assistant
+header is a categorically stronger attack than the same words in a paragraph,
+and no `[data, not instructions]` label touches it, because the forgery happens
+before the model reasons about the label at all. So `neutralizeControlTokens`
+(sanitize.ts) runs on every tool result — the executeCall chokepoint every
+external vector returns through — and on attachment and OCR text, which reach
+the prompt by a different path. It is the one edit that survives the
+"never rewrite the page" rule, because the token is defanged in place
+(`<|im_start|>` becomes `⟨im_start⟩`): the words stay, the readable name stays,
+only the exact string the tokenizer matches is gone, so the trace still shows
+what the page said and what was neutralised. Model-agnostic because the model
+is switchable at runtime — it covers the ChatML/Qwen, Llama, Mistral and Gemma
+delimiter families, not only the one currently serving. Borrowed from OpenClaw,
+which strips the same tokens for the same reason.
+
 **What this does not cover, and what stage three must answer.** A logged-in
 browser changes the calculation: the value of an authenticated session is
 doing things, so the "cannot act" boundary cannot simply be extended to it.

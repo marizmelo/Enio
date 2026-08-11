@@ -14,6 +14,7 @@ import type { Registry } from "./tools/index.js";
 import { createHash } from "node:crypto";
 import { toolText, toWireTool, type Message, type ToolCall, type Widget } from "./types.js";
 import { contextBudget } from "./model-settings.js";
+import { neutralizeControlTokens } from "./sanitize.js";
 
 /**
  * Who the assistant is, ahead of everything else in the system message.
@@ -863,12 +864,15 @@ async function readAttachments(
           `The user attached "${rel}". Its full text content, below, is ` +
             `available to you now and is what you should answer from. ` +
             `Answer questions about "${rel}" directly from it.\n\n` +
-            `--- ${rel} ---\n${reading.text}\n--- end of ${rel} ---`,
+            // OCR text is untrusted content going straight into the prompt --
+            // the same forgery vector as a fetched page, and this path does
+            // not pass through executeCall, so it is defanged here too.
+            `--- ${rel} ---\n${neutralizeControlTokens(reading.text)}\n--- end of ${rel} ---`,
         );
         continue;
       }
 
-      const text = await readFile(absolute, "utf8");
+      const text = neutralizeControlTokens(await readFile(absolute, "utf8"));
       const clipped =
         text.length > 12_000 ? text.slice(0, 12_000) + "\n[...truncated]" : text;
       blocks.push(`<file path="${rel}">\n${clipped}\n</file>`);
@@ -987,7 +991,14 @@ async function executeCall(
     // A tool may return a bare string or { text, widget }. The text is what
     // the model reads either way -- the widget never carries information the
     // text does not, so a client that cannot draw it loses nothing.
-    const raw = typeof result === "string" ? result : result.text;
+    //
+    // Defanged before anything else touches it: this text becomes a message
+    // whose content the model server flattens straight into the chat template,
+    // so a `<|im_start|>` in a fetched page or file would forge a role
+    // boundary rather than read as data. Every external vector returns through
+    // here, which is why it is the one place this has to happen. See
+    // sanitize.ts.
+    const raw = neutralizeControlTokens(typeof result === "string" ? result : result.text);
     if (typeof result !== "string" && result.widget) {
       handlers.onWidget?.(result.widget);
     }
