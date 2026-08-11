@@ -411,6 +411,16 @@ export const config = {
   browserAct: env("BROWSER_ACT") === "1",
 
   /**
+   * Whether the browsing session's cookies and localStorage survive restarts
+   * (saved under the data dir, readable only by the owner). On by default
+   * because a login that evaporates on restart makes the session browser
+   * pointless — and off by a flag rather than never, because cookies on disk
+   * are a real thing someone may refuse. This is persistence for the agent's
+   * *own* browser; nothing ever reads the user's daily browser profile.
+   */
+  browserPersist: env("BROWSER_PERSIST") !== "0",
+
+  /**
    * What the agent calls itself.
    *
    * Without this the model answers "who are you" with whatever identity its

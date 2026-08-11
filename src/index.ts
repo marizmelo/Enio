@@ -675,6 +675,37 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "login": {
+      const raw = rest[0];
+      if (!raw) {
+        console.error("Usage: enio login <url>    e.g. enio login github.com");
+        process.exit(1);
+      }
+      const { playwrightAvailable, loginBrowser, browserStatePath } = await import(
+        "./tools/browser.js"
+      );
+      if (!playwrightAvailable()) {
+        console.error(
+          "Needs Playwright:\n\n    npm install playwright && npx playwright install chromium",
+        );
+        process.exit(1);
+      }
+      if (!config.browserPersist) {
+        console.error("ENIO_BROWSER_PERSIST=0 is set, so a login would not be kept.");
+        process.exit(1);
+      }
+      const target = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+      console.log(
+        `Opening a browser window at ${target}.\n` +
+          `Log in there, then close the window. The session is saved to\n` +
+          `${browserStatePath()} (readable only by you), and the agent's\n` +
+          `browser will use it. Your everyday browser is never touched.`,
+      );
+      await loginBrowser(target);
+      console.log("Saved.");
+      break;
+    }
+
     case "help":
     case "--help":
     case "-h":
@@ -878,6 +909,7 @@ enio — a local agent with tools and persistent memory
   enio skills --new NAME   scaffold a new skill
   enio skills --install-examples
   enio vision [IMAGE]      check vision setup, or read one image
+  enio login URL          log in to a site in a visible window; the agent's browser keeps the session
   enio token              print the API key for the HTTP endpoint
   enio token --rotate     generate a new one, invalidating the old
   enio backends           list model backends and how to switch

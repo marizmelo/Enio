@@ -70,6 +70,33 @@ trusting the pages you send the agent to. Local and internal addresses stay
 unreachable regardless: every request, including form submissions, passes the
 same host guard.
 
+## Staying logged in
+
+The agent's browser is its own — a bundled Chromium with its own cookie jar.
+It never opens, reads, or imports from your everyday browser. To give it a
+login, log in for it:
+
+```sh
+enio login github.com
+```
+
+That opens a **visible** window. You log in there yourself — the password goes
+from your keyboard to the site, never through enio or the model — then close
+the window. The cookies the site set are saved to `browser-state.json` in the
+data directory, readable only by you, and every later `browse` starts from
+them. Sessions the agent picks up while browsing (cookie-consent choices, and
+logins that happen to occur) are saved the same way, so they survive a
+restart.
+
+`ENIO_BROWSER_PERSIST=0` turns the saved state off entirely, for setups where
+cookies on disk are unwelcome; the browser then starts fresh every run and
+`enio login` refuses to run.
+
+Two caveats. A saved login raises what `ENIO_BROWSER_ACT` can do — that is the
+point, and it is why both are deliberate choices rather than defaults.
+And some providers detect automated browsers and refuse their login pages;
+a site that blocks the window is a site this cannot help with.
+
 Page text is labelled as data where it enters the model, and is never edited to
 remove instruction-shaped sentences — silently rewriting what a page said would
 make the trace a lie. The real defence is that the agent reading it cannot act;

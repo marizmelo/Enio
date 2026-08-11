@@ -489,6 +489,38 @@ reading of where it landed.
 
 ---
 
+### Logins: a state file and a visible window, never the user's browser
+
+The session context saves its cookies and localStorage to
+`browser-state.json` (owner-only) after every page it settles on, and loads
+the file at creation, so a login survives a restart. `enio login <url>` opens
+a *headed* window sharing that file: the user logs in themselves and closes
+the window.
+
+**Rejected: importing cookies from the user's daily browser.** Chrome's
+cookie store is encrypted via the keychain; decrypting it is invasive,
+breaks with Chrome's storage changes, and — the real objection — hands the
+agent every login the user has rather than the one they chose. The headed
+window inverts that: the password goes from keyboard to site without passing
+through enio, and the agent holds exactly the sessions the user deliberately
+gave it, one `enio login` at a time.
+
+**Rejected: launchPersistentContext.** The obvious Playwright feature for
+this, and wrong here twice. It is a second Chromium beside the one
+`renderPage`'s throwaway contexts come from — double the memory for the same
+pages — and its profile directory takes an exclusive lock, so the CLI login
+flow and a running agent would fight over who owns the profile. The
+storage-state file has neither problem: both sides read it at context
+creation and write it after changes, last writer wins, and the stateless
+`renderPage` stays stateless by simply never loading it.
+
+The save is fire-and-forget and coalesced (no "cookies changed" event exists
+to subscribe to), a corrupt file is ignored rather than fatal (a truncated
+write must cost at most a login, never the browser), and `ENIO_BROWSER_PERSIST=0`
+turns the whole thing off for setups where cookies on disk are unwelcome.
+
+---
+
 ## Bugs that testing found
 
 Recorded because each cost real time and could recur.

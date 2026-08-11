@@ -1,4 +1,6 @@
 import { createRequire } from "node:module";
+import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { config } from "../config.js";
 
 /**
@@ -179,6 +181,72 @@ const MAX_TABS = 6;
 const tabs = new Map<string, Promise<any>>();
 let contextPromise: Promise<any> | null = null;
 
+/**
+ * Where the shared context's cookies and localStorage live between runs.
+ *
+ * A storage-state file rather than launchPersistentContext, for two reasons.
+ * A persistent context is a second Chromium beside the one renderPage's
+ * throwaway contexts come from — double the memory for the same pages — and
+ * its profile directory takes an exclusive lock, so the CLI login flow and a
+ * running agent would fight over it. A JSON file has neither problem: both
+ * sides read it at context creation and write it after changes, last writer
+ * wins, and a stateless renderPage stays stateless because it simply never
+ * loads the file.
+ */
+export function browserStatePath(): string {
+  return join(config.dataDir, "browser-state.json");
+}
+
+/**
+ * The storageState to give a new context: the saved file when it exists and
+ * parses, nothing otherwise. Corrupt or missing state must cost at most a
+ * login — never the browser.
+ */
+export function storageStateArg(): string | undefined {
+  if (!config.browserPersist) return undefined;
+  const path = browserStatePath();
+  if (!existsSync(path)) return undefined;
+  try {
+    JSON.parse(readFileSync(path, "utf8"));
+    return path;
+  } catch {
+    return undefined;
+  }
+}
+
+async function writeState(context: any): Promise<void> {
+  const path = browserStatePath();
+  mkdirSync(dirname(path), { recursive: true });
+  await context.storageState({ path });
+  // Cookies are credentials. Owner-only, like a private key.
+  chmodSync(path, 0o600);
+}
+
+let persisting: Promise<void> | null = null;
+
+/**
+ * Save the shared context's cookies and localStorage to disk, fire-and-forget.
+ *
+ * Called after every page the session browser settles on, because there is no
+ * "cookies changed" event to subscribe to and a process can die without
+ * warning. Coalesced so a burst of reads is one write, and errors are
+ * swallowed: losing a save costs a login, and must never cost the turn.
+ */
+export async function persistBrowserState(): Promise<void> {
+  if (!config.browserPersist || !contextPromise) return;
+  if (persisting) return persisting;
+  persisting = (async () => {
+    try {
+      await writeState(await contextPromise);
+    } catch {
+      /* losing a save costs a login, never a turn */
+    } finally {
+      persisting = null;
+    }
+  })();
+  return persisting;
+}
+
 async function getContext(): Promise<any> {
   if (!contextPromise) {
     contextPromise = (async () => {
@@ -188,10 +256,56 @@ async function getContext(): Promise<any> {
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
           "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
         viewport: { width: 1280, height: 900 },
+        // Yesterday's logins, if any were saved. undefined means fresh.
+        storageState: storageStateArg(),
       });
     })();
   }
   return contextPromise;
+}
+
+/**
+ * A visible window for the user to log in — the only path by which the agent's
+ * browser acquires credentials.
+ *
+ * Chosen over importing cookies from the user's daily browser, which would
+ * mean decrypting Chrome's cookie store via the keychain: invasive, fragile,
+ * and it hands the agent every login the user has rather than the one they
+ * chose. Here the user types their password into a page they navigated to, in
+ * a window they control; enio never sees the password, only the cookies the
+ * site set, and only for sites the user deliberately logged into this way.
+ *
+ * No route guard and no image-blocking in this window: those defend against
+ * model-driven requests, and here the human is driving — logging into a router
+ * on 192.168.1.1 is legitimate when it is the user doing it. The *agent's*
+ * pages still refuse blocked hosts, cookies or not.
+ *
+ * Saved on a heartbeat while the window is open, because the flow ends with
+ * the user closing the window — and once Chromium is gone there is nothing
+ * left to ask for its cookies.
+ */
+export async function loginBrowser(url: string): Promise<void> {
+  const specifier = "playwright";
+  const { chromium } = (await import(specifier)) as any;
+  const browser = await chromium.launch({ headless: false });
+  const context = await browser.newContext({
+    storageState: storageStateArg(),
+    viewport: null,
+  });
+  const page = await context.newPage();
+  await page
+    .goto(url, { waitUntil: "domcontentloaded", timeout: config.browserTimeoutMs })
+    .catch(() => {});
+
+  const save = () => writeState(context).catch(() => {});
+  const timer = setInterval(save, 2000);
+  await new Promise<void>((resolve) => {
+    page.on("close", () => resolve());
+    context.on("close", () => resolve());
+  });
+  clearInterval(timer);
+  await save();
+  await browser.close().catch(() => {});
 }
 
 export async function getSession(key = "default"): Promise<any> {
@@ -230,6 +344,9 @@ export async function closeSession(key: string): Promise<void> {
 
 /** Chromium lingers as a child process otherwise. */
 export async function closeBrowser(): Promise<void> {
+  // A last save before the context goes away — the in-flight one may have
+  // been coalesced past whatever the final page set.
+  await persistBrowserState().catch(() => {});
   tabs.clear();
   contextPromise = null;
   if (!browserPromise) return;

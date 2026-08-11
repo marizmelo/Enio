@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { getSession, playwrightAvailable } from "./browser.js";
+import { getSession, persistBrowserState, playwrightAvailable } from "./browser.js";
 import { isBlockedHost } from "./web.js";
 import type { ToolDef } from "../types.js";
 
@@ -234,6 +234,10 @@ export function renderReading(
 function settleReading(session: string, reading: PageReading): string {
   linksBySession.set(session, reading.links);
   controlsBySession.set(session, reading.controls);
+  // Cookies the page just set survive a restart. Fire-and-forget: the save is
+  // coalesced and swallows its own errors, and the reading must not wait on a
+  // disk write.
+  void persistBrowserState();
   return renderReading(reading, reading.text.length >= MAX_TEXT);
 }
 

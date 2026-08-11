@@ -132,6 +132,14 @@ macOS still prompts for Automation access, which is the consent that protects
 the data. Gating a read identically to arbitrary AppleScript made the safest
 capability carry the cost of the most dangerous one.
 
+**The agent's browser is its own; logins enter it only through `enio login`.**
+Session cookies persist in `browser-state.json` (owner-only, `ENIO_BROWSER_PERSIST=0`
+to refuse), and the login flow is a *headed* window the user drives — the
+password never passes through enio or the model. Never add a path that reads
+the user's everyday browser profile or cookie store, and keep `renderPage`
+(the stateless fetch) off the state file: a one-shot render carrying logins
+would quietly turn every `web_fetch_rendered` into an authenticated request.
+
 **Clicking is by name, never by coordinate.** `window_controls` and
 `menu_items` read the macOS accessibility tree, so a plan step says
 `click: "Save"` rather than a pixel. This is the same closed-list
