@@ -57,3 +57,46 @@ describe("links in a reply", () => {
     assert.ok(!/<a /.test(renderMarkdownish("```\ncurl https://example.com/x\n```")));
   });
 });
+
+/**
+ * The [Source](url) lift. The researcher is told to link the noun and at 4B it
+ * half-follows: link inline, but as a generic tag at the end of the bullet.
+ * Where the link goes is not a judgement call when there is one bold phrase
+ * and one generic-text link, so the join happens at render time — and the
+ * transcript keeps exactly what the model said.
+ */
+describe("trailing citations move onto the subject", () => {
+  test("a bullet's [Source](url) becomes the link on its bold phrase", () => {
+    const html = renderMarkdownish(
+      "- **Anker Soundcore 2** IPX7, 12h battery. [Source](https://a.example/x)",
+    );
+    assert.match(html, /<strong><a href="https:\/\/a\.example\/x"[^>]*>Anker Soundcore 2<\/a><\/strong>/);
+    assert.ok(!/>Source</.test(html));
+  });
+
+  test("parenthesised and punctuated forms work without doubling the stop", () => {
+    const parens = renderMarkdownish("- **comiso** with LEDs ([Source](https://a.example/1))");
+    assert.ok(!/>Source</.test(parens));
+    const stop = renderMarkdownish("- **JBL** rated 8.8/10. [source](https://a.example/2).");
+    assert.ok(!/testers\.\./.test(stop));
+    assert.ok(stop.includes("rated 8.8/10."), stop);
+    assert.ok(!stop.includes("8.8/10.."), stop);
+  });
+
+  /** With two bold phrases the subject is ambiguous, and a citation on the
+   *  wrong claim is worse than one at the end of the line. */
+  test("left alone when the subject is ambiguous or absent", () => {
+    for (const line of [
+      "- **A** versus **B** compared. [Source](https://a.example/3)",
+      "- no bold here at all. [Source](https://a.example/4)",
+    ]) {
+      assert.match(renderMarkdownish(line), />Source</);
+    }
+  });
+
+  test("a link the model named meaningfully is where it wanted it", () => {
+    const html = renderMarkdownish("- **Kept** as written. [full review](https://a.example/5)");
+    assert.match(html, />full review</);
+    assert.match(html, /<strong>Kept<\/strong>/);
+  });
+});

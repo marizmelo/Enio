@@ -59,7 +59,9 @@ export const SPECIALISTS: Specialist[] = [
       `Answer from what the pages say, not from the search snippets. Put the ` +
       `link inline, on the thing it is about, as [name](url) — write ` +
       `"the [JBL Flip 7](https://example.com/flip7) is £120", never a list of ` +
-      `bare URLs at the end. Each claim links to the page it came from.\n\n` +
+      `bare URLs at the end, and never [Source](url) — the link's text is the ` +
+      `name of the thing, not the word Source. Each claim links to the page it ` +
+      `came from.\n\n` +
       `If the sources disagree, say so rather than picking one silently. If you ` +
       `could not find something, say that plainly — a confident wrong answer is ` +
       `worse than an admission.`,

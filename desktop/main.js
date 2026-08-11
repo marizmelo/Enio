@@ -250,7 +250,11 @@ async function startBackends() {
     // Non-fatal — the status bar just won't show a tool count.
   }
 
-  sendStatus("ready", modelStartedByUs ? "Ready." : "Ready (reused existing servers).", { tools: toolCount });
+  // No prose in the ready state: the green dot already says it, and a healthy
+  // app should not spend status-bar width announcing that nothing is wrong.
+  // Words are reserved for the states that need explaining -- starting, and
+  // failed, where the message is the diagnosis.
+  sendStatus("ready", "", { tools: toolCount });
   watchBackends(toolCount);
 }
 
@@ -284,7 +288,7 @@ function watchBackends(toolCount) {
     const healthy = model && agent;
 
     if (healthy && lastStatus.phase !== "ready") {
-      sendStatus("ready", "Ready (recovered).", { tools: toolCount ?? null });
+      sendStatus("ready", "", { tools: toolCount ?? null });
     } else if (!healthy && lastStatus.phase === "ready") {
       sendStatus(
         "failed",

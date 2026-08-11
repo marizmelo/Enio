@@ -30,8 +30,51 @@ const SENTINEL = "";
 // either side -- correct for a block, wrong for a link inside a sentence.
 const LINK = "";
 
+/**
+ * Move a trailing "[Source](url)" onto the bold phrase it belongs to.
+ *
+ * The researcher is told to link the noun -- "the [JBL Flip 7](url) is £120" --
+ * and at 4B it reliably half-follows: the link arrives inline, but as a
+ * generic [Source](url) tag at the end of the bullet whose subject it cites.
+ * Where the link should go is not a judgement call, though. When a block has
+ * one bold phrase and ends with one generic-text link, the phrase is the
+ * subject and the link is its citation, so the join is done here rather than
+ * asked of the model. Same move as the rest of the project: a decision the
+ * model gets wrong becomes one it does not have to make.
+ *
+ * Narrow on purpose. Only generic link text is moved -- a link the model
+ * already named meaningfully is where it wanted it -- and only when there is
+ * exactly one bold phrase to receive it, because with two the subject is
+ * genuinely ambiguous and guessing would put a citation on the wrong claim.
+ * Display-only, on the raw markdown at render time: the transcript stays
+ * exactly what the model said.
+ */
+const TRAILING_CITE =
+  /^([ \t]*(?:[-*][ \t]+)?)(.*?)[ \t]*\(?\[(?:source|src|link|read more|more info|more|details|reference|here)\]\((https?:\/\/[^\s)]+)\)\)?([.,;:!?]*)[ \t]*$/i;
+
+function liftCitations(raw) {
+  return raw
+    .split("\n")
+    .map((line) => {
+      const match = TRAILING_CITE.exec(line);
+      if (!match) return line;
+      const [, lead, body, href, tail] = match;
+      const bolds = body.match(/\*\*[^*\n]+\*\*/g);
+      if (!bolds || bolds.length !== 1) return line;
+      const linked = body.replace(
+        /\*\*([^*\n]+)\*\*/,
+        (_m, name) => `**[${name}](${href})**`,
+      ).replace(/[ \t]+$/, "");
+      // "…testers. [Source](url)." carries the sentence's own full stop AND
+      // one after the link; keeping both prints "testers..".
+      const punct = /[.,;:!?]$/.test(linked) ? "" : tail;
+      return `${lead}${linked}${punct}`;
+    })
+    .join("\n");
+}
+
 export function renderMarkdownish(raw) {
-  const escaped = escapeHtml(raw);
+  const escaped = escapeHtml(liftCitations(raw));
 
   // Pull fenced code blocks out first so the inline-code and bold passes below
   // cannot reach inside them.
