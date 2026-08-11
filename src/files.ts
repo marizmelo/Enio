@@ -150,17 +150,29 @@ export function attachmentPaths(): string[] {
 export class FileRefused extends Error {}
 
 /**
- * Delete one file, or one conversation's whole attachment folder.
+ * Delete one attachment copy, or one conversation's whole attachment folder.
  *
- * Deliberately not recursive over arbitrary paths: it removes a single file,
- * or a directory that is specifically a conversation's attachments. "Delete
- * this directory tree" reachable from an HTTP body is a bigger capability than
- * anything this screen needs, and safePath alone would not narrow it -- the
- * workspace is exactly where the user's own work lives.
+ * Attachments only, and that is the boundary that matters: an attachment is
+ * *enio's copy* — attaching copies the chosen file into the workspace, so
+ * removing the copy removes enio's reference and the user's original, wherever
+ * it lives, is never touched. Everything else in the workspace is the user's
+ * actual work, and a permanent delete of it reachable from an HTTP body is an
+ * irreversible action nobody opted into. Those files are removed where the
+ * user's own files are always removed: in Finder, which the storage screen
+ * can reveal them in, and which has a Trash.
+ *
+ * Deliberately not recursive over arbitrary paths either: a single file, or a
+ * directory that is specifically one conversation's attachments. "Delete this
+ * directory tree" is a bigger capability than anything this screen needs.
  */
 export function removeFile(relPath: string): number {
   const absolute = safePath(relPath);
-  if (absolute === config.workspace) throw new FileRefused("Refusing to delete the workspace");
+  const parts = relative(config.workspace, absolute).split(sep);
+  if (parts[0] !== ATTACH_DIR || parts.length < 2) {
+    throw new FileRefused(
+      "Only attachment copies can be deleted here — that file is your own work. Use Show in Finder to manage it.",
+    );
+  }
   let stat;
   try {
     stat = statSync(absolute);
@@ -168,8 +180,7 @@ export function removeFile(relPath: string): number {
     throw new FileRefused(`${relPath} is not there`);
   }
   if (stat.isDirectory()) {
-    const parent = relative(config.workspace, absolute).split(sep);
-    if (parent.length !== 2 || parent[0] !== ATTACH_DIR) {
+    if (parts.length !== 2) {
       throw new FileRefused("Only a conversation's attachment folder can be removed whole");
     }
     const bytes = filesIn(absolute).reduce((sum, f) => sum + f.bytes, 0);

@@ -59,14 +59,25 @@ test("an attachment path is the mention that resolves to it", () => {
 
 /**
  * The workspace is where the user's own work lives, so a delete reachable from
- * an HTTP query string has to be narrow in two directions: it cannot leave the
- * workspace, and it cannot take a whole tree with it.
+ * an HTTP query string has to be narrow in three directions: it cannot leave
+ * the workspace, it cannot take a whole tree with it, and it cannot touch
+ * anything that is not an attachment copy at all.
  */
 test("deleting refuses to escape the workspace", () => {
   for (const path of ["../secrets.txt", "/etc/passwd", "../../"]) {
-    assert.throws(() => files.removeFile(path), /escapes the workspace|not there/);
+    assert.throws(() => files.removeFile(path), /escapes the workspace|attachment/);
   }
   assert.ok(existsSync(join(WORK, "budget.csv")), "nothing should have been removed");
+});
+
+test("deleting refuses the user's own workspace files entirely", () => {
+  // An attachment is enio's copy — deleting it never touches the original.
+  // Everything else in the workspace is the user's actual work, and the only
+  // path that removes it is the user doing so themselves, in Finder.
+  assert.throws(() => files.removeFile("budget.csv"), files.FileRefused);
+  assert.throws(() => files.removeFile("notes/plan.md"), files.FileRefused);
+  assert.ok(existsSync(join(WORK, "budget.csv")));
+  assert.ok(existsSync(join(WORK, "notes", "plan.md")));
 });
 
 test("deleting refuses a directory that is not a conversation's attachments", () => {

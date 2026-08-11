@@ -34,7 +34,11 @@ const size = (bytes) =>
  * makes an old attachment worth keeping. **Save a copy** writes it out through
  * the system panel, because the workspace is not where anyone keeps their
  * files. **Reveal** opens Finder for everything this dialog does not do.
- * **Remove** deletes it, and is the only one that is not reversible.
+ * **Remove** deletes it, and is the only one that is not reversible — which
+ * is why it exists only for attachments. An attachment is enio's own copy;
+ * removing it never touches the file it was copied from. Workspace files are
+ * the user's actual work, the server refuses to delete them, and their row
+ * offers Finder instead.
  */
 export function FilesDialog({ open, onOpenChange, conversationId, onReuse }) {
   const [data, setData] = useState(null);
@@ -101,7 +105,10 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse }) {
       busy={busy === file.path}
       onOpen={() => setViewing({ files: siblings, index: siblings.indexOf(file) })}
       onReuse={() => onReuse([file.path])}
-      onRemove={() => drop(file.path)}
+      // Deleting is for attachments — enio's own copies. A workspace file is
+      // the user's actual work; the server refuses to delete it, so no button
+      // pretends otherwise. Show in Finder is how those are managed.
+      onRemove={siblings === workspace ? null : () => drop(file.path)}
     />
   );
 
@@ -207,7 +214,8 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse }) {
             <h3 className="text-xs font-medium text-muted-foreground">Workspace</h3>
             <p className="mt-1 text-xs text-muted-foreground">
               Files you or the agent put in <code>~/enio-workspace</code>, rather than
-              attached to a conversation.
+              attached to a conversation. These are your files — enio does not delete
+              them; use Show in Finder to manage them.
             </p>
             <ul className="mt-2 space-y-1">{workspace.map((f) => row(f, workspace))}</ul>
           </section>
@@ -275,16 +283,18 @@ function FileRow({ file, busy, onOpen, onReuse, onRemove }) {
       >
         <FolderOpen className="size-3.5" />
       </Button>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="size-7 shrink-0"
-        disabled={busy}
-        title={`Delete ${file.name}`}
-        onClick={onRemove}
-      >
-        <Trash2 className="size-3.5" />
-      </Button>
+      {onRemove && (
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-7 shrink-0"
+          disabled={busy}
+          title={`Delete ${file.name}`}
+          onClick={onRemove}
+        >
+          <Trash2 className="size-3.5" />
+        </Button>
+      )}
     </li>
   );
 }
