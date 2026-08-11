@@ -34,8 +34,41 @@ journey rather than a series of unrelated fetches. Each conversation gets its
 own tab, sharing one browser profile — so two conversations never read each
 other's pages, while a login would apply everywhere.
 
-**It is read-only.** It navigates and reads; it does not click buttons, submit
-forms or type. Those mutate, and mutations belong in the approval sheet.
+**It is read-only by default.** It navigates and reads; it does not click
+buttons, submit forms or type.
+
+## Acting on pages
+
+```sh
+export ENIO_BROWSER_ACT=1
+```
+
+With that set, the page's controls come back numbered too, and the agent can
+act on one:
+
+```
+Controls — click one with control: <number>, or add text: to type into it
+1. textbox: Search Wikipedia
+2. button: Sign in
+3. select: Language (English | Deutsch | Français)
+```
+
+`control: 1` with `text: "grey-cowled wood rail"` and `enter: true` types into
+the search box and submits; `control: 2` alone clicks. Each action re-reads the
+page, so what comes back is what the page looks like now. This is the same
+closed-list trick as links and menu items: choosing `control: 7` is selection,
+composing a CSS selector is generation. A control that has left the page fails
+by name — never by hitting whatever moved into its place.
+
+**Why it is off by default.** A reader that cannot act is immune to a page's
+instructions in a way no prompt wording achieves — that is the boundary
+described in [Agents and routing](agents.md), and turning this on softens it: a
+hostile page could talk the model into clicking things, in a session that may
+be logged in somewhere. The blast radius stays the browser — `browse` still has
+no shell, no filesystem, no email — but inside the browser, enabling this means
+trusting the pages you send the agent to. Local and internal addresses stay
+unreachable regardless: every request, including form submissions, passes the
+same host guard.
 
 Page text is labelled as data where it enters the model, and is never edited to
 remove instruction-shaped sentences — silently rewriting what a page said would

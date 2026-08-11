@@ -197,6 +197,42 @@ describe("browsing as a session", () => {
     // still costs the model the attention of choosing it.
     assert.equal(browseTools.length, playwrightAvailable() ? 1 : 0);
   });
+
+  test("acting is off by default: control is refused and not offered", { skip }, async () => {
+    // The read-only default is the security posture (see the disjointness test
+    // below), so it must hold against what actually arrives, not just what the
+    // schema advertises -- a model can emit a parameter it was never offered.
+    assert.match(String(await tool!.run({ control: 1 })), /switched off|ENIO_BROWSER_ACT/);
+    const props = (tool!.parameters as any).properties;
+    assert.equal(props.control, undefined);
+    assert.equal(props.text, undefined);
+    assert.match(String(tool!.description), /^((?!control:).)*$/s);
+  });
+
+  test("controls render as a named list when read-only, numbered when acting", async () => {
+    const { renderReading } = await import("./tools/browse.js");
+    const reading = {
+      title: "T",
+      url: "https://example.com/",
+      text: "hello",
+      links: [],
+      controls: [
+        { kind: "textbox" as const, name: "Search" },
+        { kind: "select" as const, name: "Country", options: ["US", "UK"] },
+      ],
+    };
+    // Read-only: named so "is there a search box" is answerable, unnumbered so
+    // there is nothing to try to act on.
+    const readOnly = renderReading(reading, false, false);
+    assert.match(readOnly, /On the page: textbox: Search; select: Country/);
+    assert.doesNotMatch(readOnly, /control: <number>/);
+    // Acting: the numbered closed list, options included -- choosing an option
+    // is also selection, never generation.
+    const acting = renderReading(reading, false, true);
+    assert.match(acting, /1\. textbox: Search/);
+    assert.match(acting, /2\. select: Country \(US \| UK\)/);
+    assert.match(acting, /control: <number>/);
+  });
 });
 
 
@@ -213,6 +249,12 @@ describe("untrusted page content cannot become an action", () => {
    * Specialist isolation was justified by the tool budget. This is the second
    * thing it buys, it was accidental until it was written down, and a test is
    * the only reason it will still be true after the next tool is added.
+   *
+   * ENIO_BROWSER_ACT knowingly softens this: with it on, browse itself can
+   * click and type, so the reader can act *within the browser*. That is a
+   * user's explicit trade (off by default, asserted above), and the blast
+   * radius stays the browser session -- browse still cannot reach the shell,
+   * the filesystem or email, which is what this test continues to guarantee.
    */
   const READS_UNTRUSTED = ["browse", "web_fetch", "web_fetch_rendered", "web_search"];
   const MUTATES = [

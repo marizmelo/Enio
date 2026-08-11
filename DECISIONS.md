@@ -444,10 +444,48 @@ which strips the same tokens for the same reason.
 **What this does not cover, and what stage three must answer.** A logged-in
 browser changes the calculation: the value of an authenticated session is
 doing things, so the "cannot act" boundary cannot simply be extended to it.
-The answer there has to be that every mutation goes through the approval
-sheet, which already exists and already shows the exact text that will run —
-but it has not been built or measured, and it should not be assumed to follow
-from this.
+This paragraph originally guessed the answer would be the approval sheet; the
+next section records what was actually chosen, and why that guess was wrong.
+
+---
+
+### Acting on pages: numbered controls behind a flag
+
+`browse` can click, type and choose from dropdowns when `ENIO_BROWSER_ACT=1`
+is set. The mechanism is the codebase's one trick applied again: at read time
+every visible control gets a number and a `data-enio-ref` tag in the DOM, and
+acting is `control: 7` — with `text:` to type, the same shape as `link: 7`.
+Borrowed from OpenClaw's snapshot → ref → act browser tool, minus the parts
+that assume a frontier model.
+
+**Rejected: the approval sheet per action.** The previous section guessed
+mutations in the browser would go through it. Wrong granularity: web
+interaction is dozens of micro-actions — type, submit, click through, paginate
+— and a sheet per click is either rubber-stamped (teaching the habit of
+approving without reading, which poisons the sheet where it *does* protect
+something) or abandoned. The sheet exists for scripts that change the
+machine; a click on a page this conversation deliberately opened is a
+different risk class, and conflating them weakens the protection both need.
+
+**Rejected: a separate `web_act` tool.** `researcher` sits at exactly six
+tools, and acting is meaningless without the reading that numbered the
+controls — separating them puts a two-tool protocol where one closed list
+suffices, and costs a tool slot that does not exist.
+
+**Rejected: selectors or coordinates.** A small model composing a CSS selector
+is generation, the thing it gets wrong; coordinates need vision and hit
+whatever moved under them. A numbered ref whose element has gone errors by
+name — the same safe failure as the accessibility tree's `click: "Save"`.
+
+**The trade, stated plainly:** with the flag on, the specialist that reads
+untrusted pages can act on them, which is precisely the boundary the previous
+section is about. That is why it is a flag and not a default: off, nothing
+changed; on, the user has chosen to trust the pages they send the agent to.
+What remains structural either way: the blast radius is the browser session
+(browse still reaches no shell, no filesystem, no email — the disjointness
+test still enforces that), every request including form submissions passes
+the SSRF guard, and act-then-reread keeps each action followed by an honest
+reading of where it landed.
 
 ---
 

@@ -117,8 +117,14 @@ limited attention. An attachment must never be able to fail a turn.
 
 **Irreversible actions are opt-in.** Email is dry-run until `ENIO_EMAIL_SEND=1`.
 IMAP opens with `EXAMINE` so the *server* refuses changes. Anything that can
-change the machine is off until `ENIO_DESKTOP=1`. The model deciding to do
-something irreversible is exactly the judgement it gets wrong.
+change the machine is off until `ENIO_DESKTOP=1`. Clicking and typing on web
+pages is off until `ENIO_BROWSER_ACT=1` — that one gates a *security boundary*,
+not just reversibility: a reader that cannot act is immune to a page's
+instructions, and with the flag on a hostile page can become clicks in a
+possibly-logged-in session. The blast radius stays the browser (no shell, no
+filesystem — the disjointness test in web.test.ts still holds), but do not
+weaken the default or widen what an acting browse can reach. The model deciding
+to do something irreversible is exactly the judgement it gets wrong.
 
 The gate is about irreversibility, not about touching apps at all: `mac_recipe`
 runs fixed read-only scripts chosen from a closed list, and needs no flag —

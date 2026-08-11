@@ -401,6 +401,16 @@ export const config = {
   browserTimeoutMs: Number(env("BROWSER_TIMEOUT") ?? 30_000),
 
   /**
+   * Clicking and typing on web pages. Off by default because it dissolves a
+   * boundary the read-only browser gets for free: a specialist that only reads
+   * cannot be made to *do* anything by a hostile page. With this on, a page's
+   * instructions can become clicks in a session that may be logged in
+   * somewhere. The blast radius stays the browser — no shell, no filesystem —
+   * but inside it, turning this on is trusting the pages you send the agent to.
+   */
+  browserAct: env("BROWSER_ACT") === "1",
+
+  /**
    * What the agent calls itself.
    *
    * Without this the model answers "who are you" with whatever identity its
