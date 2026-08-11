@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Thinking } from "@/components/Thinking";
 import { Widget } from "@/components/Widget";
 import { AttachmentPreviews } from "@/components/AttachmentPreviews";
-import { SearchResults, SourcesFooter } from "@/components/Sources";
+import { SourcesFooter } from "@/components/Sources";
 import { MessageActions } from "@/components/MessageActions";
 import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -44,10 +44,6 @@ export function Message({
         </div>
       )}
 
-      {/* What the searches returned, above the answer written from them. A
-          model this size summarises loosely, and the hits are both the check
-          on that and often the thing actually wanted. */}
-      {searchHits(sources).length > 0 && <SearchResults items={searchHits(sources)} />}
 
       {waiting ? (
         <Thinking startedAt={startedAt} chars={thinking} />
@@ -64,7 +60,7 @@ export function Message({
             streaming &&
               "after:ml-0.5 after:inline-block after:h-4 after:w-1.5 after:translate-y-0.5 after:animate-pulse after:bg-current",
           )}
-          onClick={copyCodeBlock}
+          onClick={onBodyClick}
           dangerouslySetInnerHTML={{ __html: renderMarkdownish(content) }}
         />
       )}
@@ -119,6 +115,24 @@ export function Message({
  * process for the same reason the message-level copy is: the renderer's
  * clipboard API is blocked under this CSP.
  */
+/**
+ * Clicks inside the rendered answer.
+ *
+ * The body is injected as a string, so there is no React left to hang a
+ * handler on and both of these arrive by delegation. A link goes to the real
+ * browser through the main process: the renderer has no navigation of its own,
+ * and a page loading inside the chat window would be a trap with no way back.
+ */
+function onBodyClick(event) {
+  const link = event.target.closest("a[data-link]");
+  if (link) {
+    event.preventDefault();
+    window.maple?.openExternal(link.getAttribute("href"));
+    return;
+  }
+  copyCodeBlock(event);
+}
+
 async function copyCodeBlock(event) {
   const button = event.target.closest("[data-copy-code]");
   if (!button) return;
@@ -148,10 +162,4 @@ function countCalls(tools) {
     counts.set(name, (counts.get(name) ?? 0) + 1);
   }
   return order.map((name) => ({ name, calls: counts.get(name) }));
-}
-
-/** Hits from searches only. A fetched page is a source but not a result --
- *  it was already chosen, so listing it as something to choose is noise. */
-function searchHits(sources) {
-  return (sources ?? []).filter((s) => s.tool === "web_search").flatMap((s) => s.items ?? []);
 }

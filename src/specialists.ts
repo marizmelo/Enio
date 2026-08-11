@@ -46,14 +46,23 @@ export const SPECIALISTS: Specialist[] = [
       "Questions about the outside world: news, current events, announcements, documentation, or anything needing a web lookup.",
     systemPrompt:
       `You research things on the web and report what you find.\n\n` +
-      `Search first, then open the most promising result with browse to read it ` +
-      `properly — snippets are often misleading. browse keeps the session, so ` +
-      `follow a trail with link: <number> from the list it prints rather than ` +
-      `guessing a URL. web_fetch is the quick path when you only need one page ` +
-      `and it is plain HTML.\n\n` +
-      `Cite the URL for anything you assert. If the sources disagree, say so ` +
-      `rather than picking one silently. If you could not find something, say ` +
-      `that plainly — a confident wrong answer is worse than an admission.`,
+      `Always start with web_search. It returns the ranked list AND the text of ` +
+      `the top pages, so one call is usually everything you need. Never guess a ` +
+      `URL — a guessed address is a 404, and the search is there so you do not ` +
+      `have to. Use browse when you need to follow a trail (it keeps the ` +
+      `session: use link: <number> from the list it prints), and web_fetch for ` +
+      `one more page you already have the address of.\n\n` +
+      // Written as an instruction about *format* rather than about honesty:
+      // "cite your sources" produced a bare URL dumped at the end, which is
+      // not a citation anyone can follow at the point it matters. A model this
+      // size follows a shape it has been shown far better than a principle.
+      `Answer from what the pages say, not from the search snippets. Put the ` +
+      `link inline, on the thing it is about, as [name](url) — write ` +
+      `"the [JBL Flip 7](https://example.com/flip7) is £120", never a list of ` +
+      `bare URLs at the end. Each claim links to the page it came from.\n\n` +
+      `If the sources disagree, say so rather than picking one silently. If you ` +
+      `could not find something, say that plainly — a confident wrong answer is ` +
+      `worse than an admission.`,
     // weather lives here as well as on the generalist because this is where
     // the router actually sends "what is it like outside" -- it reads as a
     // question about the world, which is exactly this specialist's description.

@@ -29,11 +29,15 @@ export function isWebTool(name: string): boolean {
 }
 
 /**
- * `1. Title\n   https://…\n   snippet` — the shape web_search prints. Anchored
- * to the numbered-line format rather than scanning for bare URLs, so a URL
- * quoted inside a snippet does not become a result of its own.
+ * `1. Title\n   https://…\n   snippet` — the shape web_search prints.
+ *
+ * Anchored to the numbered-line format rather than scanning for bare URLs, so
+ * a URL quoted inside a snippet does not become a result of its own. The
+ * snippet is only the *indented* lines that follow: web_search appends the
+ * text of the pages it read after the list, at column zero, and a greedy
+ * capture would swallow a page of prose into the last result's snippet.
  */
-const SEARCH_HIT = /^\s*\d+\.\s+(.+)\n\s+(https?:\/\/\S+)\n?([\s\S]*?)(?=\n\s*\d+\.\s|\s*$)/gm;
+const SEARCH_HIT = /^[ \t]*\d+\.[ \t]+(.+)\n[ \t]+(https?:\/\/\S+)\n?((?:[ \t]+\S.*\n?)*)/gm;
 
 export function extractSources(
   name: string,
@@ -59,11 +63,36 @@ export function extractSources(
   // error string rather than a page.
   const url = typeof args.url === "string" ? args.url : firstUrl(result);
   if (!url || !/^https?:\/\//i.test(url)) return [];
-  // Anything that reads like a failure is not a source. Citing a page the turn
-  // could not read would be worse than citing nothing.
-  if (/^(Fetch failed|Rendered fetch failed|Search failed|Error:)/m.test(result)) return [];
+  if (unusable(result)) return [];
 
-  return [{ url, title: titleFrom(result, url) }];
+  const title = titleFrom(result, url);
+  // A soft 404 -- an error page served with status 200 -- renders like any
+  // other page, so the status check upstream never sees it and the title is
+  // the only tell left. Narrow on purpose: an article genuinely called "Page
+  // Not Found" is a rarer thing than a site that cannot be bothered to set a
+  // status code, and the cost of being wrong here is one missing row.
+  if (/^(404\b|page not found\b|not found\b)/i.test(title)) return [];
+
+  return [{ url, title }];
+}
+
+/**
+ * Whether the result is a failure rather than a page.
+ *
+ * Citing a page the turn could not read is worse than citing nothing: it makes
+ * an answer look sourced when the source is an error message. The HTTP line
+ * covers browse and web_fetch_rendered, which now refuse a 4xx or 5xx outright
+ * rather than handing the model somebody's error template as content.
+ */
+const UNUSABLE = [
+  /^(Fetch failed|Rendered fetch failed|Search failed|Error:)/m,
+  /returned HTTP [45]\d\d/,
+  /loaded but had no readable text/,
+  /is not a valid URL|not permitted|redirected to a local or internal address/,
+];
+
+function unusable(result: string): boolean {
+  return UNUSABLE.some((pattern) => pattern.test(result));
 }
 
 function firstUrl(text: string): string | null {

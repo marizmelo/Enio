@@ -10,7 +10,7 @@ Three ways to reach the web, in increasing order of involvement.
 
 | Tool | For |
 |---|---|
-| `web_search` | Finding pages. Works with no setup; better with a provider. |
+| `web_search` | Finding pages *and reading the top few*. Works with no setup. |
 | `web_fetch` | One page, plain HTML, no session. The quick path. |
 | `browse` | Reading a page and following links, keeping the session between calls. |
 
@@ -55,6 +55,17 @@ npm install playwright && npx playwright install chromium
 Without it, `browse` isn't offered at all.
 
 ## Search
+
+`web_search` returns the ranked list **and the text of the top three results**,
+in one call. The intended sequence is search, then fetch the best hit — and a
+small model reliably stops after the first step and writes a summary of the
+search snippets, which reads like an answer and is assembled from search-engine
+blurbs. Doing the second step for it removes a decision it gets wrong. Page text
+is clipped hard, because the context budget is small.
+
+Pages that return 404 are refused rather than read. A browser renders an error
+page exactly as happily as an article, so without checking the status the model
+reads "Page Not Found" as content and reasons from it.
 
 **Search works out of the box.** With nothing configured, `web_search` uses
 DuckDuckGo's HTML-only endpoint — the page it serves to clients that cannot run

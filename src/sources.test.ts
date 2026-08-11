@@ -97,3 +97,45 @@ test("the same page searched then fetched is cited once, keeping the snippet", (
   );
   assert.equal(merged[0]!.snippet, "the snippet");
 });
+
+/**
+ * The failure this fixes was visible on screen: a 404 page cited as a source
+ * under an answer that was written from its error template.
+ */
+test("a page that returned 4xx is never a source", () => {
+  const browse404 =
+    "https://www.cnet.com/best-products/best-bluetooth-speakers-under-150-dollars/ returned " +
+    "HTTP 404, so there is no page there to read. Do not describe this as the page's content.";
+  assert.deepEqual(extractSources("browse", { url: "https://www.cnet.com/x" }, browse404), []);
+  assert.deepEqual(
+    extractSources("web_fetch_rendered", { url: "https://example.com/x" }, "Rendered fetch failed: HTTP 503 — there is no page at https://example.com/x."),
+    [],
+  );
+});
+
+/** A soft 404 -- an error page served with status 200 -- has no status to
+ *  catch it, so the title is the only tell left. */
+test("an error page served as 200 is not a source either", () => {
+  const soft = "Page Not Found - CNET\nhttps://www.cnet.com/gone/\n\nThe page you wanted is not here.";
+  assert.deepEqual(extractSources("browse", { url: "https://www.cnet.com/gone/" }, soft), []);
+});
+
+test("a real page whose text merely mentions 404 is still a source", () => {
+  const page = "How to fix a 404 error\nhttps://example.com/guide\n\nA 404 means the page is missing.";
+  const found = extractSources("web_fetch", { url: "https://example.com/guide" }, page);
+  assert.deepEqual(found, [{ url: "https://example.com/guide", title: "How to fix a 404 error" }]);
+});
+
+/** web_search appends the text of the pages it read below the list. A greedy
+ *  snippet capture would swallow that prose into the last result. */
+test("page text appended after the list does not leak into the last snippet", () => {
+  const out =
+    "1. First\n   https://a.example/1\n   snippet one\n\n" +
+    "2. Second\n   https://b.example/2\n   snippet two\n\n" +
+    "Page contents — answer from these, not from the snippets above.\n\n" +
+    "--- https://a.example/1\nA long article body that must not become a snippet.";
+  const found = extractSources("web_search", {}, out);
+  assert.equal(found.length, 2);
+  assert.equal(found[1]!.snippet, "snippet two");
+  assert.ok(!found[1]!.snippet!.includes("long article body"));
+});

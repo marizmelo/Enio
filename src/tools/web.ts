@@ -308,14 +308,73 @@ const searchTool: ToolDef = {
     try {
       const hits = await runSearch(query, count);
       if (hits.length === 0) return `No results for "${query}".`;
-      return hits
+
+      const list = hits
         .map((h, i) => `${i + 1}. ${h.title}\n   ${h.url}\n   ${h.snippet.slice(0, 300)}`)
         .join("\n\n");
+
+      const read = await readTopResults(hits);
+      return read ? `${list}\n\n${read}` : list;
     } catch (err) {
       return `Search failed: ${(err as Error).message}`;
     }
   },
 };
+
+/**
+ * Read the top few results, in the same call that found them.
+ *
+ * A search returns titles and one-line snippets, which is enough to *choose* a
+ * page and nowhere near enough to answer from. The intended sequence is search
+ * then fetch, and a model this size reliably stops after the first step and
+ * writes a summary of the snippets -- which reads like an answer, cites real
+ * pages, and is assembled from search-engine blurbs rather than from anything
+ * the pages actually say.
+ *
+ * So the second step is not left to the model. This is the same closed-list
+ * move as everything else here: a decision it gets wrong becomes something it
+ * does not have to make. It costs one round of fetches, which is cheaper than
+ * the follow-up turn it replaces.
+ *
+ * Bounded hard, because the context budget is small and measured -- three
+ * pages at 1500 characters is roughly 1k tokens on top of the list. Failures
+ * are silent: a page that will not load simply is not quoted, and the list on
+ * its own is what the model had before.
+ */
+const READ_TOP = 3;
+const READ_CHARS = 1500;
+
+async function readTopResults(hits: SearchHit[]): Promise<string> {
+  const pages = await Promise.all(hits.slice(0, READ_TOP).map((hit) => readArticle(hit)));
+  const usable = pages.filter((p): p is string => p !== null);
+  if (usable.length === 0) return "";
+  return `Page contents — answer from these, not from the snippets above.\n\n${usable.join("\n\n")}`;
+}
+
+async function readArticle(hit: SearchHit): Promise<string | null> {
+  // Through the same guard a hand-typed URL goes through. These addresses come
+  // from a search engine, so they are exactly the untrusted case it exists for.
+  const target = parseTarget(hit.url);
+  if (typeof target === "string") return null;
+  try {
+    const res = await fetch(target, {
+      headers: { "User-Agent": "enio/0.1 (+local)" },
+      signal: AbortSignal.timeout(10_000),
+      redirect: "follow",
+    });
+    if (!res.ok) return null;
+    if (!(res.headers.get("content-type") ?? "").includes("html")) return null;
+
+    const { text } = await extractReadable(await res.text(), target.href);
+    const trimmed = text.trim();
+    // Under a paragraph means the extractor found navigation, not an article.
+    if (trimmed.length < 200) return null;
+    const clipped = trimmed.slice(0, READ_CHARS);
+    return `--- ${hit.url}\n${clipped}${trimmed.length > READ_CHARS ? "\n…" : ""}`;
+  } catch {
+    return null;
+  }
+}
 
 const fetchTool: ToolDef = {
   name: "web_fetch",
@@ -376,9 +435,17 @@ const renderedFetchTool: ToolDef = {
     const target = parseTarget(String(args.url ?? ""));
     if (typeof target === "string") return target;
     try {
-      const html = await renderPage(target.href, {
+      const { html, status } = await renderPage(target.href, {
         waitFor: args.wait_for ? String(args.wait_for) : undefined,
       });
+      // Same reason as browse: a rendered 404 is a page like any other to a
+      // browser, and its error template reads as content to the model.
+      if (status >= 400) {
+        return (
+          `Rendered fetch failed: HTTP ${status} — there is no page at ${target.href}. ` +
+          `Use web_search to find the right URL.`
+        );
+      }
       const { title, text } = await extractReadable(html, target.href);
       return clip(`${title ? title + "\n" : ""}${target.href}\n\n${text}`);
     } catch (err) {

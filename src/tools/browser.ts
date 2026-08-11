@@ -99,7 +99,18 @@ export interface RenderOptions {
  * images, fonts, media — are aborted at the network layer, which is a large
  * speedup on heavy pages and costs nothing for our purposes.
  */
-export async function renderPage(url: string, opts: RenderOptions = {}): Promise<string> {
+/** The rendered HTML and the status that came with it. The status is returned
+ *  rather than acted on: whether a 404's body is worth reading is the caller's
+ *  decision, not the renderer's. */
+export interface RenderedPage {
+  html: string;
+  status: number;
+}
+
+export async function renderPage(
+  url: string,
+  opts: RenderOptions = {},
+): Promise<RenderedPage> {
   const browser = await getBrowser();
   const context = await browser.newContext({
     userAgent:
@@ -115,7 +126,11 @@ export async function renderPage(url: string, opts: RenderOptions = {}): Promise
     await page.route("**/*", routeGuard);
 
     const timeout = opts.timeoutMs ?? config.browserTimeoutMs;
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout });
+    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout });
+    // Returned alongside the HTML rather than acted on here: this function's
+    // job is to render, and whether a 404's body is worth anything is the
+    // caller's call.
+    const status: number = response?.status?.() ?? 0;
 
     if (opts.waitFor) {
       // A missing selector shouldn't lose the page we already have.
@@ -124,7 +139,7 @@ export async function renderPage(url: string, opts: RenderOptions = {}): Promise
       await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
     }
 
-    return (await page.content()) as string;
+    return { html: (await page.content()) as string, status };
   } finally {
     await context.close().catch(() => {});
   }

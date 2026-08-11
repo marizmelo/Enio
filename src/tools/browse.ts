@@ -202,10 +202,25 @@ const browseTool: ToolDef = {
 
     try {
       const page = await getSession(session);
-      await page.goto(target, {
+      const response = await page.goto(target, {
         waitUntil: "domcontentloaded",
         timeout: config.browserTimeoutMs,
       });
+
+      // A browser renders a 404 exactly as happily as an article, so without
+      // this the model reads "Page Not Found" as the page's content and
+      // reasons from it -- which is how a turn ends with "CNET does not have
+      // that page" written from CNET's own error template, and how a dead URL
+      // ends up cited as a source. The status is the only thing that
+      // distinguishes them, and it is thrown away unless it is asked for.
+      const status: number = response?.status?.() ?? 0;
+      if (status >= 400) {
+        return (
+          `${target} returned HTTP ${status}, so there is no page there to read. ` +
+          `Do not describe this as the page's content. Use web_search to find the ` +
+          `right URL instead of trying another guess.`
+        );
+      }
 
       // A redirect can land somewhere the initial check would have refused, so
       // the address actually reached is checked before a single byte is read.
