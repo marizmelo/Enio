@@ -421,6 +421,17 @@ export const config = {
   browserPersist: env("BROWSER_PERSIST") !== "0",
 
   /**
+   * How often the daemon checks the watch list (a cron expression). Watches
+   * are "tell me if something changed", distinct from tasks' "run this at
+   * 9am" — see heartbeat.ts. Every 30 minutes by default; "off" (or "0")
+   * disables the heartbeat without touching the watches themselves.
+   */
+  heartbeatSchedule: (() => {
+    const v = (env("HEARTBEAT") ?? "*/30 * * * *").trim();
+    return v === "0" || v.toLowerCase() === "off" ? "" : v;
+  })(),
+
+  /**
    * What the agent calls itself.
    *
    * Without this the model answers "who are you" with whatever identity its

@@ -675,6 +675,65 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "watches": {
+      const { listWatches } = await import("./heartbeat.js");
+      const watches = listWatches();
+      if (watches.length === 0) {
+        console.log('No watches. Add one with: enio watch add "does X have a new release"');
+        break;
+      }
+      for (const w of watches) {
+        const checked = w.lastCheckedAt ? new Date(w.lastCheckedAt).toLocaleString() : "never";
+        console.log(
+          `${String(w.id).padStart(3)}  ${w.enabled ? " " : "(off) "}${w.prompt}\n` +
+            `     last checked ${checked}` +
+            (w.lastReport ? ` — ${w.lastReport.slice(0, 100).replace(/\n/g, " ")}` : ""),
+        );
+      }
+      break;
+    }
+
+    case "watch": {
+      const { addWatch, removeWatch, runHeartbeat } = await import("./heartbeat.js");
+      const sub = rest[0];
+      if (sub === "add") {
+        const prompt = rest.slice(1).join(" ").trim();
+        if (!prompt) {
+          console.error('Usage: enio watch add "does X have a new release"');
+          process.exit(1);
+        }
+        const w = addWatch(prompt);
+        console.log(
+          `Watching (#${w.id}): ${w.prompt}\n` +
+            `The daemon checks every "${config.heartbeatSchedule || "(heartbeat is off)"}" and notifies only when something changed.\n` +
+            `Run 'enio daemon' if it is not already running, or 'enio watch run' to check now.`,
+        );
+      } else if (sub === "rm") {
+        const id = Number(rest[1]);
+        if (!Number.isInteger(id)) {
+          console.error("Usage: enio watch rm <id>");
+          process.exit(1);
+        }
+        console.log(removeWatch(id) ? `Removed watch ${id}.` : `No watch ${id}.`);
+      } else if (sub === "run") {
+        const results = await runHeartbeat((m) => console.log(m));
+        const alerts = results.filter((r) => r.alerted);
+        console.log(
+          results.length === 0
+            ? "Nothing to check — add a watch first."
+            : alerts.length === 0
+              ? `\nAll quiet — ${results.length} watch(es) checked, nothing new.`
+              : `\n${alerts.length} of ${results.length} had news:\n` +
+                alerts.map((r) => `  #${r.watch.id}: ${r.report.slice(0, 200)}`).join("\n"),
+        );
+        break;
+      } else {
+        console.error("Usage: enio watch <add|rm|run> ...");
+        process.exit(1);
+      }
+      break;
+    }
+
     case "login": {
       const raw = rest[0];
       if (!raw) {
@@ -903,6 +962,11 @@ enio — a local agent with tools and persistent memory
   enio task run|rm|enable|disable|runs NAME
   enio daemon              run the scheduler
   enio suggest [--write]   find what is worth automating
+
+  enio watches             list what the heartbeat is watching
+  enio watch add "..."     watch for a change — notifies only when something is new
+  enio watch rm ID         stop watching
+  enio watch run           check every watch right now
 
   enio skills              list installed skills
   enio skills NAME         show one in full

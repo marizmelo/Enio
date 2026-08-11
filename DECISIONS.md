@@ -521,6 +521,38 @@ turns the whole thing off for setups where cookies on disk are unwelcome.
 
 ---
 
+### Watches: the sentinel became a comparison
+
+Tasks answer "run this at 9am"; watches answer "tell me if something
+changed", which is the more common wish and a different shape: the value is
+mostly in staying quiet. The daemon sweeps the watch list on a heartbeat
+(`ENIO_HEARTBEAT`, default every 30 minutes), and a check that found nothing
+new ends in silence.
+
+The pattern is OpenClaw's heartbeat, with its one model judgement rebuilt
+for a small model. OpenClaw asks the agent to *decide* to reply
+`HEARTBEAT_OK` when nothing needs attention — open generation resting on
+the model remembering an instruction across a whole turn, exactly what a
+~1B model drops. **Rejected** for that reason. Here the check turn just
+reports what it sees (no sentinel to remember), and a second, separate call
+answers a closed yes/no: "does the current report say anything meaningfully
+new that the previous one did not?" That is classification, the thing this
+model size is good at, and it also absorbs rephrasing — "no new release"
+versus "still nothing new" is the same answer said twice, and a text-diff
+would false-alarm on it where the comparison does not.
+
+Details that took deciding: the comparison runs against the **last report,
+not the last alert**, so three small drifts over three checks alert once
+each instead of compounding into a false "no change"; the first check
+**always alerts**, because it doubles as confirmation the watch works and
+as the baseline; and a failed or unparseable comparison **fails open** —
+over-notifying is visible and self-correcting, a watch that silently
+stopped watching is not. Delivery is a macOS notification, degrading to the
+daemon log off-macOS, and every alert lands in `watch_alerts` so "what did
+it tell me last week" has an answer.
+
+---
+
 ## Bugs that testing found
 
 Recorded because each cost real time and could recur.

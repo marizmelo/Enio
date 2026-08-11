@@ -1,9 +1,11 @@
 import { Cron } from "croner";
+import { config } from "./config.js";
 import { getDb } from "./memory/db.js";
 import { endSession, indexPending, startSession } from "./memory/store.js";
 import { runTurn } from "./agent.js";
 import { buildRegistry } from "./tools/index.js";
 import { setMemorySession } from "./tools/memory.js";
+import { listWatches, runHeartbeat } from "./heartbeat.js";
 import type { Message } from "./types.js";
 
 /**
@@ -198,6 +200,27 @@ export function startScheduler(onLog: (message: string) => void): { stop(): void
   const sync = () => {
     const tasks = listTasks().filter((t) => t.enabled);
     const wanted = new Set(tasks.map((t) => `${t.name}:${t.schedule}`));
+
+    // The heartbeat rides the same sync loop as the tasks, keyed like one, so
+    // adding the first watch starts it and removing the last stops it without
+    // a restart. It exists only while there is something to watch: an empty
+    // sweep every half hour is model time spent proving nothing.
+    if (config.heartbeatSchedule && listWatches().some((w) => w.enabled)) {
+      wanted.add(`\0heartbeat:${config.heartbeatSchedule}`);
+      if (!jobs.has(`\0heartbeat:${config.heartbeatSchedule}`)) {
+        try {
+          const job = new Cron(config.heartbeatSchedule, { protect: true }, async () => {
+            await runHeartbeat(onLog);
+          });
+          jobs.set(`\0heartbeat:${config.heartbeatSchedule}`, job);
+          onLog(
+            `heartbeat every "${config.heartbeatSchedule}" — next ${job.nextRun()?.toISOString()}`,
+          );
+        } catch (err) {
+          onLog(`could not schedule heartbeat: ${(err as Error).message}`);
+        }
+      }
+    }
 
     for (const [key, job] of jobs) {
       if (!wanted.has(key)) {

@@ -162,6 +162,24 @@ function migrate(d: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_task_runs_task ON task_runs(task_id);
 
+    CREATE TABLE IF NOT EXISTS watches (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      prompt          TEXT NOT NULL,
+      enabled         INTEGER NOT NULL DEFAULT 1,
+      created_at      INTEGER NOT NULL,
+      last_checked_at INTEGER,
+      last_report     TEXT,
+      last_alerted_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS watch_alerts (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      watch_id  INTEGER NOT NULL REFERENCES watches(id) ON DELETE CASCADE,
+      at        INTEGER NOT NULL,
+      report    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_watch_alerts_watch ON watch_alerts(watch_id);
+
     CREATE TABLE IF NOT EXISTS plans (
       id          TEXT PRIMARY KEY,
       session_id  TEXT,
