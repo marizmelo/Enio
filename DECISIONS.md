@@ -768,6 +768,34 @@ part is deciding when to write and how to invalidate, not the mechanism. Small
 win, no new dependency, and it only matters once conversations are routinely
 long enough to notice.
 
+### Ollama's MLX engine (2026)
+
+Same question as oMLX, new contender, same answer. Ollama 0.19 (March 2026)
+shipped a native MLX engine on Apple Silicon — C++ MLX driven by a Go runner,
+not mlx-lm, not Python — stabilised in 0.30, roughly doubling decode on the
+architectures it covers. Chat templates and tool-call parsing live in Ollama's
+Go server layer, shared across engines, so the `json.loads` fragility our
+`raw_decode` patch exists for does not exist there.
+
+**Not adopted as the runtime, for the oMLX reason verbatim:** Maple is
+`MapleForCausalLM`, exists only in the deepgrove fork, and needs
+`--flash-head`; Ollama's model list cannot load it and never will. The parts
+Ollama-MLX would remove — the Python venv, the git-cloned runtime,
+`patch-runtime.mjs` — are all costs Maple imposes, and removing them means
+removing Maple.
+
+**Nothing to build either:** `ENIO_BACKEND=ollama` already reaches the MLX
+engine when the pulled tag qualifies, because it all sits behind the same
+OpenAI-compatible API. The one thing users need to know — GGUF tags,
+including the backend's default `qwen3:8b`, get no MLX benefit; safetensors
+tags of supported architectures do — is a docs note (`docs/models.md`), not
+code.
+
+**What would change the answer:** the same condition as oMLX — Maple landing
+upstream or enio switching to a mainline default model. At that point
+Ollama-MLX is the *stronger* candidate of the two: it also owns model
+management and could absorb the separate vision-model process.
+
 ---
 
 ## Open questions

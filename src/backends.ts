@@ -44,7 +44,10 @@ export const BACKENDS: Record<string, Backend> = {
     nativeToolCalls: true,
     notes:
       "Set ENIO_MODEL to any tag you have pulled. Tool calling requires a " +
-      "model trained for it — most small instruct models are not.",
+      "model trained for it — most small instruct models are not. On Apple " +
+      "Silicon, Ollama ≥0.30 serves safetensors tags of supported " +
+      "architectures on its MLX engine (~2x decode); GGUF tags, including " +
+      "the default here, stay on llama.cpp.",
   },
   lmstudio: {
     id: "lmstudio",

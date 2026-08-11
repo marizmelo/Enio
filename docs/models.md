@@ -163,3 +163,22 @@ generation.
 The honest summary: Maple is fastest per token and lightest to run given its
 capability; a dense 4B is more reliable at multi-step tool use and holds far
 more context. Try both — switching costs one click and a model load.
+
+## A note on Ollama's MLX engine
+
+Since v0.30 (May 2026), Ollama on Apple Silicon can serve **safetensors**
+models through its own native MLX engine — roughly double the decode speed of
+its llama.cpp path, on the architectures it supports (Qwen3.5/Qwen3 MoE,
+Gemma 4, and a growing list). Two things matter if you run
+`ENIO_BACKEND=ollama` on a Mac:
+
+- **GGUF tags get none of it.** Most of what `ollama pull` lands, including
+  the default `qwen3:8b`, is GGUF and still runs on llama.cpp. To get MLX
+  speeds, pick a safetensors tag of a supported architecture, and note the
+  MLX preview targeted Macs with more than 32GB of memory.
+- **It cannot serve Maple.** Maple's architecture exists only in the mlx-lm
+  fork the bundled runtime uses; no upstream MLX stack loads it. Ollama-MLX
+  is a faster *Ollama*, not an alternative Maple runtime.
+
+Nothing in enio changes either way — the Ollama backend speaks the same
+OpenAI-compatible API whichever engine serves the model.
