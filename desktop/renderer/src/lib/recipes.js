@@ -63,3 +63,13 @@ export const automation = () => call("/automation");
 
 export const setAutoRun = (autoRun) =>
   call("/automation", { method: "POST", body: JSON.stringify({ autoRun }) });
+
+/** What is on disk: workspace files, and attachments grouped by conversation. */
+export const listFiles = () => call("/files");
+
+/** Removes one file, or a whole conversation's attachments. Returns bytes freed. */
+export const removeFile = (path) =>
+  call(`/files?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+
+export const removeConversationFiles = (id) =>
+  call(`/files?conversation=${encodeURIComponent(id)}`, { method: "DELETE" });

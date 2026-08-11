@@ -5,7 +5,8 @@ import { Message } from "@/components/Message";
 import { Composer } from "@/components/Composer";
 import { EmptyState } from "@/components/EmptyState";
 import { streamTurn } from "@/lib/agent";
-import { attachedFiles, fetchCapabilities } from "@/lib/capabilities";
+import { appendMention, attachedFiles, fetchCapabilities } from "@/lib/capabilities";
+import { FilesDialog } from "@/components/FilesDialog";
 import {
   conversationMessages,
   createConversation,
@@ -42,11 +43,14 @@ export function App() {
   // Off by default, deliberately. An assistant that starts talking without
   // being asked is startling in a way a silent one never is.
   const [speakReplies, setSpeakReplies] = useState(false);
-  // Which stored conversation this thread is. Null until resume or first send;
-  // the server logs every turn under it, which is what makes restarts cheap.
+  // Which stored conversation this thread is. Minted before the first message
+  // rather than at send: attachments are filed under it, and they happen while
+  // the message is still being written. An id with no messages behind it costs
+  // one row and never appears in the list.
   const [conversationId, setConversationId] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [recipesOpen, setRecipesOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
   // How full the model's window is, reported by the server after folding.
   const [context, setContext] = useState(null);
 
@@ -165,7 +169,12 @@ export function App() {
     (async () => {
       try {
         const all = await listConversations();
-        if (all.length === 0) return;
+        if (all.length === 0) {
+          // Nothing to resume, but attaching still needs somewhere to file
+          // things — so the thread gets its id now rather than on send.
+          setConversationId(await createConversation().catch(() => null));
+          return;
+        }
         const latest = all[0];
         const msgs = await restoreThread(latest.id);
         setConversationId(latest.id);
@@ -209,7 +218,11 @@ export function App() {
       setShowJump(false);
       // Recorded on the message so the thread can show what was attached
       // after the composer has been cleared.
-      const files = attachedFiles(trimmed, [...(capabilities.files ?? []), ...sessionFiles]);
+      const files = attachedFiles(trimmed, [
+        ...(capabilities.files ?? []),
+        ...(capabilities.attachments ?? []),
+        ...sessionFiles,
+      ]);
       const history = [...messages, { role: "user", content: trimmed, files }];
       setMessages([...history, { role: "assistant", content: "", tools: [] }]);
       setStreaming(true);
@@ -317,9 +330,21 @@ export function App() {
         onNewChat={newChat}
         onHistory={() => setHistoryOpen(true)}
         onRecipes={isMac ? () => setRecipesOpen(true) : undefined}
+        onFiles={() => setFilesOpen(true)}
       />
 
       <RecipesDialog open={recipesOpen} onOpenChange={setRecipesOpen} />
+
+      <FilesDialog
+        open={filesOpen}
+        onOpenChange={setFilesOpen}
+        conversationId={conversationId}
+        onReuse={(paths) => {
+          setSessionFiles((prev) => [...new Set([...prev, ...paths])]);
+          setInput((value) => paths.reduce(appendMention, value));
+          setFilesOpen(false);
+        }}
+      />
 
       <HistoryDialog
         open={historyOpen}
@@ -327,10 +352,9 @@ export function App() {
         currentId={conversationId}
         onPick={openConversation}
         onDiscarded={(id) => {
-          if (id === conversationId) {
-            setConversationId(null);
-            setMessages([]);
-          }
+          // Discarding took its attachments with it, so this thread cannot
+          // keep the id — the folder it was filing into is gone.
+          if (id === conversationId) newChat();
         }}
       />
 
@@ -390,6 +414,7 @@ export function App() {
         streaming={streaming}
         capabilities={capabilities}
         sessionFiles={sessionFiles}
+        conversationId={conversationId}
         onAttached={(names) =>
           setSessionFiles((prev) => [...new Set([...prev, ...names])])
         }

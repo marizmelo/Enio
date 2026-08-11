@@ -39,6 +39,7 @@ export const Composer = forwardRef(function Composer({
   streaming,
   capabilities = {},
   sessionFiles = [],
+  conversationId = null,
   onAttached = () => {},
   speakReplies = false,
   onToggleSpeak = () => {},
@@ -78,8 +79,18 @@ export const Composer = forwardRef(function Composer({
   // chip. Still only a *known* name becomes a chip: "@researcher" is an agent
   // and "@notafile" is ordinary text the server will leave alone.
   const known = useMemo(
-    () => [...new Set([...(capabilities.files ?? []), ...sessionFiles])],
-    [capabilities.files, sessionFiles],
+    () => [
+      ...new Set([
+        ...(capabilities.files ?? []),
+        // Attachments are listed apart from workspace files so they stay out
+        // of the file menu, but a mention naming one still has to become a
+        // chip -- otherwise reopening a conversation shows its attachments as
+        // plain text.
+        ...(capabilities.attachments ?? []),
+        ...sessionFiles,
+      ]),
+    ],
+    [capabilities.files, capabilities.attachments, sessionFiles],
   );
   const attached = attachedFiles(value, known);
 
@@ -257,7 +268,7 @@ export const Composer = forwardRef(function Composer({
   }));
 
   const pickFiles = async () => {
-    const names = (await window.maple?.pickFiles()) ?? [];
+    const names = (await window.maple?.pickFiles(conversationId)) ?? [];
     if (names.length > 0) attachAll(names);
   };
 
@@ -271,7 +282,7 @@ export const Composer = forwardRef(function Composer({
     for (let i = 0; i < bytes.length; i += 8192) {
       binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
     }
-    return window.maple?.saveImage(file.name || "pasted.png", btoa(binary));
+    return window.maple?.saveImage(file.name || "pasted.png", btoa(binary), conversationId);
   };
 
   const handlePaste = async (e) => {
@@ -292,7 +303,7 @@ export const Composer = forwardRef(function Composer({
     for (let i = 0; i < dropped.length; i++) {
       names.push(
         paths[i]
-          ? await window.maple?.importFile(paths[i])
+          ? await window.maple?.importFile(paths[i], conversationId)
           : await saveImageBlob(dropped[i]),
       );
     }

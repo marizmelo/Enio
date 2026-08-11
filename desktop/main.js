@@ -507,26 +507,49 @@ const WORKSPACE = path.resolve(
 );
 
 /**
- * Copy into the workspace without ever overwriting.
+ * Where one conversation's attachments go.
+ *
+ * Grouped by conversation rather than tipped into the top of the workspace,
+ * which is what this used to do: attach four screenshots across three threads
+ * and the workspace was screenshot.png through screenshot-4.png with nothing
+ * recording which question any of them belonged to. Still inside the
+ * workspace, because safePath scopes every filesystem tool there and an
+ * attachment the agent cannot read is not an attachment.
+ *
+ * The id is checked rather than trusted even though it comes from our own
+ * renderer: it reaches this as a string and is about to become a path.
+ */
+const ATTACH_DIR = "attachments";
+
+function attachmentDir(conversationId) {
+  const id = String(conversationId ?? "");
+  if (!/^[0-9a-fA-F-]{8,64}$/.test(id)) return WORKSPACE;
+  return path.join(WORKSPACE, ATTACH_DIR, id);
+}
+
+/**
+ * Copy into a conversation's folder without ever overwriting.
  *
  * A second screenshot.png must not silently replace the first — the user would
  * be asking about one image while the model reads another, and nothing on
  * screen would say so.
  */
-function copyIntoWorkspace(sourcePath) {
-  fs.mkdirSync(WORKSPACE, { recursive: true });
+function copyIntoWorkspace(sourcePath, conversationId) {
+  const dir = attachmentDir(conversationId);
+  fs.mkdirSync(dir, { recursive: true });
   const ext = path.extname(sourcePath);
   const stem = path.basename(sourcePath, ext).replace(/[^\w.-]+/g, "-") || "file";
 
   let name = `${stem}${ext}`;
-  for (let n = 2; fs.existsSync(path.join(WORKSPACE, name)); n++) {
+  for (let n = 2; fs.existsSync(path.join(dir, name)); n++) {
     name = `${stem}-${n}${ext}`;
   }
-  fs.copyFileSync(sourcePath, path.join(WORKSPACE, name));
-  return name;
+  fs.copyFileSync(sourcePath, path.join(dir, name));
+  // Workspace-relative, because that is what an @mention is.
+  return path.relative(WORKSPACE, path.join(dir, name));
 }
 
-ipcMain.handle("pick-files", async () => {
+ipcMain.handle("pick-files", async (_event, conversationId) => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: "Attach to this message",
     properties: ["openFile", "multiSelections"],
@@ -537,7 +560,42 @@ ipcMain.handle("pick-files", async () => {
     ],
   });
   if (result.canceled) return [];
-  return result.filePaths.map(copyIntoWorkspace);
+  return result.filePaths.map((p) => copyIntoWorkspace(p, conversationId));
+});
+
+/**
+ * Save a copy of a workspace file somewhere the user chooses.
+ *
+ * The counterpart to attaching: something that arrived in a conversation — a
+ * generated image, a file the agent wrote — should be gettable back out
+ * without going through Finder to find where the workspace actually is. The
+ * source is resolved against the workspace and refused if it escapes; the
+ * *destination* is wherever the user points the save panel, which is theirs to
+ * decide and is why it is a panel rather than a path from the renderer.
+ */
+ipcMain.handle("save-file-as", async (_event, relPath) => {
+  const full = resolveInWorkspace(relPath);
+  if (!full || !fs.existsSync(full)) return false;
+
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "Save a copy",
+    defaultPath: path.basename(full),
+  });
+  if (result.canceled || !result.filePath) return false;
+  try {
+    fs.copyFileSync(full, result.filePath);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+/** Show a workspace file in Finder. */
+ipcMain.handle("reveal-file", (_event, relPath) => {
+  const full = resolveInWorkspace(relPath);
+  if (!full || !fs.existsSync(full)) return false;
+  shell.showItemInFolder(full);
+  return true;
 });
 
 const PREVIEWABLE = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"]);
@@ -550,10 +608,19 @@ const PREVIEW_LIMIT = 4 * 1024 * 1024;
  * reads a path the renderer supplied — the same rule the agent's own file
  * tools follow, for the same reason.
  */
+/** A renderer-supplied path, resolved against the workspace, or null if it
+ *  escapes. Every handler that touches a path from the renderer goes through
+ *  this — one rule in one place, matching what the agent's own file tools do. */
+function resolveInWorkspace(relPath) {
+  const full = path.resolve(WORKSPACE, String(relPath ?? ""));
+  if (full !== WORKSPACE && !full.startsWith(WORKSPACE + path.sep)) return null;
+  return full;
+}
+
 ipcMain.handle("read-attachment", (_event, name) => {
   try {
-    const full = path.resolve(WORKSPACE, name);
-    if (full !== WORKSPACE && !full.startsWith(WORKSPACE + path.sep)) return null;
+    const full = resolveInWorkspace(name);
+    if (!full) return null;
 
     const ext = path.extname(full).toLowerCase();
     if (!PREVIEWABLE.has(ext)) return null;
@@ -570,9 +637,9 @@ ipcMain.handle("read-attachment", (_event, name) => {
   }
 });
 
-ipcMain.handle("import-file", (_event, sourcePath) => {
+ipcMain.handle("import-file", (_event, sourcePath, conversationId) => {
   try {
-    return copyIntoWorkspace(sourcePath);
+    return copyIntoWorkspace(sourcePath, conversationId);
   } catch {
     // A drag from somewhere unreadable should drop the file, not the app.
     return null;
@@ -580,17 +647,18 @@ ipcMain.handle("import-file", (_event, sourcePath) => {
 });
 
 /** Pasted or dropped image bytes, which have no path to copy from. */
-ipcMain.handle("save-image", (_event, { name, base64 }) => {
-  fs.mkdirSync(WORKSPACE, { recursive: true });
+ipcMain.handle("save-image", (_event, { name, base64, conversationId }) => {
+  const dir = attachmentDir(conversationId);
+  fs.mkdirSync(dir, { recursive: true });
   const ext = path.extname(name || "") || ".png";
   const stem = (path.basename(name || "pasted", ext) || "pasted").replace(/[^\w.-]+/g, "-");
 
   let file = `${stem}${ext}`;
-  for (let n = 2; fs.existsSync(path.join(WORKSPACE, file)); n++) {
+  for (let n = 2; fs.existsSync(path.join(dir, file)); n++) {
     file = `${stem}-${n}${ext}`;
   }
-  fs.writeFileSync(path.join(WORKSPACE, file), Buffer.from(base64, "base64"));
-  return file;
+  fs.writeFileSync(path.join(dir, file), Buffer.from(base64, "base64"));
+  return path.relative(WORKSPACE, path.join(dir, file));
 });
 
 /**

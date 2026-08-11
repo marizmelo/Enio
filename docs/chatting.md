@@ -67,6 +67,39 @@ Recent turns are kept whole, because that is where pronouns point: a summary of
 
 See [Models](models.md) for how the size of that window is chosen.
 
+## Files and attachments
+
+Attach a file with the **+** menu, by dragging it in, or by pasting an image.
+The workspace list in that menu shows a thumbnail for anything previewable —
+four screenshots are indistinguishable by name and obvious by picture.
+
+**Attachments are stored with the conversation they belong to**, under
+`~/enio-workspace/attachments/<conversation>/`. They stay inside the workspace
+because the filesystem tools are scoped there and a file outside it cannot be
+read at all; the subfolder is what keeps the workspace from becoming a drawer of
+`screenshot-7.png` with nothing recording which question any of them went with.
+
+The **Files** button in the status bar is where storage is managed. It shows
+what this conversation attached, what every other conversation attached —
+grouped under the question it was asked with, which is the only grouping that
+answers "do I still need this" — and the workspace files that belong to no
+conversation. Per file:
+
+| | |
+|---|---|
+| **+** | attach it to the message you are writing, again |
+| **Download** | save a copy wherever you like, through the system panel |
+| **Reveal** | show it in Finder |
+| **Delete** | remove it — the only one of the four that is not reversible |
+
+A whole conversation's attachments can be removed in one go, and **discarding a
+conversation removes its files with it**. Keeping them would leave bytes on disk
+that nothing can name any more.
+
+Files from a conversation you already discarded are still listed, marked
+*discarded conversation*. Hiding them would mean a storage screen that omits
+some of what is stored, and this is now the only place they can be found.
+
 ## Conversations
 
 Every message is logged, so restarting the app restores the thread you were in.

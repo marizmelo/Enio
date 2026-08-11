@@ -1,5 +1,6 @@
 import { Paperclip, FileText, Folder, Plug, Sparkles, Users } from "lucide-react";
 import { TipButton } from "@/components/TipButton";
+import { useThumbnail } from "@/components/AttachmentChips";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -68,9 +69,7 @@ export function AttachMenu({
               <DropdownMenuItem disabled>Workspace is empty</DropdownMenuItem>
             ) : (
               files.slice(0, 100).map((f) => (
-                <DropdownMenuItem key={f} onSelect={() => onInsertMention(f)}>
-                  <span className="truncate font-mono text-xs">{f}</span>
-                </DropdownMenuItem>
+                <FileItem key={f} path={f} onSelect={() => onInsertMention(f)} />
               ))
             )}
           </DropdownMenuSubContent>
@@ -163,5 +162,31 @@ export function AttachMenu({
         </DropdownMenuSub>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * One workspace file, with a thumbnail when it is an image.
+ *
+ * A list of names is enough to pick `budget.csv` out of and useless for
+ * picking between four screenshots — which is exactly the case where a file
+ * gets attached from this menu. The thumbnail loads through the same bridge
+ * the chips use and simply does not appear for anything that is not a
+ * previewable image, so the row never waits on it.
+ */
+function FileItem({ path, onSelect }) {
+  const src = useThumbnail(path);
+
+  return (
+    <DropdownMenuItem onSelect={onSelect} className="gap-2">
+      {src ? (
+        <img src={src} alt="" className="size-7 shrink-0 rounded object-cover" />
+      ) : (
+        <span className="flex size-7 shrink-0 items-center justify-center rounded bg-muted">
+          <FileText className="size-3.5 text-muted-foreground" />
+        </span>
+      )}
+      <span className="truncate font-mono text-xs">{path}</span>
+    </DropdownMenuItem>
   );
 }

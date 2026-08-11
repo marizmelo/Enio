@@ -17,6 +17,13 @@ import {
 } from "./tools/desktop.js";
 import { probeAssistiveAccess } from "./tools/ax.js";
 import { availableModels, currentModelId } from "./model-settings.js";
+import {
+  ATTACH_DIR,
+  FileRefused,
+  listStorage,
+  removeConversationFiles,
+  removeFile,
+} from "./files.js";
 import { CATALOGUE, fitFor, machineMemory } from "./model-catalogue.js";
 import {
   DownloadRefused,
@@ -199,7 +206,12 @@ async function handle(
         tools: s.tools,
       })),
       servers: ctx.servers,
-      files: ctx.files,
+      // Split so the file menu can stay a view of the *workspace*. Attachments
+      // still have to be listed, because an @mention naming one has to resolve
+      // after a restart -- but a menu that grows by one row every time anyone
+      // attaches a screenshot stops being a way to find a file.
+      files: ctx.files.filter((f) => !f.startsWith(`${ATTACH_DIR}/`)),
+      attachments: ctx.files.filter((f) => f.startsWith(`${ATTACH_DIR}/`)),
       // So a client can decide whether to offer a microphone at all, rather
       // than offering one that returns 503 when pressed.
       voice: { transcription: whisperInstalled(), speech: config.ttsEngine !== "off" },
@@ -740,6 +752,35 @@ async function handle(
     return;
   }
 
+  /**
+   * What is on disk and whose it is: workspace files, and attachments grouped
+   * by the conversation they were attached to.
+   *
+   * A read and a delete, and nothing else. Reusing a file is re-mentioning it,
+   * which needs no endpoint, and saving one out is the desktop's own save
+   * dialog -- routing a copy of the bytes through HTTP to land them somewhere
+   * the agent is not allowed to write would be theatre.
+   */
+  if (req.method === "GET" && url.pathname === "/files") {
+    sendJson(res, 200, listStorage());
+    return;
+  }
+
+  if (req.method === "DELETE" && url.pathname === "/files") {
+    const path = url.searchParams.get("path");
+    const conversation = url.searchParams.get("conversation");
+    try {
+      const freed = conversation
+        ? removeConversationFiles(conversation)
+        : removeFile(String(path ?? ""));
+      sendJson(res, 200, { freed });
+    } catch (err) {
+      const refused = err instanceof FileRefused || /escapes the workspace/.test(String(err));
+      sendJson(res, refused ? 400 : 500, { error: { message: (err as Error).message } });
+    }
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/conversations") {
     sendJson(res, 200, { conversations: listConversations() });
     return;
@@ -764,7 +805,15 @@ async function handle(
     }
     if (req.method === "DELETE" && !sub) {
       const keepFacts = url.searchParams.get("facts") !== "forget";
-      sendJson(res, 200, { discarded: id, ...discardConversation(id!, { keepFacts }) });
+      // The files go with it. Keeping them would leave bytes on disk that
+      // nothing can name any more -- the conversation that grouped them is the
+      // only record of what they were for.
+      const freed = removeConversationFiles(id!);
+      sendJson(res, 200, {
+        discarded: id,
+        freed,
+        ...discardConversation(id!, { keepFacts }),
+      });
       return;
     }
 

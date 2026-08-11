@@ -1,4 +1,4 @@
-import { BookMarked, CircleHelp, History, MessageSquarePlus } from "lucide-react";
+import { BookMarked, CircleHelp, FolderOpen, History, MessageSquarePlus } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -25,7 +25,16 @@ const DOT = {
  * rather than disappearing once ready, because the one question this window
  * cannot answer on its own is whether the model is actually up.
  */
-export function StatusBar({ phase, message, tools, context, onNewChat, onHistory, onRecipes }) {
+export function StatusBar({
+  phase,
+  message,
+  tools,
+  context,
+  onNewChat,
+  onHistory,
+  onRecipes,
+  onFiles,
+}) {
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
     // lights over the top-left of the page rather than in a title bar of its
@@ -46,6 +55,9 @@ export function StatusBar({ phase, message, tools, context, onNewChat, onHistory
         </TipButton>
         <TipButton tip="Conversations" className="size-7" onClick={onHistory}>
           <History className="size-3.5" />
+        </TipButton>
+        <TipButton tip="Files" className="size-7" onClick={onFiles}>
+          <FolderOpen className="size-3.5" />
         </TipButton>
         {/* Only on a Mac: recipes are AppleScript, so the list is empty and
             unfillable anywhere else, and a button opening an empty drawer

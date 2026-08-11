@@ -29,13 +29,23 @@ contextBridge.exposeInMainWorld("maple", {
    * Native file picker. Returns workspace-relative names, because the chosen
    * files are copied in — the agent cannot read anything outside the workspace.
    */
-  pickFiles() {
-    return ipcRenderer.invoke("pick-files");
+  pickFiles(conversationId) {
+    return ipcRenderer.invoke("pick-files", conversationId);
   },
 
   /** Save pasted or dropped image bytes into the workspace. */
-  saveImage(name, base64) {
-    return ipcRenderer.invoke("save-image", { name, base64 });
+  saveImage(name, base64, conversationId) {
+    return ipcRenderer.invoke("save-image", { name, base64, conversationId });
+  },
+
+  /** Copy a workspace file out to wherever the user points the save panel. */
+  saveFileAs(relPath) {
+    return ipcRenderer.invoke("save-file-as", relPath);
+  },
+
+  /** Show a workspace file in Finder. */
+  revealFile(relPath) {
+    return ipcRenderer.invoke("reveal-file", relPath);
   },
 
   /**
@@ -57,8 +67,8 @@ contextBridge.exposeInMainWorld("maple", {
   },
 
   /** Copy an already-on-disk file into the workspace. */
-  importFile(sourcePath) {
-    return ipcRenderer.invoke("import-file", sourcePath);
+  importFile(sourcePath, conversationId) {
+    return ipcRenderer.invoke("import-file", sourcePath, conversationId);
   },
 
   /** Put text on the system clipboard. */
