@@ -84,7 +84,10 @@ export function StatusBar({
       <div className="ml-auto flex min-w-0 items-center gap-2">
         <ModelPicker backendReady={phase === "ready"} />
         <ContextMeter context={context} />
-        <span className="truncate">{message}</span>
+        {/* Rendered only when there is something to say: an empty span still
+            costs two flex gaps, which reads as a hole between the model name
+            and the tool count now that the ready state sends no prose. */}
+        {message && <span className="truncate">{message}</span>}
         {typeof tools === "number" && (
           <span className="shrink-0 tabular-nums">· {tools} tools</span>
         )}

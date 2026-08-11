@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Cpu, LibraryBig } from "lucide-react";
+import { LibraryBig } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,7 +74,6 @@ export function ModelPicker({ backendReady }) {
           disabled={switching}
           title={error || undefined}
         >
-          <Cpu className="size-3" />
           {switching ? "switching…" : shortName(current)}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
