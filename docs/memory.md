@@ -56,6 +56,18 @@ nothing.
 If embeddings are unavailable, keyword matching takes over and the agent keeps
 working.
 
+Alongside similarity there is one channel of pure **recency**: the last two
+days' session summaries ride into every conversation, labelled *today* or
+*yesterday*. "What was I doing yesterday" resembles yesterday's summary only
+by accident — the day boundary is the actual relation, and similarity search
+cannot express it.
+
+Long conversations get one more protection. When a session outgrows the
+context window, the older part is folded into a running summary; that fold is
+now also kept, and when the session is later summarised into memory, the
+summariser reads the fold plus the transcript's tail — so both ends of a long
+session reach its durable summary, instead of only the first part.
+
 ## Forgetting
 
 Discarding a conversation asks what happens to the facts learned from it,

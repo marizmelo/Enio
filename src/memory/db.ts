@@ -236,6 +236,9 @@ function migrate(d: Database.Database): void {
   // has vouched for them. Both default to what the old rows already meant.
   addColumn(d, "saved_recipes", "kind", "TEXT NOT NULL DEFAULT 'applescript'");
   addColumn(d, "saved_recipes", "safe", "INTEGER NOT NULL DEFAULT 0");
+  // The running summary compaction produces mid-session, kept so the final
+  // session summary can cover the whole arc instead of the first 12k chars.
+  addColumn(d, "sessions", "fold_summary", "TEXT");
 
 }
 

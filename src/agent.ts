@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { complete } from "./model.js";
-import { buildMemoryBlock, logMessage } from "./memory/store.js";
+import { buildMemoryBlock, logMessage, saveFoldSummary } from "./memory/store.js";
 import { lastSpecialist, recordTurn, type StepRecord } from "./memory/traces.js";
 import { exemplarBlock, preferenceBlock } from "./memory/learning.js";
 import { getSpecialist, route, toolsFor } from "./specialists.js";
@@ -175,7 +175,7 @@ export function contextUsage(history: Message[]): { tokens: number; budget: numb
  */
 const COMPACT_TO = 0.6;
 
-async function compactHistory(history: Message[]): Promise<Message[]> {
+async function compactHistory(history: Message[], sessionId?: string): Promise<Message[]> {
   const system = history[0]?.role === "system" ? history[0] : null;
   const rest = system ? history.slice(1) : history;
 
@@ -253,6 +253,20 @@ async function compactHistory(history: Message[]): Promise<Message[]> {
     // An empty summary is not cached: it means the model failed, and the next
     // turn deserves another attempt rather than a permanent hole.
     if (summary) summaryCache.set(key, summary);
+  }
+
+  // Persisted, not just cached: the durable session summariser reads this
+  // later so a long session's summary covers the whole arc rather than the
+  // transcript's first 12k characters (see summaryInput). Each re-fold folds
+  // the previous fold message, so the latest one always spans everything
+  // before the recent window. Wrapped like tracing is: losing the save must
+  // never cost the turn.
+  if (summary && sessionId) {
+    try {
+      saveFoldSummary(sessionId, summary);
+    } catch {
+      /* the fold still happened; only its persistence was lost */
+    }
   }
 
   // Without a summary, drop to the window anyway. Losing the old messages is
@@ -479,7 +493,7 @@ export async function runTurn(
     history.length - 1 > config.historyWindow ||
     contextUsage(history).tokens > contextBudget()
   ) {
-    const compacted = await compactHistory(history);
+    const compacted = await compactHistory(history, sessionId);
     history.splice(0, history.length, ...compacted);
   }
 

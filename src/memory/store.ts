@@ -283,6 +283,61 @@ export async function searchSummaries(query: string, limit = 3): Promise<string[
     .map((r) => r.summary);
 }
 
+/**
+ * Keep the latest compaction summary on the session row.
+ *
+ * Compaction distils the early conversation into a summary and then throws it
+ * away when the session ends — while the durable session summariser reads only
+ * the transcript's first 12k characters, so a long session's later half never
+ * reached its summary. Persisting the fold closes that: it already covers
+ * everything before the recent window (re-folds fold the previous fold, so the
+ * latest one spans the whole pre-window arc), and it cost nothing extra — the
+ * model already wrote it. This is the save-before-compaction pass, done with
+ * work compaction was doing anyway.
+ */
+export function saveFoldSummary(sessionId: string, summary: string): void {
+  getDb()
+    .prepare(`UPDATE sessions SET fold_summary = ? WHERE id = ?`)
+    .run(summary.slice(0, 8000), sessionId);
+}
+
+/**
+ * What the session summariser should read.
+ *
+ * A transcript that fits goes in whole. One that does not used to be cut at
+ * 12k characters — the *first* 12k, so whatever the session ended on was
+ * exactly what its summary omitted. With a fold summary available, the input
+ * becomes the fold (which covers the early part) plus the transcript's tail
+ * (which covers what the fold has not seen), so both ends of a long session
+ * reach the summary. Without one, the old head-slice stands: a wrong-shaped
+ * input beats no input.
+ */
+export function summaryInput(transcript: string, foldSummary: string | null): string {
+  const CAP = 12000;
+  if (transcript.length <= CAP || !foldSummary) return transcript.slice(0, CAP);
+  return (
+    `Notes on the earlier part of the conversation:\n${foldSummary}\n\n` +
+    `The most recent part, verbatim:\n${transcript.slice(-(CAP - foldSummary.length - 100))}`
+  );
+}
+
+/**
+ * The latest indexed sessions from the last two days, newest first — recency,
+ * where every other channel is similarity. "What was I doing yesterday" only
+ * resembles yesterday's summary by accident; the day boundary is the actual
+ * relation, and similarity search cannot express it.
+ */
+export function recentSummaries(limit = 3): Array<{ summary: string; startedAt: number }> {
+  const cutoff = Date.now() - 48 * 3600_000;
+  return getDb()
+    .prepare(
+      `SELECT summary, started_at AS startedAt FROM sessions
+       WHERE summary IS NOT NULL AND started_at > ?
+       ORDER BY started_at DESC LIMIT ?`,
+    )
+    .all(cutoff, limit) as Array<{ summary: string; startedAt: number }>;
+}
+
 /* ---------- retrieval for prompt injection ------------------------------ */
 
 /**
@@ -316,6 +371,27 @@ export async function buildMemoryBlock(query: string): Promise<string> {
   if (summaries.length > 0) {
     sections.push(
       "Earlier conversations:\n" + summaries.map((s) => `- ${s}`).join("\n"),
+    );
+  }
+
+  // Recency alongside similarity: the last two days' sessions, whatever the
+  // question. This is what lets "where was I" and "what was I doing
+  // yesterday" mean something — nothing about those words matches a summary
+  // about deploy scripts. Deduped against the similarity hits, clipped hard
+  // (attention is the scarce resource), and last, so the whole-block
+  // truncation below cuts recency before it cuts relevance.
+  const already = new Set(summaries);
+  const recent = recentSummaries().filter((r) => !already.has(r.summary));
+  if (recent.length > 0) {
+    const today = new Date().toDateString();
+    sections.push(
+      "Recent sessions:\n" +
+        recent
+          .map((r) => {
+            const day = new Date(r.startedAt).toDateString() === today ? "today" : "yesterday";
+            return `- (${day}) ${r.summary.slice(0, 200)}`;
+          })
+          .join("\n"),
     );
   }
 
@@ -363,9 +439,15 @@ export async function indexPending(
 
     onProgress?.(`indexing session ${id.slice(0, 8)} (${transcript.length} chars)`);
 
+    const fold = (
+      db.prepare(`SELECT fold_summary AS f FROM sessions WHERE id = ?`).get(id) as
+        | { f: string | null }
+        | undefined
+    )?.f ?? null;
+
     let summaryText = "";
     try {
-      summaryText = await summarize(transcript.slice(0, 12000));
+      summaryText = await summarize(summaryInput(transcript, fold));
       const vec = await embed(summaryText);
       db.prepare(`UPDATE sessions SET summary = ?, embedding = ? WHERE id = ?`).run(
         summaryText,

@@ -521,6 +521,40 @@ turns the whole thing off for setups where cookies on disk are unwelcome.
 
 ---
 
+### Temporal memory: recency as a channel, and the fold that stopped being thrown away
+
+Two pieces borrowed in outline from OpenClaw's memory design, both reshaped.
+
+**Daily notes became a recency channel.** OpenClaw keeps `memory/YYYY-MM-DD.md`
+files and auto-loads today's and yesterday's. The mechanism does not transplant
+— enio's memory is a database with query-driven retrieval, not a notes folder —
+but the gap it fills is real here too: every retrieval channel was *similarity*,
+and "what was I doing yesterday" resembles yesterday's summary only by
+accident. The day boundary is the actual relation, and similarity cannot
+express it. So the memory block now carries the last two days' session
+summaries unconditionally, labelled today/yesterday, deduped against the
+similarity hits, clipped hard, and placed last so the block's own truncation
+cuts recency before relevance. **Rejected: generating daily notes** as a new
+artifact — that is open generation for a model that is bad at it, and a second
+memory representation to keep consistent with the first.
+
+**The pre-compaction flush became "stop discarding the fold".** OpenClaw
+prompts the agent to save anything important before compaction summarises it
+away. Enio does not have that loss — raw transcripts are authoritative, logged
+before compaction ever runs, and triple extraction chunks the *whole*
+transcript. What it did have was quieter: the durable session summary read only
+the transcript's first 12k characters, so whatever a long session ended on was
+exactly what its summary omitted; and compaction's fold summary — the model's
+own distillation of the early part, re-folded so the latest always spans the
+whole pre-window arc — was cached in memory and thrown away. Persisting the
+fold and feeding the summariser fold-plus-tail closes the hole with work the
+model had already done. **Rejected: a save-important-things turn** before
+compaction — an open judgement call ("what matters?") by the model this
+codebase never trusts with judgement calls, costing a model round-trip per
+compaction to protect against a loss enio's architecture does not have.
+
+---
+
 ### Watches: the sentinel became a comparison
 
 Tasks answer "run this at 9am"; watches answer "tell me if something
