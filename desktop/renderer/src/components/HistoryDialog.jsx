@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MessageSquare, Trash2 } from "lucide-react";
+import { Brain, MessageSquare, Trash2 } from "lucide-react";
 import {
   CommandDialog,
   CommandEmpty,
@@ -95,6 +95,17 @@ export function HistoryDialog({ open, onOpenChange, currentId, onPick, onDiscard
               >
                 <MessageSquare className="mr-2 size-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                {/* Marks the conversations whose deletion would cost something
+                    memory keeps. The count is the tooltip, not the label: the
+                    scan question is "does this hold anything", answered by the
+                    icon being there at all, and a number on every row would be
+                    noise on the ones reading 1. */}
+                {c.knowledge > 0 && (
+                  <Brain
+                    className="ml-2 size-3.5 shrink-0 text-emerald-500"
+                    title={`Enio learned ${c.knowledge === 1 ? "1 thing" : `${c.knowledge} things`} here`}
+                  />
+                )}
                 <span className="ml-2 shrink-0 text-xs text-muted-foreground">
                   {ago(c.lastAt)}
                 </span>

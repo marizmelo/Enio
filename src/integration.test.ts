@@ -409,6 +409,15 @@ describe("conversations", () => {
     const atRisk = store.conversationKnowledge(a).map((f) => f.text);
     assert.deepEqual(atRisk, ["favourite colour is teal"]);
 
+    // The list badge must count exactly what the dialog would enumerate, so a
+    // scan and an open agree: unpinned facts only, pinned excluded.
+    const listed = store.listConversations();
+    const rowA = listed.find((c) => c.id === a);
+    const rowB = listed.find((c) => c.id === b);
+    assert.equal(rowA?.knowledge, 1, "a's badge should count its one at-risk fact");
+    assert.equal(rowB?.knowledge, 1);
+    assert.equal(rowA!.knowledge, store.conversationKnowledge(a).length);
+
     // Keep: transcript goes, knowledge is promoted to transcript-free standing.
     const kept = store.discardConversation(a, { keepFacts: true });
     assert.equal(kept.facts, 1);

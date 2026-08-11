@@ -458,6 +458,10 @@ export interface ConversationSummary {
   startedAt: number;
   lastAt: number;
   messages: number;
+  /** Unpinned facts learned here — what discarding this would lose. The same
+   *  count the discard dialog enumerates, surfaced up front so a conversation
+   *  worth keeping can be spotted by scanning rather than by opening each. */
+  knowledge: number;
 }
 
 /**
@@ -479,7 +483,9 @@ export function listConversations(limit = 50): ConversationSummary[] {
               COUNT(m.id)  AS messages,
               (SELECT content FROM messages
                 WHERE session_id = s.id AND role = 'user'
-                ORDER BY ts ASC LIMIT 1) AS firstUser
+                ORDER BY ts ASC LIMIT 1) AS firstUser,
+              (SELECT COUNT(*) FROM facts
+                WHERE session_id = s.id AND pinned = 0) AS knowledge
          FROM sessions s
          JOIN messages m ON m.session_id = s.id
         GROUP BY s.id
@@ -492,6 +498,7 @@ export function listConversations(limit = 50): ConversationSummary[] {
     lastAt: number;
     messages: number;
     firstUser: string | null;
+    knowledge: number;
   }>;
 
   return rows.map((r) => ({
@@ -500,6 +507,7 @@ export function listConversations(limit = 50): ConversationSummary[] {
     startedAt: r.startedAt,
     lastAt: r.lastAt,
     messages: r.messages,
+    knowledge: r.knowledge,
   }));
 }
 
