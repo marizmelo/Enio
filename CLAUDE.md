@@ -150,14 +150,18 @@ and the AX recipes are withheld until it is granted. Match on the *phrase*
 "not allowed assistive access", never the bare -1719: macOS reuses that code
 for "Invalid index".
 
-Reading and pressing go through `scripts/ax_bridge.py` (pyobjc) when it is
-available, with AppleScript as the fallback. This is not a preference but a
-capability difference — Calculator reports zero windows to System Events and
-twenty-three named buttons to the AX API — and it is faster besides. A click
-still compiles to a script so the approval sheet keeps showing the text that
-actually runs, and names reaching the shell go through `quoted form of`.
-Actions are compiled at *propose* time so the sheet shows the text that will
-actually run.
+Reading, pressing and typing go through `scripts/ax_bridge.py` (pyobjc) when
+it is available, with AppleScript as the fallback. This is not a preference
+but a capability difference — Calculator reports zero windows to System Events
+and twenty-three named buttons to the AX API — and it is faster besides.
+Bridge typing sets the field's value rather than synthesizing keystrokes: it
+works without fronting the app and *structurally refuses password fields*
+(`AXSecureTextField` by role) — do not replace it with an event-posting path,
+which would need a third TCC permission for unverifiable delivery (see the
+Peekaboo entry in DECISIONS.md). A click still compiles to a script so the
+approval sheet keeps showing the text that actually runs, and names reaching
+the shell go through `quoted form of`. Actions are compiled at *propose* time
+so the sheet shows the text that will actually run.
 
 **A plan step can be AppleScript, shell or Python** (`kind` on the step,
 missing means AppleScript). The model writes Python far better than it writes

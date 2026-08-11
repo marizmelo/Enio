@@ -26,3 +26,4 @@ token
 
 # Inspector UI build output
 ui/dist/
+__pycache__/

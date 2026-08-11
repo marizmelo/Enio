@@ -77,11 +77,22 @@ This fails in the right direction. A click by coordinate lands on whatever
 happens to be at those pixels now — after a scroll or a relayout, the wrong
 control, silently. A click by name either finds the name or errors.
 
-Reading and pressing go through a small Python helper (`scripts/ax_bridge.py`)
-that talks to the accessibility API directly, falling back to AppleScript when
-it isn't installed. That matters for more than speed: some apps — Calculator
-among them — report **zero windows** to AppleScript's System Events while
-exposing every button to the API underneath.
+Reading, pressing and typing go through a small Python helper
+(`scripts/ax_bridge.py`) that talks to the accessibility API directly, falling
+back to AppleScript when it isn't installed. That matters for more than speed:
+some apps — Calculator among them — report **zero windows** to AppleScript's
+System Events while exposing every button to the API underneath.
+
+The bridge reads the window you are looking at (the focused one, not just the
+first), fetches each element's attributes in one round-trip, names unlabeled
+controls from their developer identifiers, and answers instead of hanging when
+an app is wedged. Typing through it sets the field's value directly — the app
+does not need to be brought forward, and a **password field is refused by
+role**: the bridge cannot type into one even if asked. A press that opens a
+dialog reports itself as *dispatched but unconfirmed* rather than pretending
+to know. Several of these techniques are borrowed from
+[Peekaboo](https://github.com/steipete/peekaboo) (MIT), reimplemented on the
+public API.
 
 ## Plans, and the approval sheet
 
@@ -95,7 +106,7 @@ A step is one action, and can be any of these:
 | `open` | `"Calendar"` | Opens or fronts an app |
 | `click` | `"Save"` | Clicks a control by name |
 | `menu` | `"File > New Note"` | Chooses a menu command |
-| `type_text` | `"milk, eggs"` | Types into the frontmost app |
+| `type_text` | `"milk, eggs"` | Types into the app's focused field (without fronting it, when the bridge is installed) |
 | `press` | `"return"` | Presses one named key |
 | `script` | AppleScript | For when no named action fits |
 | `shell` | `git status` | A shell command |

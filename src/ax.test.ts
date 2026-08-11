@@ -216,6 +216,34 @@ describe("the accessibility bridge", () => {
     assert.equal(out.ok, false);
     assert.match(String(out.error), /not running/);
   });
+
+  test("typing compiles to settext when the bridge is available", { skip: notMac }, async () => {
+    const ax = await import("./tools/ax.js");
+    await ax.probeAxBridge();
+    const out = ax.compileAction("type", "Notes", "hello there");
+    assert.ok(out.ok);
+    if (ax.axBridgeAvailable()) {
+      // Set-value typing: no focus steal, and the bridge refuses password
+      // fields by role — neither of which keystroke could offer.
+      assert.match(out.script, /" settext "/);
+      assert.match(out.script, /quoted form of/);
+      // The text reaches a shell; it must never be bare in the command.
+      const sneaky = ax.compileAction("type", "Notes", '"; touch /tmp/enio-pwned; "');
+      assert.ok(sneaky.ok);
+      assert.doesNotMatch(sneaky.script, /do shell script "[^"]*touch/);
+    } else {
+      assert.match(out.script, /keystroke/);
+    }
+  });
+
+  test("settext refuses bad arguments with JSON, like everything else", { skip: notMac }, async () => {
+    const ax = await import("./tools/ax.js");
+    await ax.probeAxBridge();
+    if (!ax.axBridgeAvailable()) return;
+    const out = await ax.axBridge(["settext", "NoSuchApplication9917", "hi"]);
+    assert.equal(out.ok, false);
+    assert.match(String(out.error), /not running/);
+  });
 });
 
 describe("permission hints", () => {

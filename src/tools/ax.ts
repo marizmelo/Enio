@@ -51,6 +51,30 @@ export const assistiveAccessGranted = (): boolean => granted === true;
  * erroring, which is what makes it usable as a gate.
  */
 export async function probeAssistiveAccess(): Promise<boolean> {
+  // The direct question first, when the bridge's interpreter is there to ask
+  // it: AXIsProcessTrusted() is the exact predicate every AX call is gated
+  // on, where the System Events round-trip needs Automation permission just
+  // to ask about Accessibility — a probe that could itself be refused for an
+  // unrelated reason.
+  try {
+    if (existsSync(axBridgePath()) && existsSync(axBridgePython())) {
+      const { stdout } = await run(
+        axBridgePython(),
+        [
+          "-c",
+          "import ApplicationServices as A, sys; sys.stdout.write('granted' if A.AXIsProcessTrusted() else 'denied')",
+        ],
+        { timeout: 15_000 },
+      );
+      const answer = stdout.trim();
+      if (answer === "granted" || answer === "denied") {
+        granted = answer === "granted";
+        return granted;
+      }
+    }
+  } catch {
+    /* pyobjc missing or broken — the System Events probe below still answers */
+  }
   try {
     const { stdout } = await run(
       "osascript",
@@ -148,6 +172,12 @@ export interface AxBridgeResult {
   ok: boolean;
   rows?: string[];
   truncated?: boolean;
+  /** Which window the tree came from, when the window has a title. */
+  window?: string | null;
+  /** False when a press was dispatched but the app never confirmed it —
+   *  usually because the press worked and opened something modal. */
+  verified?: boolean;
+  note?: string;
   error?: string;
 }
 
@@ -481,9 +511,24 @@ export function compileAction(
     };
   }
 
-  // type. The delay is not superstition: bringing an app forward is
-  // asynchronous, and keystrokes sent before it has focus land in whatever was
-  // in front a moment ago -- which is the worst possible failure for typing.
+  // type. Through the bridge when it is available: setting the field's
+  // kAXValueAttribute writes into the named app whether or not it is
+  // frontmost, and structurally refuses password fields — the keystroke
+  // path can do neither. Still a script, same reason as click: the approval
+  // sheet shows the text that runs.
+  if (axBridgeAvailable()) {
+    const q = (v: string) => `quoted form of "${esc(v)}"`;
+    return {
+      ok: true,
+      script:
+        `do shell script ${q(axBridgePython())} & " " & ${q(axBridgePath())} & ` +
+        `" settext " & ${q(a)} & " " & ${q(target)}`,
+    };
+  }
+
+  // The delay is not superstition: bringing an app forward is asynchronous,
+  // and keystrokes sent before it has focus land in whatever was in front a
+  // moment ago -- which is the worst possible failure for typing.
   return {
     ok: true,
     script:

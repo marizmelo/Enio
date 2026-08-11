@@ -390,6 +390,52 @@ The lesson is the one already written down for OCR and for tool-name repair:
 this project's scripts are *tried*, not reasoned about. `osacompile` is a
 useful gate and not evidence.
 
+### Peekaboo, studied and mined rather than adopted (2026)
+
+[Peekaboo](https://github.com/steipete/peekaboo) (now under the openclaw org,
+MIT, Swift) drives the same AXUIElement API far more maturely than
+`ax_bridge.py` did, and its source was read closely before deciding what to
+take. Six techniques were reimplemented on the public API — batched
+attribute reads (`AXUIElementCopyMultipleAttributeValues`, one round-trip
+per element where a label alone cost three), messaging timeouts
+(`AXUIElementSetMessagingTimeout`, so a wedged app answers instead of riding
+the 30s subprocess kill), press-action verification (skip disabled controls
+and container roles; a press the app never confirms reports *dispatched,
+unverified* instead of success or hang), focused-window resolution
+(`windows[0]` is not reliably the front window), label fallbacks (cleaned
+`AXIdentifier`, then textual descendants for button-ish roles), and
+set-value typing (`AXUIElementSetAttributeValue` on `kAXValueAttribute` —
+types into the named app without fronting it, and **structurally refuses
+secure text fields**, which the keystroke path never could). Verified live:
+3×7= pressed on Calculator and read back from its display; text set in a
+background TextEdit while Calculator stayed frontmost.
+
+**Rejected: the dependency itself.** A 21MB brew binary requiring macOS 15+,
+which changed GitHub orgs and broke its CLI surface within a year, against
+~150 lines of pyobjc that will not move. Everything above is public API.
+
+**Rejected: opaque element IDs and snapshot receipts.** Peekaboo's `see`
+snapshots number elements (`elem_N`) and later actions re-resolve them
+through stored descriptors and window-identity receipts. Built for a
+frontier agent carrying tokens across turns; wrong here twice over. Names
+*are* enio's protocol — self-describing, checkable against the list the
+model was just shown — and a snapshot pinned at propose time would be stale
+by approval time, so the receipts would correctly refuse it, constantly.
+
+**Rejected: private-API event posting.** `SLEventPostToPid` (SkyLight,
+dlopen'd) and `_AXUIElementGetWindow` are exactly the moving-target
+dependency this codebase avoids, and pid-routed CGEvents need a third TCC
+permission (post-event, requiring relaunch after grant) for delivery that is
+*unverifiable by design* — which collides with the approval sheet's promise
+that the run reports what happened.
+
+**What would change the answer:** needing background right-click, scroll, or
+event-level typing into apps whose fields refuse `AXSetValue` — things AX
+actions cannot express. The seam is clean if that day comes: subprocess with
+`--json --no-remote` (the flag matters — without it the CLI auto-starts a
+daemon, a standing process nothing consented to), and its fuzzy text `click`
+is name-based, so the approval sheet would still show a name.
+
 ---
 
 ### Page content is data, and capability is what enforces it
