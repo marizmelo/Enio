@@ -188,26 +188,29 @@ export function App() {
       ? "Attach files or folders to this project"
       : "Attach files or folders to this conversation";
     const paths = (await window.maple?.pickProjectPaths?.(title)) ?? [];
+    if (paths.length === 0) return;
+    // Resolved once, before the loop: creating the conversation triggers the
+    // per-conversation effect, whose fetch races any optimistic append -- so
+    // the list is re-fetched once at the end instead of appended mid-flight.
+    let convId = conversationId;
+    if (!project && !convId) {
+      convId = await createConversation().catch(() => null);
+      if (!convId) return;
+      setConversationId(convId);
+    }
     for (const p of paths) {
       try {
-        if (project) {
-          await attachToProject(project.id, p, "");
-        } else {
-          let convId = conversationId;
-          if (!convId) {
-            convId = await createConversation();
-            setConversationId(convId);
-          }
-          const a = await attachToConversation(convId, p, "");
-          setConvAttachments((prev) => [...prev, a]);
-        }
+        if (project) await attachToProject(project.id, p, "");
+        else await attachToConversation(convId, p, "");
       } catch (err) {
         setAttachError(String(err?.message ?? err));
       }
     }
-    if (project && paths.length > 0) {
+    if (project) {
       const state = await projectState().catch(() => null);
       if (state?.project) setProject(state.project);
+    } else {
+      setConvAttachments(await conversationAttachments(convId).catch(() => []));
     }
   }, [project, conversationId]);
 
@@ -680,6 +683,7 @@ export function App() {
         capabilities={capabilities}
         sessionFiles={sessionFiles}
         conversationId={conversationId}
+        conversationAttachments={convAttachments}
         onAttachStanding={attachStanding}
         onManageConnections={() => setConnectionsOpen(true)}
         onAttached={(names) =>

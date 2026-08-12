@@ -1287,9 +1287,15 @@ async function handle(
       if (req.method === "POST" && !subArg) {
         try {
           const body = JSON.parse((await readBody(req)) || "{}");
-          sendJson(res, 200, {
-            attachment: attachToConversation(id!, String(body?.path ?? ""), String(body?.note ?? "")),
-          });
+          const attachment = attachToConversation(
+            id!, String(body?.path ?? ""), String(body?.note ?? ""),
+          );
+          // Attaching IS working in this conversation: make its mounts the
+          // active ones now, so the file listings (mention menu, folders)
+          // include the new root before any message is sent -- without this
+          // the mount only surfaced after the conversation's next turn.
+          setConversationSession(id!);
+          sendJson(res, 200, { attachment });
         } catch (err) {
           sendJson(res, 400, { error: { message: (err as Error).message } });
         }
@@ -1297,6 +1303,7 @@ async function handle(
       }
       if (req.method === "DELETE" && subArg) {
         detachFromConversation(id!, decodeURIComponent(subArg));
+        setConversationSession(id!);
         sendJson(res, 200, { detached: decodeURIComponent(subArg) });
         return;
       }

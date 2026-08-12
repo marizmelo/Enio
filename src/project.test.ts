@@ -12,6 +12,10 @@ process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 // read from or written to the developer's real machine by a test.
 process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// A configured MCP server would otherwise be SPAWNED by buildRegistry:
+// the developer's own ~/.enio/mcp.json is real, and a suite that starts
+// npx servers hangs for minutes and depends on the machine.
+process.env.ENIO_MCP_CONFIG = join(scratch, "no-such-mcp.json");
 // The overlay test drives a full turn with a scripted model; routing would
 // spend the script on a classification call. Set before any import of config.
 process.env.ENIO_ROUTING = "0";

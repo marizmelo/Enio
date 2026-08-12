@@ -29,6 +29,7 @@ import {
  */
 export function AttachMenu({
   capabilities,
+  conversationAttachments = [],
   onInsertMention,
   onInsertSkill,
   onPickFiles,
@@ -44,7 +45,13 @@ export function AttachMenu({
   // the workspace's are conversation leftovers. Split by alias so the
   // project's get their own entry -- listed together, three hundred images
   // from one attached folder buried everything else.
-  const aliases = new Set((project?.attachments ?? []).map((a) => a.alias));
+  // Mount aliases — the project's AND the conversation's — are excluded from
+  // the workspace-derived listings below: their files arrive in the same flat
+  // list from the server, and deriving a "folder" from them would list every
+  // mount twice.
+  const aliases = new Set(
+    [...(project?.attachments ?? []), ...conversationAttachments].map((a) => a.alias),
+  );
   const workspaceFiles = [];
   let projectFileCount = 0;
   for (const f of files) {
@@ -122,15 +129,35 @@ export function AttachMenu({
             Folder
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="max-h-72 overflow-y-auto">
-            {folders.length === 0 ? (
-              <DropdownMenuItem disabled>No folders</DropdownMenuItem>
-            ) : (
-              folders.map((d) => (
-                <DropdownMenuItem key={d} onSelect={() => onInsertMention(d)}>
-                  <span className="truncate font-mono text-xs">{d}/</span>
+            {/* Folders the user granted come first, straight from live state
+                rather than the capabilities cache — the workspace subfolders
+                below only exist once something created them, which on a
+                fresh install is never. */}
+            {[
+              ...(project?.attachments ?? []),
+              ...conversationAttachments,
+            ]
+              .filter((a) => a.kind === "folder")
+              .map((a) => (
+                <DropdownMenuItem key={`mount-${a.alias}`} onSelect={() => onInsertMention(a.alias)}>
+                  <span className="truncate font-mono text-xs">{a.alias}/</span>
                 </DropdownMenuItem>
-              ))
-            )}
+              ))}
+            {folders.map((d) => (
+              <DropdownMenuItem key={d} onSelect={() => onInsertMention(d)}>
+                <span className="truncate font-mono text-xs">{d}/</span>
+              </DropdownMenuItem>
+            ))}
+            {/* Empty is a dead end unless it says how to stop being empty. */}
+            {folders.length === 0 &&
+              ![...(project?.attachments ?? []), ...conversationAttachments].some(
+                (a) => a.kind === "folder",
+              ) && (
+                <DropdownMenuItem onSelect={onAttachStanding}>
+                  <FolderOpen className="mr-2 size-4" />
+                  Attach a folder…
+                </DropdownMenuItem>
+              )}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
 

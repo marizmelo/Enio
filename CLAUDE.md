@@ -313,6 +313,15 @@ rejected *before* any request, constant-time token comparison against
 same-length wrong keys. Prefer a test that would catch a silent regression over
 one that checks something obvious.
 
+**A test that builds the registry must redirect its whole environment.**
+`ENIO_DATA_DIR`, `ENIO_WORKSPACE`, `ENIO_MACHINE_STATE_DIR` *and*
+`ENIO_MCP_CONFIG` — set before the first import, since config reads them at
+module load. The last one is the sharpest: `buildRegistry` connects MCP
+servers for real, so a suite that inherits the developer's `~/.enio/mcp.json`
+spawns `npx` processes, hangs for minutes, and passes or fails depending on
+whose machine it runs on. It stayed invisible while no mcp.json existed;
+adding one connection turned the suite from 15 seconds into a hang.
+
 **Adding a tool:** define it in `src/tools/`, add it to `buildRegistry`, assign
 it to exactly one specialist, keep that specialist ≤6 tools. If it needs config,
 withhold the tool entirely when unconfigured.

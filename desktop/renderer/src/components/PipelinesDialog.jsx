@@ -466,7 +466,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !running && onOpenChange(next)}>
-      <DialogContent className="flex h-[85vh] max-w-none flex-col gap-3 sm:max-w-4xl">
+      <DialogContent className="flex h-[80vh] w-[80vw] max-w-none flex-col gap-3 sm:max-w-none">
         <DialogHeader className="shrink-0">
           <DialogTitle>Pipelines</DialogTitle>
           <DialogDescription>

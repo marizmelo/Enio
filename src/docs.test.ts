@@ -8,6 +8,10 @@ import { CATALOGUE } from "./model-catalogue.js";
 // The registry this suite builds must not depend on the developer's real
 // machine-wide settings (desktop-control consent, model choice).
 process.env.ENIO_MACHINE_STATE_DIR = join(mkdtempSync(join(tmpdir(), "enio-docs-")), "machine");
+// A configured MCP server would otherwise be SPAWNED by buildRegistry:
+// the developer's own ~/.enio/mcp.json is real, and a suite that starts
+// npx servers hangs for minutes and depends on the machine.
+process.env.ENIO_MCP_CONFIG = join(tmpdir(), "enio-docs-no-such-mcp.json");
 
 /**
  * The documentation, checked against the code it describes.

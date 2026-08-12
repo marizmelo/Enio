@@ -42,6 +42,7 @@ export const Composer = forwardRef(function Composer({
   sessionFiles = [],
   conversationId = null,
   onAttached = () => {},
+  conversationAttachments = [],
   onAttachStanding = () => {},
   onManageConnections = () => {},
   speakReplies = false,
@@ -355,7 +356,8 @@ export const Composer = forwardRef(function Composer({
         capabilities={capabilities}
         onInsertMention={insertMention}
         onInsertSkill={insertSkill}
-        onAttachStanding={onAttachStanding}
+        conversationAttachments={conversationAttachments}
+          onAttachStanding={onAttachStanding}
           onManageConnections={onManageConnections}
           onPickFiles={pickFiles}
         onBrowseProject={() => setProjectFilesOpen(true)}

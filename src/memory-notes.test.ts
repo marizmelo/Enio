@@ -12,6 +12,10 @@ import { join } from "node:path";
  */
 const scratch = mkdtempSync(join(tmpdir(), "enio-memory-notes-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// A configured MCP server would otherwise be SPAWNED by buildRegistry:
+// the developer's own ~/.enio/mcp.json is real, and a suite that starts
+// npx servers hangs for minutes and depends on the machine.
+process.env.ENIO_MCP_CONFIG = join(scratch, "no-such-mcp.json");
 // Machine-wide state (model choice, desktop-control consent) must never be
 // read from or written to the developer's real machine by a test.
 process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");

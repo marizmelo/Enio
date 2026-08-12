@@ -79,7 +79,7 @@ export function FileViewer({ files, index, onIndex, open, onOpenChange }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex h-[85vh] max-w-[min(92vw,1100px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(92vw,1100px)]"
+        className="flex h-[80vh] w-[80vw] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
         // The arrows and the page both want the arrow keys. The viewer wins:
         // scrolling a document is the scrollbar's job and stepping the set is
         // the only thing the keyboard here is for.
