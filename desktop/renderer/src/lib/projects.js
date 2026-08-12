@@ -62,3 +62,7 @@ export const closeProject = () => call("/project/close", { method: "POST" });
 
 /** The active project, or null. Includes latestConversation for resume. */
 export const currentProject = () => call("/project").then((d) => d.project);
+
+/** The active project plus the id the user last chose to have open — what a
+ *  fresh launch should restore, since the server forgets on restart. */
+export const projectState = () => call("/project");

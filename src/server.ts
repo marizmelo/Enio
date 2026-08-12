@@ -83,6 +83,7 @@ import {
   deleteProject,
   detachPath,
   findProject,
+  lastOpenedProjectId,
   listProjects,
   openProject,
   updateProject,
@@ -1080,7 +1081,15 @@ async function handle(
   }
 
   if (req.method === "GET" && url.pathname === "/project") {
-    sendJson(res, 200, { project: projectSummary(activeProject()) });
+    // lastOpenedId is what the user last chose to have open. A client
+    // restoring a session reopens THAT (through this endpoint, like any
+    // other open) rather than inferring a project from the newest
+    // conversation's tag -- which made closing a project un-survivable
+    // across a relaunch.
+    sendJson(res, 200, {
+      project: projectSummary(activeProject()),
+      lastOpenedId: lastOpenedProjectId(),
+    });
     return;
   }
 

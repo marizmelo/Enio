@@ -21,6 +21,7 @@ import {
   closeProject as closeProjectApi,
   currentProject,
   openProject as openProjectApi,
+  projectState,
 } from "@/lib/projects";
 import { PermissionNotice } from "@/components/PermissionNotice";
 import { RecipesDialog } from "@/components/RecipesDialog";
@@ -205,9 +206,17 @@ export function App() {
     if (!backendReady || conversationId) return;
     (async () => {
       try {
-        // If the server (which can outlive this window) still has a project
-        // open, resume where that project left off; otherwise latest overall.
-        const active = await currentProject().catch(() => null);
+        // Restore the project the user last chose to have OPEN — not one
+        // inferred from the newest conversation's tag. Inferring it meant
+        // closing a project never survived a relaunch, and every new chat
+        // afterwards silently inherited a project nobody had opened.
+        const state = await projectState().catch(() => ({}));
+        let active = state.project ?? null;
+        if (!active && state.lastOpenedId) {
+          active = await openProjectApi(state.lastOpenedId)
+            .then(() => currentProject())
+            .catch(() => null);
+        }
         setProject(active);
         if (active?.latestConversation) {
           const msgs = await restoreThread(active.latestConversation);
@@ -222,21 +231,10 @@ export function App() {
           setConversationId(await createConversation().catch(() => null));
           return;
         }
+        // Nothing open: the newest conversation still comes back, but as a
+        // transcript only. If it belongs to a project, the history dialog's
+        // named badge is the click that re-scopes — consent stays a user act.
         const latest = all[0];
-        // Restoring the thread as you left it includes its scope: a
-        // conversation that was inside a project comes back with the project
-        // open. Launching the app is the user act that re-grants it — the
-        // open still travels through the authed endpoint, and the model
-        // still has no path to any of this. A deleted project degrades to
-        // the transcript alone.
-        if (latest.projectId) {
-          try {
-            await openProjectApi(latest.projectId);
-            setProject(await currentProject().catch(() => null));
-          } catch {
-            /* project gone: the conversation still opens */
-          }
-        }
         const msgs = await restoreThread(latest.id);
         setConversationId(latest.id);
         setMessages(msgs);

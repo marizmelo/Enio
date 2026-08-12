@@ -220,9 +220,12 @@ creates a project, attaches a path, or opens one — the only routes in are the
 CLI and the authed HTTP endpoints, which is what keeps the sandbox something
 the user grants rather than something the model widens. The active project is
 process memory: a server restart forgets it, and reopening is a user act —
-which includes launching the desktop app, whose boot restore reopens the
-project of the conversation it brings back (through the authed endpoint, like
-any other open). While
+which includes launching the desktop app, whose boot restore reopens *the
+project the user last chose to have open* (recorded in `project-state.json`,
+cleared on close, and reopened through the authed endpoint like any other
+open). It must never be inferred from data — restoring the newest
+conversation's tag instead meant closing a project never survived a relaunch,
+and every new chat afterwards silently inherited a project nobody opened. While
 one is open the readable roots are the attached paths (addressed by alias as
 the first path segment), the project's own out dir (unprefixed paths), and a
 read-only fallback to the global workspace for files that already exist there

@@ -110,7 +110,8 @@ in history.
 Conversations started under a project are tagged with it. `enio project open`
 drops you into the project's most recent conversation; the desktop does the
 same, and its history dialog can filter to the current project. Launching the
-desktop app restores your last conversation *with its project* — the thread
-comes back as you left it, scope included. Opening a conversation that
+desktop app restores the project you last had **open** — closing one sticks,
+so a closed project stays closed across restarts and new chats started after
+it are untagged. Opening a conversation that
 belongs to a *different* project does not silently switch — the badge naming
 its project next to it is the click that does.

@@ -284,6 +284,7 @@ export function deleteProject(id: string): void {
   const dir = projectDir(id);
   if (!existsSync(join(dir, "project.json"))) throw new Error(`No project with id ${id}.`);
   if (active?.id === id) active = null;
+  if (lastOpenedProjectId() === id) rememberLastOpened(null);
   // Sessions tagged with this id keep their tag: the conversations are the
   // user's history, and the raw transcript remaining the source of truth
   // does not stop mattering because the project folder is gone.
@@ -344,6 +345,39 @@ export function activeProject(): Project | null {
   return active;
 }
 
+/**
+ * Which project the user last chose to have open, or null if they closed it.
+ *
+ * Activation itself stays process memory -- a restart forgets it and only a
+ * user act reopens it. This is the *record of that act*, so a client
+ * restoring a session reopens what the person actually left open rather than
+ * inferring it from data. Inferring it was the bug: the desktop reopened
+ * whatever project the newest conversation was tagged with, so closing a
+ * project never survived a relaunch and every new chat afterwards silently
+ * inherited the tag of a project nobody had opened.
+ */
+const STATE_FILE = () => join(config.dataDir, "project-state.json");
+
+function rememberLastOpened(id: string | null): void {
+  try {
+    writeFileSync(STATE_FILE(), JSON.stringify({ lastOpenedId: id }, null, 2) + "\n");
+  } catch {
+    /* A lost hint costs one reopen, never a turn. */
+  }
+}
+
+export function lastOpenedProjectId(): string | null {
+  try {
+    const parsed = JSON.parse(readFileSync(STATE_FILE(), "utf8")) as { lastOpenedId?: string };
+    const id = parsed.lastOpenedId;
+    // Verified against what exists: a deleted project must not haunt every
+    // launch with a reopen that can only fail.
+    return id && existsSync(join(projectDir(id), "project.json")) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 export function openProject(ref: string): Project {
   const project = findProject(ref);
   if (!project) throw new Error(`No project matches "${ref}".`);
@@ -354,11 +388,13 @@ export function openProject(ref: string): Project {
   project.lastOpenedAt = Date.now();
   persist(project);
   active = project;
+  rememberLastOpened(project.id);
   return project;
 }
 
 export function closeProject(): void {
   active = null;
+  rememberLastOpened(null);
 }
 
 /** The directory unprefixed relative paths resolve against: the active

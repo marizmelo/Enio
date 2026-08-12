@@ -105,6 +105,46 @@ test("activation is process memory; the definition persists", () => {
   assert.ok(project.findProject(p.id));
 });
 
+test("closing is remembered, so a relaunch does not silently reopen", () => {
+  // The bug: the desktop restored whichever project the newest conversation
+  // was tagged with, so closing never survived a relaunch -- and every new
+  // chat afterwards inherited a project nobody had opened. What a client
+  // restores must be the user's last *choice*, not an inference from data.
+  const p = fresh("sticky");
+  project.openProject(p.id);
+  assert.equal(project.lastOpenedProjectId(), p.id);
+
+  project.closeProject();
+  assert.equal(project.lastOpenedProjectId(), null, "closing must survive a restart");
+
+  // Reopening records it again; deleting the project clears the pointer, so a
+  // deleted project cannot haunt every launch with a reopen that can only fail.
+  project.openProject(p.id);
+  assert.equal(project.lastOpenedProjectId(), p.id);
+  project.deleteProject(p.id);
+  assert.equal(project.lastOpenedProjectId(), null);
+});
+
+test("a conversation started with nothing open carries no project tag", async () => {
+  const store = await import("./memory/store.js");
+  const p = fresh("untagged");
+
+  project.openProject(p.id);
+  const inside = store.startSession();
+  project.closeProject();
+  const outside = store.startSession();
+  store.logMessage(inside, "user", "in the project");
+  store.logMessage(outside, "user", "not in the project");
+
+  const all = store.listConversations();
+  assert.equal(all.find((c) => c.id === inside)?.projectId, p.id);
+  assert.equal(
+    all.find((c) => c.id === outside)?.projectId,
+    null,
+    "a chat started after closing must not be tagged",
+  );
+});
+
 test("unprefixed paths root in out/ only while a project is open", () => {
   const p = fresh("roots");
   project.openProject(p.id);
