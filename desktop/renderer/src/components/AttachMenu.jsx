@@ -1,4 +1,4 @@
-import { Paperclip, FileText, Folder, Plug, Sparkles, Users } from "lucide-react";
+import { Paperclip, Briefcase, FileText, Folder, Plug, Sparkles, Users } from "lucide-react";
 import { TipButton } from "@/components/TipButton";
 import { useThumbnail } from "@/components/AttachmentChips";
 import {
@@ -20,22 +20,38 @@ import {
  * parallel protocol -- the server resolves "@file" and "/skill" for both
  * clients now, so the menu is a way to type them without knowing them.
  *
- * Files come from the workspace listing rather than a native file dialog. The
- * filesystem tools are hard-scoped to the workspace, so a file chosen from
- * anywhere else could not be read anyway; offering the whole disk would be an
- * invitation to pick something that silently fails.
+ * The listings are what the agent can actually address: the open project's
+ * attached folders (by alias) and the workspace. The native dialog stays
+ * first for everything else, and what it returns depends on where the file
+ * lives — inside a project folder it is referenced, from anywhere else it is
+ * copied in, because the filesystem tools only reach granted roots and
+ * offering a path that silently fails would be worse than not offering it.
  */
 export function AttachMenu({
   capabilities,
   onInsertMention,
   onInsertSkill,
   onPickFiles,
+  onBrowseProject,
   disabled,
 }) {
-  const { files = [], servers = [], skills = [], agents = [] } = capabilities;
+  const { files = [], servers = [], skills = [], agents = [], project = null } = capabilities;
+
+  // Project files and workspace files are one flat list from the server, but
+  // they are not one idea: the project's are the folders this work is about,
+  // the workspace's are conversation leftovers. Split by alias so the
+  // project's get their own entry -- listed together, three hundred images
+  // from one attached folder buried everything else.
+  const aliases = new Set((project?.attachments ?? []).map((a) => a.alias));
+  const workspaceFiles = [];
+  let projectFileCount = 0;
+  for (const f of files) {
+    if (aliases.has(f.split("/")[0])) projectFileCount++;
+    else workspaceFiles.push(f);
+  }
 
   const folders = [...new Set(
-    files.filter((f) => f.includes("/")).map((f) => f.split("/")[0]),
+    workspaceFiles.filter((f) => f.includes("/")).map((f) => f.split("/")[0]),
   )].sort();
 
   return (
@@ -59,16 +75,31 @@ export function AttachMenu({
           Choose file or image…
         </DropdownMenuItem>
 
+        {/* A modal rather than a submenu, and labelled by the *idea* rather
+            than the project's name: one attached folder here holds hundreds
+            of files, which a menu can only truncate and cannot search or
+            walk into. Above the workspace, because with a project open these
+            are what the work is about. */}
+        {projectFileCount > 0 && (
+          <DropdownMenuItem onSelect={onBrowseProject}>
+            <Briefcase className="mr-2 size-4" />
+            From project…
+            <span className="ml-auto pl-2 text-[10px] text-muted-foreground">
+              {projectFileCount}
+            </span>
+          </DropdownMenuItem>
+        )}
+
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <FileText className="mr-2 size-4" />
             From workspace
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="max-h-72 overflow-y-auto">
-            {files.length === 0 ? (
+            {workspaceFiles.length === 0 ? (
               <DropdownMenuItem disabled>Workspace is empty</DropdownMenuItem>
             ) : (
-              files.slice(0, 100).map((f) => (
+              workspaceFiles.slice(0, 100).map((f) => (
                 <FileItem key={f} path={f} onSelect={() => onInsertMention(f)} />
               ))
             )}

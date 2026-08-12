@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { config } from "../config.js";
 import { WINDOWS_COMMANDS, isWindows, shellFor } from "../platform.js";
+import { activeProject } from "../project.js";
 import { DESKTOP_COMMANDS, desktopEnabled } from "./desktop.js";
 import type { ToolDef } from "../types.js";
 
@@ -84,16 +85,48 @@ export function checkCommand(command: string): { ok: true } | { ok: false; reaso
   return { ok: true };
 }
 
+/**
+ * Where a command runs. With no project open: the workspace, as always.
+ * With one open: the named attachment when `in` is given (a closed list --
+ * the aliases the overlay and list_dir already show), else the sole
+ * attached folder when there is exactly one (the common case needs no
+ * parameter), else the project's out dir. Never a path -- an alias that is
+ * not there errors, where a path would quietly run somewhere else.
+ */
+function commandCwd(inAlias: string): { cwd: string } | { error: string } {
+  const active = activeProject();
+  if (!active) {
+    if (inAlias) return { error: `No project is open, so "in" has no meaning here.` };
+    return { cwd: config.workspace };
+  }
+  const folders = active.attachments.filter((a) => a.kind === "folder");
+  if (inAlias) {
+    const mount = folders.find((a) => a.alias === inAlias);
+    if (!mount) {
+      const known = folders.map((a) => a.alias).join(", ") || "none";
+      return { error: `No attached folder named "${inAlias}". Attached folders: ${known}.` };
+    }
+    return { cwd: mount.path };
+  }
+  if (folders.length === 1) return { cwd: folders[0]!.path };
+  return { cwd: active.outDir };
+}
+
 export const shellTools: ToolDef[] = [
   {
     name: "run_command",
     description:
-      "Run a shell command inside the workspace directory. Use this for builds, tests, git, and inspecting code. Returns combined stdout and stderr.",
+      "Run a shell command inside the working folder. Use this for builds, tests, git, and inspecting code. Returns combined stdout and stderr.",
     origin: "builtin",
     parameters: {
       type: "object",
       properties: {
         command: { type: "string", description: "The shell command to run." },
+        in: {
+          type: "string",
+          description:
+            "Optional: name of an attached project folder to run in. Omit to use the default working folder.",
+        },
       },
       required: ["command"],
     },
@@ -104,10 +137,13 @@ export const shellTools: ToolDef[] = [
       const check = checkCommand(command);
       if (!check.ok) return `Refused: ${check.reason}`;
 
+      const where = commandCwd(String(args.in ?? "").trim());
+      if ("error" in where) return `Refused: ${where.error}`;
+
       return await new Promise<string>((resolveRun) => {
         const shell = shellFor(command);
         const child = spawn(shell.file, shell.args, {
-          cwd: config.workspace,
+          cwd: where.cwd,
           env: { ...process.env, GIT_PAGER: "cat", PAGER: "cat" },
         });
 

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { TipButton } from "@/components/TipButton";
 import { Textarea } from "@/components/ui/textarea";
 import { AttachMenu } from "@/components/AttachMenu";
+import { ProjectFilesDialog } from "@/components/ProjectFilesDialog";
 import { SlashPalette } from "@/components/SlashPalette";
 import { AttachmentChips } from "@/components/AttachmentChips";
 import { startRecording, transcribe } from "@/lib/dictation";
@@ -64,6 +65,9 @@ export const Composer = forwardRef(function Composer({
   }, [streaming, disabled]);
 
   const [recording, setRecording] = useState(false);
+  // The project file browser. A modal rather than a submenu: an attached
+  // folder can hold hundreds of files, which a menu can only truncate.
+  const [projectFilesOpen, setProjectFilesOpen] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const recorderRef = useRef(null);
 
@@ -268,7 +272,10 @@ export const Composer = forwardRef(function Composer({
   }));
 
   const pickFiles = async () => {
-    const names = (await window.maple?.pickFiles(conversationId)) ?? [];
+    // The project's attached roots go with the request so a file already
+    // inside one comes back as its alias path rather than a copy.
+    const roots = capabilities.project?.attachments ?? [];
+    const names = (await window.maple?.pickFiles(conversationId, roots)) ?? [];
     if (names.length > 0) attachAll(names);
   };
 
@@ -331,11 +338,20 @@ export const Composer = forwardRef(function Composer({
         <MentionPalette groups={mentionGroups} onPick={pickMention} />
       )}
 
+      <ProjectFilesDialog
+        open={projectFilesOpen}
+        onOpenChange={setProjectFilesOpen}
+        project={capabilities.project}
+        files={capabilities.files ?? []}
+        onPick={(path) => attachAll([path])}
+      />
+
       <AttachMenu
         capabilities={capabilities}
         onInsertMention={insertMention}
         onInsertSkill={insertSkill}
         onPickFiles={pickFiles}
+        onBrowseProject={() => setProjectFilesOpen(true)}
         disabled={disabled || streaming}
       />
 

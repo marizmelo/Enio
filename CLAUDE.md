@@ -53,9 +53,12 @@ security model is documented there rather than here.
 
 ## The constraint everything else follows from
 
-**The model is small.** Maple has ~1B active parameters. Nearly every design
-decision here exists because of that, and most of them look like over-engineering
-until you remember it.
+**The model is small.** The default is a 4B (Qwen3 4B Instruct); Maple, the
+optional alternative, has ~1B active parameters; everything must still work at
+that floor. Nearly every design decision here exists because of that, and most
+of them look like over-engineering until you remember it. Never size anything
+off model identity — `contextBudget()` is the only knob that follows the
+selected model.
 
 Concretely, a ~1B-active model:
 
@@ -211,6 +214,24 @@ well stacked two limits: one extra desktop tool pushed the total past 16 and
 silently truncated the end of the list, which is where the web tools live.
 Single-agent mode still caps the registry, because there it *is* what the model
 sees.
+
+**Projects are defined and opened by the user, never by the model.** No tool
+creates a project, attaches a path, or opens one — the only routes in are the
+CLI and the authed HTTP endpoints, which is what keeps the sandbox something
+the user grants rather than something the model widens. The active project is
+process memory: a server restart forgets it, and reopening is a user act —
+which includes launching the desktop app, whose boot restore reopens the
+project of the conversation it brings back (through the authed endpoint, like
+any other open). While
+one is open the readable roots are the attached paths (addressed by alias as
+the first path segment), the project's own out dir (unprefixed paths), and a
+read-only fallback to the global workspace for files that already exist there
+— conversation attachments must never fail a turn. A project is *contextual*,
+not a mode: routing keeps working, the type only biases the router. And every
+always-loaded project field (description, instructions, notes) is hard-capped
+at save time, sized to the smallest supported context budget — refuse
+overflow, never truncate, and never size anything off the model's identity
+instead of `contextBudget()`.
 
 **The model proposes scripts; it does not run them.** No specialist has
 `run_applescript`. The operator calls `propose_plan`, which stores the script

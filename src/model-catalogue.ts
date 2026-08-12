@@ -46,9 +46,9 @@ export const CATALOGUE: CatalogueModel[] = [
   },
   {
     id: "mlx-community/Qwen3-4B-Instruct-2507-4bit",
-    label: "Qwen3 4B Instruct",
+    label: "Qwen3 4B Instruct (default)",
     bytes: 2.28 * GB,
-    note: "Measured here: routed 8/8 at 426ms median, faster than the default.",
+    note: "The out-of-the-box model. Measured here: routed 8/8 at 426ms median.",
     measured: true,
   },
   {

@@ -1,4 +1,4 @@
-import { BookMarked, CircleHelp, FolderOpen, History, MessageSquarePlus } from "lucide-react";
+import { BookMarked, Briefcase, CircleHelp, FolderOpen, History, MessageSquarePlus } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -30,10 +30,12 @@ export function StatusBar({
   message,
   tools,
   context,
+  project,
   onNewChat,
   onHistory,
   onRecipes,
   onFiles,
+  onProjects,
 }) {
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
@@ -56,6 +58,25 @@ export function StatusBar({
         <TipButton tip="Conversations" className="size-7" onClick={onHistory}>
           <History className="size-3.5" />
         </TipButton>
+        {/* The project chip: named when one is open, an icon otherwise. Named
+            because the open project silently shapes every turn — routing bias,
+            instructions, which folders the tools reach — and state that shapes
+            behavior invisibly gets misread as the model acting strangely.
+            Ahead of Files because it scopes what Files means. */}
+        {project ? (
+          <button
+            onClick={onProjects}
+            className="mx-1 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs text-foreground hover:bg-muted"
+            title="Project settings"
+          >
+            <Briefcase className="size-3" />
+            <span className="max-w-40 truncate">{project.name}</span>
+          </button>
+        ) : (
+          <TipButton tip="Projects" className="size-7" onClick={onProjects}>
+            <Briefcase className="size-3.5" />
+          </TipButton>
+        )}
         <TipButton tip="Files" className="size-7" onClick={onFiles}>
           <FolderOpen className="size-3.5" />
         </TipButton>

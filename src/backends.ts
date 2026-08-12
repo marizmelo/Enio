@@ -28,13 +28,16 @@ export interface Backend {
 }
 
 export const BACKENDS: Record<string, Backend> = {
+  // The id predates the rename of the default model: "maple" here means the
+  // mlx-lm server enio manages itself, whatever model it serves. Changing the
+  // id would break every ENIO_BACKEND=maple already written down.
   maple: {
     id: "maple",
-    label: "Maple via mlx-lm (default)",
+    label: "MLX via mlx-lm (default)",
     baseUrl: "http://127.0.0.1:8080/v1",
     model: "maple-2bit-mlx",
     nativeToolCalls: true,
-    notes: "Started by `enio up`. Fastest option on Apple Silicon.",
+    notes: "Started by `enio up`. Serves the selected MLX model on Apple Silicon.",
   },
   ollama: {
     id: "ollama",

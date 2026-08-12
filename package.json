@@ -33,6 +33,7 @@
     "mailparser": "^3.9.15",
     "nodemailer": "^9.0.5",
     "tesseract.js": "^7.0.0",
+    "unpdf": "^1.8.0",
     "yaml": "^2.9.0",
     "zod": "^3.24.1"
   },

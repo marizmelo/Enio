@@ -22,8 +22,20 @@ import { config } from "./config.js";
 
 const SETTING_FILE = "model.json";
 
-/** The sentinel for the bundled default; anything else is an HF model id. */
+/** The sentinel for the bundled Maple weights; anything else is an HF model
+ *  id. No longer the default — it survives as the name of the deepgrove
+ *  checkout in the runtime dir, which is addressed by path, not by HF id. */
 export const MAPLE = "maple";
+
+/**
+ * The out-of-the-box model. Qwen3 4B Instruct rather than Maple because it is
+ * the one catalogue entry actually measured in enio -- routed 8/8 at 426ms
+ * median -- and its weights are less than half Maple's download. Maple stays
+ * fully supported: selectable in the picker whenever its bundled weights are
+ * on disk, and the fallback when this model's weights are missing and the
+ * user declines the download (see startMaple in runtime.ts).
+ */
+export const DEFAULT_MODEL = "mlx-community/Qwen3-4B-Instruct-2507-4bit";
 
 export function currentModelId(): string {
   const env = process.env.ENIO_MODEL ?? process.env.MAPLE_MODEL;
@@ -35,7 +47,7 @@ export function currentModelId(): string {
   } catch {
     /* No setting yet: the default. */
   }
-  return MAPLE;
+  return DEFAULT_MODEL;
 }
 
 export function setModelId(id: string): void {
@@ -46,15 +58,22 @@ export function setModelId(id: string): void {
 }
 
 /**
- * The models this machine can actually serve: the bundled default, plus any
- * MLX model already in the Hugging Face cache. A closed list, scanned rather
+ * The models this machine can actually serve: the bundled Maple weights when
+ * present, plus any MLX model already in the Hugging Face cache. A closed
+ * list, scanned rather
  * than typed, because a model id with a typo in it is ninety seconds of
  * loading followed by a download of several gigabytes nobody asked for --
  * switching is choosing from what is present, and downloading is a decision
  * made elsewhere, deliberately.
  */
 export function availableModels(): string[] {
-  const models = [MAPLE];
+  // Maple is offered only while its bundled weights are actually on disk --
+  // listing it unconditionally offered a ninety-second failed load on
+  // machines that installed after it stopped being the default.
+  const models: string[] = [];
+  if (existsSync(join(config.runtimeDir, "maple-2bit-mlx", "config.json"))) {
+    models.push(MAPLE);
+  }
   const hub = join(homedir(), ".cache", "huggingface", "hub");
   try {
     if (existsSync(hub)) {
@@ -67,7 +86,7 @@ export function availableModels(): string[] {
         // vision models (their own server), speech models (whisper, TTS
         // voices) and embeddings -- offering one of those is offering a
         // ninety-second failed load. Maple's own cache entry is skipped too:
-        // the bundled default already represents those weights, and the same
+        // the bundled checkout already represents those weights, and the same
         // model twice under two names is a choice with no difference in it.
         // A blocklist, not a guarantee: the switch reverts on a failed start,
         // which is the real safety net.
@@ -80,9 +99,22 @@ export function availableModels(): string[] {
       }
     }
   } catch {
-    /* An unreadable cache means the bundled default is the whole list. */
+    /* An unreadable cache: the list is whatever survived above. */
   }
+  // The selected model is part of the machine's state whether or not its
+  // weights have landed yet -- hiding it from the picker would make the
+  // current choice unexplainable. Dedup, since the cache scan usually has it.
+  const current = currentModelId();
+  if (!models.includes(current)) models.push(current);
   return models;
+}
+
+/** Whether an HF model id already has weights in the local cache. Cheap
+ *  directory probe, not a load attempt -- used to ask before a download
+ *  rather than to guarantee a successful start. */
+export function modelIsCached(id: string): boolean {
+  const dir = `models--${id.replace("/", "--")}`;
+  return existsSync(join(homedir(), ".cache", "huggingface", "hub", dir, "snapshots"));
 }
 
 /** What request bodies should name. The bundled default keeps its API id;
@@ -131,7 +163,9 @@ const MEASURED_BUDGETS: Array<[pattern: RegExp, tokens: number, measured: boolea
   // Dense models with real long-context training hold far more than Maple's
   // 1B active does. NOT measured here -- a conservative step up rather than
   // the 256k these advertise, and it should be replaced with a number from
-  // the same planted-fact test that produced Maple's.
+  // the same planted-fact test that produced Maple's. This now covers the
+  // out-of-the-box default (Qwen3 4B), so running that test against it is
+  // the highest-value measurement left undone.
   [/qwen3/i, 12000, false],
 ];
 

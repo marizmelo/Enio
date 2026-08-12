@@ -60,7 +60,9 @@ See **[Getting started](docs/getting-started.md)** for permissions, the workspac
 
 **Learns your know-how.** Skills are markdown, not code — a tool lets it send email, a skill tells it how *you* want emails written. → [Skills](docs/skills.md)
 
-**Runs the model you choose.** Any MLX chat model that can call tools — switched from the status bar without losing your conversation, and the context budget follows the model rather than being fixed. Ships with [Maple](https://huggingface.co/deepgrove/maple-preview) (20B-A1B ternary, ~218 tok/s) and works well with the Qwen3 family. → [Models](docs/models.md)
+**Works in projects.** Attach the folders and files a piece of work is about, each with a note saying what it's for, plus standing instructions — and every conversation under that project carries the context. Not a "code mode": routing keeps working, the project just biases it. → [Projects](docs/projects.md)
+
+**Runs the model you choose.** Any MLX chat model that can call tools — switched from the status bar without losing your conversation, and the context budget follows the model rather than being fixed. Ships with Qwen3 4B Instruct, with [Maple](https://huggingface.co/deepgrove/maple-preview) (20B-A1B ternary, ~218 tok/s) as an optional extra. → [Models](docs/models.md)
 
 ---
 

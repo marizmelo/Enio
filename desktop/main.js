@@ -204,7 +204,7 @@ async function startBackends() {
     if (!modelReady) {
       sendStatus(
         "failed",
-        "Model server did not respond in time. Check that Maple is installed (see setup.sh) and that nothing else is using port 8080.",
+        "Model server did not respond in time. Check that the model runtime is installed (see install.sh) and that nothing else is using port 8080.",
       );
       // Watched even though startup failed: a slow first load that finishes a
       // minute later, or a server started by hand afterwards, should clear
@@ -553,18 +553,71 @@ function copyIntoWorkspace(sourcePath, conversationId) {
   return path.relative(WORKSPACE, path.join(dir, name));
 }
 
-ipcMain.handle("pick-files", async (_event, conversationId) => {
+/**
+ * The one picker that returns absolute paths instead of copying into the
+ * workspace: attaching to a project *references* a folder, it does not own a
+ * copy. The server decides whether a path is acceptable (its guards refuse
+ * the home dir, the data dir, and so on), so the renderer hands the choice
+ * straight through.
+ */
+ipcMain.handle("pick-project-paths", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Attach files or folders to this project",
+    buttonLabel: "Attach",
+    properties: ["openFile", "openDirectory", "multiSelections"],
+  });
+  return result.canceled ? [] : result.filePaths;
+});
+
+/**
+ * Reveal a project attachment in Finder. Unlike reveal-file this takes an
+ * absolute path, because attachments live wherever the user attached them —
+ * outside the workspace by definition. Reveal is read-only (Finder selects,
+ * nothing opens or runs), and the path must actually exist, so the worst a
+ * bad call can do is show a folder.
+ */
+ipcMain.handle("reveal-project-path", (_event, absolutePath) => {
+  const p = String(absolutePath ?? "");
+  if (!path.isAbsolute(p) || !fs.existsSync(p)) return false;
+  shell.showItemInFolder(p);
+  return true;
+});
+
+ipcMain.handle("pick-files", async (_event, conversationId, projectRoots = []) => {
+  // Open where the work is: with a project open, the folders it names are
+  // where the user means to look, not wherever the panel last happened to be.
+  const firstFolder = projectRoots.find((r) => r.kind === "folder");
   const result = await dialog.showOpenDialog(mainWindow, {
     title: "Attach to this message",
     properties: ["openFile", "multiSelections"],
+    ...(firstFolder ? { defaultPath: firstFolder.path } : {}),
+    // "All files" FIRST, because macOS applies the first filter by default:
+    // with Images leading, every PDF, DOCX and CSV in the chosen folder was
+    // greyed out and unselectable, which reads as "the app will not let me
+    // attach my own files". The narrower filters stay as opt-in ways to cut
+    // down a noisy folder, never as the default that hides most of it.
     filters: [
-      { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff"] },
-      { name: "Text", extensions: ["txt", "md", "json", "csv", "log", "yml", "yaml"] },
       { name: "All files", extensions: ["*"] },
+      { name: "Documents", extensions: ["pdf", "docx", "txt", "md", "json", "csv", "log", "yml", "yaml"] },
+      { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff"] },
     ],
   });
   if (result.canceled) return [];
-  return result.filePaths.map((p) => copyIntoWorkspace(p, conversationId));
+
+  // A file already inside an attached project folder is *referenced* by its
+  // alias path, not copied: the agent can already read it there, and copying
+  // would leave a stale duplicate in the workspace that diverges the moment
+  // the original changes. Anything from elsewhere still copies in, which is
+  // what makes attaching a file from the Desktop work at all.
+  return result.filePaths.map((p) => {
+    for (const root of projectRoots) {
+      if (root.kind === "file" && p === root.path) return root.alias;
+      if (root.kind === "folder" && p.startsWith(root.path + path.sep)) {
+        return path.join(root.alias, path.relative(root.path, p));
+      }
+    }
+    return copyIntoWorkspace(p, conversationId);
+  });
 });
 
 /**
@@ -615,8 +668,40 @@ const PREVIEW_LIMIT = 4 * 1024 * 1024;
 /** A renderer-supplied path, resolved against the workspace, or null if it
  *  escapes. Every handler that touches a path from the renderer goes through
  *  this — one rule in one place, matching what the agent's own file tools do. */
+/**
+ * The open project's attached roots, mirrored from the renderer.
+ *
+ * The main process derives its own WORKSPACE constant and knows nothing about
+ * server state, so without this a path like "Mariz/resume.pdf" — which the
+ * agent reads perfectly well — resolved to nothing here, and every
+ * main-process file affordance (thumbnail, preview, Save as…, Reveal, PDF
+ * viewer) silently did nothing for project files. Pushed rather than fetched
+ * because these handlers are synchronous and must not grow an HTTP round trip.
+ */
+let projectRoots = [];
+ipcMain.handle("set-project-roots", (_event, roots) => {
+  projectRoots = Array.isArray(roots) ? roots : [];
+  return true;
+});
+
+/**
+ * An addressable path → an absolute one, or null.
+ *
+ * Same two-root rule the agent's own safePath obeys: an alias-prefixed path
+ * resolves inside that attached root, anything else inside the workspace, and
+ * each is confined to its own root so "../" escapes nothing.
+ */
 function resolveInWorkspace(relPath) {
-  const full = path.resolve(WORKSPACE, String(relPath ?? ""));
+  const rel = String(relPath ?? "");
+  const head = rel.split(/[\\/]/)[0];
+  const mount = projectRoots.find((r) => r.alias === head);
+  if (mount) {
+    if (mount.kind === "file") return rel === mount.alias ? mount.path : null;
+    const full = path.resolve(mount.path, rel.slice(head.length + 1));
+    if (full !== mount.path && !full.startsWith(mount.path + path.sep)) return null;
+    return full;
+  }
+  const full = path.resolve(WORKSPACE, rel);
   if (full !== WORKSPACE && !full.startsWith(WORKSPACE + path.sep)) return null;
   return full;
 }

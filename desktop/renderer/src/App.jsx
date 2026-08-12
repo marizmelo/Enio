@@ -15,6 +15,8 @@ import {
   pendingPlans,
 } from "@/lib/conversations";
 import { HistoryDialog } from "@/components/HistoryDialog";
+import { ProjectsDialog } from "@/components/ProjectsDialog";
+import { currentProject, openProject as openProjectApi } from "@/lib/projects";
 import { PermissionNotice } from "@/components/PermissionNotice";
 import { RecipesDialog } from "@/components/RecipesDialog";
 import { speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
@@ -50,6 +52,10 @@ export function App() {
   // one row and never appears in the list.
   const [conversationId, setConversationId] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // The active project, as the server reports it. Null when nothing is open —
+  // which is also every fresh boot, since activation is process memory there.
+  const [project, setProject] = useState(null);
+  const [projectsOpen, setProjectsOpen] = useState(false);
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   // A file opened from the thread. The arrows walk that message's attachments,
@@ -127,6 +133,19 @@ export function App() {
     if (backendReady) fetchCapabilities().then(setCapabilities);
   }, [backendReady]);
 
+  // Mirror the open project's roots into the main process, which owns the
+  // file affordances (thumbnails, preview, Save as…, Reveal) and otherwise
+  // resolves everything against the workspace alone.
+  //
+  // Capabilities are refetched with it: the file listing *is* project-scoped
+  // (its attached folders appear under their aliases), so opening or closing
+  // a project without this left the attach menu offering the previous
+  // project's files — or none of the new one's.
+  useEffect(() => {
+    window.maple?.setProjectRoots?.(project?.attachments ?? []);
+    if (backendReady) fetchCapabilities().then(setCapabilities);
+  }, [project, backendReady]);
+
   // A stored transcript, plus any approval still waiting on this conversation.
   // The plan card only ever travelled over the live stream, so without asking
   // the server for pending plans a restart would orphan them: still in the
@@ -180,6 +199,16 @@ export function App() {
     if (!backendReady || conversationId) return;
     (async () => {
       try {
+        // If the server (which can outlive this window) still has a project
+        // open, resume where that project left off; otherwise latest overall.
+        const active = await currentProject().catch(() => null);
+        setProject(active);
+        if (active?.latestConversation) {
+          const msgs = await restoreThread(active.latestConversation);
+          setConversationId(active.latestConversation);
+          setMessages(msgs);
+          return;
+        }
         const all = await listConversations();
         if (all.length === 0) {
           // Nothing to resume, but attaching still needs somewhere to file
@@ -188,6 +217,20 @@ export function App() {
           return;
         }
         const latest = all[0];
+        // Restoring the thread as you left it includes its scope: a
+        // conversation that was inside a project comes back with the project
+        // open. Launching the app is the user act that re-grants it — the
+        // open still travels through the authed endpoint, and the model
+        // still has no path to any of this. A deleted project degrades to
+        // the transcript alone.
+        if (latest.projectId) {
+          try {
+            await openProjectApi(latest.projectId);
+            setProject(await currentProject().catch(() => null));
+          } catch {
+            /* project gone: the conversation still opens */
+          }
+        }
         const msgs = await restoreThread(latest.id);
         setConversationId(latest.id);
         setMessages(msgs);
@@ -206,6 +249,55 @@ export function App() {
     setConversationId(conv.id);
     setMessages(msgs);
   }, [restoreThread]);
+
+  // After opening a project: land in its latest conversation, or a fresh one
+  // that the server will tag with it.
+  const projectOpened = useCallback(async () => {
+    const active = await currentProject().catch(() => null);
+    setProject(active);
+    setProjectsOpen(false);
+    if (active?.latestConversation) {
+      stopSpeaking();
+      const msgs = await restoreThread(active.latestConversation).catch(() => []);
+      setConversationId(active.latestConversation);
+      setMessages(msgs);
+    } else {
+      setMessages([]);
+      setContext(null);
+      setConversationId(await createConversation().catch(() => null));
+    }
+  }, [restoreThread]);
+
+  // A fresh conversation inside a project, from the dialog's "Start a
+  // conversation" — open (idempotent when already open), then a new tagged
+  // chat rather than the resume projectOpened would do.
+  const startProjectChat = useCallback(async (projectId) => {
+    try {
+      await openProjectApi(projectId);
+      setProject(await currentProject().catch(() => null));
+    } catch {
+      return; // could not open: the dialog shows the error state
+    }
+    setProjectsOpen(false);
+    stopSpeaking();
+    followRef.current = true;
+    setShowJump(false);
+    setMessages([]);
+    setContext(null);
+    setConversationId(await createConversation().catch(() => null));
+  }, []);
+
+  // A conversation from another project: the click on "open project" is the
+  // consent that re-scopes the sandbox — resuming alone never does.
+  const openConversationInProject = useCallback(async (conv) => {
+    try {
+      await openProjectApi(conv.projectId);
+      setProject(await currentProject().catch(() => null));
+    } catch {
+      /* The conversation still opens; only the scope switch failed. */
+    }
+    await openConversation(conv);
+  }, [openConversation]);
 
   const newChat = useCallback(async () => {
     stopSpeaking();
@@ -347,12 +439,23 @@ export function App() {
         {...status}
         context={context}
         onNewChat={newChat}
+        project={project}
+        onProjects={() => setProjectsOpen(true)}
         onHistory={() => setHistoryOpen(true)}
         onRecipes={isMac ? () => setRecipesOpen(true) : undefined}
         onFiles={() => setFilesOpen(true)}
       />
 
       <RecipesDialog open={recipesOpen} onOpenChange={setRecipesOpen} />
+
+      <ProjectsDialog
+        open={projectsOpen}
+        onOpenChange={setProjectsOpen}
+        activeId={project?.id}
+        onOpened={projectOpened}
+        onClosed={() => setProject(null)}
+        onStartChat={startProjectChat}
+      />
 
       {viewing && (
         <FileViewer
@@ -379,7 +482,9 @@ export function App() {
         open={historyOpen}
         onOpenChange={setHistoryOpen}
         currentId={conversationId}
+        activeProjectId={project?.id}
         onPick={openConversation}
+        onOpenProject={openConversationInProject}
         onDiscarded={(id) => {
           // Discarding took its attachments with it, so this thread cannot
           // keep the id — the folder it was filing into is gone.

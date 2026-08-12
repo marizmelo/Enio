@@ -14,7 +14,10 @@ import type { Registry } from "./tools/index.js";
 import { createHash } from "node:crypto";
 import { toolText, toWireTool, type Message, type ToolCall, type Widget } from "./types.js";
 import { contextBudget } from "./model-settings.js";
+import { extractPdfText, looksLikePdf } from "./pdf.js";
+import { activeProject } from "./project.js";
 import { neutralizeControlTokens } from "./sanitize.js";
+import { unsupportedSpecifics } from "./grounding.js";
 
 /**
  * Who the assistant is, ahead of everything else in the system message.
@@ -353,6 +356,98 @@ export function looksDegenerate(text: string): boolean {
 }
 
 /**
+ * complete(), with a watchdog on the stream.
+ *
+ * The degeneration check used to run only on the finished reply, which
+ * meant a looping model streamed "I will now read the file." several
+ * thousand times -- to the token ceiling, live, with the user watching --
+ * before the guard saw anything. The loop is visible long before it ends,
+ * so this watches the accumulating text and aborts the request the moment
+ * the tail degenerates. The partial content is returned as the result;
+ * the existing post-reply check then treats it exactly like a completed
+ * loop (notice, retry), so nothing downstream changes.
+ *
+ * The floor and stride keep it conservative: short answers are never
+ * checked at all, and the detector itself already demands verbatim
+ * repetition across most of the text. A false abort discards a real
+ * answer, which is the one outcome worse than streaming a bad one.
+ */
+async function completeWatched(
+  messages: Message[],
+  tools: ReturnType<typeof toWireTool>[],
+  handlers: Parameters<typeof complete>[2],
+  opts?: Parameters<typeof complete>[4],
+): Promise<Awaited<ReturnType<typeof complete>>> {
+  const controller = new AbortController();
+  let streamed = "";
+  let checkedAt = 0;
+  const watched = {
+    ...handlers,
+    onContent: (delta: string) => {
+      streamed += delta;
+      handlers?.onContent?.(delta);
+      if (streamed.length > 1500 && streamed.length - checkedAt > 600) {
+        checkedAt = streamed.length;
+        if (looksDegenerate(streamed)) controller.abort();
+      }
+    },
+  };
+  try {
+    return await complete(messages, tools, watched, controller.signal, opts);
+  } catch (err) {
+    if (!controller.signal.aborted) throw err;
+    return {
+      content: streamed,
+      rawContent: streamed,
+      reasoning: "",
+      toolCalls: [],
+      repaired: false,
+      scavenged: false,
+    };
+  }
+}
+
+/**
+ * The project overlay: what makes an open project contextual for *every*
+ * specialist, which is the whole design -- no code mode, the router keeps
+ * routing, the project rides along.
+ *
+ * Only user-authored text enters this block (name, description,
+ * instructions, attachment notes) -- never the contents of attached files,
+ * which reach the model exclusively through tools and the sanitize
+ * chokepoint. Every field is capped at save time (project.ts CAPS), so the
+ * worst case is a couple hundred tokens against the smallest supported
+ * budget; how many attachments get named scales with the current model's
+ * budget rather than with what happens to be attached.
+ */
+function projectBlock(): string {
+  const project = activeProject();
+  if (!project) return "";
+  const lines = [
+    `The user is working on the project "${project.name}"${project.description ? `: ${project.description}` : ""}.`,
+    // Stated as an instruction, not a fact. A small model given "Project:
+    // Resume" as bare context still asked "are you referring to TCP
+    // performance?" on an ambiguous request -- it treated the project as one
+    // hint among the retrieved memories. Grounding has to be imperative,
+    // the same closed-choice trick as the router bias.
+    `Interpret requests in the context of this project. "This", "here", and other ambiguous references mean this project unless the message clearly says otherwise.`,
+  ];
+  if (project.instructions) lines.push(`Instructions: ${project.instructions}`);
+  if (project.attachments.length > 0) {
+    const maxListed = Math.min(48, Math.max(12, Math.round(contextBudget() / 160)));
+    const listed = project.attachments
+      .slice(0, maxListed)
+      .map((a) => `${a.alias}${a.kind === "folder" ? "/" : ""}${a.note ? ` — ${a.note}` : ""}`);
+    const more = project.attachments.length - listed.length;
+    lines.push(`Attached: ${listed.join("; ")}${more > 0 ? `; and ${more} more` : ""}`);
+    lines.push(
+      `Use these names as the first path segment. Files you create with plain relative paths are stored with the project.`,
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
  * Runs one user turn to completion, including any tool round-trips.
  *
  * `history` is mutated so the caller keeps the full conversation, tool calls
@@ -428,7 +523,17 @@ export async function runTurn(
         // one specialist with no Notes tools.
         ? route(userInput, lastSpecialist(sessionId))
         : Promise.resolve(""),
-    buildMemoryBlock(userInput),
+    // With a project open, retrieval hears the project too: an ambiguous
+    // "what can we optimize here?" otherwise ranks by nothing and surfaces
+    // whatever facts happen to be nearest -- a stray "comparing TCP and UDP"
+    // memory beat the open resume project for exactly that query. Specific
+    // questions still dominate the ranking; the project terms only settle
+    // ties in its favor.
+    buildMemoryBlock(
+      activeProject()
+        ? `${userInput} (project: ${activeProject()!.name} ${activeProject()!.description})`
+        : userInput,
+    ),
     exemplarBlock(userInput),
     readAttachments(overrides.files ?? [], attachmentNotes),
   ]);
@@ -459,12 +564,15 @@ export async function runTurn(
   // *how* the task is approached rather than supplying facts about it.
   // An explicitly invoked skill goes in ahead of the catalogue: it is no longer
   // one option among many, it is the instruction for this turn.
+  // The project overlay sits between the stable role material and the
+  // volatile memory: it changes only when the user edits the project.
   const invoked = invokedSkillBlock(overrides.skills ?? []);
   const system = [
     IDENTITY,
     roleSystem,
     invoked,
     invoked ? "" : skillCatalogue(),
+    projectBlock(),
     preferenceBlock(),
     memoryBlock,
     exemplars,
@@ -564,7 +672,7 @@ export async function runTurn(
       });
     }
 
-    const result = await complete(
+    const result = await completeWatched(
       history,
       // On the final permitted iteration, withhold tools so the model is forced
       // to produce an answer instead of another call it has no budget to run.
@@ -668,11 +776,12 @@ export async function runTurn(
       let retry = { content: "", rawContent: "", reasoning: "", repaired: false, scavenged: false, toolCalls: [] as ToolCall[] };
       for (let r = 0; r < retryRounds; r++) {
         const retryStartedAt = Date.now();
-        retry = await complete(
+        // Watched like the main call: the no-think retry is where the worst
+        // observed loops actually streamed from.
+        retry = await completeWatched(
           history,
           retryTools,
           { onContent: handlers.onContent },
-          undefined,
           { enableThinking: false },
         );
         steps.push({
@@ -811,6 +920,40 @@ export async function runTurn(
     logMessage(sessionId, "assistant", reply);
   }
 
+  // The grounding check, on turns that read source material. Sources are
+  // everything this turn could legitimately copy a specific from: the user's
+  // words (the whole conversation's, not just this message), tool outputs,
+  // attachments, and the project's own fields. Deliberately NOT earlier
+  // assistant replies -- an invention repeated is still an invention, and
+  // counting it as a source would let one turn's fabrication launder the
+  // next's. Warn-only: a notice under the reply, never a block or rewrite.
+  if (steps.some((s) => s.kind === "tool")) {
+    try {
+      const project = activeProject();
+      const sources = [
+        userInput,
+        ...history.filter((m) => m.role === "user" || m.role === "tool")
+          .map((m) => String(m.content ?? "")),
+        ...steps.map((s) => s.output ?? ""),
+        attachments,
+        ...(project
+          ? [project.name, project.description, project.instructions,
+             ...project.attachments.map((a) => `${a.alias} ${a.path} ${a.note}`)]
+          : []),
+      ];
+      const invented = unsupportedSpecifics(reply, sources);
+      if (invented.length > 0) {
+        const listed = invented.slice(0, 5).join(", ");
+        const more = invented.length > 5 ? ` and ${invented.length - 5} more` : "";
+        handlers.onNotice?.(
+          `Not found in this turn's sources: ${listed}${more}. These may be invented — verify before relying on them.`,
+        );
+      }
+    } catch {
+      // The check is advisory; a crash in it must never cost the answer.
+    }
+  }
+
   try {
     recordTurn({
       sessionId,
@@ -882,6 +1025,38 @@ async function readAttachments(
             // the same forgery vector as a fetched page, and this path does
             // not pass through executeCall, so it is defanged here too.
             `--- ${rel} ---\n${neutralizeControlTokens(reading.text)}\n--- end of ${rel} ---`,
+        );
+        continue;
+      }
+
+      // Same rule as read_file: binary becomes real text or an honest note,
+      // never bytes -- garbage in the prompt reads as the model being wrong,
+      // and an attachment must never be able to fail a turn.
+      const head = (await readFile(absolute)).subarray(0, 8192);
+      if (looksLikePdf(head)) {
+        const pdf = await extractPdfText(absolute);
+        if (pdf?.text) {
+          const clipped =
+            pdf.text.length > 12_000 ? pdf.text.slice(0, 12_000) + "\n[...truncated]" : pdf.text;
+          // Extracted PDF text is untrusted content going straight into the
+          // prompt, the same as OCR above -- defanged here because this path
+          // does not pass through executeCall.
+          blocks.push(`<file path="${rel}">\n${neutralizeControlTokens(clipped)}\n</file>`);
+        } else {
+          notes.push(
+            pdf
+              ? `${rel} is a scanned PDF with no text layer; its contents are not readable.`
+              : `${rel} could not be parsed as a PDF.`,
+          );
+          blocks.push(
+            `<file path="${rel}">This PDF's text could not be extracted. Say so; do not guess at its contents.</file>`,
+          );
+        }
+        continue;
+      }
+      if (head.includes(0)) {
+        blocks.push(
+          `<file path="${rel}">This is a binary file and cannot be read as text. Say so; do not guess at its contents.</file>`,
         );
         continue;
       }

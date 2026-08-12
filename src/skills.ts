@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { config } from "./config.js";
+import { activeProject } from "./project.js";
 
 /**
  * Skills: reusable know-how, as opposed to tools, which are capability.
@@ -48,50 +49,67 @@ export interface SkillSet {
 
 export const skillsDir = (): string => join(config.dataDir, "skills");
 
+/** Global skills, then the active project's -- iterated in that order so a
+ *  project skill with a global skill's name shadows it (the more specific
+ *  intent wins), and project skills vanish the moment the project closes. */
+export function skillRoots(): string[] {
+  const roots = [skillsDir()];
+  const project = activeProject();
+  if (project) roots.push(join(project.dir, "skills"));
+  return roots;
+}
+
 /**
  * Loaded fresh on each call rather than cached.
  *
  * Editing a skill and having it take effect on the next message — without
  * restarting — is most of what makes them pleasant to iterate on. At a few
  * dozen small files the read cost is irrelevant next to a single model call.
+ * Being uncached is also what makes project skills free: the roots are
+ * re-derived per call, so opening or closing a project changes the set with
+ * no caller involved.
  */
 export function loadSkills(): SkillSet {
-  const root = skillsDir();
-  if (!existsSync(root)) return { skills: [], problems: [] };
-
-  const skills: Skill[] = [];
+  const byName = new Map<string, Skill>();
   const problems: SkillProblem[] = [];
 
-  let entries: string[];
-  try {
-    entries = readdirSync(root);
-  } catch (err) {
-    return { skills: [], problems: [{ path: root, reason: (err as Error).message }] };
-  }
+  for (const root of skillRoots()) {
+    if (!existsSync(root)) continue;
 
-  for (const entry of entries.sort()) {
-    const dir = join(root, entry);
+    let entries: string[];
     try {
-      if (!statSync(dir).isDirectory()) continue;
-    } catch {
-      continue;
-    }
-
-    const file = join(dir, "SKILL.md");
-    if (!existsSync(file)) {
-      problems.push({ path: dir, reason: "no SKILL.md" });
-      continue;
-    }
-
-    try {
-      skills.push(parseSkill(readFileSync(file, "utf8"), dir, entry));
+      entries = readdirSync(root);
     } catch (err) {
-      // One malformed skill must not take the others down with it.
-      problems.push({ path: file, reason: (err as Error).message });
+      problems.push({ path: root, reason: (err as Error).message });
+      continue;
+    }
+
+    for (const entry of entries.sort()) {
+      const dir = join(root, entry);
+      try {
+        if (!statSync(dir).isDirectory()) continue;
+      } catch {
+        continue;
+      }
+
+      const file = join(dir, "SKILL.md");
+      if (!existsSync(file)) {
+        problems.push({ path: dir, reason: "no SKILL.md" });
+        continue;
+      }
+
+      try {
+        const skill = parseSkill(readFileSync(file, "utf8"), dir, entry);
+        // Later roots override: the map write is the shadowing rule.
+        byName.set(skill.name, skill);
+      } catch (err) {
+        // One malformed skill must not take the others down with it.
+        problems.push({ path: file, reason: (err as Error).message });
+      }
     }
   }
 
-  return { skills, problems };
+  return { skills: [...byName.values()], problems };
 }
 
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;

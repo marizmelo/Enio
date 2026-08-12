@@ -1,7 +1,7 @@
 ---
 title: Agents and routing
 layout: default
-nav_order: 7
+nav_order: 8
 ---
 
 # Agents and routing
@@ -12,7 +12,7 @@ You'll see the choice in the transcript as `→ coder`.
 | Agent | Handles | Tools |
 |---|---|---|
 | `researcher` | The outside world: news, docs, anything needing a lookup | `web_search`, `web_fetch`, `browse`, `recall`, `weather`, `read_skill` |
-| `coder` | Reading, writing, running and debugging code in the workspace | `read_file`, `write_file`, `list_dir`, `run_command`, `read_image`, `read_skill` |
+| `coder` | Reading, writing, running and debugging code in the working folders | `read_file`, `write_file`, `list_dir`, `run_command`, `search_code`, `read_skill` |
 | `librarian` | You: preferences, and earlier conversations | `recall`, `remember`, `set_preference`, `read_skill` |
 | `mail` | Finding, reading, summarising and drafting email | `search_email`, `read_email`, `send_email`, `read_skill` |
 | `operator` | Doing things in Mac apps | `mac_recipe`, `open_app`, `propose_plan`, `take_screenshot`, `read_image`, `read_skill` |

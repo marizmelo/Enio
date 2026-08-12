@@ -53,6 +53,22 @@ function sse(content: string): Response {
   );
 }
 
+describe("the embedding cache is isolated from the real one", () => {
+  test("it lives under the (redirected) data dir", async () => {
+    // Tests stub globalThis.fetch with scripted chat responses -- exactly the
+    // frames built above. transformers.js once cached those frames as model
+    // files in its node_modules default cache, which the REAL agent then
+    // read: every startup failed with a JSON parse error on an SSE chunk,
+    // and recall silently degraded to keyword-only. The cache living under
+    // config.dataDir is the fix, because tests redirect that to a scratch
+    // dir -- so a test can no longer write where the agent reads.
+    const { embeddingCacheDir } = await import("./memory/embed.js");
+    const { config } = await import("./config.js");
+    assert.ok(embeddingCacheDir().startsWith(config.dataDir));
+    assert.ok(config.dataDir.includes("enio-memory-notes-"), "this suite runs on a scratch dir");
+  });
+});
+
 describe("summaryInput", () => {
   test("a transcript that fits goes in whole", () => {
     assert.equal(summaryInput("short conversation", null), "short conversation");

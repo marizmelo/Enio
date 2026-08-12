@@ -174,14 +174,30 @@ fi
 ENIO_DIR="$ENIO_DIR" node "$AGENT_DIR/scripts/patch-runtime.mjs" || \
   warn "Could not patch the mlx-lm tool parser; tool calls may be dropped."
 
-say "Model weights (~5GB)"
-if [ -f "$ENIO_DIR/maple-2bit-mlx/config.json" ]; then
-  skip "weights present"
+# The default model goes to the shared HF cache (mlx_lm.server resolves it
+# from there by id). Maple keeps its own checkout in the runtime dir because
+# it is addressed by path, not by HF id -- and it is optional now.
+DEFAULT_MODEL="mlx-community/Qwen3-4B-Instruct-2507-4bit"
+say "Model weights (~2.3GB)"
+if [ -d "$HOME/.cache/huggingface/hub/models--mlx-community--Qwen3-4B-Instruct-2507-4bit/snapshots" ]; then
+  skip "default model weights present"
 else
-  printf '    downloading — resumable, safe to interrupt\n'
+  printf '    downloading %s — resumable, safe to interrupt\n' "$DEFAULT_MODEL"
   ( cd "$ENIO_DIR" && source .venv/bin/activate && \
-    hf download deepgrove/maple-2bit-mlx --local-dir maple-2bit-mlx ) \
+    hf download "$DEFAULT_MODEL" ) \
     || die "Weight download failed. Re-run this script to resume."
+fi
+
+if [ -f "$ENIO_DIR/maple-2bit-mlx/config.json" ]; then
+  skip "Maple weights present"
+else
+  # Optional, not default: Maple is the ternary 20B-A1B experiment -- fastest
+  # per token here, but the 4B routes better and downloads at half the size.
+  if [ "$ASSUME_YES" != "1" ] && ask "Also download Maple? (~5GB, ternary 20B-A1B, fastest per token)"; then
+    ( cd "$ENIO_DIR" && source .venv/bin/activate && \
+      hf download deepgrove/maple-2bit-mlx --local-dir maple-2bit-mlx ) \
+      || warn "Maple download failed — enio works without it; re-run to retry."
+  fi
 fi
 
 else

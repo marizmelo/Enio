@@ -1,6 +1,7 @@
 import * as readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { config } from "./config.js";
+import { activeProject } from "./project.js";
 import { runTurn } from "./agent.js";
 import { serverIsUp } from "./model.js";
 import { claimModelServer } from "./runtime.js";
@@ -108,7 +109,14 @@ export async function repl(opts: { showThinking: boolean; resume?: string }): Pr
   console.log(
     `\n${green("enio")} ${dim(`· ${registry.all.length} tools · ${s.facts} facts · ${s.entities} entities`)}`,
   );
-  console.log(dim(`workspace: ${config.workspace}`));
+  const project = activeProject();
+  if (project) {
+    const attached = project.attachments.map((a) => a.alias).join(", ") || "nothing attached yet";
+    console.log(dim(`project: ${project.name} (${project.type}) · ${attached}`));
+    console.log(dim(`generated files go to the project; conversation attachments stay readable`));
+  } else {
+    console.log(dim(`workspace: ${config.workspace}`));
+  }
   console.log(dim(`/help for commands · tab completes /skills and @mentions · ctrl-C to quit\n`));
 
   // Tab completion is what makes /skill and @mention discoverable. Without it

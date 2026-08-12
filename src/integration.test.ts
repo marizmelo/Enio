@@ -16,6 +16,10 @@ process.env.ENIO_MCP_CONFIG = join(scratch, "no-such-mcp.json");
 // every turn, which would consume the scripted responses below; it has its own
 // tests in learning.test.ts and routing.test.ts.
 process.env.ENIO_ROUTING = "0";
+// The compaction tests size their histories against a known budget. Pinned
+// because the budget otherwise follows the default model, and these tests are
+// about folding behavior, not about which model ships.
+process.env.ENIO_CONTEXT_BUDGET = "2000";
 
 const { runTurn } = await import("./agent.js");
 const { buildRegistry } = await import("./tools/index.js");

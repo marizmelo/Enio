@@ -239,6 +239,10 @@ function migrate(d: Database.Database): void {
   // The running summary compaction produces mid-session, kept so the final
   // session summary can cover the whole arc instead of the first 12k chars.
   addColumn(d, "sessions", "fold_summary", "TEXT");
+  // Which project a conversation belonged to. A tag, not a foreign key:
+  // deleting a project keeps its conversations -- the raw transcript stays
+  // the source of truth whatever happens to the project folder.
+  addColumn(d, "sessions", "project_id", "TEXT");
 
 }
 

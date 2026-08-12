@@ -21,13 +21,14 @@ ensureDirs();
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
 describe("the model setting", () => {
-  test("defaults to the bundled model, and persists a switch", () => {
-    assert.equal(settings.currentModelId(), settings.MAPLE);
+  test("defaults to Qwen3 4B, and persists a switch", () => {
+    assert.equal(settings.currentModelId(), settings.DEFAULT_MODEL);
+    assert.equal(settings.DEFAULT_MODEL, "mlx-community/Qwen3-4B-Instruct-2507-4bit");
 
     settings.setModelId("mlx-community/some-model-4bit");
     assert.equal(settings.currentModelId(), "mlx-community/some-model-4bit");
 
-    // Back, so the sentinel round-trips too.
+    // Back through the Maple sentinel, so it round-trips too.
     settings.setModelId(settings.MAPLE);
     assert.equal(settings.currentModelId(), settings.MAPLE);
   });
@@ -45,20 +46,24 @@ describe("the model setting", () => {
     assert.equal(settings.currentModelId(), "mlx-community/persisted-model");
   });
 
-  test("the available list always contains the default and never a vision model", () => {
+  test("the available list contains the selected model and never a vision model", () => {
+    settings.setModelId(settings.DEFAULT_MODEL);
     const models = settings.availableModels();
-    assert.ok(models.includes(settings.MAPLE));
+    // The selected model is machine state whether or not its weights have
+    // landed; a picker that hides the current choice cannot explain it.
+    assert.ok(models.includes(settings.DEFAULT_MODEL));
     assert.ok(
       !models.some((m) => /-VL-|vision/i.test(m)),
       "vision models have their own server and do not belong in this list",
     );
-    // Maple's own HF cache entry must not appear beside the bundled default:
-    // the same weights under two names is a choice with no difference in it,
-    // and it made the picker show "three models" on a two-model machine.
+    // Maple is offered only while its bundled weights are on disk. This
+    // scratch install has none, so offering it would be offering a
+    // ninety-second failed load -- and the cache-scan blocklist keeps its HF
+    // entry out regardless, so it must not appear at all.
     assert.equal(
       models.filter((m) => /maple/i.test(m)).length,
-      1,
-      "maple must appear exactly once — as the bundled default",
+      0,
+      "maple must not be offered without its bundled weights",
     );
   });
 

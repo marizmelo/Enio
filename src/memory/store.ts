@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { config } from "../config.js";
+import { activeProject } from "../project.js";
 import { cosine, fromBlob, ftsAvailable, getDb, toBlob } from "./db.js";
 import { embed, embedBatch } from "./embed.js";
 import { chunkTranscript, extractTriples, summarize } from "./extract.js";
@@ -12,9 +13,12 @@ const now = () => Date.now();
 
 export function startSession(): string {
   const id = randomUUID();
+  // Stamped at creation from whichever project is open, so resuming a
+  // project can find its conversations. project.ts is a leaf module; the
+  // import cannot cycle.
   getDb()
-    .prepare(`INSERT INTO sessions (id, started_at) VALUES (?, ?)`)
-    .run(id, now());
+    .prepare(`INSERT INTO sessions (id, started_at, project_id) VALUES (?, ?, ?)`)
+    .run(id, now(), activeProject()?.id ?? null);
   return id;
 }
 
@@ -544,6 +548,9 @@ export interface ConversationSummary {
    *  count the discard dialog enumerates, surfaced up front so a conversation
    *  worth keeping can be spotted by scanning rather than by opening each. */
   knowledge: number;
+  /** The project this conversation was started under, if any. A tag that
+   *  outlives the project — see the migration note in db.ts. */
+  projectId: string | null;
 }
 
 /**
@@ -556,11 +563,12 @@ export interface ConversationSummary {
  * The title is the first user message rather than a stored column, so it can
  * never disagree with the transcript it names.
  */
-export function listConversations(limit = 50): ConversationSummary[] {
+export function listConversations(limit = 50, projectId?: string): ConversationSummary[] {
   const rows = getDb()
     .prepare(
       `SELECT s.id,
               s.started_at AS startedAt,
+              s.project_id AS projectId,
               MAX(m.ts)    AS lastAt,
               COUNT(m.id)  AS messages,
               (SELECT content FROM messages
@@ -570,13 +578,15 @@ export function listConversations(limit = 50): ConversationSummary[] {
                 WHERE session_id = s.id AND pinned = 0) AS knowledge
          FROM sessions s
          JOIN messages m ON m.session_id = s.id
+        WHERE (? IS NULL OR s.project_id = ?)
         GROUP BY s.id
         ORDER BY lastAt DESC
         LIMIT ?`,
     )
-    .all(limit) as Array<{
+    .all(projectId ?? null, projectId ?? null, limit) as Array<{
     id: string;
     startedAt: number;
+    projectId: string | null;
     lastAt: number;
     messages: number;
     firstUser: string | null;
@@ -590,7 +600,26 @@ export function listConversations(limit = 50): ConversationSummary[] {
     lastAt: r.lastAt,
     messages: r.messages,
     knowledge: r.knowledge,
+    projectId: r.projectId,
   }));
+}
+
+/** The most recently active conversation of a project, for resume-on-open.
+ *  Activity, not creation: the conversation someone left off in is the one
+ *  reopening the project should surface. */
+export function latestSessionForProject(projectId: string): string | null {
+  const row = getDb()
+    .prepare(
+      `SELECT s.id, MAX(m.ts) AS lastAt
+         FROM sessions s
+         JOIN messages m ON m.session_id = s.id
+        WHERE s.project_id = ?
+        GROUP BY s.id
+        ORDER BY lastAt DESC
+        LIMIT 1`,
+    )
+    .get(projectId) as { id: string } | undefined;
+  return row?.id ?? null;
 }
 
 export interface StoredMessage {

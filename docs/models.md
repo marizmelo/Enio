@@ -1,7 +1,7 @@
 ---
 title: Models
 layout: default
-nav_order: 6
+nav_order: 7
 ---
 
 # Models
@@ -9,8 +9,9 @@ nav_order: 6
 ## Switching
 
 The model is a **setting**, not a launch flag. The desktop app's status bar has
-a picker listing what this machine can serve right now: the bundled default plus
-any MLX chat model already in your Hugging Face cache. One click switches.
+a picker listing what this machine can serve right now: any MLX chat model
+already in your Hugging Face cache, plus Maple when its bundled weights are
+installed. One click switches.
 
 Switching restarts the model server underneath the agent — your conversation,
 pending approvals and history all stay up. The choice persists in
@@ -45,10 +46,10 @@ The new model simply appears in **On this machine**.
 
 | Model | Size | Notes |
 |---|---|---|
-| `deepgrove/maple-preview` | 5.3GB | The bundled default. 20B total, ~1B active, ternary. Fastest per token. |
+| `mlx-community/Qwen3-4B-Instruct-2507-4bit` | 2.3GB | **The default.** Measured here: routed 8/8 at 426ms median. |
+| `deepgrove/maple-preview` | 5.3GB | Optional. 20B total, ~1B active, ternary. Fastest per token. |
 | `mlx-community/Qwen3-1.7B-4bit` | 1.0GB | Smallest that still routes and calls tools. For 8GB machines. |
 | `mlx-community/Llama-3.2-3B-Instruct-4bit` | 1.8GB | Small and quick. Shorter context than the Qwen3 models. |
-| `mlx-community/Qwen3-4B-Instruct-2507-4bit` | 2.3GB | Measured here: routed 8/8 at 426ms median, faster than the default. |
 | `mlx-community/Mistral-7B-Instruct-v0.3-4bit` | 4.1GB | Strong plain prose. Weaker at picking tools than the Qwen3 models. |
 | `mlx-community/Qwen2.5-7B-Instruct-4bit` | 4.3GB | The older generation. Steadier, no thinking mode. |
 | `mlx-community/Qwen3-8B-4bit` | 4.6GB | Better at multi-step tool use, at roughly half the speed of 4B. |
@@ -151,18 +152,18 @@ switching models mid-session would keep the old number.
 
 ## Which model to run
 
-Maple is the shipped default on Apple Silicon: 20B total, ~1B active, ternary
-weights, ~218 tok/s, about 6.9GB resident. It decodes very fast.
+Qwen3 4B Instruct is the shipped default: it is the entry actually measured
+in Enio (routed 8/8 at 426ms median), it is reliable at multi-step tool use,
+and its weights are a 2.3GB download.
 
-Raw decode speed is not the same as finishing a task, though. On one measured
-comparison of routing — the classification that picks a specialist — both
-scored 8/8 correct, and the dense 4B was about twice as fast *per decision*
-because a short output is dominated by prompt processing rather than token
-generation.
-
-The honest summary: Maple is fastest per token and lightest to run given its
-capability; a dense 4B is more reliable at multi-step tool use and holds far
-more context. Try both — switching costs one click and a model load.
+Maple (20B total, ~1B active, ternary, ~218 tok/s) is the optional
+alternative the installer offers: fastest per token and lightest to run given
+its capability. Raw decode speed is not the same as finishing a task, though —
+on the measured routing comparison both scored 8/8 correct, and the dense 4B
+was about twice as fast *per decision*, because a short output is dominated by
+prompt processing rather than token generation. Maple also holds far less
+context (see the budget table above). Try both — switching costs one click and
+a model load.
 
 ## A note on Ollama's MLX engine
 

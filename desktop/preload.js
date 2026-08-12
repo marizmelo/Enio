@@ -26,11 +26,24 @@ contextBridge.exposeInMainWorld("maple", {
   },
 
   /**
-   * Native file picker. Returns workspace-relative names, because the chosen
-   * files are copied in — the agent cannot read anything outside the workspace.
+   * Native file picker. Returns names the agent can address: a file already
+   * inside one of the project's attached folders comes back as its alias
+   * path (a reference), anything else is copied into the workspace first.
    */
-  pickFiles(conversationId) {
-    return ipcRenderer.invoke("pick-files", conversationId);
+  pickFiles(conversationId, projectRoots) {
+    return ipcRenderer.invoke("pick-files", conversationId, projectRoots);
+  },
+
+  /** Folder/file picker for project attachments. Absolute paths, no copying —
+   *  the server's guards decide whether each one is attachable. */
+  pickProjectPaths() {
+    return ipcRenderer.invoke("pick-project-paths");
+  },
+
+  /** Tell the main process which project roots are open, so previews,
+   *  Save as… and Reveal work for project files too. */
+  setProjectRoots(roots) {
+    return ipcRenderer.invoke("set-project-roots", roots);
   },
 
   /** Save pasted or dropped image bytes into the workspace. */
@@ -46,6 +59,12 @@ contextBridge.exposeInMainWorld("maple", {
   /** Show a workspace file in Finder. */
   revealFile(relPath) {
     return ipcRenderer.invoke("reveal-file", relPath);
+  },
+
+  /** Show a project attachment in Finder — absolute path, because
+   *  attachments live wherever the user attached them. */
+  revealProjectPath(absolutePath) {
+    return ipcRenderer.invoke("reveal-project-path", absolutePath);
   },
 
   /** A file's contents for the viewer: an image data URL, decoded text, or a

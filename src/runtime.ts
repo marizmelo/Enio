@@ -9,7 +9,14 @@ import {
   unregisterModelClient,
 } from "./model-clients.js";
 import { canRunMaple, isWindows, whyNoMaple } from "./platform.js";
-import { currentModelId, currentModelLabel, currentModelPath, setModelId } from "./model-settings.js";
+import {
+  MAPLE,
+  currentModelId,
+  currentModelLabel,
+  currentModelPath,
+  modelIsCached,
+  setModelId,
+} from "./model-settings.js";
 
 /**
  * How the model server is launched, in one place because there are two callers
@@ -321,8 +328,30 @@ async function startMaple(opts: EnsureOptions): Promise<RunningBackend> {
   // lets the choice survive the restart cycle: quitting the app shuts down
   // whichever server it was using, and before this the relaunch could only
   // ever bring Maple back. An HF id resolves from the local HF cache.
-  const modelPath = currentModelPath();
-  const label = currentModelLabel();
+  //
+  // An HF id whose weights are not cached yet would be handed to
+  // mlx_lm.server, which downloads it silently -- gigabytes nobody agreed
+  // to, timing out waitForServer halfway through. Ask first; a declined (or
+  // non-interactive) answer falls back to the bundled Maple weights when
+  // they exist, so a machine upgraded across the default-model change keeps
+  // working without a surprise download.
+  let id = currentModelId();
+  if (id !== MAPLE && !modelIsCached(id)) {
+    const wanted = await opts.confirm(`Download ${id}? (a few GB, one time)`);
+    if (!wanted) {
+      if (existsSync(join(config.runtimeDir, "maple-2bit-mlx", "config.json"))) {
+        opts.log(`Weights for ${id} are not downloaded — serving Maple instead`);
+        id = MAPLE;
+      } else {
+        throw new Error(
+          `No weights for ${id} and no bundled Maple weights to fall back to.\n` +
+            `Run 'bash install.sh' or download from the desktop model picker.`,
+        );
+      }
+    }
+  }
+  const modelPath = id === MAPLE ? join(config.runtimeDir, "maple-2bit-mlx") : currentModelPath();
+  const label = id === MAPLE ? "Maple" : currentModelLabel();
 
   const child = spawn(
     modelServerBinary(),

@@ -718,6 +718,62 @@ shape that fits; a file-tree walker plus a grepper plus a symbol index is not.
 
 Graphify was considered here and not adopted — see below.
 
+**Built (August 2026), as projects rather than a folder mode.** The shape that
+shipped answers both constraints above, and the deliberate deviations from
+what this section anticipated are worth recording:
+
+- **A contextual project, not a code mode.** The evaluation: what makes code
+  mode efficient on a small model is narrowing — fewer tools, shorter prompt,
+  a domain prior — and routing already narrows harder per turn than a
+  session-wide mode would. The missing piece was only the *prior*, so a
+  project carries a `type` from a closed list (`general`/`code`/`planning`)
+  that biases the router without overriding it. A hard mode was rejected: it
+  strands a code session's email question on the wrong specialist and buys
+  nothing that per-turn narrowing hadn't already bought.
+- **Multiple attachments with user-authored notes**, not one opened folder.
+  Each attachment mounts under a deduped basename alias; the alias is the
+  first path segment every tool prints and accepts, because a small model
+  copies paths far more reliably than it composes them — search output is
+  deliberately the model's path source. Unprefixed paths root in the
+  project's own `out/` dir, so generated files stop piling into the global
+  workspace; existing workspace files (conversation attachments) keep a
+  read-only fallback.
+- **Consent stays a user act**: no tool creates/attaches/opens a project;
+  activation is process memory, forgotten on restart. `project.json` persists
+  the definition, never an auto-reopen.
+- **`search_code` is one tool** (FTS5 per-project index + live ripgrep,
+  merged, rg exact hits first), per the shape prescribed above. It replaced
+  `read_image` on the coder — generalist and operator both keep that tool, so
+  the product lost nothing — because the six-tool ceiling forbade an
+  addition. Embeddings were rejected for the index (the no-vector-store
+  stance below held); `git ls-files` picks the corpus so `.gitignore`d
+  secrets stay out.
+- **Sessions are tagged (`sessions.project_id`) in the global DB.**
+  Per-project databases were rejected: they fork the raw-transcripts
+  invariant and fragment memory. Deleting a project keeps its conversations.
+- **Per-domain coder variants (mobile-coder, game-coder…) were rejected**:
+  near-identical classes degrade a small router, they would share the same
+  six tools (eroding disjointness), and what differs between domains is
+  know-how — which is what skills are for. Example skills `delegate-coding`
+  and `project-planning` ship instead; `home-automation` and `research`
+  project types wait until the HA MCP setup and a real need arrive.
+- **AGENTS.md/CLAUDE.md in attached repos are not injected** — long,
+  untrusted, written for frontier models, and the budget is small. They are
+  indexed like any file, and treated as a signal the repo is set up for the
+  provider CLIs `delegate-coding` can drive via `run_command` when the user
+  allowlists them.
+- **Everything always-loaded is capped at save time and refused on overflow**
+  (description 200, instructions 600, note 120 chars), sized to the smallest
+  supported `contextBudget()`. Truncation was rejected because instructions
+  that silently lose their tail degrade exactly when they matter.
+
+Known residual risks, accepted: alias-path composition remains the weakest
+joint (mitigated by copy-over-compose, watched via traces); a mid-turn
+open/close changes resolution between tool calls (both ends are user acts;
+documented rather than locked); tasks/heartbeat run in the separate daemon
+process and never see a project — if the scheduler ever moves into `serve`,
+task turns must run with the project suspended.
+
 ### Monaco, and rich code output
 
 Monaco is the editor from VS Code and would give real syntax highlighting, a
@@ -842,6 +898,33 @@ upstream or enio switching to a mainline default model. At that point
 Ollama-MLX is the *stronger* candidate of the two: it also owns model
 management and could absorb the separate vision-model process.
 
+### Qwen3 4B Instruct becomes the default (August 2026)
+
+Maple stopped being the out-of-the-box model; `mlx-community/
+Qwen3-4B-Instruct-2507-4bit` is. The case: it is the one catalogue entry
+actually measured in enio (routed 8/8 at 426ms median, about twice as fast
+per routing decision than Maple, because short outputs are dominated by
+prompt processing), it is markedly steadier at multi-step tool use, and its
+weights are 2.3GB against Maple's 5GB — which also makes `install.sh` faster
+and lighter. Maple stays fully supported: the installer offers it as an
+optional download, the picker lists it whenever the bundled weights exist,
+and it remains the fallback when the default's weights are missing and the
+user declines the download (`startMaple` asks first — before this, a
+non-cached HF id went straight to `mlx_lm.server`, which downloads silently).
+
+Two consequences recorded rather than hidden:
+
+- **The 12,000-token qwen3 context budget is now the *default's* budget, and
+  it is a guess.** `contextBudgetMeasured()` says so. Re-running the
+  planted-fact test that produced Maple's measured 2,000 against Qwen3 4B is
+  the highest-value measurement currently undone.
+- **The condition "enio switching to a mainline default model" — named twice
+  above as what would change the runtime answer — has now fired.** Ollama-MLX
+  (or oMLX) as the serving runtime deserves a fresh look: for the default
+  model the deepgrove fork, the venv and `patch-runtime.mjs` are no longer
+  load-bearing, only Maple-optional. Not done in the same change on purpose;
+  runtime swaps and default swaps fail differently and should land alone.
+
 ---
 
 ## Open questions
@@ -854,8 +937,16 @@ management and could absorb the separate vision-model process.
 - At what point does the knowledge graph become noise? Extraction is imperfect
   by design; there may be a size where pruning stops being worth it.
 - If a folder can be opened outside the workspace, what stops a prompt-injected
-  file in that folder from being read as an instruction? The sandbox currently
-  answers this by being small.
+  file in that folder from being read as an instruction? The sandbox no longer
+  answers this by being small — projects attach arbitrary folders now. The
+  partial answer: control tokens are neutralised at the one chokepoint every
+  tool result passes through, so a file cannot forge a role boundary; the
+  prompt overlay carries only user-authored text, never file contents; and
+  the blast radius is bounded by tool disjointness (the coder that reads the
+  folder has no web tools) plus the opt-in gates on anything irreversible.
+  *Semantic* injection — a file whose prose talks the model into misusing the
+  tools it does hold — remains open, and remains the reason irreversible
+  actions stay behind flags and approval sheets.
 - ~~Decoding measures ~75 tok/s against a claimed 200+; are we running the wrong
   build?~~ **Answered, and the first answer was wrong.** `bits: 2, mode: affine`
   *is* the ternary model: `mlx_lm.ternary`'s own description says it recovers

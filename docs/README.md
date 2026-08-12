@@ -21,6 +21,7 @@ No API keys. No account. Nothing leaves your computer.
 |---|---|
 | [Getting started](getting-started.md) | Install it, run it, grant the permissions |
 | [Chatting](chatting.md) | The conversation loop, `/skill`, `@mention`, commands |
+| [Projects](projects.md) | Standing context: instructions, attached folders, project skills |
 | [Controlling your Mac](mac-control.md) | Open apps, read windows, propose and approve plans |
 | [Models](models.md) | Switching models, and what the context budget means |
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { complete } from "./model.js";
+import { activeProject } from "./project.js";
 import type { Registry } from "./tools/index.js";
 import type { Message, ToolDef } from "./types.js";
 
@@ -75,16 +76,21 @@ export const SPECIALISTS: Specialist[] = [
   {
     name: "coder",
     description:
-      "Reading, writing, running, debugging or explaining code and files in the workspace.",
+      "Reading, writing, running, debugging or explaining code and files in the working folders.",
     systemPrompt:
-      `You work with code in the user's workspace.\n\n` +
-      `Look before you edit: list the directory and read the file rather than ` +
-      `assuming its contents. After a change, run the relevant test or build ` +
-      `command to check it. Report what you actually observed, including ` +
-      `failures — do not describe an intended outcome as if it happened.\n\n` +
-      `Everything is scoped to the workspace directory. Paths outside it are ` +
+      `You work with code in the user's working folders.\n\n` +
+      `Look before you edit: search or list, then read the file rather than ` +
+      `assuming its contents. search_code returns path:line locations — use ` +
+      `those paths exactly as printed. After a change, run the relevant test ` +
+      `or build command to check it. Report what you actually observed, ` +
+      `including failures — do not describe an intended outcome as if it ` +
+      `happened.\n\n` +
+      `Everything is scoped to the granted folders. Paths outside them are ` +
       `refused, which is expected, not a bug to work around.`,
-    tools: ["read_file", "write_file", "list_dir", "run_command", "read_image", "read_skill"],
+    // read_image left to generalist and operator (both keep it): the swap
+    // that fits search_code under the six-tool ceiling. Image questions
+    // route to specialists that still hold the tool.
+    tools: ["read_file", "write_file", "list_dir", "run_command", "search_code", "read_skill"],
     mcpServers: ["filesystem", "git", "github"],
   },
   {
@@ -225,11 +231,25 @@ export async function route(
 
   const menu = SPECIALISTS.map((s) => `- ${s.name}: ${s.description}`).join("\n");
 
+  // A prior, not an override: an open project of type "code" makes the
+  // ambiguous "fix this" mean the coder, while "did Sam reply" still names
+  // mail plainly enough to route away. This is what replaces the code-mode
+  // other tools make the user enter -- the narrowing stays per turn, the
+  // domain bias comes from what the user said this project is.
+  const projectType = activeProject()?.type;
+  const bias =
+    projectType === "code"
+      ? `The user is working in a code project, so when a request is ambiguous, prefer the coder.\n\n`
+      : projectType === "planning"
+        ? `The user is working in a planning project, so when a request is ambiguous, prefer the generalist.\n\n`
+        : "";
+
   const messages: Message[] = [
     {
       role: "system",
       content:
         `Route the user's request to exactly one specialist.\n\n${menu}\n\n` +
+        bias +
         (sticky
           ? `The conversation so far was handled by ${sticky}. Keep follow-ups ` +
             `("try again", "yes do it", "what about now") with ${sticky}; pick ` +

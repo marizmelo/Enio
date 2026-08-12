@@ -1,6 +1,7 @@
 import { readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { config } from "./config.js";
+import { activeProject } from "./project.js";
 import { loadSkills, type Skill } from "./skills.js";
 import { SPECIALISTS } from "./specialists.js";
 import type { Registry } from "./tools/index.js";
@@ -61,10 +62,12 @@ export function mentionContext(registry?: Registry): MentionContext {
   };
 }
 
-/** Shallow-ish listing, capped — this feeds tab completion, not a file browser. */
+/** Shallow-ish listing, capped — this feeds tab completion, not a file browser.
+ *  With a project open, its attachments come first under their alias names —
+ *  the same names every other tool addresses them by — then the workspace. */
 export function workspaceFiles(max = 400): string[] {
   const out: string[] = [];
-  const walk = (dir: string, depth: number) => {
+  const walk = (dir: string, depth: number, base: string, prefix: string) => {
     if (out.length >= max || depth > 3) return;
     let entries: string[];
     try {
@@ -76,15 +79,23 @@ export function workspaceFiles(max = 400): string[] {
       if (entry.startsWith(".") || entry === "node_modules") continue;
       const full = join(dir, entry);
       try {
-        if (statSync(full).isDirectory()) walk(full, depth + 1);
-        else out.push(relative(config.workspace, full));
+        if (statSync(full).isDirectory()) walk(full, depth + 1, base, prefix);
+        else out.push(prefix + relative(base, full));
       } catch {
         /* vanished between readdir and stat */
       }
       if (out.length >= max) return;
     }
   };
-  walk(config.workspace, 0);
+  const project = activeProject();
+  if (project) {
+    for (const a of project.attachments) {
+      if (out.length >= max) break;
+      if (a.kind === "file") out.push(a.alias);
+      else walk(a.path, 0, a.path, a.alias + "/");
+    }
+  }
+  walk(config.workspace, 0, config.workspace, "");
   return out.sort();
 }
 

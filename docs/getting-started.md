@@ -43,9 +43,10 @@ else.
 **First run takes a while** on Apple Silicon — mostly the weights. Later runs
 start in about 30 seconds.
 
-The installer sets up Maple to give you something that works immediately. It is
-not the only option and not a commitment: see [Models](models.md) for what else
-runs and how to switch, which takes one click.
+The installer sets up Qwen3 4B Instruct to give you something that works
+immediately, and offers Maple as an optional extra. Neither is a commitment:
+see [Models](models.md) for what else runs and how to switch, which takes one
+click.
 
 ## Run it
 

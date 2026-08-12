@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Brain, MessageSquare, Trash2 } from "lucide-react";
+import { Brain, Briefcase, MessageSquare, Trash2 } from "lucide-react";
 import {
   CommandDialog,
   CommandEmpty,
@@ -22,6 +22,7 @@ import {
   discardConversation,
   listConversations,
 } from "@/lib/conversations";
+import { listProjects } from "@/lib/projects";
 
 function ago(ts) {
   const m = Math.round((Date.now() - ts) / 60000);
@@ -42,16 +43,42 @@ function ago(ts) {
  * transcript — the same standing `enio remember` grants — and Forget deletes
  * them with it. There is no silent default.
  */
-export function HistoryDialog({ open, onOpenChange, currentId, onPick, onDiscarded }) {
+export function HistoryDialog({
+  open,
+  onOpenChange,
+  currentId,
+  activeProjectId,
+  onPick,
+  onOpenProject,
+  onDiscarded,
+}) {
   const [conversations, setConversations] = useState([]);
+  // id → name, so a tagged conversation can say which project it belongs to
+  // rather than the generic "open project". A deleted project's conversations
+  // keep their tag but lose the name — those rows just show no badge.
+  const [projectNames, setProjectNames] = useState({});
+  // With a project open, its conversations are usually what's wanted — but
+  // "all" stays one click away, because the filter must never read as loss.
+  const [onlyProject, setOnlyProject] = useState(false);
   // The discard flow: which conversation, and what dies with it.
   const [confirming, setConfirming] = useState(null);
   const [facts, setFacts] = useState([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (open) listConversations().then(setConversations).catch(() => setConversations([]));
-  }, [open]);
+    if (open) {
+      setOnlyProject(Boolean(activeProjectId));
+      listConversations().then(setConversations).catch(() => setConversations([]));
+      listProjects()
+        .then((all) => setProjectNames(Object.fromEntries(all.map((p) => [p.id, p.name]))))
+        .catch(() => setProjectNames({}));
+    }
+  }, [open, activeProjectId]);
+
+  const shown =
+    onlyProject && activeProjectId
+      ? conversations.filter((c) => c.projectId === activeProjectId)
+      : conversations;
 
   const beginDiscard = async (conv) => {
     setConfirming(conv);
@@ -82,8 +109,24 @@ export function HistoryDialog({ open, onOpenChange, currentId, onPick, onDiscard
         <CommandInput placeholder="Search conversations…" />
         <CommandList>
           <CommandEmpty>No stored conversations.</CommandEmpty>
+          {activeProjectId && (
+            <div className="flex gap-1 px-3 pt-2 text-xs">
+              <button
+                className={`rounded-full border px-2 py-0.5 ${onlyProject ? "bg-muted font-medium" : "text-muted-foreground"}`}
+                onClick={() => setOnlyProject(true)}
+              >
+                This project
+              </button>
+              <button
+                className={`rounded-full border px-2 py-0.5 ${onlyProject ? "text-muted-foreground" : "bg-muted font-medium"}`}
+                onClick={() => setOnlyProject(false)}
+              >
+                All
+              </button>
+            </div>
+          )}
           <CommandGroup heading="Conversations">
-            {conversations.map((c) => (
+            {shown.map((c) => (
               <CommandItem
                 key={c.id}
                 value={`${c.title} ${c.id}`}
@@ -95,6 +138,32 @@ export function HistoryDialog({ open, onOpenChange, currentId, onPick, onDiscard
               >
                 <MessageSquare className="mr-2 size-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                {/* The project a tagged conversation belongs to, by name.
+                    For a project this window does not have open, the badge is
+                    a button: picking the row resumes the transcript only,
+                    while this explicit click re-scopes the sandbox to that
+                    project — consent stays a user act. */}
+                {c.projectId && projectNames[c.projectId] && (
+                  c.projectId !== activeProjectId && onOpenProject ? (
+                    <button
+                      className="ml-2 flex max-w-32 shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted"
+                      title={`Open this conversation in its project, ${projectNames[c.projectId]}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenChange(false);
+                        onOpenProject(c);
+                      }}
+                    >
+                      <Briefcase className="size-2.5 shrink-0" />
+                      <span className="truncate">{projectNames[c.projectId]}</span>
+                    </button>
+                  ) : (
+                    <span className="ml-2 flex max-w-32 shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      <Briefcase className="size-2.5 shrink-0" />
+                      <span className="truncate">{projectNames[c.projectId]}</span>
+                    </span>
+                  )
+                )}
                 {/* Marks the conversations whose deletion would cost something
                     memory keeps. The count is the tooltip, not the label: the
                     scan question is "does this hold anything", answered by the

@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import type { ToolDef } from "../types.js";
 import { fsTools } from "./fs.js";
+import { searchTools } from "./search.js";
 import { shellTools } from "./shell.js";
 import { buildWebTools } from "./web.js";
 import { browseTools } from "./browse.js";
@@ -80,6 +81,7 @@ export async function buildRegistry(
     ...mailTools,
     ...desktopTools,
     ...shellTools,
+    ...searchTools,
     ...buildWebTools(),
     ...browseTools,
   ];

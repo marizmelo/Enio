@@ -87,9 +87,182 @@ async function main(): Promise<void> {
       break;
     }
 
-    case "serve":
+    case "serve": {
+      // A headless server can start scoped: --project activates before
+      // anything listens, so every conversation it hosts is tagged and the
+      // coder's tools see the attached folders from the first request.
+      const proj = rest.indexOf("--project");
+      if (proj !== -1) {
+        const ref = rest[proj + 1];
+        if (!ref || ref.startsWith("--")) {
+          console.error("Usage: enio serve --project <name|id>");
+          process.exit(1);
+        }
+        const { openProject } = await import("./project.js");
+        const { buildIndexInBackground } = await import("./project-index.js");
+        try {
+          const opened = openProject(ref);
+          buildIndexInBackground(opened);
+          console.log(`project: ${opened.name} (${opened.type})`);
+        } catch (err) {
+          console.error((err as Error).message);
+          process.exit(1);
+        }
+      }
       await serve();
       break;
+    }
+
+    case "projects": {
+      const { listProjects } = await import("./project.js");
+      const all = listProjects();
+      if (all.length === 0) {
+        console.log("No projects yet. Create one:  enio project new <name>");
+        break;
+      }
+      for (const p of all) {
+        const opened = p.lastOpenedAt
+          ? new Date(p.lastOpenedAt).toISOString().replace("T", " ").slice(0, 16)
+          : "never";
+        console.log(
+          `${p.id.slice(0, 8)}  ${p.type.padEnd(8)}  ${String(p.attachments.length).padStart(2)} attached  ${opened}  ${p.name}` +
+            (p.description ? `  ${p.description}` : ""),
+        );
+      }
+      console.log(`\nOpen one:  enio project open <name>`);
+      break;
+    }
+
+    case "project": {
+      const projectApi = await import("./project.js");
+      const sub = rest[0];
+      const argAfter = (flag: string): string | undefined => {
+        const at = rest.indexOf(flag);
+        const value = at === -1 ? undefined : rest[at + 1];
+        return value && !value.startsWith("--") ? value : undefined;
+      };
+
+      try {
+        switch (sub) {
+          case "new": {
+            const name = rest[1];
+            if (!name || name.startsWith("--")) {
+              console.error(`Usage: enio project new <name> [--type code|planning] [--desc "..."]`);
+              process.exit(1);
+            }
+            const created = projectApi.createProject({
+              name,
+              type: argAfter("--type"),
+              description: argAfter("--desc"),
+            });
+            console.log(`Created project "${created.name}" (${created.type})`);
+            console.log(`  attach folders:  enio project attach ${created.name} <path> [--note "..."]`);
+            console.log(`  start working:   enio project open ${created.name}`);
+            break;
+          }
+
+          case "attach": {
+            const [, ref, path] = rest;
+            if (!ref || !path || path.startsWith("--")) {
+              console.error(`Usage: enio project attach <name|id> <path> [--note "what this is for"]`);
+              process.exit(1);
+            }
+            const target = projectApi.findProject(ref);
+            if (!target) {
+              console.error(`No project matches "${ref}".`);
+              process.exit(1);
+            }
+            const attachment = projectApi.attachPath(target.id, path, argAfter("--note") ?? "");
+            console.log(
+              `Attached ${attachment.kind} as "${attachment.alias}"` +
+                (attachment.note ? ` — ${attachment.note}` : ""),
+            );
+            break;
+          }
+
+          case "instructions": {
+            const ref = rest[1];
+            const target = ref ? projectApi.findProject(ref) : null;
+            if (!target) {
+              console.error(`Usage: enio project instructions <name|id>`);
+              process.exit(1);
+            }
+            // $EDITOR on a temp file, like git commit: the cap is enforced on
+            // save, and a refused save loses nothing — the text is echoed.
+            const { spawnSync } = await import("node:child_process");
+            const { mkdtempSync, readFileSync: readTmp, writeFileSync: writeTmp } = await import("node:fs");
+            const { tmpdir } = await import("node:os");
+            const dir = mkdtempSync(join(tmpdir(), "enio-instructions-"));
+            const file = join(dir, "INSTRUCTIONS.md");
+            writeTmp(file, target.instructions);
+            const editor = process.env.EDITOR ?? process.env.VISUAL ?? "vi";
+            const run = spawnSync(editor, [file], { stdio: "inherit" });
+            if (run.status !== 0) {
+              console.error(`${editor} exited with ${run.status}; nothing saved.`);
+              process.exit(1);
+            }
+            const text = readTmp(file, "utf8").trim();
+            try {
+              projectApi.updateProject(target.id, { instructions: text });
+              console.log(`Saved (${text.length} characters).`);
+            } catch (err) {
+              console.error((err as Error).message);
+              console.error(`\nYour text, so it is not lost:\n${text}`);
+              process.exit(1);
+            }
+            break;
+          }
+
+          case "delete": {
+            const ref = rest[1];
+            const target = ref ? projectApi.findProject(ref) : null;
+            if (!target) {
+              console.error(`Usage: enio project delete <name|id>`);
+              process.exit(1);
+            }
+            projectApi.deleteProject(target.id);
+            console.log(
+              `Deleted project "${target.name}". Its conversations are kept — see enio chats.`,
+            );
+            break;
+          }
+
+          case "open": {
+            const ref = rest[1];
+            if (!ref || ref.startsWith("--")) {
+              console.error(`Usage: enio project open <name|id>`);
+              process.exit(1);
+            }
+            const opened = projectApi.openProject(ref);
+            const { buildIndexInBackground } = await import("./project-index.js");
+            buildIndexInBackground(opened);
+            const { latestSessionForProject } = await import("./memory/store.js");
+            const resume = latestSessionForProject(opened.id);
+            await repl({
+              showThinking: rest.includes("--think"),
+              resume: resume ?? undefined,
+            });
+            break;
+          }
+
+          default:
+            console.error(
+              `Usage:\n` +
+                `  enio project new <name> [--type code|planning] [--desc "..."]\n` +
+                `  enio project attach <name|id> <path> [--note "..."]\n` +
+                `  enio project instructions <name|id>\n` +
+                `  enio project open <name|id>\n` +
+                `  enio project delete <name|id>\n` +
+                `  enio projects`,
+            );
+            process.exit(1);
+        }
+      } catch (err) {
+        console.error((err as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
 
     case "inspect":
       await inspect();
@@ -172,10 +345,27 @@ async function main(): Promise<void> {
       const newName = rest[rest.indexOf("--new") + 1];
       if (rest.includes("--new")) {
         if (!newName || newName.startsWith("--")) {
-          console.error(`Usage: enio skills --new <name>`);
+          console.error(`Usage: enio skills --new <name> [--project <name|id>]`);
           process.exit(1);
         }
-        const dir = join(skillsDir(), newName);
+        // --project scaffolds into that project's own skills dir, where it
+        // shadows any global skill of the same name while the project is open.
+        let root = skillsDir();
+        const projRef = rest[rest.indexOf("--project") + 1];
+        if (rest.includes("--project")) {
+          if (!projRef || projRef.startsWith("--")) {
+            console.error(`Usage: enio skills --new <name> --project <name|id>`);
+            process.exit(1);
+          }
+          const { findProject } = await import("./project.js");
+          const target = findProject(projRef);
+          if (!target) {
+            console.error(`No project matches "${projRef}".`);
+            process.exit(1);
+          }
+          root = join(target.dir, "skills");
+        }
+        const dir = join(root, newName);
         if (existsSync(dir)) {
           console.error(`${dir} already exists.`);
           process.exit(1);
@@ -967,6 +1157,14 @@ enio — a local agent with tools and persistent memory
   enio watch add "..."     watch for a change — notifies only when something is new
   enio watch rm ID         stop watching
   enio watch run           check every watch right now
+
+  enio projects            list projects
+  enio project new NAME [--type code|planning] [--desc "..."]
+  enio project attach NAME PATH [--note "what this is for"]
+  enio project instructions NAME    edit the project's standing instructions
+  enio project open NAME   open it and chat — resumes its latest conversation
+  enio project delete NAME remove the project (conversations are kept)
+  enio serve --project NAME  start the endpoint with the project open
 
   enio skills              list installed skills
   enio skills NAME         show one in full

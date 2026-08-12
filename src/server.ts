@@ -63,6 +63,22 @@ import {
   startSession,
 } from "./memory/store.js";
 import { ensureToken, isAuthorized } from "./auth.js";
+import {
+  activeProject,
+  attachPath,
+  closeProject,
+  createProject,
+  deleteProject,
+  detachPath,
+  findProject,
+  listProjects,
+  openProject,
+  updateProject,
+  type Project,
+} from "./project.js";
+import { buildIndexInBackground } from "./project-index.js";
+import { latestSessionForProject } from "./memory/store.js";
+import { embeddingsDegraded } from "./memory/embed.js";
 import { mentionContext, parseMentions } from "./mentions.js";
 import { SPECIALISTS } from "./specialists.js";
 import { extractSources } from "./sources.js";
@@ -121,6 +137,43 @@ export async function serve(): Promise<void> {
 const DIM = "\x1b[2m";
 const YELLOW = "\x1b[33m";
 const RESET = "\x1b[0m";
+
+/** The chip's view: enough to display and to filter conversations by. */
+function projectSummary(project: Project | null) {
+  if (!project) return null;
+  return {
+    id: project.id,
+    name: project.name,
+    type: project.type,
+    // The absolute path rides along so the desktop's file picker can tell
+    // "this file is already in the project" from "this file needs copying
+    // in" -- a file inside an attached folder is referenced by its alias,
+    // never duplicated into the workspace.
+    attachments: project.attachments.map((a) => ({
+      alias: a.alias,
+      kind: a.kind,
+      note: a.note,
+      path: a.path,
+    })),
+    // What "open this project" should resume, so the client needs no second
+    // round-trip to decide.
+    latestConversation: latestSessionForProject(project.id),
+  };
+}
+
+/** The editor's view: everything project.json holds, paths included. */
+function projectDetail(project: Project) {
+  return {
+    id: project.id,
+    name: project.name,
+    type: project.type,
+    description: project.description,
+    instructions: project.instructions,
+    attachments: project.attachments,
+    createdAt: project.createdAt,
+    lastOpenedAt: project.lastOpenedAt,
+  };
+}
 
 async function handle(
   req: IncomingMessage,
@@ -216,6 +269,13 @@ async function handle(
       // So a client can decide whether to offer a microphone at all, rather
       // than offering one that returns 503 when pressed.
       voice: { transcription: whisperInstalled(), speech: config.ttsEngine !== "off" },
+      // The active project, so the chip and the file menu can reflect it
+      // without a second request. Null is a real answer: nothing open.
+      project: projectSummary(activeProject()),
+      // semanticRecall false means memory search is running keyword-only --
+      // a degradation the user would otherwise diagnose as "worse answers".
+      // Null means nothing has tried to embed yet this session.
+      memory: { semanticRecall: embeddingsDegraded() === null ? null : !embeddingsDegraded() },
     });
     return;
   }
@@ -783,7 +843,106 @@ async function handle(
   }
 
   if (req.method === "GET" && url.pathname === "/conversations") {
-    sendJson(res, 200, { conversations: listConversations() });
+    const project = url.searchParams.get("project") ?? undefined;
+    sendJson(res, 200, { conversations: listConversations(50, project) });
+    return;
+  }
+
+  /**
+   * Projects. Every write here is a user act arriving through the desktop or
+   * CLI -- no tool definition reaches these routes, which is what keeps the
+   * sandbox something the user grants rather than something the model widens.
+   * All behind the same bearer auth as everything else: attach + open moves
+   * where run_command executes, so an unauthenticated caller must not reach
+   * it (a web page can POST to loopback).
+   */
+  if (url.pathname === "/projects" && req.method === "GET") {
+    sendJson(res, 200, {
+      projects: listProjects().map((p) => ({
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        description: p.description,
+        attachments: p.attachments.length,
+        lastOpenedAt: p.lastOpenedAt,
+      })),
+    });
+    return;
+  }
+
+  if (url.pathname === "/projects" && req.method === "POST") {
+    try {
+      const body = JSON.parse((await readBody(req)) || "{}") as { name?: string; type?: string; description?: string };
+      const project = createProject({
+        name: String(body?.name ?? ""),
+        type: body?.type,
+        description: body?.description,
+      });
+      sendJson(res, 200, { project: projectDetail(project) });
+    } catch (err) {
+      sendJson(res, 400, { error: { message: (err as Error).message } });
+    }
+    return;
+  }
+
+  const projMatch = url.pathname.match(/^\/projects\/([0-9a-f-]{8,})(\/(open|attachments)(\/(.+))?)?$/);
+  if (projMatch) {
+    const [, id, , sub, , aliasRaw] = projMatch;
+    try {
+      if (req.method === "GET" && !sub) {
+        const project = findProject(id!);
+        if (!project) {
+          sendJson(res, 404, { error: { message: `No project with id ${id}.` } });
+          return;
+        }
+        sendJson(res, 200, { project: projectDetail(project) });
+        return;
+      }
+      if (req.method === "PATCH" && !sub) {
+        const body = JSON.parse((await readBody(req)) || "{}") as Record<string, string>;
+        sendJson(res, 200, { project: projectDetail(updateProject(id!, body)) });
+        return;
+      }
+      if (req.method === "DELETE" && !sub) {
+        deleteProject(id!);
+        sendJson(res, 200, { deleted: id });
+        return;
+      }
+      if (req.method === "POST" && sub === "open") {
+        const project = openProject(id!);
+        buildIndexInBackground(project);
+        sendJson(res, 200, { project: projectDetail(project) });
+        return;
+      }
+      if (req.method === "POST" && sub === "attachments") {
+        const body = JSON.parse((await readBody(req)) || "{}") as { path?: string; note?: string };
+        const attachment = attachPath(id!, String(body?.path ?? ""), body?.note ?? "");
+        // A new root while this project is open should be searchable now,
+        // not after the next open.
+        const current = activeProject();
+        if (current && current.id === id) buildIndexInBackground(current);
+        sendJson(res, 200, { attachment });
+        return;
+      }
+      if (req.method === "DELETE" && sub === "attachments" && aliasRaw) {
+        detachPath(id!, decodeURIComponent(aliasRaw));
+        sendJson(res, 200, { detached: decodeURIComponent(aliasRaw) });
+        return;
+      }
+    } catch (err) {
+      sendJson(res, 400, { error: { message: (err as Error).message } });
+      return;
+    }
+  }
+
+  if (req.method === "GET" && url.pathname === "/project") {
+    sendJson(res, 200, { project: projectSummary(activeProject()) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/project/close") {
+    closeProject();
+    sendJson(res, 200, { project: null });
     return;
   }
 
