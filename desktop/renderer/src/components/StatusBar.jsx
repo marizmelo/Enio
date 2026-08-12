@@ -1,4 +1,4 @@
-import { BookMarked, Briefcase, CircleHelp, FolderOpen, History, MessageSquarePlus } from "lucide-react";
+import { BookMarked, Briefcase, CircleHelp, FolderOpen, History, MessageSquarePlus, X } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -36,6 +36,7 @@ export function StatusBar({
   onRecipes,
   onFiles,
   onProjects,
+  onCloseProject,
 }) {
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
@@ -64,14 +65,27 @@ export function StatusBar({
             behavior invisibly gets misread as the model acting strangely.
             Ahead of Files because it scopes what Files means. */}
         {project ? (
-          <button
-            onClick={onProjects}
-            className="mx-1 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs text-foreground hover:bg-muted"
-            title="Project settings"
-          >
-            <Briefcase className="size-3" />
-            <span className="max-w-40 truncate">{project.name}</span>
-          </button>
+          <div className="mx-1 flex items-center gap-1 rounded-full border pl-2.5 pr-1 py-1 text-xs text-foreground">
+            <button
+              onClick={onProjects}
+              className="flex items-center gap-1.5 hover:opacity-70"
+              title="Project settings"
+            >
+              <Briefcase className="size-3" />
+              <span className="max-w-40 truncate">{project.name}</span>
+            </button>
+            {/* Closing is one click because opening was: the chip is scope
+                the user granted, and revoking a grant should never be buried
+                a dialog deep. Files are untouched — this only ends the
+                session's scope. */}
+            <button
+              onClick={onCloseProject}
+              className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              title={`Close project ${project.name}`}
+            >
+              <X className="size-3" />
+            </button>
+          </div>
         ) : (
           <TipButton tip="Projects" className="size-7" onClick={onProjects}>
             <Briefcase className="size-3.5" />

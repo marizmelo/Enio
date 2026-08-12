@@ -99,7 +99,17 @@ export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, disable
                 key={a.id}
                 disabled={disabled}
                 title={a.description}
-                onClick={() => setLockedId(a.id)}
+                onClick={() => {
+                  setLockedId(a.id);
+                  // Locking the type also pins it in the composer: the
+                  // mention prefix goes in and the caret lands after it, so
+                  // whatever is typed next reaches the ability just chosen
+                  // rather than the router's guess about it.
+                  if (a.availability === "available") {
+                    const pin = /^@\w+/.exec(a.promptTemplate);
+                    onPrefill(pin ? `${pin[0]} ` : "");
+                  }
+                }}
                 className={`flex flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-xs transition-colors hover:bg-muted ${
                   available ? "" : "opacity-50"
                 }`}
@@ -131,7 +141,10 @@ export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, disable
         <div className="flex w-full max-w-md flex-col gap-3">
           <button
             className="flex items-center gap-1 self-start text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => setLockedId(null)}
+            onClick={() => {
+              setLockedId(null);
+              onPrefill("");
+            }}
           >
             <ArrowLeft className="size-3" /> All abilities
           </button>
@@ -161,7 +174,8 @@ export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, disable
                 </Button>
               ))}
               <p className="text-left text-[11px] text-muted-foreground">
-                …or write your own below. These prefill the message — nothing sends until you do.
+                …or just type below — {locked.title.toLowerCase()} is already selected. Nothing
+                sends until you do.
               </p>
             </>
           ) : locked.setup ? (

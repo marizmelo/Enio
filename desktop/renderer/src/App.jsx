@@ -17,7 +17,11 @@ import {
 import { HistoryDialog } from "@/components/HistoryDialog";
 import { ProjectsDialog } from "@/components/ProjectsDialog";
 import { PipelinesDialog } from "@/components/PipelinesDialog";
-import { currentProject, openProject as openProjectApi } from "@/lib/projects";
+import {
+  closeProject as closeProjectApi,
+  currentProject,
+  openProject as openProjectApi,
+} from "@/lib/projects";
 import { PermissionNotice } from "@/components/PermissionNotice";
 import { RecipesDialog } from "@/components/RecipesDialog";
 import { speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
@@ -443,6 +447,11 @@ export function App() {
         onNewChat={newChat}
         project={project}
         onProjects={() => setProjectsOpen(true)}
+        onCloseProject={async () => {
+          // Only the session's scope ends; the project and its files stay.
+          await closeProjectApi().catch(() => {});
+          setProject(null);
+        }}
         onHistory={() => setHistoryOpen(true)}
         onRecipes={isMac ? () => setRecipesOpen(true) : undefined}
         onFiles={() => setFilesOpen(true)}

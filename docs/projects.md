@@ -20,8 +20,11 @@ enio project open game
 
 In the desktop app the same lives behind the briefcase icon in the status
 bar: create a project, attach files and folders with the picker, write
-instructions, and open it. The chip shows which project is active, because an
-open project quietly shapes every turn.
+instructions, and open it. The chip then shows which project is active,
+because an open project quietly shapes every turn — and carries an **×** to
+close it, since ending a scope should be as easy as granting it. Closing
+only ends the session's scope: the project, its instructions and every
+attached file stay exactly as they were.
 
 ## Not a mode
 

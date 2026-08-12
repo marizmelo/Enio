@@ -20,10 +20,12 @@ you think of them. Picking a tile does two things a typed message cannot:
 - **It states the expectation.** "Create document" means a markdown file gets
   saved; "Send email" means a draft (or a send, if you enabled it).
 
-Tiles **prefill the composer and hand you the caret** — nothing is ever sent
-by clicking a tile. You finish the sentence. Picking a tile also opens three
-worked examples *for that ability* — each one fills the tile's own template,
-so clicking a suggestion produces exactly what typing it would have.
+Picking a tile **locks onto that ability**: the grid gives way to that one
+ability and three things it is good at, under *Try saying*. The message box
+takes focus with the agent already pinned, so you can simply start typing —
+or click a suggestion, which fills the rest of the sentence for you. Either
+way **nothing sends until you send it**. **← All abilities** goes back to the
+grid and unpins.
 
 Unconfigured abilities stay visible, greyed, with the setup path one click
 away (an environment variable, `enio login`, an MCP server). The model is

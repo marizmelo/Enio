@@ -94,9 +94,11 @@ See [Models](models.md) for how the size of that window is chosen.
 ## Start from a tile
 
 A new chat opens on the [launcher](pipelines.md): every ability as a tile.
-Picking one prefills the composer with a template that pins the right agent —
-nothing sends until you finish the sentence. Greyed tiles are abilities that
-need setup, with the steps one click away.
+Picking one locks onto that ability — the right agent is pinned, the message
+box takes focus, and three things it is good at appear under *Try saying*.
+Type straight away, or click a suggestion; nothing sends until you send it,
+and **← All abilities** goes back. Greyed tiles are abilities that need
+setup, with the steps one click away.
 
 ## Files and attachments
 
