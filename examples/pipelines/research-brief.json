@@ -1,0 +1,9 @@
+{
+  "name": "research-brief",
+  "prompt": "research a topic on the web and write a brief about it",
+  "nodes": [
+    { "id": "n1", "abilityId": "web-search", "prompt": "Search the web for the topic and gather the key facts, dates and sources." },
+    { "id": "n2", "abilityId": "create-document", "prompt": "Write a short brief from the research results and save it as a markdown file." }
+  ],
+  "edges": [{ "from": "n1", "to": "n2" }]
+}

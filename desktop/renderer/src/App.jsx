@@ -16,6 +16,7 @@ import {
 } from "@/lib/conversations";
 import { HistoryDialog } from "@/components/HistoryDialog";
 import { ProjectsDialog } from "@/components/ProjectsDialog";
+import { PipelinesDialog } from "@/components/PipelinesDialog";
 import { currentProject, openProject as openProjectApi } from "@/lib/projects";
 import { PermissionNotice } from "@/components/PermissionNotice";
 import { RecipesDialog } from "@/components/RecipesDialog";
@@ -56,6 +57,7 @@ export function App() {
   // which is also every fresh boot, since activation is process memory there.
   const [project, setProject] = useState(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [pipelinesOpen, setPipelinesOpen] = useState(false);
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   // A file opened from the thread. The arrows walk that message's attachments,
@@ -448,6 +450,12 @@ export function App() {
 
       <RecipesDialog open={recipesOpen} onOpenChange={setRecipesOpen} />
 
+      <PipelinesDialog
+        open={pipelinesOpen}
+        onOpenChange={setPipelinesOpen}
+        abilities={capabilities.abilities ?? []}
+      />
+
       <ProjectsDialog
         open={projectsOpen}
         onOpenChange={setProjectsOpen}
@@ -495,7 +503,17 @@ export function App() {
       <div className="relative flex min-h-0 flex-1 flex-col">
       <main ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
-          <EmptyState onPick={send} disabled={!backendReady} />
+          // Tiles prefill and hand over the caret; the user finishes the
+          // sentence, so the turn is theirs. The old wiring sent immediately.
+          <EmptyState
+            abilities={capabilities.abilities ?? []}
+            onPrefill={(text) => {
+              setInput(text);
+              composerRef.current?.focus?.();
+            }}
+            onOpenPipelines={() => setPipelinesOpen(true)}
+            disabled={!backendReady}
+          />
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-5">
             {messages.map((m, i) => (

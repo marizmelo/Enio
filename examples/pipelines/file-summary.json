@@ -1,0 +1,9 @@
+{
+  "name": "file-summary",
+  "prompt": "find the relevant files and summarize them into a document",
+  "nodes": [
+    { "id": "n1", "abilityId": "file-search", "prompt": "Find the files relevant to the topic and read the important parts." },
+    { "id": "n2", "abilityId": "create-document", "prompt": "Summarize what was found into a markdown document and save it." }
+  ],
+  "edges": [{ "from": "n1", "to": "n2" }]
+}

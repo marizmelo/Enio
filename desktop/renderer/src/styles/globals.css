@@ -1,4 +1,8 @@
 @import "tailwindcss";
+/* React Flow's stylesheet, inlined by the Tailwind CLI at build time — the
+   window loads files off disk under a CSP with no remote anything, so every
+   stylesheet has to end up in the one styles.css the build emits. */
+@import "@xyflow/react/dist/style.css";
 
 /* Tailwind v4 discovers classes by scanning source files. The renderer is the
    only source tree, and renderer/dist holds build output that would otherwise

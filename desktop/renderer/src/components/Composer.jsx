@@ -269,6 +269,9 @@ export const Composer = forwardRef(function Composer({
     startDictation: () => {
       if (!recording && !transcribing) toggleDictation();
     },
+    // The launcher prefills and hands the caret over; typing continues the
+    // template rather than starting over.
+    focus: () => ref.current?.focus(),
   }));
 
   const pickFiles = async () => {

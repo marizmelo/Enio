@@ -62,6 +62,18 @@ import {
   listConversations,
   startSession,
 } from "./memory/store.js";
+import { ABILITIES, abilityAvailability } from "./abilities.js";
+import {
+  composePipeline,
+  deletePipeline,
+  getPipeline,
+  listPipelines,
+  loadPipelineExamples,
+  pipelineIsRunning,
+  runPipeline,
+  saveExample,
+  savePipeline,
+} from "./pipelines.js";
 import { ensureToken, isAuthorized } from "./auth.js";
 import {
   activeProject,
@@ -276,6 +288,21 @@ async function handle(
       // a degradation the user would otherwise diagnose as "worse answers".
       // Null means nothing has tried to embed yet this session.
       memory: { semanticRecall: embeddingsDegraded() === null ? null : !embeddingsDegraded() },
+      // The launcher's tile list. Availability is derived per request from
+      // the live registry, so a tile flips to available the moment its
+      // backing configuration exists -- nothing stored, nothing stale.
+      abilities: ABILITIES.map((a) => ({
+        id: a.id,
+        title: a.title,
+        description: a.description,
+        icon: a.icon,
+        promptTemplate: a.promptTemplate,
+        suggestions: a.suggestions ?? [],
+        inputs: a.inputs,
+        outputs: a.outputs,
+        availability: abilityAvailability(a, registry, ctx.servers),
+        setup: a.setup ?? null,
+      })),
     });
     return;
   }
@@ -931,6 +958,123 @@ async function handle(
       }
     } catch (err) {
       sendJson(res, 400, { error: { message: (err as Error).message } });
+      return;
+    }
+  }
+
+  /**
+   * Pipelines. The graph is data the user edits and the harness executes;
+   * the model's only role was drafting it in /pipelines/compose. All behind
+   * the same bearer auth as everything else -- a node can reach run_command,
+   * so an unauthenticated run endpoint would be remote code execution.
+   */
+  if (url.pathname === "/pipelines" && req.method === "GET") {
+    sendJson(res, 200, {
+      pipelines: listPipelines().map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        nodeCount: p.nodes.length,
+        lastRunAt: p.lastRunAt,
+      })),
+    });
+    return;
+  }
+
+  if (url.pathname === "/pipelines" && req.method === "POST") {
+    try {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      sendJson(res, 200, { pipeline: savePipeline(body) });
+    } catch (err) {
+      sendJson(res, 400, { error: { message: (err as Error).message } });
+    }
+    return;
+  }
+
+  if (url.pathname === "/pipelines/compose" && req.method === "POST") {
+    const body = JSON.parse((await readBody(req)) || "{}");
+    const composed = await composePipeline(
+      String(body?.prompt ?? ""),
+      registry,
+      mentionContext(registry).servers,
+    );
+    // Stores nothing: the draft goes straight to the canvas, where a bad
+    // compose costs a glance and an edit rather than an action.
+    sendJson(res, composed.ok ? 200 : 422, composed);
+    return;
+  }
+
+  if (url.pathname === "/pipelines/examples" && req.method === "GET") {
+    sendJson(res, 200, {
+      examples: loadPipelineExamples().map((e) => ({ name: e.name, prompt: e.prompt })),
+    });
+    return;
+  }
+
+  const pipeMatch = url.pathname.match(/^\/pipelines\/([0-9a-f-]{8,})(\/(run|example))?$/);
+  if (pipeMatch) {
+    const [, id, , sub] = pipeMatch;
+    const pipeline = getPipeline(id!);
+    if (!pipeline) {
+      sendJson(res, 404, { error: { message: `No pipeline with id ${id}.` } });
+      return;
+    }
+    if (req.method === "GET" && !sub) {
+      sendJson(res, 200, { pipeline });
+      return;
+    }
+    if (req.method === "POST" && !sub) {
+      try {
+        const body = JSON.parse((await readBody(req)) || "{}");
+        sendJson(res, 200, { pipeline: savePipeline({ ...body, id: id! }) });
+      } catch (err) {
+        sendJson(res, 400, { error: { message: (err as Error).message } });
+      }
+      return;
+    }
+    if (req.method === "DELETE" && !sub) {
+      deletePipeline(id!);
+      sendJson(res, 200, { deleted: id });
+      return;
+    }
+    if (req.method === "POST" && sub === "example") {
+      try {
+        const body = JSON.parse((await readBody(req)) || "{}");
+        saveExample({
+          name: String(body?.name ?? pipeline.name),
+          prompt: String(body?.prompt ?? ""),
+          nodes: pipeline.nodes,
+          edges: pipeline.edges,
+        });
+        sendJson(res, 200, { saved: true });
+      } catch (err) {
+        sendJson(res, 400, { error: { message: (err as Error).message } });
+      }
+      return;
+    }
+    if (req.method === "POST" && sub === "run") {
+      if (pipelineIsRunning(id!)) {
+        // The same reasoning as the plans 409: for anything with side
+        // effects, refusing a double run is the difference between one email
+        // and two.
+        sendJson(res, 409, { error: { message: "This pipeline is already running." } });
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+      try {
+        await runPipeline(pipeline, registry, (event) => {
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+        });
+      } catch (err) {
+        res.write(
+          `data: ${JSON.stringify({ type: "run_finished", status: "failed", error: (err as Error).message })}\n\n`,
+        );
+      }
+      res.end();
       return;
     }
   }

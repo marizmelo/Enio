@@ -244,6 +244,29 @@ function migrate(d: Database.Database): void {
   // the source of truth whatever happens to the project folder.
   addColumn(d, "sessions", "project_id", "TEXT");
 
+  // Pipelines get their own tables rather than riding the plans table on
+  // purpose: planSteps() coerces unknown step kinds to applescript and
+  // runScript's fallthrough is bash, so a pipeline row leaking into that
+  // machinery would execute node prompts as shell. The graph is JSON because
+  // nodes carry canvas positions the server never interprets.
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS pipelines (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      graph       TEXT NOT NULL,
+      created_at  INTEGER NOT NULL,
+      last_run_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS pipeline_runs (
+      id           TEXT PRIMARY KEY,
+      pipeline_id  TEXT NOT NULL,
+      started_at   INTEGER NOT NULL,
+      finished_at  INTEGER,
+      status       TEXT NOT NULL DEFAULT 'running',
+      node_results TEXT NOT NULL DEFAULT '[]'
+    );
+  `);
 }
 
 /* ---------- vector helpers ---------------------------------------------- */

@@ -633,6 +633,83 @@ it tell me last week" has an answer.
 
 ---
 
+## The launcher and pipelines (August 2026)
+
+The ask was ComfyUI/n8n: an app-launcher of everything the agent can do, and
+tasks plugged into each other by prompting. The design question was where the
+accuracy comes from, and the answer is the same one as everywhere else in
+this codebase: narrowing, moved to the user.
+
+**Abilities are user-side routing.** A tile removes the router's
+classification entirely -- it prefills the composer through the same
+`/skill @specialist` grammar typed mentions use, so there is no second
+mechanism, and `overrides.specialist` skips the routing call. The closed
+ability list (`src/abilities.ts`) is what the pipeline composer's enum is
+built from. Availability is derived from the live registry per request,
+never stored: the registry already withholds unconfigured tools, so it is
+already the truth about configuration. Deliberate asymmetry recorded here:
+the *model* is shown only tools that work (a dead-end tool burns attention);
+the *user* is shown greyed tiles with setup paths, because a person can act
+on "set ENIO_DESKTOP=1" where a model can only fail.
+
+**The pipeline graph is harness-owned; the model never plans.** One-hop
+survives intact: each node is one ordinary `runTurn` with the ability's
+specialist pinned, nodes never talk to each other, and what moves between
+them is artifacts, moved by the executor. The model's only structural role
+is `composePipeline` -- classification into the closed ability enum at
+temperature 0, zod-refused on anything invented, and its output is a draft
+on an editable canvas, never something that executes. Node prompts are
+guidance, not scripts: inside a node the specialist keeps its whole tool
+loop, which is also why every gate applies unchanged (dry-run email,
+propose-not-run plans, the sanitize chokepoint) -- there is no
+pipeline-shaped side door into any tool.
+
+**Rejected: reusing the plans table.** The UX pattern is copied (editable
+before run, one-shot 409, survives restart, promote-by-name), the storage is
+not: `planSteps()` coerces unknown kinds to applescript and `runScript`'s
+fallthrough is `/bin/bash -c` -- a pipeline row leaking into that machinery
+would execute node prompts as shell. Pipelines got their own tables.
+
+**Rejected: chat auto-detection of pipeline-shaped prompts.** "Create an
+image and email it" typed into chat still routes as one turn. Detecting
+chain-shaped requests is a classification the router would have to make on
+every message to benefit rarely, and a false positive hijacks an ordinary
+request into a surface the user did not ask for. The pipeline canvas is
+entered deliberately. What would change this: the launcher proving out, and
+a cheap high-precision detector measured on real traces.
+
+**Artifact capture parses tool text** (the sources.ts pattern): `write_file`,
+`take_screenshot` and `send_email` name their outputs only in prose, so the
+executor's regexes are pinned by verbatim-string tests that fail loudly on
+rewording. A structured artifact channel on ToolDef becomes worth building
+when a third consumer of tool outputs appears (sources and pipelines are
+two).
+
+**Typed ports are the expectation contract.** Each ability declares
+input/output types from a closed list; an edge is valid iff the intersection
+is non-empty, checked at draw time on the canvas and again server-side. A
+chain that would fail at step three is impossible to build rather than
+discovered at step three.
+
+**Examples are the composer's quality floor.** At 4B, prompt→graph works
+because it is few-shot classification: shipped examples in
+`examples/pipelines/`, user-saved ones shadowing by name (the skills rule),
+nearest-by-stemmed-overlap selection. The editable canvas is the backstop --
+compose is a draft generator. This is also the Hermes-style "procedural
+memory" idea routed through enio's invariants: the system learns shapes from
+vouched examples, it does not self-author executable behavior.
+
+**@xyflow/react v12 accepted into the renderer bundle** (~193KB minified,
+bundle 456→650KB): pure JS+CSS, no remote assets, CSP intact, styles inlined
+through the Tailwind build. The one-bundle no-code-splitting shape survives.
+
+**Follow-up recorded, not built:** surfacing `suggest.ts`'s "Repeated
+sequence: a → b → c" proposals as suggested pipelines -- it is literally
+mined pipelines, but `analyse()` embeds up to 2,000 questions per call and
+needs caching before it can sit behind an HTTP endpoint.
+
+---
+
 ## Bugs that testing found
 
 Recorded because each cost real time and could recur.

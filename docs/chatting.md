@@ -91,6 +91,13 @@ Recent turns are kept whole, because that is where pronouns point: a summary of
 
 See [Models](models.md) for how the size of that window is chosen.
 
+## Start from a tile
+
+A new chat opens on the [launcher](pipelines.md): every ability as a tile.
+Picking one prefills the composer with a template that pins the right agent —
+nothing sends until you finish the sentence. Greyed tiles are abilities that
+need setup, with the steps one click away.
+
 ## Files and attachments
 
 Attach a file with the **+** menu, by dragging it in, or by pasting an image.

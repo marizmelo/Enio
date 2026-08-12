@@ -1,0 +1,9 @@
+{
+  "name": "screenshot-email",
+  "prompt": "take a screenshot and email it to me",
+  "nodes": [
+    { "id": "n1", "abilityId": "screenshot", "prompt": "Take a screenshot of the screen." },
+    { "id": "n2", "abilityId": "send-email", "prompt": "Email the screenshot with a one-line description of what it shows." }
+  ],
+  "edges": [{ "from": "n1", "to": "n2" }]
+}
