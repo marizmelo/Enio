@@ -787,6 +787,32 @@ because a no-id save always inserted. Three connected fixes:
   and the dialog's close button simultaneously -- reported as three bugs,
   all one missing capability.
 
+**A screenshot hides enio's own window.** The shot is supposed to answer
+"what is on the user's screen", and enio's window is the one thing that
+never is — it is in front precisely because they just typed the request into
+it, and its contents are the conversation, so the model was reading its own
+words back as evidence about the screen. Rejected: Electron's
+`setContentProtection`, which excludes the window from *all* capture
+including the user's own screenshots and any screen share — too broad a
+side effect for a per-capture need, and it would need a server→desktop
+channel that does not exist (the agent is a spawned child). Rejected too:
+Quartz `kCGWindowListOptionOnScreenBelowWindow`, the exactly-right
+primitive, because it needs a pyobjc binding that is not installed and would
+make the common path depend on an optional dependency. Kept: hide by app
+name through System Events, restore in a `finally` (a window left hidden by
+a failed capture reads as the app having quit), and capture anyway if
+Automation is not granted — degrade, never fail. The name comes from
+`ENIO_APP_NAME`, which the desktop passes as `app.getName()` rather than the
+agent guessing, and is sanitised because it is interpolated into AppleScript
+source.
+
+**Bug found while doing it:** `screencapture -w` is *interactive* — it waits
+for the user to click a window. The `window: true` path had therefore never
+worked: it blocked until the 15s timeout and reported a capture failure.
+Window mode is now a rect read from the accessibility tree, taken after enio
+is hidden so "the front window" is the user's, not enio's. Coordinates here
+are crop geometry, not a click target, so the click-by-name rule is intact.
+
 **The execution log is the run row, shown.** `pipeline_runs.node_results`
 always stored each step's reply and artifacts; nothing displayed it, so a
 finished run communicated only status rings. `GET /pipelines/:id/runs` +

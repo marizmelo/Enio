@@ -119,6 +119,91 @@ function unescapeQuotes(script: string): string {
   return script.replace(/\\"/g, '"');
 }
 
+/**
+ * The name of enio's own app, hidden for the duration of a capture.
+ *
+ * A screenshot answers "what is on the user's screen", and the one window
+ * that is never the answer is enio's own -- it is in front precisely
+ * because they just typed into it. Leaving it in is worse than noise: the
+ * shot contains the conversation, so the model reads its own words back as
+ * evidence about the screen, and a request to "look at what I'm doing"
+ * returns a description of enio.
+ *
+ * By app name rather than window id: it covers every window the app has,
+ * needs no Quartz binding, and works for the packaged app and a dev
+ * Electron alike (both report "Enio" to System Events; the desktop passes
+ * its real name in ENIO_APP_NAME rather than leaving it to a guess).
+ */
+export const ownAppName = (): string =>
+  (process.env.ENIO_APP_NAME ?? "Enio").replace(/[^A-Za-z0-9 ._-]/g, "").trim() || "Enio";
+
+/** Hides enio, runs the capture, and puts it back -- always, including on
+ *  failure. A window left hidden by a crashed screenshot would look like the
+ *  app had quit. Hiding needs Automation permission; without it the capture
+ *  simply happens with the window in frame, because a screenshot that
+ *  refuses is worse than one with enio in the corner. */
+async function withoutOwnWindow<T>(capture: () => Promise<T>): Promise<T> {
+  const name = ownAppName();
+  const visibility = async (visible: boolean) => {
+    await run(
+      "osascript",
+      ["-e", `tell application "System Events" to set visible of process "${name}" to ${visible}`],
+      { timeout: 5_000 },
+    );
+  };
+
+  let hidden = false;
+  try {
+    await visibility(false);
+    hidden = true;
+    // The hide is animated; capturing immediately catches the window
+    // mid-fade, which is the artifact this whole function exists to avoid.
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  } catch {
+    // Not running (CLI-only), or Automation not granted. Capture anyway.
+  }
+
+  try {
+    return await capture();
+  } finally {
+    if (hidden) await visibility(true).catch(() => {});
+  }
+}
+
+/**
+ * The frontmost window's rectangle, read from the accessibility tree.
+ *
+ * `screencapture -w` is INTERACTIVE -- it waits for the user to click a
+ * window, so the old window:true path hung until the timeout and then
+ * reported a capture failure. A rect from the AX tree is the non-interactive
+ * equivalent. Coordinates here are geometry for a crop, not a click target,
+ * so this does not weaken the click-by-name rule.
+ */
+async function frontWindowRect(): Promise<string | null> {
+  try {
+    const { stdout } = await run(
+      "osascript",
+      [
+        "-e",
+        `tell application "System Events"
+           set frontApp to first process whose frontmost is true
+           tell frontApp
+             if (count of windows) is 0 then return ""
+             set {x, y} to position of front window
+             set {w, h} to size of front window
+             return (x as text) & "," & (y as text) & "," & (w as text) & "," & (h as text)
+           end tell
+         end tell`,
+      ],
+      { timeout: 5_000 },
+    );
+    const rect = stdout.trim();
+    return /^-?\d+,-?\d+,\d+,\d+$/.test(rect) ? rect : null;
+  } catch {
+    return null;
+  }
+}
+
 const screenshotTool: ToolDef = {
   name: "take_screenshot",
   description:
@@ -141,12 +226,22 @@ const screenshotTool: ToolDef = {
   },
   async run(args) {
     const file = join(config.workspace, `screen-${Date.now()}.png`);
+    let note = "";
     try {
-      // -x suppresses the shutter sound; -o omits window shadows so the crop
-      // is tight. Screen Recording permission is required and macOS prompts
-      // for it the first time.
-      const flags = args.window ? ["-x", "-o", "-w"] : ["-x"];
-      await run("screencapture", [...flags, file], { timeout: 15_000 });
+      await withoutOwnWindow(async () => {
+        // -x suppresses the shutter sound. Window mode is a rect read from
+        // the AX tree, because screencapture's own -w waits for a click.
+        const flags = ["-x"];
+        if (args.window) {
+          // Read AFTER enio is hidden: the frontmost window is then the one
+          // the user was actually looking at, not the window they typed the
+          // request into.
+          const rect = await frontWindowRect();
+          if (rect) flags.push(`-R${rect}`);
+          else note = "\n\n(Captured the whole screen — the frontmost window's bounds were unreadable.)";
+        }
+        await run("screencapture", [...flags, file], { timeout: 15_000 });
+      });
     } catch (err) {
       return (
         `Could not capture the screen: ${(err as Error).message}\n` +
@@ -158,7 +253,7 @@ const screenshotTool: ToolDef = {
     // Straight into the vision path, so the model gets text rather than a file
     // path it cannot look at.
     const reading = await readImage(file, args.question ? String(args.question) : undefined);
-    return `Screenshot saved to ${file}\n\n${reading.text}`;
+    return `Screenshot saved to ${file}${note}\n\n${reading.text}`;
   },
 };
 

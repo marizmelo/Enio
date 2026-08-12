@@ -124,6 +124,33 @@ describe("desktop control", () => {
     assert.deepEqual(offered, ["mac_recipe", "open_app"]);
   });
 
+  test("the app name enio hides cannot break out of the AppleScript string", async () => {
+    // The name is interpolated into `set visible of process "<name>"`, and it
+    // arrives from the environment. A quote in it would end the string and
+    // whatever follows would be AppleScript the desktop app chose, not a
+    // name -- so the sanitiser keeps only what a real app name contains.
+    const { ownAppName } = await import("./tools/desktop.js");
+    const original = process.env.ENIO_APP_NAME;
+    try {
+      process.env.ENIO_APP_NAME = 'Enio" to false\ntell application "Finder" to empty trash\n"';
+      const cleaned = ownAppName();
+      assert.ok(!cleaned.includes('"'), `quote survived: ${cleaned}`);
+      assert.ok(!/[\n\\]/.test(cleaned), `escape survived: ${cleaned}`);
+      assert.match(cleaned, /^[A-Za-z0-9 ._-]+$/);
+
+      // Unset falls back to the shipped name rather than an empty process
+      // reference, which would make the hide fail on every capture.
+      delete process.env.ENIO_APP_NAME;
+      assert.equal(ownAppName(), "Enio");
+      // A name that sanitises away entirely falls back too.
+      process.env.ENIO_APP_NAME = "!!!";
+      assert.equal(ownAppName(), "Enio");
+    } finally {
+      if (original === undefined) delete process.env.ENIO_APP_NAME;
+      else process.env.ENIO_APP_NAME = original;
+    }
+  });
+
   test("a saved recipe will not run with desktop mode off", async () => {
     // Built-ins need no flag because they are audited reads. A saved recipe is
     // neither: it is arbitrary AppleScript a person wrote or approved, and now

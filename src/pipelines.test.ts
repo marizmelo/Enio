@@ -95,6 +95,15 @@ test("artifact extraction is pinned to the tools' exact wording", () => {
   assert.deepEqual(extractArtifacts("propose_plan", "Proposed, not run. Steps:\n1. x"), [
     { type: "plan" },
   ]);
+  // A screenshot may append a note about how it was captured; the path must
+  // still be found, or a pipeline step would silently produce no artifact.
+  assert.deepEqual(
+    extractArtifacts(
+      "take_screenshot",
+      "Screenshot saved to /Users/x/enio-workspace/screen-9.png\n\n(Captured the whole screen — the frontmost window's bounds were unreadable.)\n\nA browser.",
+    ),
+    [{ type: "image", path: "/Users/x/enio-workspace/screen-9.png" }],
+  );
   assert.deepEqual(extractArtifacts("read_file", "   1 | hello"), []);
 });
 

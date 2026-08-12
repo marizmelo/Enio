@@ -139,7 +139,10 @@ function spawnBackend(args, label) {
   // assumes a normal Node runtime (ESM loader, no Electron-specific globals).
   const child = spawn("node", [AGENT_ENTRY, ...args], {
     cwd: PARENT_DIR,
-    env: process.env,
+    // The agent hides this app while it captures the screen, so it has to
+    // know what this app is called — "Enio" packaged, whatever Electron
+    // reports in dev. A guess would silently stop working on a rename.
+    env: { ...process.env, ENIO_APP_NAME: app.getName() },
     stdio: ["ignore", "pipe", "pipe"],
     // Its own process group, so shutdown can signal the whole tree.
     // `enio up` is a wrapper: the thing actually holding ~6GB is the python

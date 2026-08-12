@@ -80,6 +80,15 @@ selected by name rather than written on the spot:
 
 The last two are the only ones withheld without Accessibility permission.
 
+**Screenshots leave enio out.** A screenshot is meant to answer "what is on
+my screen", and enio's own window is never that answer — it is in front
+because you just typed into it, and leaving it in means the model reads its
+own conversation back as evidence. So enio hides itself for the length of
+the capture and comes straight back, whatever the result. Hiding needs
+Automation permission; without it you get the shot with enio still in frame
+rather than no shot at all. Asking for just the front window captures the
+window you were actually looking at, for the same reason.
+
 ## Clicking by name, never by coordinate
 
 macOS publishes every button, field and menu item of every window *by name*
