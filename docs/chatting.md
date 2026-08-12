@@ -95,7 +95,25 @@ See [Models](models.md) for how the size of that window is chosen.
 
 Attach a file with the **+** menu, by dragging it in, or by pasting an image.
 The workspace list in that menu shows a thumbnail for anything previewable —
-four screenshots are indistinguishable by name and obvious by picture.
+four screenshots are indistinguishable by name and obvious by picture. With a
+[project](projects.md) open, **From project…** opens a browser over the
+project's attached folders — walk in, search all of them at once, or attach a
+whole folder — and picking a file that already lives in the project
+references it in place rather than copying it.
+
+**PDFs are read for real.** An attached or referenced PDF has its text layer
+extracted before the model sees it, so questions are answered from the actual
+document. A scanned PDF with no text layer says so honestly, and other binary
+files are named as unreadable rather than decoded into garbage — garbage in
+the prompt is what used to invite the model to invent the contents.
+
+**Specifics are checked against their sources.** On any turn that read
+material — files, tool results, attachments — the hard specifics in the reply
+(emails, phone numbers, URLs, figures, names) are checked against what the
+turn actually saw. Anything unaccounted for surfaces as a notice under the
+reply: *"Not found in this turn's sources: … These may be invented."* It
+never blocks or rewrites an answer; it tells you which details to verify
+before relying on them.
 
 **Attachments are stored with the conversation they belong to**, under
 `~/enio-workspace/attachments/<conversation>/`. They stay inside the workspace

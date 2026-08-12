@@ -54,7 +54,11 @@ words — people rephrase when they repeat themselves, so `summarise`,
 nothing.
 
 If embeddings are unavailable, keyword matching takes over and the agent keeps
-working.
+working — but retrieval quality drops with nothing visibly failing, so the
+state is surfaced rather than silent: `/capabilities` reports
+`memory.semanticRecall` (`true`, `false`, or `null` before anything has tried
+to embed this session). The embedding model lives in
+`~/.enio/embeddings-cache`, downloaded once on first use.
 
 Alongside similarity there is one channel of pure **recency**: the last two
 days' session summaries ride into every conversation, labelled *today* or

@@ -71,8 +71,9 @@ out. It is deterministic — SQLite full-text search over the attached folders
 plus live ripgrep, no embeddings — and its index lives inside the project
 folder, refreshed incrementally. In a git repository it indexes what
 `git ls-files` reports, so `.gitignore`d build output and `.env` secrets stay
-out. Oversized and binary files are skipped. Without a project open it
-searches the workspace.
+out. PDFs are indexed by their extracted text layer, so "find X in my resume"
+works; other binary files and anything over 512KB are skipped. Without a
+project open it searches the workspace.
 
 `AGENTS.md` and `CLAUDE.md` files in attached repos get no special treatment:
 they are indexed and searchable like any other file, and they are a signal
