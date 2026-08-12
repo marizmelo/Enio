@@ -8,11 +8,16 @@ import { test } from "node:test";
 const scratch = mkdtempSync(join(tmpdir(), "enio-abilities-"));
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// The desktop-control setting is machine-wide; without this the test would
+// write the developer's real consent file.
+process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");
 mkdirSync(process.env.ENIO_WORKSPACE, { recursive: true });
 mkdirSync(process.env.ENIO_DATA_DIR, { recursive: true });
 
 const { ABILITIES, PORT_TYPES, abilityAvailability } = await import("./abilities.js");
 const { SPECIALISTS } = await import("./specialists.js");
+const { desktopControlStored, setDesktopControl } = await import("./automation.js");
+const { desktopEnabled } = await import("./tools/desktop.js");
 
 test("ability ids are unique and kebab-case", () => {
   const ids = ABILITIES.map((a) => a.id);
@@ -51,7 +56,8 @@ test("every usable ability offers exactly three worked openings", () => {
   // Suggestions are slot-fillers: template with "___" replaced must read as a
   // sentence, which a leading capital in slot position usually breaks.
   for (const ability of ABILITIES) {
-    if (ability.future) continue;
+    // Hidden abilities have no tile, so no "try saying" panel to fill.
+    if (ability.future || ability.launcherHidden) continue;
     assert.equal(ability.suggestions?.length, 3, `${ability.id} needs 3 suggestions`);
     for (const s of ability.suggestions!) {
       assert.ok(s.length > 8 && s.length <= 100, `${ability.id}: suggestion length off: ${s}`);
@@ -95,4 +101,35 @@ test("availability derives from the registry and flags", () => {
   const house = ABILITIES.find((a) => a.id === "automate-house")!;
   assert.equal(abilityAvailability(house, fakeRegistry([]), []), "setup");
   assert.equal(abilityAvailability(house, fakeRegistry([]), ["home-assistant"]), "available");
+});
+
+test("desktop control can be a recorded click, and the env var still wins", () => {
+  const fakeRegistry = (names: string[]) =>
+    ({ all: [], byName: new Map(names.map((n) => [n, {} as never])), dropped: [] }) as never;
+  const mac = ABILITIES.find((a) => a.id === "control-mac")!;
+
+  // Nothing recorded, no env: gated.
+  assert.equal(desktopControlStored(), false);
+  assert.equal(abilityAvailability(mac, fakeRegistry(["propose_plan"]), []), "setup");
+
+  // The launcher's button records the consent; the gate opens (on macOS --
+  // the platform check rides along, which is itself correct behavior).
+  setDesktopControl(true);
+  assert.equal(desktopControlStored(), true);
+  if (process.platform === "darwin") {
+    assert.equal(desktopEnabled(), true);
+    assert.equal(abilityAvailability(mac, fakeRegistry(["propose_plan"]), []), "available");
+  }
+
+  // Env present beats the file, whatever it says -- a one-off ENIO_DESKTOP=0
+  // run forces it off without erasing the recorded choice.
+  process.env.ENIO_DESKTOP = "0";
+  try {
+    assert.equal(desktopEnabled(), false);
+  } finally {
+    delete process.env.ENIO_DESKTOP;
+  }
+
+  setDesktopControl(false);
+  assert.equal(desktopControlStored(), false);
 });

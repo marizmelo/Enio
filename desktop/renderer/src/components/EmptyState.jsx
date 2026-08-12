@@ -65,7 +65,8 @@ const ICONS = {
  * because a person can act on "set ENIO_DESKTOP=1" where the model can only
  * fail.
  */
-export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, disabled }) {
+export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, onEnableDesktop, disabled }) {
+  const [enabling, setEnabling] = useState(false);
   const [lockedId, setLockedId] = useState(null);
   const locked = lockedId ? abilities.find((a) => a.id === lockedId) : null;
   const LockedIcon = locked ? (ICONS[locked.icon] ?? Sparkles) : null;
@@ -91,7 +92,7 @@ export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, disable
 
       {!locked ? (
         <div className="grid w-full max-w-2xl grid-cols-3 gap-2 sm:grid-cols-4">
-          {abilities.map((a) => {
+          {abilities.filter((a) => !a.launcherHidden).map((a) => {
             const Icon = ICONS[a.icon] ?? Sparkles;
             const available = a.availability === "available";
             return (
@@ -181,6 +182,28 @@ export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, disable
           ) : locked.setup ? (
             <div className="rounded-lg border bg-muted/40 p-3 text-left text-xs">
               <p className="mb-1.5 font-medium">{locked.setup.summary}</p>
+              {/* The one gate with a user-shaped switch: desktop control is a
+                  recorded click here, not an env var. macOS still asks its own
+                  per-app permissions after. Deliberately NOT offered for the
+                  browser-act gate — that one is a security boundary and stays
+                  a step harder than a click. */}
+              {locked.requiredFlag === "desktopEnabled" && onEnableDesktop && (
+                <Button
+                  size="sm"
+                  className="mb-2"
+                  disabled={enabling}
+                  onClick={async () => {
+                    setEnabling(true);
+                    try {
+                      await onEnableDesktop();
+                    } finally {
+                      setEnabling(false);
+                    }
+                  }}
+                >
+                  {enabling ? "Enabling…" : "Enable desktop control"}
+                </Button>
+              )}
               <ol className="list-decimal space-y-0.5 pl-4 text-muted-foreground">
                 {locked.setup.steps.map((step) => (
                   <li key={step}>{step}</li>

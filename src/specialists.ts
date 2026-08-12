@@ -176,13 +176,16 @@ export const SPECIALISTS: Specialist[] = [
     systemPrompt:
       `You are a thoughtful assistant. Answer directly from what you know.\n\n` +
       `Use recall if the user refers to something from a past conversation. ` +
-      `Otherwise just answer — not everything needs a tool.`,
+      `run_pipeline runs one of the user's saved pipelines when they ask for ` +
+      `it by name. Otherwise just answer — not everything needs a tool.`,
     // read_image belongs here as much as it belongs to coder and operator:
     // "what does this show?" is ordinary conversation, and it is the generalist
     // that gets routed it. Without the tool it had no way to look, so it said
     // it could not see images -- which was true of that specialist and false of
     // the agent.
-    tools: ["recall", "current_time", "weather", "read_image", "read_skill"],
+    // run_pipeline is selection from a vouched closed list, never authoring:
+    // the sixth and final slot, spent on letting "run my news pipeline" work.
+    tools: ["recall", "current_time", "weather", "read_image", "read_skill", "run_pipeline"],
   },
 ];
 
@@ -269,6 +272,13 @@ export async function route(
         `"did Sam reply about the invoice" -> {"specialist": "mail"}\n` +
         `"write a note with my grocery list" -> {"specialist": "operator"}\n` +
         `"add lunch to my calendar for noon" -> {"specialist": "operator"}\n` +
+        // Alarms, timers and reminders are Mac-app work, but nothing in the
+        // operator's description says so -- "can you setup my alarm?" routed
+        // to the generalist, which then denied a capability Enio has.
+        `"set an alarm for 7 tomorrow morning" -> {"specialist": "operator"}\n` +
+        // "pipeline" reads as CI: "run the quarterly-taxes pipeline" routed
+        // to the coder, who has no run_pipeline tool and denied it exists.
+        `"run the news-brief pipeline" -> {"specialist": "generalist"}\n` +
         `"explain monads to me" -> {"specialist": "generalist"}`,
     },
     { role: "user", content: userInput.slice(0, 500) },

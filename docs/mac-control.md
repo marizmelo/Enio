@@ -17,8 +17,15 @@ They answer different questions, and they are deliberately not one switch.
 
 | | Question it answers | Default |
 |---|---|---|
-| `ENIO_DESKTOP=1` | May it change anything at all? | off |
+| **Desktop control** | May it change anything at all? | off |
 | **Run safe recipes automatically** | May a *vouched* script run without asking? | off |
+
+The first is one deliberate click: pick **Control my Mac** (or **Screenshot**)
+on the launcher and press **Enable desktop control**. The consent is recorded
+machine-wide and survives restarts; macOS still asks its own per-app
+Automation and Screen Recording permissions on first use, which is the layer
+that actually protects each app's data. `ENIO_DESKTOP=1` remains the
+environment-variable form of the same switch, and wins when set:
 
 ```sh
 cd desktop && ENIO_DESKTOP=1 npm start
@@ -27,6 +34,12 @@ cd desktop && ENIO_DESKTOP=1 npm start
 The second lives in the Recipes drawer, not in an environment variable, because
 it is a decision you revisit. Turning both on in one gesture would be bundled
 consent.
+
+Why off by default at all: with desktop control on, the shell allowlist grows
+`osascript`, `open` and friends — direct execution paths with no approval
+sheet between them and your apps. A small model can be talked into things by
+content it reads, so the ability to reach your apps is something you grant,
+never something that ships pre-granted.
 
 {: .warning }
 Auto-run applies **only to recipes you personally ticked "safe"**. A plan Enio

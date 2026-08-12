@@ -6,7 +6,7 @@ import { detectPlatform } from "../platform.js";
 import { readImage } from "../vision.js";
 import type { ToolDef } from "../types.js";
 import { listSavedRecipes, osascriptFailure, proposePlan, runScript, type PlanKind } from "../plans.js";
-import { autoRunEnabled } from "../automation.js";
+import { autoRunEnabled, desktopControlStored } from "../automation.js";
 import {
   assistiveAccessGranted,
   axBridge,
@@ -56,8 +56,13 @@ const run = promisify(execFile);
  * can do, so this is a genuine expansion of what a wrong tool call can cost.
  */
 
+// Env when set, else the recorded click from the launcher's "Enable desktop
+// control" button (automation.ts) — the user-shaped consent for the same
+// gate. Both are user acts; neither is reachable by the model.
 export const desktopEnabled = () =>
-  config.desktopEnabled && detectPlatform().startsWith("macos");
+  (process.env.ENIO_DESKTOP != null || process.env.MAPLE_DESKTOP != null
+    ? config.desktopEnabled
+    : desktopControlStored()) && detectPlatform().startsWith("macos");
 
 /**
  * Reading from apps needs no flag; changing them does.
@@ -849,9 +854,14 @@ const proposeTool: ToolDef = {
   },
 };
 
-export const desktopTools: ToolDef[] = [
-  // open_app sits with the recipes, not behind the flag: the gate is about
-  // irreversibility, and opening an app is undone by quitting it.
-  ...(recipesEnabled() ? [recipeTool, openAppTool] : []),
-  ...(desktopEnabled() ? [screenshotTool, appleScriptTool, proposeTool] : []),
-];
+/** A function, not a const: desktop control can now be enabled at runtime
+ *  (the launcher button), and the registry rebuild that follows must see the
+ *  gate's current answer -- a const spread the import-time answer forever. */
+export function buildDesktopTools(): ToolDef[] {
+  return [
+    // open_app sits with the recipes, not behind the flag: the gate is about
+    // irreversibility, and opening an app is undone by quitting it.
+    ...(recipesEnabled() ? [recipeTool, openAppTool] : []),
+    ...(desktopEnabled() ? [screenshotTool, appleScriptTool, proposeTool] : []),
+  ];
+}

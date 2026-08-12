@@ -12,6 +12,9 @@ import { join } from "node:path";
  */
 const scratch = mkdtempSync(join(tmpdir(), "enio-memory-notes-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// Machine-wide state (model choice, desktop-control consent) must never be
+// read from or written to the developer's real machine by a test.
+process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 // A window this small makes compaction reachable with a handful of scripted
 // turns instead of forty.

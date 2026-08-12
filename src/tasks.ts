@@ -6,22 +6,27 @@ import { runTurn } from "./agent.js";
 import { buildRegistry } from "./tools/index.js";
 import { setMemorySession } from "./tools/memory.js";
 import { listWatches, runHeartbeat } from "./heartbeat.js";
+import { listPipelines, runPipeline } from "./pipelines.js";
 import type { Message } from "./types.js";
 
 /**
  * Scheduled tasks.
  *
- * A task is a prompt plus a cron expression. Running one goes through the
- * ordinary turn path — same specialists, same memory, same tracing — so a
- * scheduled run is inspectable exactly like a conversation, and anything it
- * learns is remembered. That reuse is the entire design: a separate execution
- * path for automation would drift from the interactive one and rot.
+ * A task is a prompt OR a pipeline, plus a cron expression. A prompt task
+ * goes through the ordinary turn path — same specialists, same memory, same
+ * tracing — so a scheduled run is inspectable exactly like a conversation,
+ * and anything it learns is remembered. A pipeline task calls runPipeline
+ * directly: the trigger is deterministic, with no model and no router
+ * between the clock and the graph the user built. That reuse is the entire
+ * design: a separate execution path for automation would drift from the
+ * interactive one and rot.
  */
 
 export interface Task {
   id: number;
   name: string;
   prompt: string;
+  pipeline: string | null;
   schedule: string;
   specialist: string | null;
   enabled: boolean;
@@ -48,7 +53,8 @@ export function validateSchedule(schedule: string): { ok: true; next: Date } | {
 
 export function addTask(input: {
   name: string;
-  prompt: string;
+  prompt?: string;
+  pipeline?: string | null;
   schedule: string;
   specialist?: string | null;
 }): Task {
@@ -58,19 +64,28 @@ export function addTask(input: {
   }
   const check = validateSchedule(input.schedule);
   if (!check.ok) throw new Error(`invalid schedule: ${check.reason}`);
-  if (!input.prompt.trim()) throw new Error("a task needs a prompt");
+
+  const prompt = input.prompt?.trim() ?? "";
+  const pipeline = input.pipeline?.trim() || null;
+  // Exactly one action. Both set is ambiguous about which runs; neither set
+  // is a task that fires and does nothing, at 3am, silently.
+  if (pipeline && prompt) throw new Error("a task takes a prompt or a pipeline, not both");
+  if (!pipeline && !prompt) throw new Error("a task needs a prompt");
+  if (pipeline && !listPipelines().some((p) => p.name === pipeline)) {
+    throw new Error(`no pipeline named "${pipeline}" — save it in the pipeline builder first`);
+  }
 
   getDb()
     .prepare(
-      `INSERT INTO tasks (name, prompt, schedule, specialist, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO tasks (name, prompt, pipeline, schedule, specialist, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .run(name, input.prompt.trim(), input.schedule, input.specialist ?? null, now());
+    .run(name, prompt, pipeline, input.schedule, input.specialist ?? null, now());
 
   return getTask(name)!;
 }
 
-const ROW_TO_TASK = `id, name, prompt, schedule, specialist, enabled,
+const ROW_TO_TASK = `id, name, prompt, pipeline, schedule, specialist, enabled,
   created_at AS createdAt, last_run_at AS lastRunAt,
   last_status AS lastStatus, last_error AS lastError`;
 
@@ -145,14 +160,45 @@ export async function runTask(
 
   try {
     const registry = await buildRegistry();
-    const sessionId = startSession();
-    setMemorySession(sessionId);
 
-    const history: Message[] = [];
-    const result = await runTurn(task.prompt, history, registry, sessionId);
-    output = result.reply;
+    if (task.pipeline) {
+      // Deterministic trigger: the clock fires the graph directly. No model
+      // decides whether to run it, no router picks who -- each node inside
+      // still runs as an ordinary turn, so every gate holds.
+      const pipeline = listPipelines().find((p) => p.name === task.pipeline);
+      if (!pipeline) {
+        throw new Error(`no pipeline named "${task.pipeline}" — was it deleted?`);
+      }
+      const lines: string[] = [];
+      const run = await runPipeline(pipeline, registry, (event) => {
+        if (event.type === "node_finished") {
+          lines.push(`${event.nodeId}: ${event.reply.slice(0, 300).replace(/\s+/g, " ")}`);
+        }
+        if (event.type === "node_failed") {
+          lines.push(`${event.nodeId} FAILED: ${event.error}`);
+        }
+      });
+      output = lines.join("\n");
+      if (run.status === "failed") throw new Error(output || "pipeline failed");
+    } else {
+      const sessionId = startSession();
+      setMemorySession(sessionId);
 
-    endSession(sessionId);
+      const history: Message[] = [];
+      const result = await runTurn(
+        task.prompt,
+        history,
+        registry,
+        sessionId,
+        {},
+        // The pinned specialist was stored and then silently ignored for as
+        // long as tasks existed; passing it through is the fix.
+        task.specialist ? { specialist: task.specialist } : {},
+      );
+      output = result.reply;
+
+      endSession(sessionId);
+    }
     // Fold it into memory now, so a scheduled run contributes what it learned
     // rather than waiting for the next interactive session to end.
     await indexPending();

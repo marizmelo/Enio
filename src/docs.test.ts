@@ -1,8 +1,13 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { CATALOGUE } from "./model-catalogue.js";
+
+// The registry this suite builds must not depend on the developer's real
+// machine-wide settings (desktop-control consent, model choice).
+process.env.ENIO_MACHINE_STATE_DIR = join(mkdtempSync(join(tmpdir(), "enio-docs-")), "machine");
 
 /**
  * The documentation, checked against the code it describes.

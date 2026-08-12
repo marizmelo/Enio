@@ -7,6 +7,9 @@ import { join } from "node:path";
 
 const scratch = mkdtempSync(join(tmpdir(), "enio-integrations-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// Machine-wide state (model choice, desktop-control consent) must never be
+// read from or written to the developer's real machine by a test.
+process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 process.env.ENIO_MCP_CONFIG = join(scratch, "none.json");
 
@@ -16,7 +19,8 @@ process.env.ENIO_EMAIL_FROM = "me@example.com";
 process.env.ENIO_EMAIL_ALLOWED_TO = "team@example.com,@trusted.org";
 
 const { emailTools, emailConfigured } = await import("./tools/email.js");
-const { desktopTools, desktopEnabled, DESKTOP_COMMANDS } = await import("./tools/desktop.js");
+const { buildDesktopTools, desktopEnabled, DESKTOP_COMMANDS } = await import("./tools/desktop.js");
+const desktopTools = buildDesktopTools();
 const { checkCommand } = await import("./tools/shell.js");
 const { SPECIALISTS, getSpecialist } = await import("./specialists.js");
 const { ensureDirs } = await import("./config.js");

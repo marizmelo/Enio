@@ -33,18 +33,37 @@ export const savePipeline = (fields) =>
     body: JSON.stringify(fields),
   }).then((d) => d.pipeline);
 export const deletePipeline = (id) => call(`/pipelines/${id}`, { method: "DELETE" });
+/** The execution log: past runs with each step's reply, artifacts, error. */
+export const listRuns = (id) => call(`/pipelines/${id}/runs`).then((d) => d.runs);
 export const composePipeline = (prompt) =>
   call("/pipelines/compose", { method: "POST", body: JSON.stringify({ prompt }) });
-export const saveAsExample = (id, prompt) =>
-  call(`/pipelines/${id}/example`, { method: "POST", body: JSON.stringify({ prompt }) });
-
+/** Mine the trace history for repeated tool sequences; returns unsaved
+ *  drafts. Deliberately a POST the user triggers — it embeds real work. */
+export const suggestPipelines = () =>
+  call("/pipelines/suggest", { method: "POST" }).then((d) => d.drafts);
+/** Ask a running pipeline (saved or draft) to stop. The stop lands at the
+ *  next safe boundary; the stream reports the rest. */
+export const stopPipeline = (id) => call(`/pipelines/${id}/stop`, { method: "POST" });
 /** Run a pipeline, invoking onEvent per SSE frame. Resolves when the stream
  *  closes. The caller treats events as the only truth about progress. */
-export async function runPipeline(id, onEvent, signal) {
+export function runPipeline(id, onEvent, signal) {
+  return runStream(`/pipelines/${id}/run`, undefined, onEvent, signal);
+}
+/** Run an unsaved graph. Same stream; the run_started event carries the
+ *  ephemeral id (for stopping) and runId (for adoption on save). */
+export function runDraft(graph, onEvent, signal) {
+  return runStream("/pipelines/run-draft", JSON.stringify(graph), onEvent, signal);
+}
+
+async function runStream(path, body, onEvent, signal) {
   const token = await window.maple?.getToken();
-  const res = await fetch(`${AGENT_BASE}/pipelines/${id}/run`, {
+  const res = await fetch(`${AGENT_BASE}${path}`, {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body,
     signal,
   });
   if (!res.ok) {

@@ -11,11 +11,15 @@ import { join } from "node:path";
 // left four junk plans in the real ~/.enio database.
 const scratch = mkdtempSync(join(tmpdir(), "enio-plans-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// Machine-wide state (model choice, desktop-control consent) must never be
+// read from or written to the developer's real machine by a test.
+process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
 const plans = await import("./plans.js");
-const { desktopTools } = await import("./tools/desktop.js");
+const { buildDesktopTools } = await import("./tools/desktop.js");
+const desktopTools = buildDesktopTools();
 const { SPECIALISTS } = await import("./specialists.js");
 
 describe("proposed actions", () => {

@@ -8,8 +8,14 @@ const scratch = mkdtempSync(join(tmpdir(), "enio-tasks-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 process.env.ENIO_MCP_CONFIG = join(scratch, "none.json");
+// Registry-touching tests must never read this machine's real consent files.
+process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");
+// Scripted-model tests spend one response per turn; routing would burn the
+// script on classification calls before the turn itself.
+process.env.ENIO_ROUTING = "0";
 
 const tasks = await import("./tasks.js");
+const pipelines = await import("./pipelines.js");
 const suggest = await import("./suggest.js");
 const { closeDb } = await import("./memory/db.js");
 
@@ -210,5 +216,83 @@ describe("naming and drafting", () => {
   test("shorten preserves short text and marks truncation", () => {
     assert.equal(suggest.shorten("short"), "short");
     assert.match(suggest.shorten("x".repeat(200)), /…$/);
+  });
+});
+
+describe("pipeline tasks", () => {
+  /** Scripted SSE model, the integration.test.ts idiom. */
+  const scriptModel = (replies: string[]) => {
+    const queue = [...replies];
+    globalThis.fetch = (async () => {
+      const content = queue.shift() ?? "(exhausted)";
+      const frames = [
+        `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ];
+      return new Response(frames.join(""), { status: 200 });
+    }) as typeof fetch;
+  };
+  const originalFetch = globalThis.fetch;
+
+  test("a task takes a prompt or a pipeline, never both, never neither", () => {
+    assert.throws(
+      () => tasks.addTask({ name: "twin", prompt: "x", pipeline: "y", schedule: "0 9 * * 1" }),
+      /not both/,
+    );
+    assert.throws(
+      () => tasks.addTask({ name: "hollow", schedule: "0 9 * * 1" }),
+      /needs a prompt/,
+    );
+    // The pipeline must exist when the task is created, not when it fires.
+    assert.throws(
+      () => tasks.addTask({ name: "ghost", pipeline: "no-such-flow", schedule: "0 9 * * 1" }),
+      /no pipeline named/,
+    );
+  });
+
+  test("a pipeline task fires the graph deterministically and records the run", async () => {
+    pipelines.savePipeline({
+      name: "nightly-note",
+      nodes: [{ id: "n1", abilityId: "prompt", prompt: "write the nightly note" }],
+      edges: [],
+    });
+    const t = tasks.addTask({ name: "nightly", pipeline: "nightly-note", schedule: "0 9 * * *" });
+    assert.equal(t.pipeline, "nightly-note");
+
+    scriptModel(["The note is written."]);
+    try {
+      const run = await tasks.runTask(t);
+      assert.equal(run.status, "ok");
+      assert.match(run.output ?? "", /The note is written/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    // The run also vouches the pipeline: it is now eligible for run_pipeline
+    // and teaches the composer -- the same promotion rule as recipes.
+    const saved = pipelines.listPipelines().find((p) => p.name === "nightly-note")!;
+    assert.equal(pipelines.hasSuccessfulRun(saved.id), true);
+  });
+
+  test("a prompt task lands on its pinned specialist", async () => {
+    const t = tasks.addTask({
+      name: "pinned",
+      prompt: "check the weather",
+      schedule: "0 9 * * *",
+      specialist: "researcher",
+    });
+    scriptModel(["Sunny."]);
+    try {
+      const run = await tasks.runTask(t);
+      assert.equal(run.status, "ok");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    // The trace is the proof: task.specialist used to be stored and then
+    // silently ignored, so the turn recorded whatever routing decided.
+    const { getDb } = await import("./memory/db.js");
+    const row = getDb()
+      .prepare(`SELECT specialist FROM turns ORDER BY id DESC LIMIT 1`)
+      .get() as { specialist: string };
+    assert.equal(row.specialist, "researcher");
   });
 });

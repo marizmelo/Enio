@@ -18,13 +18,16 @@ import {
   FilePen,
   FileSearch,
   Globe,
+  History,
   Inbox,
   Loader2,
+  PencilLine,
   Play,
   Plus,
   Send,
   ShoppingCart,
   Sparkles,
+  Square,
   Trash2,
   Wand2,
   X,
@@ -37,12 +40,16 @@ import {
   deletePipeline,
   getPipeline,
   listPipelines,
+  listRuns,
+  runDraft,
   runPipeline,
-  saveAsExample,
   savePipeline,
+  stopPipeline,
+  suggestPipelines,
 } from "@/lib/pipelines";
 
 const ICONS = {
+  "pencil-line": PencilLine,
   globe: Globe,
   "file-search": FileSearch,
   "file-pen": FilePen,
@@ -119,10 +126,30 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
   const [edges, setEdges] = useState([]);
   const [selectedNode, setSelectedNode] = useState(null);
   const [prompt, setPrompt] = useState("");
+  // Inline, not window.prompt(): Electron does not implement prompt(), and
+  // the throw happened outside every catch — Save and Run silently did
+  // nothing, which is the worst possible shape for a button.
+  const [name, setName] = useState("");
+  // The compose prompt rides along as the pipeline's description: it is what
+  // lets a saved flow teach the composer once it has run successfully.
+  const [composedFrom, setComposedFrom] = useState("");
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [finale, setFinale] = useState("");
+  // Run-before-save: a draft runs without a name, and only a canvas that has
+  // actually executed can be saved — the same order recipes earn their keep.
+  const [hasRun, setHasRun] = useState(false);
+  // From run_started: which id to stop, and which run a save should adopt.
+  const [stopTarget, setStopTarget] = useState(null);
+  const [lastRunId, setLastRunId] = useState(null);
+  // File paths the run produced, so "where did my document go" has an answer
+  // on the same screen that made it.
+  const [artifacts, setArtifacts] = useState([]);
+  // null = not asked yet, [] = asked and nothing found — the empty answer is
+  // still an answer and deserves its own line.
+  const [drafts, setDrafts] = useState(null);
+  const [suggesting, setSuggesting] = useState(false);
   const counter = useRef(0);
 
   const byId = useMemo(() => new Map(abilities.map((a) => [a.id, a])), [abilities]);
@@ -138,6 +165,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
       setView("list");
       setError("");
       setFinale("");
+      setDrafts(null);
     }
   }, [open, refresh]);
 
@@ -190,7 +218,15 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
         draft.nodes.map((n) => ({ ...n, position: undefined })),
         draft.edges,
       );
-      setCurrent((c) => c ?? { name: "" });
+      setComposedFrom(prompt.trim());
+      // A compose is always a fresh draft. Keeping stale editing state here
+      // meant a compose after opening a saved pipeline silently overwrote
+      // that pipeline on save, under its old name.
+      setCurrent({ name: "" });
+      setName("");
+      setHasRun(false);
+      setLastRunId(null);
+      setArtifacts([]);
       setView("canvas");
     } catch (err) {
       setError(String(err?.message ?? err));
@@ -232,14 +268,26 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
   };
 
   const persist = async () => {
-    const name = current?.name?.trim() || window.prompt("Name this pipeline:");
-    if (!name) return null;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Give the pipeline a name first.");
+      return null;
+    }
     setBusy(true);
     setError("");
     try {
       const graph = fromFlow();
-      const pipeline = await savePipeline({ id: current?.id, name, ...graph });
+      const pipeline = await savePipeline({
+        id: current?.id,
+        name: trimmed,
+        ...(composedFrom ? { description: composedFrom } : {}),
+        // Saving right after a watched draft run brings that run along, so
+        // the pipeline arrives already vouched — no ritual second run.
+        ...(!current?.id && lastRunId ? { adoptRunId: lastRunId } : {}),
+        ...graph,
+      });
       setCurrent({ id: pipeline.id, name: pipeline.name });
+      setLastRunId(null);
       refresh();
       return pipeline;
     } catch (err) {
@@ -250,54 +298,161 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
     }
   };
 
+  const onRunEvent = (event) => {
+    if (event.type === "run_started") {
+      setStopTarget(event.pipelineId);
+      setLastRunId(event.runId);
+      return;
+    }
+    if (event.nodeId) {
+      const status =
+        event.type === "node_started"
+          ? "running"
+          : event.type === "node_finished"
+            ? "finished"
+            : event.type === "node_failed"
+              ? "failed"
+              : event.type === "node_skipped"
+                ? "skipped"
+                : null;
+      if (status) {
+        setNodes((ns) =>
+          ns.map((n) => (n.id === event.nodeId ? { ...n, data: { ...n.data, status } } : n)),
+        );
+      }
+      if (event.type === "node_finished") {
+        const paths = (event.artifacts ?? []).map((a) => a.path).filter(Boolean);
+        if (paths.length) setArtifacts((prior) => [...prior, ...paths]);
+        setNodes((ns) =>
+          ns.map((n) =>
+            n.id === event.nodeId ? { ...n, data: { ...n.data, reply: event.reply } } : n,
+          ),
+        );
+      }
+      if (event.type === "node_failed") {
+        setError(event.error);
+        setNodes((ns) =>
+          ns.map((n) =>
+            n.id === event.nodeId ? { ...n, data: { ...n.data, reply: event.error } } : n,
+          ),
+        );
+      }
+    }
+    if (event.type === "run_finished") {
+      setHasRun(true);
+      setFinale(
+        event.status === "succeeded"
+          ? "Done — every step finished."
+          : event.status === "cancelled"
+            ? "Stopped by you — nothing after the current step ran."
+            : "Stopped — a step failed.",
+      );
+    }
+  };
+
+  /** A saved pipeline runs by id (persisting edits first); an unsaved canvas
+   *  runs as a draft — proving a flow works comes BEFORE naming it. */
   const run = async () => {
-    const pipeline = await persist();
-    if (!pipeline) return;
+    let pipelineId = current?.id;
+    if (pipelineId) {
+      const pipeline = await persist();
+      if (!pipeline) return;
+      pipelineId = pipeline.id;
+    }
     setRunning(true);
     setFinale("");
     setError("");
+    setArtifacts([]);
     setNodes((ns) => ns.map((n) => ({ ...n, data: { ...n.data, status: null } })));
     try {
-      await runPipeline(pipeline.id, (event) => {
-        if (event.nodeId) {
-          const status =
-            event.type === "node_started"
-              ? "running"
-              : event.type === "node_finished"
-                ? "finished"
-                : event.type === "node_failed"
-                  ? "failed"
-                  : event.type === "node_skipped"
-                    ? "skipped"
-                    : null;
-          if (status) {
-            setNodes((ns) =>
-              ns.map((n) => (n.id === event.nodeId ? { ...n, data: { ...n.data, status } } : n)),
-            );
-          }
-          if (event.type === "node_failed") setError(event.error);
-        }
-        if (event.type === "run_finished") {
-          setFinale(event.status === "succeeded" ? "Done — every step finished." : "Stopped — a step failed.");
-        }
-      });
+      if (pipelineId) await runPipeline(pipelineId, onRunEvent);
+      else await runDraft(fromFlow(), onRunEvent);
     } catch (err) {
       setError(String(err?.message ?? err));
     } finally {
       setRunning(false);
+      setStopTarget(null);
       refresh();
     }
+  };
+
+  const stop = async () => {
+    if (!stopTarget) return;
+    try {
+      await stopPipeline(stopTarget);
+    } catch (err) {
+      setError(String(err?.message ?? err));
+    }
+  };
+
+  const suggest = async () => {
+    setSuggesting(true);
+    setError("");
+    try {
+      setDrafts(await suggestPipelines());
+    } catch (err) {
+      setError(String(err?.message ?? err));
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
+  /** A draft opens unsaved: naming and saving it is the user's act, and the
+   *  save is also what makes it teachable once it runs successfully. */
+  const openDraft = (draft) => {
+    setCurrent({ name: "" });
+    setName("");
+    setHasRun(false);
+    setLastRunId(null);
+    setArtifacts([]);
+    setComposedFrom(draft.title);
+    toFlow(draft.nodes, draft.edges);
+    setSelectedNode(null);
+    setFinale("");
+    setError("");
+    setView("canvas");
   };
 
   const openSaved = async (summary) => {
     try {
       const pipeline = await getPipeline(summary.id);
       setCurrent({ id: pipeline.id, name: pipeline.name });
+      setName(pipeline.name);
+      setComposedFrom(pipeline.description ?? "");
+      setHasRun(false);
+      setLastRunId(null);
+      setArtifacts([]);
       toFlow(pipeline.nodes, pipeline.edges);
       setSelectedNode(null);
       setFinale("");
       setError("");
       setView("canvas");
+      // The execution log: the latest run's statuses, replies and files are
+      // laid over the canvas, so opening a pipeline answers "what did it do
+      // last time" without re-running anything.
+      try {
+        const runs = await listRuns(pipeline.id);
+        const last = runs?.[0];
+        if (last?.nodeResults?.length) {
+          setFinale(
+            `Last run ${last.status} — ${new Date(last.startedAt).toLocaleString()}.`,
+          );
+          setNodes((ns) =>
+            ns.map((n) => {
+              const r = last.nodeResults.find((x) => x.nodeId === n.id);
+              if (!r) return n;
+              const status =
+                r.status === "finished" ? "finished" : r.status === "failed" ? "failed" : "skipped";
+              return { ...n, data: { ...n.data, status, reply: r.reply || r.error || "" } };
+            }),
+          );
+          setArtifacts(
+            last.nodeResults.flatMap((r) => (r.artifacts ?? []).map((a) => a.path).filter(Boolean)),
+          );
+        }
+      } catch {
+        /* no runs is not an error */
+      }
     } catch (err) {
       setError(String(err?.message ?? err));
     }
@@ -318,6 +473,14 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
 
         {error && <p className="shrink-0 text-xs text-destructive">{error}</p>}
         {finale && <p className="shrink-0 text-xs text-muted-foreground">{finale}</p>}
+        {artifacts.length > 0 && (
+          <div className="shrink-0 text-[11px] text-muted-foreground">
+            Files this run produced:
+            {artifacts.map((p) => (
+              <code key={p} className="ml-1.5 rounded bg-muted px-1 py-0.5">{p}</code>
+            ))}
+          </div>
+        )}
 
         {view === "list" ? (
           <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -377,20 +540,61 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
               )}
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1 self-start"
-              onClick={() => {
-                setCurrent({ name: "" });
-                setNodes([]);
-                setEdges([]);
-                setSelectedNode(null);
-                setView("canvas");
-              }}
-            >
-              <Plus className="size-3.5" /> Blank canvas
-            </Button>
+            {drafts !== null && (
+              <div className="max-h-40 shrink-0 overflow-y-auto rounded-md border">
+                {drafts.length === 0 ? (
+                  <p className="p-3 text-xs text-muted-foreground">
+                    Nothing repeated often enough yet — suggestions come from tool sequences
+                    you've run at least three times.
+                  </p>
+                ) : (
+                  drafts.map((d, i) => (
+                    <button
+                      key={i}
+                      className="flex w-full items-center gap-2 border-b px-3 py-2 text-left last:border-b-0 hover:bg-muted"
+                      onClick={() => openDraft(d)}
+                    >
+                      <History className="size-3 shrink-0" />
+                      <span className="min-w-0 truncate text-sm">{d.title}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{d.reason}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                onClick={() => {
+                  setCurrent({ name: "" });
+                  setName("");
+                  setComposedFrom("");
+                  setHasRun(false);
+                  setLastRunId(null);
+                  setArtifacts([]);
+                  setNodes([]);
+                  setEdges([]);
+                  setSelectedNode(null);
+                  setView("canvas");
+                }}
+              >
+                <Plus className="size-3.5" /> Blank canvas
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                disabled={suggesting}
+                title="Find repeated tool sequences in your history and turn them into draft pipelines"
+                onClick={suggest}
+              >
+                {suggesting ? <Loader2 className="size-3.5 animate-spin" /> : <History className="size-3.5" />}
+                Suggest from my history
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 gap-2">
@@ -480,6 +684,16 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
                       )
                     }
                   />
+                  {selected.data.reply ? (
+                    <div className="min-h-0 flex-1 overflow-y-auto rounded-md border bg-muted/40 p-2">
+                      <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Last output
+                      </p>
+                      <p className="whitespace-pre-wrap text-[11px] leading-snug">
+                        {selected.data.reply}
+                      </p>
+                    </div>
+                  ) : null}
                 </>
               ) : (
                 <p className="text-xs text-muted-foreground">
@@ -489,33 +703,40 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
               )}
 
               <div className="mt-auto flex flex-col gap-1.5">
-                <Button size="sm" className="gap-1" disabled={busy || running || nodes.length === 0} onClick={run}>
-                  {running ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
-                  {running ? "Running…" : "Run"}
-                </Button>
-                <Button size="sm" variant="outline" disabled={busy || running || nodes.length === 0} onClick={persist}>
-                  Save
-                </Button>
+                <input
+                  className="rounded-md border bg-transparent px-2 py-1 text-xs"
+                  placeholder="Pipeline name"
+                  value={name}
+                  disabled={running}
+                  onChange={(e) => setName(e.target.value)}
+                />
+                {running ? (
+                  <Button size="sm" variant="destructive" className="gap-1" disabled={!stopTarget} onClick={stop}>
+                    <Square className="size-3.5" /> Stop
+                  </Button>
+                ) : (
+                  <Button size="sm" className="gap-1" disabled={busy || nodes.length === 0} onClick={run}>
+                    <Play className="size-3.5" /> Run
+                  </Button>
+                )}
                 <Button
                   size="sm"
-                  variant="ghost"
-                  className="text-xs text-muted-foreground"
-                  disabled={busy || running || !current?.id}
-                  title="Feed this pipeline to the composer as an example it can learn the shape of"
-                  onClick={async () => {
-                    const examplePrompt = window.prompt(
-                      "What request should this pipeline be the example for?",
-                      prompt,
-                    );
-                    if (examplePrompt) {
-                      await saveAsExample(current.id, examplePrompt).catch((err) =>
-                        setError(String(err?.message ?? err)),
-                      );
-                    }
-                  }}
+                  variant="outline"
+                  disabled={busy || running || nodes.length === 0 || (!current?.id && !hasRun)}
+                  title={
+                    !current?.id && !hasRun
+                      ? "Run it once first — a pipeline is saved after you've seen it work"
+                      : undefined
+                  }
+                  onClick={persist}
                 >
-                  Save as example
+                  {current?.id ? "Update" : "Save"}
                 </Button>
+                {!current?.id && !hasRun && nodes.length > 0 && (
+                  <p className="text-[10px] leading-tight text-muted-foreground">
+                    Run it once — Save unlocks after you've seen it work.
+                  </p>
+                )}
               </div>
             </div>
           </div>

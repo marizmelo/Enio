@@ -10,7 +10,8 @@ import { skillTools } from "./skills.js";
 import { visionTools } from "./vision.js";
 import { emailTools } from "./email.js";
 import { mailTools } from "./mail.js";
-import { desktopTools, recipesEnabled } from "./desktop.js";
+import { buildDesktopTools, recipesEnabled } from "./desktop.js";
+import { buildPipelineTools } from "../pipelines.js";
 import { probeAssistiveAccess, probeAxBridge } from "./ax.js";
 import { timeTools } from "./time.js";
 import { weatherTools } from "./weather.js";
@@ -30,6 +31,9 @@ export interface Registry {
 export async function buildRegistry(
   onLog: (msg: string) => void = () => {},
 ): Promise<Registry> {
+  // Filled just before returning; the run_pipeline tool dereferences it at
+  // call time, when it is guaranteed to be set.
+  const registryBox: { value: Registry | null } = { value: null };
   // Asked once, before the descriptions are read: whether macOS will let this
   // process read the accessibility tree decides which recipes mac_recipe
   // offers, and offering one that can only fail wastes the model's attention.
@@ -79,7 +83,11 @@ export async function buildRegistry(
     ...visionTools,
     ...emailTools,
     ...mailTools,
-    ...desktopTools,
+    ...buildDesktopTools(),
+    // The tool needs the registry the TURN will run with; a getter defers
+    // the reference until run() time, sidestepping the chicken-and-egg of
+    // registering a tool that itself drives turns.
+    ...buildPipelineTools(() => registryBox.value!),
     ...shellTools,
     ...searchTools,
     ...buildWebTools(),
@@ -114,9 +122,11 @@ export async function buildRegistry(
     );
   }
 
-  return {
+  const registry: Registry = {
     all: combined,
     byName: new Map(combined.map((t) => [t.name, t])),
     dropped,
   };
+  registryBox.value = registry;
+  return registry;
 }

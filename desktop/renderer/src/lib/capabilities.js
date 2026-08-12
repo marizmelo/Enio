@@ -11,6 +11,23 @@ const AGENT_BASE = "http://127.0.0.1:8787";
 
 const EMPTY = { tools: [], skills: [], agents: [], servers: [], files: [] };
 
+/** The launcher's "Enable desktop control" click: records the consent
+ *  server-side and rebuilds the tool registry, so the tiles flip on the
+ *  capabilities refetch that follows. */
+export async function enableDesktopControl() {
+  const token = await window.maple?.getToken();
+  const res = await fetch(`${AGENT_BASE}/settings/desktop`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ enabled: true }),
+  });
+  if (!res.ok) throw new Error(`enable returned ${res.status}`);
+  return res.json();
+}
+
 export async function fetchCapabilities() {
   try {
     const token = await window.maple?.getToken();

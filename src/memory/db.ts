@@ -243,6 +243,10 @@ function migrate(d: Database.Database): void {
   // deleting a project keeps its conversations -- the raw transcript stays
   // the source of truth whatever happens to the project folder.
   addColumn(d, "sessions", "project_id", "TEXT");
+  // A task can trigger a pipeline instead of a prompt. A name, not an id:
+  // pipelines are addressed by name everywhere a person types one, and the
+  // lookup is re-done at run time so a deleted pipeline fails loudly.
+  addColumn(d, "tasks", "pipeline", "TEXT");
 
   // Pipelines get their own tables rather than riding the plans table on
   // purpose: planSteps() coerces unknown step kinds to applescript and

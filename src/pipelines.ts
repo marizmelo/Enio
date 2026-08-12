@@ -20,7 +20,7 @@ import { setMemorySession } from "./tools/memory.js";
 import { setBrowseSession } from "./tools/browse.js";
 import { setPlanSession } from "./tools/desktop.js";
 import type { Registry } from "./tools/index.js";
-import type { Message } from "./types.js";
+import type { Message, ToolDef } from "./types.js";
 
 /**
  * Pipelines: abilities composed into a graph the *harness* owns.
@@ -85,13 +85,16 @@ export interface NodeResult {
 }
 
 export type RunEvent =
+  // First out of the gate: tells the client which id to stop and which run
+  // to adopt if this was a draft the user saves afterwards.
+  | { type: "run_started"; runId: string; pipelineId: string }
   | { type: "node_started"; nodeId: string }
   | { type: "node_content"; nodeId: string; content: string }
   | { type: "node_tool"; nodeId: string; tool: string }
   | { type: "node_finished"; nodeId: string; artifacts: Artifact[]; reply: string }
   | { type: "node_failed"; nodeId: string; error: string }
   | { type: "node_skipped"; nodeId: string }
-  | { type: "run_finished"; status: "succeeded" | "failed"; runId: string };
+  | { type: "run_finished"; status: "succeeded" | "failed" | "cancelled"; runId: string };
 
 /* ------------------------------------------------------------- validation */
 
@@ -211,6 +214,10 @@ export function savePipeline(input: {
   if (input.id) {
     const existing = getPipeline(input.id);
     if (!existing) throw new Error(`No pipeline with id ${input.id}.`);
+    // Renaming onto another pipeline's name would leave two rows answering
+    // to one name, and every by-name consumer resolves first-match.
+    const collision = listPipelines().find((p) => p.name === name && p.id !== input.id);
+    if (collision) throw new Error(`A pipeline named "${name}" already exists.`);
     db.prepare(`UPDATE pipelines SET name = ?, description = ?, graph = ? WHERE id = ?`).run(
       name,
       input.description?.trim() ?? existing.description,
@@ -219,11 +226,75 @@ export function savePipeline(input: {
     );
     return getPipeline(input.id)!;
   }
+  // No id but a name that already exists: the user means THAT pipeline.
+  // Blind inserts multiplied rows on every re-save, and every by-name
+  // consumer (run_pipeline, scheduled tasks) resolves first-match, so
+  // duplicates make "run X" ambiguous. Same name, same pipeline -- the
+  // shadowing rule skills and examples already follow.
+  const sameName = listPipelines().find((p) => p.name === name);
+  if (sameName) return savePipeline({ ...input, id: sameName.id });
+
   const id = randomUUID();
   db.prepare(
     `INSERT INTO pipelines (id, name, description, graph, created_at) VALUES (?, ?, ?, ?, ?)`,
   ).run(id, name, input.description?.trim() ?? "", graph, Date.now());
   return getPipeline(id)!;
+}
+
+/**
+ * Re-parents a draft run onto a just-saved pipeline, so "run it, see it
+ * work, then save it" produces a pipeline that is already vouched -- the
+ * green run the user watched IS the proof, and demanding a second identical
+ * run to earn trust would be ritual. Only orphan runs can be adopted: a run
+ * already belonging to a saved pipeline is history, not a transferable
+ * credential.
+ */
+export function adoptRun(runId: string, pipelineId: string): boolean {
+  return (
+    getDb()
+      .prepare(
+        `UPDATE pipeline_runs SET pipeline_id = ?
+         WHERE id = ? AND pipeline_id NOT IN (SELECT id FROM pipelines)`,
+      )
+      .run(pipelineId, runId).changes > 0
+  );
+}
+
+export interface PipelineRunRecord {
+  id: string;
+  startedAt: number;
+  finishedAt: number | null;
+  status: string;
+  nodeResults: NodeResult[];
+}
+
+/**
+ * The execution log: what each step actually replied and produced, straight
+ * from the run row the executor wrote. Without this a run's only trace was
+ * the status rings — "it worked" with no way to read WHAT worked.
+ */
+export function listRuns(pipelineId: string, limit = 10): PipelineRunRecord[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, started_at AS startedAt, finished_at AS finishedAt, status, node_results
+       FROM pipeline_runs WHERE pipeline_id = ? ORDER BY started_at DESC LIMIT ?`,
+    )
+    .all(pipelineId, limit) as Array<Record<string, unknown> & { node_results: string }>;
+  return rows.map((r) => {
+    let nodeResults: NodeResult[] = [];
+    try {
+      nodeResults = JSON.parse(r.node_results);
+    } catch {
+      // A malformed row loses its detail, never the listing.
+    }
+    return {
+      id: r.id as string,
+      startedAt: r.startedAt as number,
+      finishedAt: (r.finishedAt as number) ?? null,
+      status: r.status as string,
+      nodeResults,
+    };
+  });
 }
 
 export function deletePipeline(id: string): void {
@@ -244,10 +315,28 @@ function userExamplesDir(): string {
   return join(config.dataDir, "pipelines", "examples");
 }
 
-/** Shipped first, then the user's -- iterated in that order into a Map so a
- *  user example shadows a shipped one by name, the skills rule again. These
- *  feed the composer as few-shot guidance: patterns it adapts to the request
- *  at hand, never scripts it replays. */
+/** Whether this pipeline has ever finished a run with every step green.
+ *  The vouching rule for everything a pipeline is trusted with beyond its
+ *  own canvas: teaching the composer, being runnable by an agent. Same
+ *  reasoning as recipe promotion -- a graph that never worked would be
+ *  imitated verbatim forever. */
+export function hasSuccessfulRun(pipelineId: string): boolean {
+  const row = getDb()
+    .prepare(`SELECT 1 FROM pipeline_runs WHERE pipeline_id = ? AND status = 'succeeded' LIMIT 1`)
+    .get(pipelineId);
+  return row !== undefined;
+}
+
+/**
+ * The composer's few-shot library. Shipped examples are the quality floor;
+ * on top of them, **the user's own saved pipelines teach the composer --
+ * but only after a successful run**. There is no user-facing "example"
+ * concept: saving a flow and having it work is what makes Enio better at
+ * composing the next one, with nothing to manage. Iterated shipped → user
+ * files → saved pipelines into a Map, so later shadows earlier by name (the
+ * skills rule). Examples are guidance the composer adapts, never scripts it
+ * replays.
+ */
 export function loadPipelineExamples(): PipelineExample[] {
   const byName = new Map<string, PipelineExample>();
   for (const dir of [join(projectRoot, "examples", "pipelines"), userExamplesDir()]) {
@@ -263,6 +352,17 @@ export function loadPipelineExamples(): PipelineExample[] {
         // One malformed example must not take the library down.
       }
     }
+  }
+  for (const pipeline of listPipelines()) {
+    if (!hasSuccessfulRun(pipeline.id)) continue;
+    byName.set(pipeline.name, {
+      name: pipeline.name,
+      // The compose prompt rides in description; a hand-built pipeline falls
+      // back to its name, which stems well enough ("ai-news-brief").
+      prompt: pipeline.description || pipeline.name,
+      nodes: pipeline.nodes,
+      edges: pipeline.edges,
+    });
   }
   return [...byName.values()];
 }
@@ -440,26 +540,48 @@ function addressablePath(path: string): string {
 /* --------------------------------------------------------------- executor */
 
 const running = new Set<string>();
+const stopRequested = new Set<string>();
 
 export function pipelineIsRunning(id: string): boolean {
   return running.has(id);
 }
 
+/**
+ * Asks a running pipeline to stop; returns false when nothing is running.
+ * The stop lands at the next safe boundary: the in-flight node's model
+ * stream is aborted and the node fails with "Stopped by the user.", every
+ * node after it is skipped, and the run is recorded as cancelled -- which,
+ * like failed, never vouches the pipeline.
+ */
+export function stopPipeline(id: string): boolean {
+  if (!running.has(id)) return false;
+  stopRequested.add(id);
+  return true;
+}
+
+/** True while any pipeline run is executing nodes. The run_pipeline tool
+ *  refuses while set: a pipeline step starting another pipeline is the
+ *  compounding hand-off the one-hop invariant exists to prevent, wearing a
+ *  different hat. */
+let inPipelineRun = false;
+
 export async function runPipeline(
   pipeline: Pipeline,
   registry: Registry,
   emit: (event: RunEvent) => void,
-): Promise<{ runId: string; status: "succeeded" | "failed" }> {
+): Promise<{ runId: string; status: "succeeded" | "failed" | "cancelled" }> {
   const valid = validatePipeline(pipeline.nodes, pipeline.edges);
   if (!valid.ok) throw new Error(valid.reason);
   if (running.has(pipeline.id)) throw new Error("This pipeline is already running.");
   running.add(pipeline.id);
+  inPipelineRun = true;
 
   const runId = randomUUID();
   const db = getDb();
   db.prepare(
     `INSERT INTO pipeline_runs (id, pipeline_id, started_at, status) VALUES (?, ?, ?, 'running')`,
   ).run(runId, pipeline.id, Date.now());
+  emit({ type: "run_started", runId, pipelineId: pipeline.id });
 
   // One session for the whole run: every node's turn lands in the ordinary
   // trace tables, so a pipeline is inspectable exactly like a conversation.
@@ -470,11 +592,26 @@ export async function runPipeline(
 
   const results = new Map<string, NodeResult>();
   const skills = loadSkills().skills;
+  let wasStopped = false;
 
   try {
     for (const nodeId of valid.order) {
       const node = pipeline.nodes.find((n) => n.id === nodeId)!;
       const ability = getAbility(node.abilityId)!;
+
+      // A requested stop skips everything from here on; the results map keeps
+      // what already finished, so a stopped run is honest about how far it got.
+      if (stopRequested.has(pipeline.id)) {
+        results.set(nodeId, {
+          nodeId,
+          status: "skipped",
+          reply: "",
+          artifacts: [],
+          error: "stopped by the user",
+        });
+        emit({ type: "node_skipped", nodeId });
+        continue;
+      }
 
       // A failed upstream poisons everything downstream of it -- running a
       // step whose inputs never arrived would produce exactly the ungrounded
@@ -527,6 +664,9 @@ export async function runPipeline(
             onContent: (delta) => emit({ type: "node_content", nodeId, content: delta }),
             onToolStart: (name) => emit({ type: "node_tool", nodeId, tool: name }),
             onToolEnd: (name, output) => artifacts.push(...extractArtifacts(name, output)),
+            // Lets a stop land inside the node: the turn aborts its stream
+            // and throws, the node fails, everything downstream skips.
+            shouldStop: () => stopRequested.has(pipeline.id),
           },
           {
             specialist: ability.specialist,
@@ -549,11 +689,18 @@ export async function runPipeline(
       }
     }
   } finally {
+    wasStopped = stopRequested.has(pipeline.id);
     running.delete(pipeline.id);
+    stopRequested.delete(pipeline.id);
+    inPipelineRun = false;
   }
 
   const failed = [...results.values()].some((r) => r.status !== "finished");
-  const status = failed ? ("failed" as const) : ("succeeded" as const);
+  const status = wasStopped
+    ? ("cancelled" as const)
+    : failed
+      ? ("failed" as const)
+      : ("succeeded" as const);
   db.prepare(
     `UPDATE pipeline_runs SET finished_at = ?, status = ?, node_results = ? WHERE id = ?`,
   ).run(Date.now(), status, JSON.stringify([...results.values()]), runId);
@@ -561,4 +708,177 @@ export async function runPipeline(
 
   emit({ type: "run_finished", status, runId });
   return { runId, status };
+}
+
+/* ------------------------------------------------------------------ tool */
+
+/**
+ * run_pipeline: an agent runs one of the user's saved pipelines by NAME.
+ *
+ * Selection, never authoring -- the recipes rule. The eligible list is
+ * pipelines that have already run successfully (the same vouching that
+ * makes one teach the composer), so what the model can trigger is only a
+ * graph the user built and reality has tested. Each node still runs as an
+ * ordinary turn, which means every gate holds: this tool grants
+ * orchestration convenience, not one new capability.
+ *
+ * A function, not a const (the buildDesktopTools lesson): the eligible set
+ * changes as pipelines are saved and run, and descriptions are static, so
+ * eligibility is checked inside run().
+ */
+export function buildPipelineTools(registry: () => Registry): ToolDef[] {
+  return [
+    {
+      name: "run_pipeline",
+      description:
+        "Run one of the user's saved pipelines by name. Use when the user asks to run a pipeline or flow they created. Only pipelines that have run successfully before are eligible.",
+      origin: "builtin",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "The saved pipeline's exact name." },
+        },
+        required: ["name"],
+      },
+      async run(args: Record<string, unknown>) {
+        const wanted = String(args.name ?? "").trim().toLowerCase();
+        if (!wanted) return "Error: no pipeline name given.";
+        if (inPipelineRun) {
+          return "Refused: a pipeline step cannot start another pipeline.";
+        }
+
+        const eligible = listPipelines().filter((p) => hasSuccessfulRun(p.id));
+        const pipeline = eligible.find((p) => p.name.toLowerCase() === wanted);
+        if (!pipeline) {
+          const names = eligible.map((p) => p.name).join(", ") || "none yet";
+          return (
+            `No pipeline named "${args.name}" is eligible. Pipelines that can be run: ${names}. ` +
+            `(A pipeline becomes eligible after the user runs it successfully once.)`
+          );
+        }
+        if (pipelineIsRunning(pipeline.id)) {
+          return `"${pipeline.name}" is already running.`;
+        }
+
+        const lines: string[] = [];
+        const outcome = await runPipeline(pipeline, registry(), (event) => {
+          if (event.type === "node_finished") {
+            const paths = event.artifacts
+              .filter((a) => a.path)
+              .map((a) => a.path)
+              .join(", ");
+            lines.push(
+              `- step ${event.nodeId}: done${paths ? ` (${paths})` : ""} — ${event.reply.slice(0, 200).replace(/\s+/g, " ")}`,
+            );
+          } else if (event.type === "node_failed") {
+            lines.push(`- step ${event.nodeId}: FAILED — ${event.error}`);
+          } else if (event.type === "node_skipped") {
+            lines.push(`- step ${event.nodeId}: skipped`);
+          }
+        });
+        return (
+          `Pipeline "${pipeline.name}" ${outcome.status === "succeeded" ? "finished" : "failed"}.\n` +
+          lines.join("\n")
+        );
+      },
+    },
+  ];
+}
+
+/* --------------------------------------------------------- suggest drafts */
+
+/**
+ * The closed tool→ability map. Suggested drafts are assembled from what
+ * actually ran, but the assembly itself is a lookup, never a judgement --
+ * a tool with no entry drops out rather than guessing a home. The default
+ * prompt is a placeholder the user rewrites on the canvas; a draft is a
+ * starting point, not a finished flow.
+ */
+const TOOL_TO_ABILITY: Record<string, { ability: string; prompt: string }> = {
+  web_search: { ability: "web-search", prompt: "search the web for it" },
+  web_fetch: { ability: "web-search", prompt: "search the web for it" },
+  browse: { ability: "web-search", prompt: "search the web for it" },
+  search_code: { ability: "file-search", prompt: "find the relevant files" },
+  read_file: { ability: "file-search", prompt: "find the relevant files" },
+  list_dir: { ability: "file-search", prompt: "find the relevant files" },
+  write_file: { ability: "create-document", prompt: "write it up as a document" },
+  run_command: { ability: "develop-app", prompt: "run the build or script" },
+  search_email: { ability: "read-email", prompt: "find the relevant email" },
+  read_email: { ability: "read-email", prompt: "find the relevant email" },
+  send_email: { ability: "send-email", prompt: "draft the email" },
+  take_screenshot: { ability: "screenshot", prompt: "capture the screen" },
+  propose_plan: { ability: "control-mac", prompt: "propose the desktop steps" },
+  mac_recipe: { ability: "control-mac", prompt: "propose the desktop steps" },
+  open_app: { ability: "control-mac", prompt: "propose the desktop steps" },
+  remember: { ability: "remember", prompt: "remember the outcome" },
+};
+
+export interface PipelineDraft {
+  title: string;
+  reason: string;
+  nodes: PipelineNode[];
+  edges: PipelineEdge[];
+}
+
+/**
+ * One repeated tool sequence → one linear draft, or null when the mapping
+ * cannot make an honest one: fewer than two mapped steps is not a chain, and
+ * a chain the validator rejects (port mismatch) would open broken on the
+ * canvas. Consecutive duplicates collapse because read_file three times is
+ * one file-search step, not three.
+ */
+export function draftFromToolSequence(
+  title: string,
+  reason: string,
+  tools: string[],
+  seedPrompt?: string,
+): PipelineDraft | null {
+  const abilities: { ability: string; prompt: string }[] = [];
+  for (const tool of tools) {
+    const mapped = TOOL_TO_ABILITY[tool];
+    if (!mapped) continue;
+    if (abilities.at(-1)?.ability === mapped.ability) continue;
+    abilities.push(mapped);
+  }
+  if (abilities.length < 2) return null;
+
+  const nodes: PipelineNode[] = abilities.map((a, i) => ({
+    id: `n${i + 1}`,
+    abilityId: a.ability,
+    // The first step carries what the user actually asked those times; the
+    // rest are placeholders to rewrite.
+    prompt: i === 0 && seedPrompt ? seedPrompt : a.prompt,
+    position: { x: 80 + i * 260, y: 120 },
+  }));
+  const edges: PipelineEdge[] = nodes
+    .slice(1)
+    .map((n, i) => ({ from: nodes[i]!.id, to: n.id }));
+
+  if (!validatePipeline(nodes, edges).ok) return null;
+  return { title, reason, nodes, edges };
+}
+
+/**
+ * Mines the trace history for repeated tool sequences and returns them as
+ * unsaved drafts. On demand only -- analyse() embeds up to 2000 questions,
+ * which is seconds of work the user should choose to spend, never a
+ * background loop. The user names and saves a draft, and only a successful
+ * run afterwards makes it teach the composer or become runnable by agents:
+ * suggestion is the least trusted rung of the same ladder.
+ */
+export async function suggestPipelines(): Promise<PipelineDraft[]> {
+  const { analyse } = await import("./suggest.js");
+  const { proposals } = await analyse();
+  const drafts: PipelineDraft[] = [];
+  for (const p of proposals) {
+    if (!p.tools || p.tools.length < 2) continue;
+    const draft = draftFromToolSequence(
+      p.title.replace(/^Repeated sequence: /, "").trim(),
+      p.reason,
+      p.tools,
+      p.evidence[0],
+    );
+    if (draft) drafts.push(draft);
+  }
+  return drafts;
 }

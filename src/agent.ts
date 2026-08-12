@@ -72,7 +72,9 @@ You can look up live information: the weather where the user is, and the current
 
 Call one tool at a time and read the result before deciding what to do next.
 If a tool returns an error, read the error and adapt — do not call it again unchanged.
-When you have enough information, answer directly and concisely.`;
+When you have enough information, answer directly and concisely.
+
+${config.agentName} as a whole can: search and read the web (@researcher); find, read and edit files and run code (@coder); search and send email (@mail); use Mac apps — notes, calendar, reminders, alarms, screenshots (@operator); and remember things across conversations (@librarian). This turn you hold only the tools listed to you; the rest belong to other agents and are not yours to use or promise. When the request needs an ability you do not hold: do not do it, do not say you will do it, do not call any tool for it. Answer with one sentence that repeats the user's request after the right mention — asked to set an alarm you reply: ${config.agentName} does that — send "@operator set my alarm" to do it here. Asked to check email: send "@mail check my unread email". Never say ${config.agentName} cannot do something on that list.`;
 
 /** Used when routing is disabled, so behaviour is unchanged from single-agent mode. */
 const BASE_SYSTEM = `You are a helpful local assistant running entirely on the user's own machine.
@@ -97,6 +99,10 @@ export interface TurnHandlers {
   /** Context carried after any folding, so a client can show how full it is. */
   onContext?(usage: { tokens: number; budget: number }): void;
   onRoute?(specialist: string): void;
+  /** Polled at the model/tool boundaries; true aborts the turn with a throw.
+   *  Set by the pipeline executor so a user's stop lands mid-node instead of
+   *  waiting out a step that can take minutes. */
+  shouldStop?(): boolean;
 }
 
 /** Per-turn overrides from /skill and @mention syntax. */
@@ -377,6 +383,7 @@ async function completeWatched(
   tools: ReturnType<typeof toWireTool>[],
   handlers: Parameters<typeof complete>[2],
   opts?: Parameters<typeof complete>[4],
+  shouldStop?: () => boolean,
 ): Promise<Awaited<ReturnType<typeof complete>>> {
   const controller = new AbortController();
   let streamed = "";
@@ -386,6 +393,13 @@ async function completeWatched(
     onContent: (delta: string) => {
       streamed += delta;
       handlers?.onContent?.(delta);
+      // A user's stop aborts the stream itself, not just the next boundary —
+      // at local-model speeds a single step's answer can take minutes. The
+      // caller re-checks after the partial result returns and throws there.
+      if (shouldStop?.()) {
+        controller.abort();
+        return;
+      }
       if (streamed.length > 1500 && streamed.length - checkedAt > 600) {
         checkedAt = streamed.length;
         if (looksDegenerate(streamed)) controller.abort();
@@ -681,7 +695,15 @@ export async function runTurn(
         onReasoning: handlers.onReasoning,
         onContent: handlers.onContent,
       },
+      undefined,
+      handlers.shouldStop,
     );
+
+    // Checked AFTER the model returns, not only before the next call: a stop
+    // that aborted the stream would otherwise let the partial text pass for
+    // a finished answer -- and a stopped pipeline node must never count as
+    // finished, or a half-run could vouch the pipeline.
+    if (handlers.shouldStop?.()) throw new Error("Stopped by the user.");
 
     steps.push({
       seq: steps.length,

@@ -113,6 +113,41 @@ test("examples: shipped files load; user example shadows by name", async () => {
   assert.equal(mine[0]!.prompt, "my own version");
 });
 
+test("a pipeline teaches the composer only after it has run successfully", async () => {
+  const { getDb } = await import("./memory/db.js");
+  const saved = pipelines.savePipeline({
+    name: "teachable-flow",
+    description: "gather the facts and write them up",
+    nodes: [node("n1", "web-search"), node("n2", "create-document")],
+    edges: [{ from: "n1", to: "n2" }],
+  });
+
+  // Saved but never run: not an example. An abandoned draft must not shape
+  // how the next pipeline gets composed.
+  assert.ok(!pipelines.loadPipelineExamples().some((e) => e.name === "teachable-flow"));
+  assert.equal(pipelines.hasSuccessfulRun(saved.id), false);
+
+  // A failed run does not vouch either.
+  getDb()
+    .prepare(
+      `INSERT INTO pipeline_runs (id, pipeline_id, started_at, finished_at, status) VALUES ('r-f', ?, 1, 2, 'failed')`,
+    )
+    .run(saved.id);
+  assert.ok(!pipelines.loadPipelineExamples().some((e) => e.name === "teachable-flow"));
+
+  // One green run flips it: the flow becomes few-shot, carrying the compose
+  // prompt it was born from.
+  getDb()
+    .prepare(
+      `INSERT INTO pipeline_runs (id, pipeline_id, started_at, finished_at, status) VALUES ('r-s', ?, 3, 4, 'succeeded')`,
+    )
+    .run(saved.id);
+  assert.equal(pipelines.hasSuccessfulRun(saved.id), true);
+  const example = pipelines.loadPipelineExamples().find((e) => e.name === "teachable-flow");
+  assert.ok(example, "a succeeded pipeline joins the composer library");
+  assert.equal(example!.prompt, "gather the facts and write them up");
+});
+
 /** Scripted SSE model, the integration.test.ts idiom. */
 function scriptModel(turns: Array<{ content?: string; toolCall?: { name: string; args: unknown } }>) {
   const queue = [...turns];
@@ -259,4 +294,186 @@ test("executor: a failed node skips its downstream and persists partial results"
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("run_pipeline: selection from the vouched list, and never from inside a run", async () => {
+  const { buildRegistry } = await import("./tools/index.js");
+  const { getDb } = await import("./memory/db.js");
+  const registry = await buildRegistry();
+  const tool = registry.byName.get("run_pipeline")!;
+  assert.ok(tool, "run_pipeline is registered");
+
+  // Vouched target: one node, one green run on record.
+  const target = pipelines.savePipeline({
+    name: "vouched-target",
+    nodes: [node("n1", "prompt")],
+    edges: [],
+  });
+  getDb()
+    .prepare(
+      `INSERT INTO pipeline_runs (id, pipeline_id, started_at, finished_at, status) VALUES ('rv', ?, 1, 2, 'succeeded')`,
+    )
+    .run(target.id);
+
+  // Unvouched: saved, never run.
+  pipelines.savePipeline({ name: "never-ran", nodes: [node("n1", "prompt")], edges: [] });
+
+  // Unknown and unvouched names are refusals that teach the closed list.
+  let out = String(await tool.run({ name: "no-such-flow" }));
+  assert.match(out, /No pipeline named/);
+  assert.match(out, /vouched-target/, "the refusal lists what IS eligible");
+  out = String(await tool.run({ name: "never-ran" }));
+  assert.match(out, /No pipeline named/, "an unvouched pipeline is not selectable");
+
+  // A vouched one runs (scripted model answers the single prompt node).
+  scriptModel([{ content: "Step handled." }]);
+  out = String(await tool.run({ name: "vouched-target" }));
+  globalThis.fetch = originalFetch;
+  assert.match(out, /"vouched-target" finished/);
+  assert.match(out, /Step handled/);
+
+  // Recursion: a pipeline whose node tries to start another pipeline is
+  // refused by the tool itself -- compounding hand-offs wearing a different
+  // hat. The node's own turn still completes.
+  const outer = pipelines.savePipeline({
+    name: "outer-flow",
+    nodes: [{ id: "n1", abilityId: "prompt", prompt: "start the other one" }],
+    edges: [],
+  });
+  scriptModel([
+    { toolCall: { name: "run_pipeline", args: { name: "vouched-target" } } },
+    { content: "Could not chain." },
+  ]);
+  const events: RunEvent[] = [];
+  await pipelines.runPipeline(outer, registry, (e) => events.push(e));
+  globalThis.fetch = originalFetch;
+  const finished = events.find((e) => e.type === "node_finished") as
+    | Extract<RunEvent, { type: "node_finished" }>
+    | undefined;
+  assert.ok(finished, "the outer node still completes");
+  // The refusal reached the model as the tool result; the trace of this run
+  // must show no second pipeline run started.
+  // Two runs on record: the seeded one and the tool-driven one above. The
+  // recursion attempt must not have added a third.
+  const runs = getDb()
+    .prepare(`SELECT COUNT(*) AS n FROM pipeline_runs WHERE pipeline_id = ?`)
+    .get(target.id) as { n: number };
+  assert.equal(runs.n, 2, "the recursion attempt started no run");
+});
+
+test("suggested drafts: mapping is a lookup, duplicates collapse, junk drops", () => {
+  // The canonical research turn: search, fetch, write. Fetch collapses into
+  // the search step (same ability), leaving a two-step chain.
+  let draft = pipelines.draftFromToolSequence(
+    "look things up and write them down",
+    "ran 4 times",
+    ["web_search", "web_fetch", "write_file"],
+    "research MLX quantization and write a summary",
+  );
+  assert.ok(draft);
+  assert.deepEqual(
+    draft!.nodes.map((n) => n.abilityId),
+    ["web-search", "create-document"],
+  );
+  // The first step carries what was actually asked; edges are a linear chain.
+  assert.equal(draft!.nodes[0]!.prompt, "research MLX quantization and write a summary");
+  assert.deepEqual(draft!.edges, [{ from: "n1", to: "n2" }]);
+
+  // Unmapped tools drop out; if fewer than two steps survive there is no
+  // chain to suggest.
+  assert.equal(
+    pipelines.draftFromToolSequence("t", "r", ["current_time", "weather", "web_search"]),
+    null,
+  );
+
+  // Three reads are one file-search step, not three.
+  draft = pipelines.draftFromToolSequence("t", "r", [
+    "read_file",
+    "read_file",
+    "list_dir",
+    "write_file",
+  ]);
+  assert.deepEqual(
+    draft!.nodes.map((n) => n.abilityId),
+    ["file-search", "create-document"],
+  );
+
+  // A chain the validator would refuse (screenshot -> remember: no shared
+  // port) must not be offered as a draft.
+  assert.equal(pipelines.draftFromToolSequence("t", "r", ["take_screenshot", "remember"]), null);
+});
+
+test("same-name save updates; renaming onto a taken name is refused", () => {
+  const first = pipelines.savePipeline({
+    name: "one-name",
+    nodes: [node("n1", "prompt")],
+    edges: [],
+  });
+  // No id, same name: the user means the same pipeline. Before this rule
+  // every re-save quietly minted another row and by-name lookups became
+  // first-match lotteries.
+  const again = pipelines.savePipeline({
+    name: "one-name",
+    nodes: [node("n1", "prompt"), node("n2", "prompt")],
+    edges: [{ from: "n1", to: "n2" }],
+  });
+  assert.equal(again.id, first.id);
+  assert.equal(pipelines.listPipelines().filter((p) => p.name === "one-name").length, 1);
+  assert.equal(again.nodes.length, 2);
+
+  const other = pipelines.savePipeline({ name: "other-name", nodes: [node("n1", "prompt")], edges: [] });
+  assert.throws(
+    () => pipelines.savePipeline({ id: other.id, name: "one-name", nodes: other.nodes, edges: [] }),
+    /already exists/,
+  );
+});
+
+test("a running pipeline can be stopped; the run is cancelled, never vouched", async () => {
+  const { buildRegistry } = await import("./tools/index.js");
+  const registry = await buildRegistry();
+  const stoppable = pipelines.savePipeline({
+    name: "stoppable-flow",
+    nodes: [
+      { id: "n1", abilityId: "prompt", prompt: "first" },
+      { id: "n2", abilityId: "prompt", prompt: "second" },
+    ],
+    edges: [{ from: "n1", to: "n2" }],
+  });
+
+  // Nothing running yet: a stop is a clean refusal, not a queued intent.
+  assert.equal(pipelines.stopPipeline(stoppable.id), false);
+
+  scriptModel([{ content: "step one done" }, { content: "should never stream" }]);
+  const events: RunEvent[] = [];
+  const result = await pipelines.runPipeline(stoppable, registry, (e) => {
+    events.push(e);
+    // The user presses Stop while the first node is working.
+    if (e.type === "node_started" && e.nodeId === "n1") {
+      assert.equal(pipelines.stopPipeline(stoppable.id), true);
+    }
+  });
+  globalThis.fetch = originalFetch;
+
+  assert.equal(result.status, "cancelled");
+  assert.ok(events.some((e) => e.type === "node_skipped" && e.nodeId === "n2"));
+  assert.equal(pipelines.hasSuccessfulRun(stoppable.id), false, "a stopped run vouches nothing");
+});
+
+test("saving after a draft run adopts it, so the pipeline is born vouched", async () => {
+  const { getDb } = await import("./memory/db.js");
+  // A draft run: pipeline_id points at an ephemeral id no pipelines row has.
+  getDb()
+    .prepare(
+      `INSERT INTO pipeline_runs (id, pipeline_id, started_at, finished_at, status)
+       VALUES ('draft-run', 'ephemeral-draft-id', 1, 2, 'succeeded')`,
+    )
+    .run();
+  const saved = pipelines.savePipeline({ name: "born-vouched", nodes: [node("n1", "prompt")], edges: [] });
+  assert.equal(pipelines.hasSuccessfulRun(saved.id), false);
+  assert.equal(pipelines.adoptRun("draft-run", saved.id), true);
+  assert.equal(pipelines.hasSuccessfulRun(saved.id), true);
+  // A run that already belongs to a saved pipeline is history, not a
+  // transferable credential.
+  const other = pipelines.savePipeline({ name: "would-be-thief", nodes: [node("n1", "prompt")], edges: [] });
+  assert.equal(pipelines.adoptRun("draft-run", other.id), false);
 });

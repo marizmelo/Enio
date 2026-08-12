@@ -435,7 +435,9 @@ async function main(): Promise<void> {
         const when = next.ok ? next.next.toISOString().replace("T", " ").slice(0, 16) : "invalid";
         const state = t.enabled ? `next ${when}` : "disabled";
         console.log(`${t.name.padEnd(24)} ${t.schedule.padEnd(16)} ${state}`);
-        console.log(`  ${t.prompt.replace(/\s+/g, " ").slice(0, 90)}`);
+        console.log(
+          `  ${t.pipeline ? `pipeline: ${t.pipeline}` : t.prompt.replace(/\s+/g, " ").slice(0, 90)}`,
+        );
         if (t.lastStatus) {
           const ago = t.lastRunAt ? new Date(t.lastRunAt).toISOString().slice(0, 16).replace("T", " ") : "?";
           console.log(`  last: ${t.lastStatus} at ${ago}${t.lastError ? ` — ${t.lastError}` : ""}`);
@@ -453,11 +455,12 @@ async function main(): Promise<void> {
       };
 
       if (action === "add") {
-        if (!name) { console.error(`Usage: enio task add <name> --cron "0 9 * * 1" --prompt "..."`); process.exit(1); }
+        if (!name) { console.error(`Usage: enio task add <name> --cron "0 9 * * 1" --prompt "..." | --pipeline <name>`); process.exit(1); }
         try {
           const task = addTask({
             name,
             prompt: flag("--prompt") ?? "",
+            pipeline: flag("--pipeline") ?? null,
             schedule: flag("--cron") ?? "0 9 * * 1",
             specialist: flag("--specialist") ?? null,
           });
@@ -1148,7 +1151,7 @@ enio — a local agent with tools and persistent memory
   enio examples           list saved answer examples
 
   enio tasks               list scheduled tasks
-  enio task add NAME --cron "0 9 * * 1" --prompt "..."
+  enio task add NAME --cron "0 9 * * 1" --prompt "..." | --pipeline NAME
   enio task run|rm|enable|disable|runs NAME
   enio daemon              run the scheduler
   enio suggest [--write]   find what is worth automating

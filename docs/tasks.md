@@ -6,19 +6,28 @@ nav_order: 12
 
 # Scheduled tasks
 
-A task is a prompt plus a cron expression. It runs through the **ordinary turn
-path** — same agents, same memory, same tracing — so a scheduled run is
-inspectable exactly like a conversation, and anything it learns is remembered.
+A task is a prompt — or a pipeline — plus a cron expression. A prompt task
+runs through the **ordinary turn path** — same agents, same memory, same
+tracing — so a scheduled run is inspectable exactly like a conversation, and
+anything it learns is remembered.
 
 ```sh
 enio task add weekly-review --cron "0 9 * * 1" \
   --prompt "Summarise what I worked on this week and what's still open"
+
+enio task add news-daily --cron "0 9 * * *" --pipeline ai-news-brief
 
 enio tasks                    # what's scheduled, and when next
 enio task run weekly-review   # run it now, ignoring the schedule
 enio task runs weekly-review  # recent runs and their outcomes
 enio daemon                   # the scheduler; leave it running
 ```
+
+A pipeline task fires the saved [pipeline](pipelines.md)
+directly: no model decides whether to run it and no router picks who — the
+clock triggers the graph you built, and only the steps inside involve the
+model. The pipeline must already be saved when you create the task, and a
+`--prompt` task can pin an agent with `--specialist`.
 
 The daemon re-reads tasks every 30 seconds, so adding or disabling one takes
 effect without a restart.

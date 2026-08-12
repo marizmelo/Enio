@@ -5,7 +5,7 @@ import { Message } from "@/components/Message";
 import { Composer } from "@/components/Composer";
 import { EmptyState } from "@/components/EmptyState";
 import { streamTurn } from "@/lib/agent";
-import { appendMention, attachedFiles, fetchCapabilities } from "@/lib/capabilities";
+import { appendMention, attachedFiles, enableDesktopControl, fetchCapabilities } from "@/lib/capabilities";
 import { FilesDialog } from "@/components/FilesDialog";
 import { FileViewer } from "@/components/FileViewer";
 import {
@@ -519,6 +519,11 @@ export function App() {
               composerRef.current?.focus?.();
             }}
             onOpenPipelines={() => setPipelinesOpen(true)}
+            onEnableDesktop={async () => {
+              await enableDesktopControl();
+              // The registry just changed shape; the tiles follow it.
+              setCapabilities(await fetchCapabilities());
+            }}
             disabled={!backendReady}
           />
         ) : (

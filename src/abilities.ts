@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { desktopEnabled } from "./tools/desktop.js";
 import { loadSkills } from "./skills.js";
 import { SPECIALISTS } from "./specialists.js";
 import type { Registry } from "./tools/index.js";
@@ -71,10 +72,29 @@ export interface Ability {
   requiredServer?: string;
   /** Not buildable yet at all -- the tile is a signpost. */
   future?: boolean;
+  /** Real ability, but not a launcher tile -- it exists for the pipeline
+   *  canvas and composer (e.g. a bare instruction step). */
+  launcherHidden?: boolean;
   setup?: AbilitySetup;
 }
 
 export const ABILITIES: Ability[] = [
+  {
+    // A pipeline step that is nothing but an instruction: shape, summarize
+    // or decide from what flowed in. Hidden from the launcher (there it
+    // would just be Chat again) but first-class on the canvas -- it is what
+    // lets a flow say "and now do THIS with the results" between two
+    // tool-bearing steps.
+    id: "prompt",
+    title: "Prompt",
+    description: "A plain instruction — shape, summarize or decide from what the previous steps produced.",
+    icon: "pencil-line",
+    specialist: "generalist",
+    promptTemplate: "___",
+    inputs: ["text", "document", "image"],
+    outputs: ["text"],
+    launcherHidden: true,
+  },
   {
     id: "chat",
     title: "Chat",
@@ -226,7 +246,10 @@ export const ABILITIES: Ability[] = [
     requiredFlag: "desktopEnabled",
     setup: {
       summary: "Desktop control is off until you opt in.",
-      steps: ["Set ENIO_DESKTOP=1 and restart Enio.", "macOS will ask for Automation access per app."],
+      steps: [
+        "Click Enable desktop control below (or set ENIO_DESKTOP=1).",
+        "macOS will still ask for Automation access per app.",
+      ],
       docs: "docs/mac-control.md",
     },
   },
@@ -248,7 +271,10 @@ export const ABILITIES: Ability[] = [
     requiredFlag: "desktopEnabled",
     setup: {
       summary: "Screenshots ride the desktop-control opt-in.",
-      steps: ["Set ENIO_DESKTOP=1 and restart Enio.", "Grant Screen Recording when macOS asks."],
+      steps: [
+        "Click Enable desktop control below (or set ENIO_DESKTOP=1).",
+        "Grant Screen Recording when macOS asks.",
+      ],
       docs: "docs/mac-control.md",
     },
   },
@@ -365,7 +391,7 @@ export function abilityAvailability(
   if (ability.future) return "future";
   if (ability.requiredTools?.some((t) => !registry.byName.has(t))) return "setup";
   if (ability.requiredFlag === "browserAct" && !config.browserAct) return "setup";
-  if (ability.requiredFlag === "desktopEnabled" && !config.desktopEnabled) return "setup";
+  if (ability.requiredFlag === "desktopEnabled" && !desktopEnabled()) return "setup";
   if (
     ability.requiredServer &&
     !servers.some((s) => s.toLowerCase().startsWith(ability.requiredServer!))

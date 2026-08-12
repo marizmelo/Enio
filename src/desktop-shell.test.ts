@@ -4,8 +4,16 @@
 // nothing ever asserted the enabled side of the gate.
 process.env.ENIO_DESKTOP = "1";
 
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
+
+// Machine-wide state: with the env var deleted (the off-side tests below),
+// desktopEnabled() falls through to the recorded-click consent file, which
+// on a developer's real machine may say yes. Tests must read scratch.
+process.env.ENIO_MACHINE_STATE_DIR = join(mkdtempSync(join(tmpdir(), "enio-dshell-")), "machine");
 
 const { checkCommand } = await import("./tools/shell.js");
 const { desktopEnabled, DESKTOP_COMMANDS } = await import("./tools/desktop.js");
@@ -47,7 +55,8 @@ describe("desktop mode opens the shell allowlist", () => {
   });
 });
 
-const { desktopTools } = await import("./tools/desktop.js");
+const { buildDesktopTools } = await import("./tools/desktop.js");
+const desktopTools = buildDesktopTools();
 const applescript = desktopTools.find((t) => t.name === "run_applescript");
 
 describe("AppleScript arguments", () => {

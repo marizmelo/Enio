@@ -8,6 +8,9 @@ import { before, test } from "node:test";
 // developer's real data dir or workspace.
 const scratch = mkdtempSync(join(tmpdir(), "enio-project-"));
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
+// Machine-wide state (model choice, desktop-control consent) must never be
+// read from or written to the developer's real machine by a test.
+process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");
 process.env.ENIO_DATA_DIR = join(scratch, "data");
 // The overlay test drives a full turn with a scripted model; routing would
 // spend the script on a classification call. Set before any import of config.

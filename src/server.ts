@@ -32,7 +32,7 @@ import {
   startDownload,
 } from "./model-download.js";
 import { switchModel } from "./runtime.js";
-import { autoRunEnabled, setAutoRun } from "./automation.js";
+import { autoRunEnabled, setAutoRun, setDesktopControl } from "./automation.js";
 import { revisePlan } from "./revise.js";
 import {
   approvePlan,
@@ -64,15 +64,19 @@ import {
 } from "./memory/store.js";
 import { ABILITIES, abilityAvailability } from "./abilities.js";
 import {
+  adoptRun,
   composePipeline,
   deletePipeline,
   getPipeline,
   listPipelines,
-  loadPipelineExamples,
+  listRuns,
   pipelineIsRunning,
   runPipeline,
-  saveExample,
   savePipeline,
+  stopPipeline,
+  suggestPipelines,
+  type PipelineEdge,
+  type PipelineNode,
 } from "./pipelines.js";
 import { ensureToken, isAuthorized } from "./auth.js";
 import {
@@ -116,7 +120,15 @@ export async function serve(): Promise<void> {
   // toward keeping it alive -- and shuts it down if it is the last one out.
   claimModelServer();
 
-  const registry = await buildRegistry((m) => console.log(m));
+  // A ref rather than a const: enabling desktop control at runtime changes
+  // which tools exist, and the registry is otherwise built once. Each request
+  // dereferences, so a rebuild takes effect on the next request with no
+  // restart.
+  const registryRef = { current: await buildRegistry((m) => console.log(m)) };
+  const rebuildRegistry = async () => {
+    registryRef.current = await buildRegistry((m) => console.log(m));
+    return registryRef.current.all.length;
+  };
   const sessionId = startSession();
   setMemorySession(sessionId);
   setPlanSession(sessionId);
@@ -124,7 +136,7 @@ export async function serve(): Promise<void> {
   const token = ensureToken();
 
   const server = createServer((req, res) => {
-    handle(req, res, registry, sessionId, token).catch((err) => {
+    handle(req, res, registryRef.current, sessionId, token, rebuildRegistry).catch((err) => {
       sendJson(res, 500, { error: { message: (err as Error).message } });
     });
   });
@@ -132,7 +144,7 @@ export async function serve(): Promise<void> {
   server.listen(config.agentPort, config.agentHost, () => {
     const shown = config.agentHost === "0.0.0.0" ? "<this-machine>" : config.agentHost;
     console.log(`\nenio listening on http://${shown}:${config.agentPort}/v1`);
-    console.log(`  ${registry.all.length} tools · upstream ${config.modelBaseUrl}`);
+    console.log(`  ${registryRef.current.all.length} tools · upstream ${config.modelBaseUrl}`);
     console.log(`\n  API key: ${token}`);
     console.log(`  ${DIM}paste that into any OpenAI-compatible client's API key field${RESET}`);
 
@@ -194,6 +206,7 @@ async function handle(
   registry: Registry,
   sessionId: string,
   token: string,
+  rebuildRegistry?: () => Promise<number>,
 ): Promise<void> {
   const url = new URL(req.url ?? "/", `http://127.0.0.1:${config.agentPort}`);
 
@@ -302,6 +315,8 @@ async function handle(
         inputs: a.inputs,
         outputs: a.outputs,
         availability: abilityAvailability(a, registry, ctx.servers),
+        launcherHidden: a.launcherHidden ?? false,
+        requiredFlag: a.requiredFlag ?? null,
         setup: a.setup ?? null,
       })),
     });
@@ -985,10 +1000,56 @@ async function handle(
   if (url.pathname === "/pipelines" && req.method === "POST") {
     try {
       const body = JSON.parse((await readBody(req)) || "{}");
-      sendJson(res, 200, { pipeline: savePipeline(body) });
+      const pipeline = savePipeline(body);
+      // The dialog's run-then-save flow: saving after a watched draft run
+      // brings that run along, so the new pipeline is born vouched.
+      if (typeof body?.adoptRunId === "string") adoptRun(body.adoptRunId, pipeline.id);
+      sendJson(res, 200, { pipeline });
     } catch (err) {
       sendJson(res, 400, { error: { message: (err as Error).message } });
     }
+    return;
+  }
+
+  if (url.pathname === "/pipelines/run-draft" && req.method === "POST") {
+    // Runs an unsaved graph: the canvas proves a flow works BEFORE it earns
+    // a name. The ephemeral id exists only so the run can be stopped and,
+    // if the user saves afterwards, adopted. Every executor guard (running
+    // set, recursion flag, node gates) applies exactly as for a saved run.
+    let draft: { nodes: PipelineNode[]; edges: PipelineEdge[] };
+    try {
+      draft = JSON.parse((await readBody(req)) || "{}");
+    } catch {
+      sendJson(res, 400, { error: { message: "Body must be JSON." } });
+      return;
+    }
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+    try {
+      await runPipeline(
+        {
+          id: randomUUID(),
+          name: "(draft)",
+          description: "",
+          nodes: draft.nodes ?? [],
+          edges: draft.edges ?? [],
+          createdAt: Date.now(),
+          lastRunAt: null,
+        },
+        registry,
+        (event) => {
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+        },
+      );
+    } catch (err) {
+      res.write(
+        `data: ${JSON.stringify({ type: "run_finished", status: "failed", error: (err as Error).message })}\n\n`,
+      );
+    }
+    res.end();
     return;
   }
 
@@ -1005,16 +1066,27 @@ async function handle(
     return;
   }
 
-  if (url.pathname === "/pipelines/examples" && req.method === "GET") {
-    sendJson(res, 200, {
-      examples: loadPipelineExamples().map((e) => ({ name: e.name, prompt: e.prompt })),
-    });
+  if (url.pathname === "/pipelines/suggest" && req.method === "POST") {
+    // Mines the trace history for repeated tool sequences. POST, not GET,
+    // and user-triggered only: analyse() embeds up to 2000 questions, which
+    // is real work the user chooses to spend, never a background loop.
+    // Returns unsaved drafts -- the canvas is where they become pipelines.
+    sendJson(res, 200, { drafts: await suggestPipelines() });
     return;
   }
 
-  const pipeMatch = url.pathname.match(/^\/pipelines\/([0-9a-f-]{8,})(\/(run|example))?$/);
+  const pipeMatch = url.pathname.match(/^\/pipelines\/([0-9a-f-]{8,})(\/(run|stop|runs))?$/);
   if (pipeMatch) {
     const [, id, , sub] = pipeMatch;
+    if (req.method === "POST" && sub === "stop") {
+      // Before the row lookup: a draft run has no pipelines row, but its id
+      // is just as stoppable.
+      const stopped = stopPipeline(id!);
+      sendJson(res, stopped ? 200 : 409, stopped
+        ? { stopped: true }
+        : { error: { message: "That pipeline is not running." } });
+      return;
+    }
     const pipeline = getPipeline(id!);
     if (!pipeline) {
       sendJson(res, 404, { error: { message: `No pipeline with id ${id}.` } });
@@ -1022,6 +1094,10 @@ async function handle(
     }
     if (req.method === "GET" && !sub) {
       sendJson(res, 200, { pipeline });
+      return;
+    }
+    if (req.method === "GET" && sub === "runs") {
+      sendJson(res, 200, { runs: listRuns(id!) });
       return;
     }
     if (req.method === "POST" && !sub) {
@@ -1036,21 +1112,6 @@ async function handle(
     if (req.method === "DELETE" && !sub) {
       deletePipeline(id!);
       sendJson(res, 200, { deleted: id });
-      return;
-    }
-    if (req.method === "POST" && sub === "example") {
-      try {
-        const body = JSON.parse((await readBody(req)) || "{}");
-        saveExample({
-          name: String(body?.name ?? pipeline.name),
-          prompt: String(body?.prompt ?? ""),
-          nodes: pipeline.nodes,
-          edges: pipeline.edges,
-        });
-        sendJson(res, 200, { saved: true });
-      } catch (err) {
-        sendJson(res, 400, { error: { message: (err as Error).message } });
-      }
       return;
     }
     if (req.method === "POST" && sub === "run") {
@@ -1078,6 +1139,22 @@ async function handle(
       res.end();
       return;
     }
+  }
+
+  /**
+   * The launcher's "Enable desktop control" button. The same consent
+   * ENIO_DESKTOP=1 records, made one deliberate click instead of a shell —
+   * persisted machine-wide, still followed by macOS's own per-app prompts.
+   * The registry rebuilds so the desktop tools exist on the next request
+   * without a restart. Behind auth like everything else; no tool reaches
+   * this route.
+   */
+  if (req.method === "POST" && url.pathname === "/settings/desktop") {
+    const body = JSON.parse((await readBody(req)) || "{}");
+    setDesktopControl(body?.enabled === true);
+    const tools = rebuildRegistry ? await rebuildRegistry() : registry.all.length;
+    sendJson(res, 200, { enabled: desktopEnabled(), tools });
+    return;
   }
 
   if (req.method === "GET" && url.pathname === "/project") {

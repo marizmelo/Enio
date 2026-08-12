@@ -708,6 +708,92 @@ sequence: a → b → c" proposals as suggested pipelines -- it is literally
 mined pipelines, but `analyse()` embeds up to 2,000 questions per call and
 needs caching before it can sit behind an HTTP endpoint.
 
+### Pipelines grow up (August 2026)
+
+Using the canvas surfaced that "pipelines" and "examples" read as two
+concepts when they are one. The fix deletes the concept rather than
+explaining it.
+
+**Examples collapsed into pipelines.** Rejected: a managed example library
+("Save as example", a second list, a second file store). Kept: **a saved
+pipeline that has run successfully teaches the composer** -- mapped into the
+few-shot set with its compose prompt (stored as `description`) as the
+example's prompt. The vouching is the recipes promotion rule applied to
+flows: saving expresses intent, a green run is what proves the shape, and an
+abandoned draft or a flow that only ever failed must not steer the next
+compose. `saveExample()` survives internally (shipped examples, tests); the
+user-facing surface is gone.
+
+**`run_pipeline` is selection, never authoring.** The generalist's sixth
+tool runs a saved pipeline by name -- eligible iff `hasSuccessfulRun`, so
+what the model can trigger is only a graph the user built and reality has
+tested. Unknown or unvouched names get a refusal that lists what is
+eligible (the closed-list transformation, again). A module-level
+`inPipelineRun` flag makes the tool refuse inside a run: a pipeline step
+starting a pipeline is agent-to-agent conversation wearing a different hat,
+and one-hop is not negotiable. The tool needs the registry the turn runs
+with, which is a chicken-and-egg at build time -- solved by a deferred
+getter (`registryBox`), the same shape as `buildDesktopTools()` being a
+function. Live probing caught the router gap the tests could not: "run the
+quarterly-taxes pipeline" routed to the *coder* ("pipeline" reads as CI),
+who has no run_pipeline and denied the capability exists -- the alarm
+lesson again, fixed the same way, with a router example.
+
+**The scheduler triggers pipelines deterministically.** A task is now a
+prompt or a pipeline (exactly one, validated at add time). The pipeline path
+calls `runPipeline` directly -- no model and no router between the clock and
+the graph, because "run what I built, at 9am" contains no judgement for a
+model to get wrong. The steps inside still run as ordinary turns, so the
+gates hold on the scheduled path identically.
+
+**Bug fixed in passing:** `task.specialist` was stored, listed, accepted by
+the CLI -- and never passed to `runTurn`. Every pinned task specialist was
+silently ignored since tasks existed; the trace's `specialist` column is
+what caught it and what the regression test asserts on.
+
+**Suggest-from-history resolved by making the user the trigger.** The
+caching condition recorded above dissolved: embeddings work now (seconds for
+2,000 questions) and the button runs `analyse()` on click, never on a loop.
+Mined "Repeated sequence" proposals map to draft graphs through a closed
+tool→ability lookup -- unmapped tools drop, consecutive duplicates collapse,
+under two steps is no chain, and a draft the validator would refuse is not
+offered. Drafts open unsaved: naming and saving is the user's act, and only
+a successful run afterwards lets the draft teach the composer or become
+runnable by agents. Suggestion is the least trusted rung of one ladder:
+suggested → saved → proven.
+
+**Run first, save after** (from first real use, same day). The original
+order -- name it, save it, then run -- put the commitment before the
+evidence, and users re-saving "the same" pipeline minted duplicate rows
+because a no-id save always inserted. Three connected fixes:
+
+- *Draft runs.* `POST /pipelines/run-draft` executes an unsaved graph under
+  an ephemeral id. Save unlocks only after a run has executed, and saving
+  adopts the watched run (`adoptRun`, orphan runs only -- a run owned by a
+  saved pipeline is history, not a transferable credential), so a pipeline
+  saved after a green run is born vouched. Demanding a second identical run
+  to earn composer-teaching would have been ritual.
+- *Same name, same pipeline.* A no-id save whose name already exists updates
+  that row (the skills shadowing rule); renaming onto a taken name is
+  refused. Rejected: a UNIQUE constraint erroring at the user -- the user
+  saying the same name twice means the same pipeline, not a mistake.
+- *Stop.* `stopPipeline(id)` + a `shouldStop` handler polled at the turn's
+  model/tool boundaries and inside the stream watcher, so a stop aborts the
+  in-flight node mid-stream rather than waiting out a minutes-long step. The
+  turn then *throws* (checked again after the partial result returns --
+  otherwise the aborted stream's partial text would pass for a finished
+  node, and a half-run could vouch a pipeline). Runs end `cancelled`,
+  which vouches nothing. Before this existed, a stuck run locked Save, Run
+  and the dialog's close button simultaneously -- reported as three bugs,
+  all one missing capability.
+
+**The execution log is the run row, shown.** `pipeline_runs.node_results`
+always stored each step's reply and artifacts; nothing displayed it, so a
+finished run communicated only status rings. `GET /pipelines/:id/runs` +
+opening a saved pipeline overlays its latest run (statuses, per-step output
+on click, produced file paths). No new storage -- the gap was presentation,
+not data.
+
 ---
 
 ## Bugs that testing found
