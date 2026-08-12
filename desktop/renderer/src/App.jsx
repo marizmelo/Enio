@@ -232,6 +232,7 @@ export function App() {
       // Rebuilt server-side from the trace, so a resumed reply keeps the
       // badges and the pages it read rather than arriving as bare text.
       tools: m.tools ?? [],
+      agent: m.agent ?? null,
       sources: m.sources ?? [],
       restored: true,
     }));
@@ -410,6 +411,7 @@ export function App() {
       let assistant = "";
       const tools = [];
       const widgets = [];
+      let agent = null;
       let thinking = 0;
       // Text streamed but not yet handed to the voice.
       let unspoken = "";
@@ -428,6 +430,8 @@ export function App() {
         )) {
           if (event.type === "tool") {
             tools.push(event.name);
+          } else if (event.type === "route") {
+            agent = event.route;
           } else if (event.type === "sources") {
             sources.push({ tool: event.tool, items: event.items });
           } else if (event.type === "widget") {
@@ -462,6 +466,7 @@ export function App() {
               content: assistant,
               tools: [...tools],
               widgets: [...widgets],
+              agent,
               sources: sources.map((s) => ({ ...s })),
               thinking,
               notices: [...notices],

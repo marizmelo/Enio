@@ -865,6 +865,21 @@ vision-model *reading* and the pixels are the check on it — the same session
 that motivated this watched the reader claim enio was visible in a capture
 it had just been hidden from. Live-stream-only, like clock and weather.
 
+**Provenance generalises: the frame states who answered and what was read,
+because the reply cannot.** The same measurement that killed the MCP prompt
+rule (below) settled the pattern for agents and files. The routed agent now
+streams to the desktop (`: route` on the SSE comment channel — it always
+reached the CLI and never the client most people use) and renders as a chip
+the model has no hand in; it is restored from the trace's specialist column,
+'single' rows skipped. And read_file/read_image results become source rows
+beside the web pages — taken from the call's own path argument, not parsed
+from output, with failed reads excluded because citing a document the turn
+could not read manufactures exactly the false grounding the footer exists to
+catch. Listing tools (list_dir, search_code) stay silent: they name files
+without reading them. Rejected: asking the reply to disclose any of this —
+the resume-fabrication incident was a file-provenance failure, and the reply
+was the thing doing the fabricating.
+
 **MCP results carry their provenance, and the UI is the channel that keeps
 it.** Every MCP tool result reaches the model as `FROM MCP (<server>): …`,
 stamped at the `executeCall` chokepoint rather than in the MCP client — the

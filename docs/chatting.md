@@ -9,17 +9,17 @@ nav_order: 3
 ## `/skill` and `@mention`
 
 Two ways to override the model's judgement — useful precisely *because* the
-model is small. The router picking a specialist, or the model deciding a skill
+model is small. The router picking an agent, or the model deciding a skill
 applies, are exactly the calls it gets wrong.
 
 ```
 /commit-message                  run a skill directly, no deciding involved
-@coder why does this fail        force a specialist, skipping the router
+@coder why does this fail        force an agent, skipping the router
 summarise @notes/plan.md         attach a workspace file
 @github what changed this week   allow an MCP server's tools this turn
 ```
 
-Tab completes all of it — `/` lists skills, `@` lists specialists, MCP servers
+Tab completes all of it — `/` lists skills, `@` lists agents, MCP servers
 and workspace files.
 
 An invoked skill is injected whole rather than offered through `read_skill`.
@@ -127,6 +127,14 @@ extracted before the model sees it, so questions are answered from the actual
 document. A scanned PDF with no text layer says so honestly, and other binary
 files are named as unreadable rather than decoded into garbage — garbage in
 the prompt is what used to invite the model to invent the contents.
+
+**Every reply says who answered and what it read.** The chip above a reply
+— `@researcher`, `@coder` — is the agent the router picked, stated by the
+harness rather than by the reply, so it stays true even when the text does
+not. The sources under a reply now include files as well as pages: a turn
+that read `thesis/chapter2.md` lists it, click opens it in the viewer. Both
+exist for the same reason as the MCP badge — at this model size the sentence
+cannot be trusted to say where its content came from, so the frame says it.
 
 **Specifics are checked against their sources.** On any turn that read
 material — files, tool results, attachments — the hard specifics in the reply

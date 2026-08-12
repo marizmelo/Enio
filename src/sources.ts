@@ -16,16 +16,37 @@
  */
 
 export interface Source {
+  /** Empty for a file: there is nothing to open in a browser. */
   url: string;
   title: string;
   snippet?: string;
+  /** Web unless stated. A file row opens in the viewer, not the browser. */
+  kind?: "web" | "file";
+  /** The path as the tools address it, for a file source. */
+  path?: string;
 }
 
 /** Only these tools reach the web, so only these can contribute a source. */
 const WEB_TOOLS = new Set(["web_search", "web_fetch", "web_fetch_rendered", "browse"]);
 
+/**
+ * Tools that put the contents of a named file in front of the model.
+ *
+ * A closed list for the same reason WEB_TOOLS is one: a tool that merely
+ * *lists* files (list_dir, search_code) did not hand over any content, and
+ * citing it would claim a reading that never happened. Naming the file is the
+ * point -- "read_file" on a badge says a file was read, not which one, and
+ * "which document did this come from" is exactly the question a paragraph
+ * about a document cannot answer for itself.
+ */
+const FILE_TOOLS = new Set(["read_file", "read_image"]);
+
 export function isWebTool(name: string): boolean {
   return WEB_TOOLS.has(name);
+}
+
+export function isFileTool(name: string): boolean {
+  return FILE_TOOLS.has(name);
 }
 
 /**
@@ -44,6 +65,15 @@ export function extractSources(
   args: Record<string, unknown>,
   result: string,
 ): Source[] {
+  // Taken from the call rather than parsed back out of the text -- the same
+  // argument web_fetch makes below, and it stays right when the read failed
+  // and the result is an explanation instead of contents.
+  if (isFileTool(name)) {
+    const path = typeof args.path === "string" ? args.path.trim() : "";
+    if (!path || fileUnusable(result)) return [];
+    return [{ kind: "file", path, url: "", title: path }];
+  }
+
   if (!isWebTool(name) || !result) return [];
 
   if (name === "web_search") {
@@ -93,6 +123,25 @@ const UNUSABLE = [
 
 function unusable(result: string): boolean {
   return UNUSABLE.some((pattern) => pattern.test(result));
+}
+
+/**
+ * A read that produced no readable content is not a source.
+ *
+ * Citing an unreadable PDF or a missing file would make an answer look
+ * grounded in a document the turn never actually read -- the precise failure
+ * this footer exists to catch, so it must not manufacture it.
+ */
+const FILE_UNUSABLE = [
+  /^Error:/m,
+  /is a binary file/,
+  /is a scanned PDF/,
+  /could not be parsed/,
+  /^ENOENT|no such file/i,
+];
+
+function fileUnusable(result: string): boolean {
+  return !result || FILE_UNUSABLE.some((pattern) => pattern.test(result));
 }
 
 function firstUrl(text: string): string | null {

@@ -86,7 +86,7 @@ on exit, because it's a shared service and something else may be using it.
 You have one file, notes.md.
 ```
 
-`→ coder` is the router choosing a specialist. `⚒` lines are tools running.
+`→ coder` is the router choosing an agent. `⚒` lines are tools running.
 
 Files and shell are locked to `~/enio-workspace`. Paths outside it are refused
 and shell commands go through an allowlist, so put things you want it to work

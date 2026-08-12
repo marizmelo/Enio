@@ -16,6 +16,7 @@ import { renderMarkdownish } from "@/lib/markdown";
 export function Message({
   role,
   content,
+  agent = null,
   tools = [],
   widgets = [],
   sources = [],
@@ -33,8 +34,18 @@ export function Message({
   return (
     <div className={cn("flex flex-col gap-1.5", isUser ? "items-end" : "items-start")}>
       {isUser && files.length > 0 && <AttachmentPreviews names={files} onOpen={onOpenFile} />}
-      {tools.length > 0 && (
+      {(agent || tools.length > 0) && (
         <div className="flex flex-wrap gap-1">
+          {/* Who answered, stated by the harness rather than by the reply --
+              the router's pick decides which tools even existed this turn,
+              so a reply that could not do something is only explicable with
+              it. Same rule as the MCP badge: provenance a model cannot
+              misattribute. */}
+          {agent && (
+            <Badge variant="outline" className="text-[11px]">
+              @{agent}
+            </Badge>
+          )}
           {countCalls(tools).map(({ name, calls }) => {
             // `server__tool` is the wire format every MCP tool is named by
             // (wireName in tools/mcp.ts); no built-in contains the separator,
@@ -103,7 +114,7 @@ export function Message({
         <MessageActions content={content} canSpeak={!isUser} />
       )}
 
-      <SourcesFooter sources={sources} />
+      <SourcesFooter sources={sources} onOpenFile={onOpenFile} />
 
       {/* Addressed to the reader, not the model: how the attachment was read
           and what would read it better. Kept out of the prompt on purpose --

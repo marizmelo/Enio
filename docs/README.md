@@ -31,7 +31,7 @@ No API keys. No account. Nothing leaves your computer.
 | | |
 |---|---|
 | [Memory](memory.md) | Facts, preferences, examples, and the knowledge graph |
-| [Agents and routing](agents.md) | Why there are six specialists and how one gets picked |
+| [Agents and routing](agents.md) | Why there are six agents and how one gets picked |
 | [Browsing](browsing.md) | Reading the web as a session |
 | [Skills](skills.md) | Teaching it know-how, in markdown, with no code |
 | [Scheduled tasks](tasks.md) | Cron-driven runs through the ordinary turn path |
@@ -51,7 +51,7 @@ path, and is far better at *choosing from a short list* than at generating
 freely.
 
 So nearly everything here turns generation into selection. The router picks one
-of six specialists, each with at most six tools. Clicking is done by *name* read
+of six agents, each with at most six tools. Clicking is done by *name* read
 from the accessibility tree, never by pixel coordinate. Memory extraction uses a
 closed vocabulary of nine relations. Recipes are tested scripts the model
 selects rather than writes.

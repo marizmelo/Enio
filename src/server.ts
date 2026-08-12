@@ -1454,6 +1454,11 @@ async function handle(
           // Same channel, same reason. A widget is decoration for a client that
           // can draw it; the tool's text has already gone to the model and to
           // every client that cannot, so dropping this loses nothing.
+          // Which agent took the turn. It decides which tools existed, so a
+          // reply that could not do something is only explicable with it --
+          // and it was already computed and handed to the CLI, reaching every
+          // client except the one most people use.
+          onRoute: (specialist) => res.write(`: route ${specialist}\n\n`),
           onWidget: (widget) => res.write(`: widget ${JSON.stringify(widget)}\n\n`),
           // Addressed to the user, not the model — which is the whole point of
           // keeping it out of the prompt. Newlines are escaped because an SSE

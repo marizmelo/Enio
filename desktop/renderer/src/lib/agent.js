@@ -24,6 +24,7 @@ export function parseSseEvent(block) {
   let notice = null;
   let context = null;
   let sources = null;
+  let route = null;
   for (const line of block.split("\n")) {
     if (line.startsWith("data:")) {
       data = (data ?? "") + line.slice(5).trimStart();
@@ -49,6 +50,8 @@ export function parseSseEvent(block) {
           sources = null;
         }
       }
+      const routeMatch = /^route\s+(\S+)$/.exec(comment);
+      if (routeMatch) route = routeMatch[1];
       const widgetMatch = /^widget\s+(.+)$/.exec(comment);
       if (widgetMatch) {
         try {
@@ -61,7 +64,7 @@ export function parseSseEvent(block) {
       }
     }
   }
-  return { data, tool, widget, think, notice, context, sources };
+  return { data, tool, widget, think, notice, context, sources, route };
 }
 
 /**
@@ -126,9 +129,10 @@ export async function* streamTurn(messages, signal, conversationId = null) {
       const block = buffer.slice(0, split);
       buffer = buffer.slice(split + 2);
 
-      const { data, tool, widget, think, notice, context, sources } = parseSseEvent(block);
+      const { data, tool, widget, think, notice, context, sources, route } = parseSseEvent(block);
       if (tool) yield { type: "tool", name: tool };
       if (sources) yield { type: "sources", ...sources };
+      if (route) yield { type: "route", route };
       if (widget) yield { type: "widget", widget };
       if (think !== null) yield { type: "think", chars: think };
       if (notice) yield { type: "notice", text: notice };

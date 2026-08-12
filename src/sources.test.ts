@@ -76,12 +76,34 @@ test("a failed fetch is not a source", () => {
   }
 });
 
-test("tools that cannot reach the web never produce sources", () => {
+test("tools that cannot reach the web never produce web sources", () => {
   assert.equal(isWebTool("run_command"), false);
+  // A URL inside a file's CONTENTS is data the file happened to hold, not a
+  // page this turn read -- the read cites the file, and only the file.
   assert.deepEqual(
     extractSources("read_file", { path: "x" }, "1. Thing\n   https://example.com/a\n   snippet"),
-    [],
+    [{ kind: "file", path: "x", url: "", title: "x" }],
   );
+  assert.deepEqual(extractSources("run_command", { command: "ls" }, "notes.md"), []);
+});
+
+test("a file that was read becomes a source; a failed read does not", () => {
+  assert.deepEqual(
+    extractSources("read_file", { path: "thesis/chapter2.md" }, "   1 | It begins."),
+    [{ kind: "file", path: "thesis/chapter2.md", url: "", title: "thesis/chapter2.md" }],
+  );
+  // Same rule as a failed fetch: citing a document the turn could not read
+  // manufactures exactly the false grounding the footer exists to catch.
+  for (const failure of [
+    "Error: ENOENT: no such file or directory",
+    "report.pdf is a binary file (12345 bytes). It cannot be read as text -- say so rather than guessing at its contents.",
+    "scan.pdf is a scanned PDF (3 pages, no text layer), so there is no text to extract.",
+    "broken.pdf is a PDF that could not be parsed.",
+  ]) {
+    assert.deepEqual(extractSources("read_file", { path: "whatever.pdf" }, failure), []);
+  }
+  // Listing tools name files without reading them; they stay silent.
+  assert.deepEqual(extractSources("list_dir", { path: "." }, "notes.md\nreport.pdf"), []);
 });
 
 test("the same page searched then fetched is cited once, keeping the snippet", () => {

@@ -630,6 +630,8 @@ export interface StoredMessage {
   tools?: string[];
   /** Pages those tools read, grouped by the tool that read them. */
   sources?: Array<{ tool: string; items: Source[] }>;
+  /** Which agent answered — restored from the trace, "single" rows skipped. */
+  agent?: string;
 }
 
 /**
@@ -658,6 +660,7 @@ export function conversationMessages(sessionId: string): StoredMessage[] {
     .all(sessionId) as StoredMessage[];
 
   let steps: Array<{ startedAt: number; name: string; args: string; output: string }>;
+  let routed: Array<{ startedAt: number; specialist: string }>;
   try {
     steps = db
       .prepare(
@@ -667,18 +670,31 @@ export function conversationMessages(sessionId: string): StoredMessage[] {
           ORDER BY t.started_at ASC, s.seq ASC`,
       )
       .all(sessionId) as typeof steps;
+    // 'single' is the no-routing marker, not an agent; skipping it here is
+    // what keeps single-agent mode from growing a meaningless chip.
+    routed = db
+      .prepare(
+        `SELECT started_at AS startedAt, specialist FROM turns
+          WHERE session_id = ? AND specialist != 'single'
+          ORDER BY started_at ASC`,
+      )
+      .all(sessionId) as typeof routed;
   } catch {
     // Losing decoration must never cost the transcript, which is the same rule
     // recordTurn follows in the other direction.
     return messages;
   }
-  if (steps.length === 0) return messages;
+  if (steps.length === 0 && routed.length === 0) return messages;
 
   // Matched by time rather than by counting turns off against replies. A turn
   // whose trace insert failed would shift every later pairing by one, and
   // silently attaching one reply's tools to another is worse than showing
   // none: it is a wrong answer to "where did this come from".
   const assistants = messages.filter((m) => m.role === "assistant");
+  for (const turn of routed) {
+    const target = assistants.find((m) => m.ts >= turn.startedAt);
+    if (target && !target.agent) target.agent = turn.specialist;
+  }
   for (const step of steps) {
     const target = assistants.find((m) => m.ts >= step.startedAt);
     if (!target) continue;

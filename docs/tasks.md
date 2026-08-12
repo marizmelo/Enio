@@ -27,7 +27,7 @@ A pipeline task fires the saved [pipeline](pipelines.md)
 directly: no model decides whether to run it and no router picks who — the
 clock triggers the graph you built, and only the steps inside involve the
 model. The pipeline must already be saved when you create the task, and a
-`--prompt` task can pin an agent with `--specialist`.
+`--prompt` task can pin an agent with `--agent`.
 
 The daemon re-reads tasks every 30 seconds, so adding or disabling one takes
 effect without a restart.

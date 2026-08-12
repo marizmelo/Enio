@@ -1,4 +1,4 @@
-import { ExternalLink, Globe } from "lucide-react";
+import { ExternalLink, FileText, Globe } from "lucide-react";
 
 const host = (url) => {
   try {
@@ -65,12 +65,17 @@ export function SearchResults({ items }) {
  * every answer that touched the web, so it has to be scannable at a glance and
  * silent when there is nothing to say.
  */
-export function SourcesFooter({ sources }) {
+export function SourcesFooter({ sources, onOpenFile }) {
   const items = [];
   const seen = new Set();
   for (const group of sources ?? []) {
     for (const item of group.items ?? []) {
-      const key = item.url.replace(/[#?].*$/, "").replace(/\/$/, "");
+      // A file has no URL to normalise; its path is the identity, and
+      // reading the same file twice in a turn is still one source.
+      const key =
+        item.kind === "file"
+          ? `file:${item.path}`
+          : item.url.replace(/[#?].*$/, "").replace(/\/$/, "");
       if (seen.has(key)) continue;
       seen.add(key);
       items.push(item);
@@ -81,26 +86,36 @@ export function SourcesFooter({ sources }) {
   return (
     <div className="max-w-[85%]">
       <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-        <Globe className="size-3" />
+        {items.every((s) => s.kind === "file") ? (
+          <FileText className="size-3" />
+        ) : (
+          <Globe className="size-3" />
+        )}
         {items.length === 1 ? "Source" : `Sources · ${items.length}`}
       </p>
       <ol className="mt-1 flex flex-col gap-0.5">
-        {items.map((item, i) => (
-          <li key={`${item.url}-${i}`} className="flex items-baseline gap-1.5 text-xs">
-            <span className="w-4 shrink-0 text-right text-[10px] text-muted-foreground tabular-nums">
-              {i + 1}
-            </span>
-            <button
-              type="button"
-              onClick={() => open(item.url)}
-              title={item.url}
-              className="min-w-0 truncate text-left text-muted-foreground hover:text-foreground hover:underline"
-            >
-              {item.title}
-              <span className="ml-1.5 text-[11px] opacity-70">{host(item.url)}</span>
-            </button>
-          </li>
-        ))}
+        {items.map((item, i) => {
+          const isFile = item.kind === "file";
+          return (
+            <li key={`${isFile ? item.path : item.url}-${i}`} className="flex items-baseline gap-1.5 text-xs">
+              <span className="w-4 shrink-0 text-right text-[10px] text-muted-foreground tabular-nums">
+                {i + 1}
+              </span>
+              <button
+                type="button"
+                // A file opens in the viewer; sending a local path to the
+                // browser would open nothing, or the wrong thing.
+                onClick={() => (isFile ? onOpenFile?.([item.path], 0) : open(item.url))}
+                title={isFile ? item.path : item.url}
+                className="min-w-0 truncate text-left text-muted-foreground hover:text-foreground hover:underline"
+              >
+                {isFile ? <FileText className="mr-1 inline size-3 opacity-60" /> : null}
+                <span className="font-mono">{item.title}</span>
+                {!isFile && <span className="ml-1.5 text-[11px] opacity-70">{host(item.url)}</span>}
+              </button>
+            </li>
+          );
+        })}
       </ol>
     </div>
   );

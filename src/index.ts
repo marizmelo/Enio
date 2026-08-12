@@ -462,7 +462,9 @@ async function main(): Promise<void> {
             prompt: flag("--prompt") ?? "",
             pipeline: flag("--pipeline") ?? null,
             schedule: flag("--cron") ?? "0 9 * * 1",
-            specialist: flag("--specialist") ?? null,
+            // --agent is the user-facing name (users see agents, the code says
+            // specialist); --specialist stays as a silent alias for old scripts.
+            specialist: flag("--agent") ?? flag("--specialist") ?? null,
           });
           const next = validateSchedule(task.schedule);
           console.log(`Added ${task.name}. Next run: ${next.ok ? next.next.toISOString() : "?"}`);
