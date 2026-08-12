@@ -197,6 +197,51 @@ describe("agent loop end to end", () => {
   });
 });
 
+describe("MCP provenance", () => {
+  test("an MCP result says where it came from; a builtin's does not", async () => {
+    // Attribution, not defence: the model must be able to tell "a server I do
+    // not control said this" from "enio worked this out". Stamped at the
+    // executeCall chokepoint, so no MCP tool can return unlabelled.
+    const base = await buildRegistry();
+    const mcpTool: import("./types.js").ToolDef = {
+      name: "demo__echo",
+      description: "echo something back",
+      parameters: { type: "object", properties: {}, required: [] },
+      origin: "mcp",
+      server: "demo",
+      async run() {
+        return "hello world";
+      },
+    };
+    const registry = {
+      all: [...base.all, mcpTool],
+      byName: new Map([...base.byName, [mcpTool.name, mcpTool]]),
+      dropped: base.dropped,
+    };
+
+    scriptModel([
+      { toolCall: { name: "demo__echo", args: {} } },
+      { content: "Echoed." },
+    ]);
+    const history: Message[] = [];
+    await runTurn("echo hello world", history, registry, store.startSession());
+    const mcpResult = history.find((m) => m.role === "tool");
+    assert.ok(mcpResult, "the tool result must be in the transcript");
+    assert.equal(String(mcpResult!.content), "FROM MCP (demo): hello world");
+
+    // A built-in tool is enio speaking for itself and must stay unlabelled --
+    // a prefix on everything would make the distinction meaningless.
+    scriptModel([
+      { toolCall: { name: "current_time", args: {} } },
+      { content: "Told you." },
+    ]);
+    const builtinHistory: Message[] = [];
+    await runTurn("what time is it", builtinHistory, registry, store.startSession());
+    const builtinResult = builtinHistory.find((m) => m.role === "tool");
+    assert.ok(!String(builtinResult!.content).includes("FROM MCP"));
+  });
+});
+
 describe("widget channel", () => {
   test("a tool's widget reaches the handler while its text reaches the model", async () => {
     // The clock is the shipped example, but the property under test is the

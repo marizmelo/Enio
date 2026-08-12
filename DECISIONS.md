@@ -865,6 +865,29 @@ vision-model *reading* and the pixels are the check on it — the same session
 that motivated this watched the reader claim enio was visible in a capture
 it had just been hidden from. Live-stream-only, like clock and weather.
 
+**MCP results carry their provenance, and the UI is the channel that keeps
+it.** Every MCP tool result reaches the model as `FROM MCP (<server>): …`,
+stamped at the `executeCall` chokepoint rather than in the MCP client — the
+same argument as the sanitizer: it is the one path every result takes, so no
+server and no future code path can return unlabelled. It is explicitly not a
+security boundary (content inside the label can claim anything; the
+structural defence is `neutralizeControlTokens`), it is sourcing.
+
+Then measured, and the measurement is the point. **A prompt rule telling the
+model to attribute labelled content does not work at this size** — with
+`FROM MCP (demo):` in the tool result and an explicit instruction in
+SHARED_RULES, asked whether it had verified an echoed claim or been told it,
+the model said "I worked that out myself". Reverted: a line that costs tokens
+on every turn and changes nothing is worse than no line. Rejected on the same
+evidence: relying on the reply to disclose sourcing at all.
+
+What stays is the split those results imply — the label lives in the data
+(traces, the inspector, tool events) where it is exact, and the *badge* is
+what a person reads, drawn from the tool's own identity (`server__tool`, the
+wire format from `wireName`) and therefore incapable of the misattribution
+the sentence just committed. A test pins that no built-in name contains the
+separator, because provenance that lies is worse than none.
+
 **The execution log is the run row, shown.** `pipeline_runs.node_results`
 always stored each step's reply and artifacts; nothing displayed it, so a
 finished run communicated only status rings. `GET /pipelines/:id/runs` +

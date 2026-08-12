@@ -105,6 +105,19 @@ describe("the tool budget", () => {
   });
 });
 
+test("no built-in tool name contains the MCP separator", async () => {
+  // The desktop names the server on an MCP badge by splitting `server__tool`
+  // (wireName in tools/mcp.ts). A built-in with a double underscore would be
+  // drawn as if it came from a connection the user never made -- provenance
+  // that lies is worse than none.
+  const { buildRegistry } = await import("./tools/index.js");
+  const registry = await buildRegistry();
+  const offenders = registry.all.filter(
+    (t: { origin: string; name: string }) => t.origin === "builtin" && t.name.includes("__"),
+  );
+  assert.deepEqual(offenders.map((t: { name: string }) => t.name), []);
+});
+
 describe("desktop control", () => {
   test("nothing that changes the machine is available unless enabled", () => {
     // The gate is about irreversibility, not about touching apps at all.

@@ -1236,10 +1236,25 @@ async function executeCall(
       handlers.onWidget?.(result.widget);
     }
 
-    const output =
+    const body =
       raw.length > config.maxToolOutputChars
         ? raw.slice(0, config.maxToolOutputChars) + "\n[...truncated]"
         : raw;
+
+    // Provenance, stamped here rather than in the MCP client for the same
+    // reason the sanitizer lives here: it is the one path every tool result
+    // takes, so no server -- or future MCP code path -- can return unlabelled.
+    // What it buys is attribution: without it, words from a third-party
+    // server are indistinguishable from something enio worked out itself, and
+    // the model answers "the file contains X" when what it means is "a
+    // server I do not control said X".
+    //
+    // It is NOT a security boundary. Content inside the label can say
+    // anything, including that the label ended; the defence against that is
+    // neutralizeControlTokens above, which is structural. This is honesty
+    // about sourcing, not a fence.
+    const output =
+      tool.origin === "mcp" ? `FROM MCP (${tool.server ?? "unknown"}): ${body}` : body;
     handlers.onToolEnd?.(tool.name, output);
     return output;
   } catch (err) {

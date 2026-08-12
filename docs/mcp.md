@@ -54,3 +54,20 @@ the allowlist doubly load-bearing — an unfiltered server floods every step
 that inherits it.
 
 A server that fails to start is reported and skipped. It never blocks the rest.
+
+## Telling third-party answers apart
+
+Anything an MCP tool returns reaches the model prefixed `FROM MCP (<server>):`,
+and the desktop names the connection on the tool badge — `demo · echo` with a
+plug icon rather than a bare tool name. Both exist because a connected server
+is not Enio: it is software someone else wrote, answering in Enio's voice
+unless something says otherwise.
+
+Worth knowing what that does and does not buy you, because it was measured
+rather than assumed. The badge is reliable — it is drawn from the tool's own
+identity and cannot be talked out of it. The prefix in the model's context is
+**not** reliable at this model size: asked point-blank whether it had verified
+an echoed claim or been told it, the model answered "I worked that out
+myself", with the label in front of it and an instruction in the prompt to
+attribute. Read the badge, not the sentence, when the question is *who said
+this*.

@@ -4,7 +4,7 @@ import { Widget } from "@/components/Widget";
 import { AttachmentPreviews } from "@/components/AttachmentPreviews";
 import { SourcesFooter } from "@/components/Sources";
 import { MessageActions } from "@/components/MessageActions";
-import { Info } from "lucide-react";
+import { Info, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { renderMarkdownish } from "@/lib/markdown";
 
@@ -35,12 +35,27 @@ export function Message({
       {isUser && files.length > 0 && <AttachmentPreviews names={files} onOpen={onOpenFile} />}
       {tools.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {countCalls(tools).map(({ name, calls }) => (
-            <Badge key={name} variant="secondary" className="font-mono text-[11px]">
-              {name}
-              {calls > 1 && <span className="ml-1 opacity-60">×{calls}</span>}
-            </Badge>
-          ))}
+          {countCalls(tools).map(({ name, calls }) => {
+            // `server__tool` is the wire format every MCP tool is named by
+            // (wireName in tools/mcp.ts); no built-in contains the separator,
+            // and a test pins that. Naming the server here is the honest
+            // channel for provenance: the reply is written by a model that
+            // will claim third-party content as its own, this is not.
+            const at = name.indexOf("__");
+            const server = at > 0 ? name.slice(0, at) : null;
+            return (
+              <Badge
+                key={name}
+                variant="secondary"
+                className="font-mono text-[11px]"
+                title={server ? `from the "${server}" MCP connection` : undefined}
+              >
+                {server && <Plug className="mr-1 inline size-3 opacity-60" />}
+                {server ? `${server} · ${name.slice(at + 2)}` : name}
+                {calls > 1 && <span className="ml-1 opacity-60">×{calls}</span>}
+              </Badge>
+            );
+          })}
         </div>
       )}
 
