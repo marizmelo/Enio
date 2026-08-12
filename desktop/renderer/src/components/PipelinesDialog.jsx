@@ -44,6 +44,7 @@ import {
   runDraft,
   runPipeline,
   savePipeline,
+  savePipelineAsSkill,
   stopPipeline,
   suggestPipelines,
 } from "@/lib/pipelines";
@@ -121,7 +122,7 @@ function layout(nodes, edges) {
 export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
   const [saved, setSaved] = useState([]);
   const [view, setView] = useState("list"); // list | canvas
-  const [current, setCurrent] = useState(null); // {id?, name}
+  const [current, setCurrent] = useState(null); // {id?, name, vouched?}
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
   const [selectedNode, setSelectedNode] = useState(null);
@@ -340,6 +341,9 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
     }
     if (event.type === "run_finished") {
       setHasRun(true);
+      if (event.status === "succeeded") {
+        setCurrent((c) => (c?.id ? { ...c, vouched: true } : c));
+      }
       setFinale(
         event.status === "succeeded"
           ? "Done — every step finished."
@@ -416,7 +420,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
   const openSaved = async (summary) => {
     try {
       const pipeline = await getPipeline(summary.id);
-      setCurrent({ id: pipeline.id, name: pipeline.name });
+      setCurrent({ id: pipeline.id, name: pipeline.name, vouched: summary.vouched === true });
       setName(pipeline.name);
       setComposedFrom(pipeline.description ?? "");
       setHasRun(false);
@@ -732,6 +736,27 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
                 >
                   {current?.id ? "Update" : "Save"}
                 </Button>
+                {/* Only a saved, vouched pipeline can teach chat to reach for
+                    it — the same rule run_pipeline enforces. */}
+                {current?.id && current?.vouched && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || running}
+                    title="Write a skill so asking in plain words runs this pipeline"
+                    onClick={async () => {
+                      setError("");
+                      try {
+                        const skill = await savePipelineAsSkill(current.id);
+                        setFinale(`Saved as the "${skill.name}" skill — plain chat can trigger it now.`);
+                      } catch (err) {
+                        setError(String(err?.message ?? err));
+                      }
+                    }}
+                  >
+                    Save as skill
+                  </Button>
+                )}
                 {!current?.id && !hasRun && nodes.length > 0 && (
                   <p className="text-[10px] leading-tight text-muted-foreground">
                     Run it once — Save unlocks after you've seen it work.

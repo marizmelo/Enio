@@ -815,6 +815,71 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "mcp": {
+      const { addServer, readMcpConfig, removeServer, setServerDisabled } = await import(
+        "./mcp-config.js"
+      );
+      const [action, name, ...restArgs] = rest;
+
+      if (action === "list" || !action) {
+        const { servers } = readMcpConfig();
+        const entries = Object.entries(servers);
+        if (entries.length === 0) {
+          console.log(`No MCP servers configured.\n\n  enio mcp add <name> <command> [args...]`);
+          break;
+        }
+        for (const [n, cfg] of entries) {
+          const state = cfg.disabled ? "disabled" : "enabled";
+          const allow = cfg.tools ? `  tools: ${cfg.tools.join(", ")}` : "";
+          console.log(`${n.padEnd(20)} ${state}`);
+          console.log(`  ${cfg.command} ${(cfg.args ?? []).join(" ")}${allow}\n`);
+        }
+        break;
+      }
+
+      try {
+        if (action === "add") {
+          if (!name || restArgs.length === 0) {
+            console.error(`Usage: enio mcp add <name> <command> [args...] [--tools a,b]`);
+            process.exit(1);
+          }
+          // --tools takes the allowlist; everything else is the command line.
+          const toolsAt = restArgs.indexOf("--tools");
+          const allow = toolsAt >= 0 ? restArgs[toolsAt + 1]?.split(",").filter(Boolean) : undefined;
+          const cmdArgs = (toolsAt >= 0 ? restArgs.slice(0, toolsAt) : restArgs).slice(1);
+          addServer(name, {
+            command: restArgs[0]!,
+            ...(cmdArgs.length > 0 ? { args: cmdArgs } : {}),
+            ...(allow && allow.length > 0 ? { tools: allow } : {}),
+          });
+          console.log(`Added ${name}. Tools connect on the next start (or instantly in the app).`);
+          if (!allow) {
+            console.log(
+              `Tip: a typical server exposes 10-30 tools, which floods a small model.\n` +
+                `Consider: enio mcp rm ${name} && enio mcp add ${name} ... --tools the,few,you,want`,
+            );
+          }
+          break;
+        }
+        if (action === "rm" || action === "remove") {
+          removeServer(name ?? "");
+          console.log(`Removed ${name}.`);
+          break;
+        }
+        if (action === "enable" || action === "disable") {
+          setServerDisabled(name ?? "", action === "disable");
+          console.log(`${action === "disable" ? "Disabled" : "Enabled"} ${name}.`);
+          break;
+        }
+      } catch (err) {
+        console.error((err as Error).message);
+        process.exit(1);
+      }
+      console.error(`Usage: enio mcp <list|add|rm|enable|disable> [...]`);
+      process.exit(1);
+      break;
+    }
+
     case "mcp-init": {
       const path = config.mcpConfigPath;
       if (existsSync(path)) {
@@ -1179,6 +1244,9 @@ enio — a local agent with tools and persistent memory
   enio token --rotate     generate a new one, invalidating the old
   enio backends           list model backends and how to switch
   enio tools              list every tool, built-in and MCP
+  enio mcp                list MCP connections
+  enio mcp add NAME CMD [args...] [--tools a,b]
+  enio mcp rm|enable|disable NAME
   enio mcp-init           write a starter mcp.json
 
 Config lives in environment variables — see src/config.ts.

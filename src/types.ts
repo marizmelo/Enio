@@ -55,7 +55,15 @@ export type Widget =
       id: string;
       summary: string;
       steps: Array<{ summary: string; script: string }>;
-    };
+    }
+  /**
+   * A picture the user should see with their own eyes — a screenshot,
+   * primarily. The vision model's text stands alone as always; the widget
+   * exists because that text is a *reading*, and the pixels are the check on
+   * it. `path` is workspace-relative so clients resolve it through the same
+   * bridge every other file preview uses; content never rides the stream.
+   */
+  | { type: "image"; path: string; caption?: string };
 
 /**
  * What a tool hands back.

@@ -563,9 +563,9 @@ function copyIntoWorkspace(sourcePath, conversationId) {
  * the home dir, the data dir, and so on), so the renderer hands the choice
  * straight through.
  */
-ipcMain.handle("pick-project-paths", async () => {
+ipcMain.handle("pick-project-paths", async (_event, title) => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: "Attach files or folders to this project",
+    title: String(title || "Attach files or folders to this project"),
     buttonLabel: "Attach",
     properties: ["openFile", "openDirectory", "multiSelections"],
   });
@@ -659,7 +659,11 @@ ipcMain.handle("reveal-file", (_event, relPath) => {
 });
 
 const PREVIEWABLE = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"]);
-const PREVIEW_LIMIT = 4 * 1024 * 1024;
+// Matches readFilePreview's image limit. It was 4MB, which quietly excluded
+// the most important previews there are: Retina full-screen captures run
+// 3-6MB, and the screenshot widget exists precisely so the user can check
+// the pixels against the model's reading of them.
+const PREVIEW_LIMIT = 20 * 1024 * 1024;
 
 /**
  * A workspace image as a data URL, for showing the user what they attached.

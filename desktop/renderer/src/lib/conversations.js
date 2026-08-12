@@ -18,7 +18,11 @@ async function call(path, init = {}) {
       ...(init.headers ?? {}),
     },
   });
-  if (!res.ok) throw new Error(`${path} returned ${res.status}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    // The server's refusal prose (caps, unattachable roots) is the message.
+    throw new Error(body?.error?.message ?? `${path} returned ${res.status}`);
+  }
   return res.json();
 }
 
@@ -33,6 +37,20 @@ export const conversationMessages = (id) =>
 /** The facts that die with this conversation unless kept. */
 export const conversationKnowledge = (id) =>
   call(`/conversations/${id}/knowledge`).then((d) => d.facts);
+
+/** Standing attachments scoped to this conversation — folders and files the
+ *  agent may read for as long as the thread lives. */
+export const conversationAttachments = (id) =>
+  call(`/conversations/${id}/attachments`).then((d) => d.attachments);
+
+export const attachToConversation = (id, path, note = "") =>
+  call(`/conversations/${id}/attachments`, {
+    method: "POST",
+    body: JSON.stringify({ path, note }),
+  }).then((d) => d.attachment);
+
+export const detachFromConversation = (id, alias) =>
+  call(`/conversations/${id}/attachments/${encodeURIComponent(alias)}`, { method: "DELETE" });
 
 export const discardConversation = (id, { keepFacts }) =>
   call(`/conversations/${id}?facts=${keepFacts ? "keep" : "forget"}`, {

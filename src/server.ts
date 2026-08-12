@@ -66,6 +66,8 @@ import { ABILITIES, abilityAvailability } from "./abilities.js";
 import {
   adoptRun,
   composePipeline,
+  exportPipelineSkill,
+  hasSuccessfulRun,
   deletePipeline,
   getPipeline,
   listPipelines,
@@ -78,6 +80,14 @@ import {
   type PipelineEdge,
   type PipelineNode,
 } from "./pipelines.js";
+import { addServer, readMcpConfig, removeServer, setServerDisabled } from "./mcp-config.js";
+import { mcpStatus } from "./tools/mcp.js";
+import {
+  attachToConversation,
+  detachFromConversation,
+  listConversationAttachments,
+  setConversationSession,
+} from "./conversation-attachments.js";
 import { ensureToken, isAuthorized } from "./auth.js";
 import {
   activeProject,
@@ -133,6 +143,7 @@ export async function serve(): Promise<void> {
   setMemorySession(sessionId);
   setPlanSession(sessionId);
   setBrowseSession(sessionId);
+  setConversationSession(sessionId);
   const token = ensureToken();
 
   const server = createServer((req, res) => {
@@ -992,6 +1003,9 @@ async function handle(
         description: p.description,
         nodeCount: p.nodes.length,
         lastRunAt: p.lastRunAt,
+        // What the Save-as-skill button (and run_pipeline eligibility) hang
+        // on: has reality tested this graph at least once.
+        vouched: hasSuccessfulRun(p.id),
       })),
     });
     return;
@@ -1075,7 +1089,7 @@ async function handle(
     return;
   }
 
-  const pipeMatch = url.pathname.match(/^\/pipelines\/([0-9a-f-]{8,})(\/(run|stop|runs))?$/);
+  const pipeMatch = url.pathname.match(/^\/pipelines\/([0-9a-f-]{8,})(\/(run|stop|runs|skill))?$/);
   if (pipeMatch) {
     const [, id, , sub] = pipeMatch;
     if (req.method === "POST" && sub === "stop") {
@@ -1098,6 +1112,15 @@ async function handle(
     }
     if (req.method === "GET" && sub === "runs") {
       sendJson(res, 200, { runs: listRuns(id!) });
+      return;
+    }
+    if (req.method === "POST" && sub === "skill") {
+      try {
+        sendJson(res, 200, { skill: exportPipelineSkill(id!) });
+      } catch (err) {
+        const message = (err as Error).message;
+        sendJson(res, /already exists/.test(message) ? 409 : 400, { error: { message } });
+      }
       return;
     }
     if (req.method === "POST" && !sub) {
@@ -1149,6 +1172,68 @@ async function handle(
    * without a restart. Behind auth like everything else; no tool reaches
    * this route.
    */
+  /**
+   * MCP connection management. The same file the user could always hand-edit
+   * (~/.enio/mcp.json), with the reload built in: every write rebuilds the
+   * registry, so tools appear and vanish without a restart. No tool reaches
+   * this module -- the model can never add itself a server -- and adding one
+   * runs its command on reload, which is exactly what hand-editing did.
+   */
+  const mcpMatch = url.pathname.match(/^\/mcp\/servers(\/([A-Za-z0-9_-]+))?$/);
+  if (mcpMatch) {
+    const serverName = mcpMatch[2];
+    const merged = () => {
+      const { servers } = readMcpConfig();
+      const status = new Map(mcpStatus().map((s) => [s.name, s]));
+      return Object.entries(servers).map(([name, cfg]) => ({
+        name,
+        command: cfg.command,
+        args: cfg.args ?? [],
+        tools: cfg.tools ?? null,
+        disabled: cfg.disabled === true,
+        connected: status.get(name)?.connected ?? false,
+        toolCount: status.get(name)?.toolCount ?? 0,
+        error: status.get(name)?.error ?? null,
+      }));
+    };
+    try {
+      if (req.method === "GET" && !serverName) {
+        sendJson(res, 200, { servers: merged() });
+        return;
+      }
+      if (req.method === "POST" && !serverName) {
+        const body = JSON.parse((await readBody(req)) || "{}");
+        addServer(String(body?.name ?? ""), {
+          command: String(body?.command ?? ""),
+          ...(Array.isArray(body?.args) ? { args: body.args.map(String) } : {}),
+          ...(body?.env && typeof body.env === "object" ? { env: body.env } : {}),
+          ...(Array.isArray(body?.tools) && body.tools.length > 0
+            ? { tools: body.tools.map(String) }
+            : {}),
+        });
+        if (rebuildRegistry) await rebuildRegistry();
+        sendJson(res, 200, { servers: merged() });
+        return;
+      }
+      if (req.method === "PATCH" && serverName) {
+        const body = JSON.parse((await readBody(req)) || "{}");
+        setServerDisabled(serverName, body?.disabled === true);
+        if (rebuildRegistry) await rebuildRegistry();
+        sendJson(res, 200, { servers: merged() });
+        return;
+      }
+      if (req.method === "DELETE" && serverName) {
+        removeServer(serverName);
+        if (rebuildRegistry) await rebuildRegistry();
+        sendJson(res, 200, { servers: merged() });
+        return;
+      }
+    } catch (err) {
+      sendJson(res, 400, { error: { message: (err as Error).message } });
+      return;
+    }
+  }
+
   if (req.method === "POST" && url.pathname === "/settings/desktop") {
     const body = JSON.parse((await readBody(req)) || "{}");
     setDesktopControl(body?.enabled === true);
@@ -1181,13 +1266,40 @@ async function handle(
     return;
   }
 
-  const convMatch = url.pathname.match(/^\/conversations\/([0-9a-f-]{8,})(\/(messages|knowledge))?$/);
+  const convMatch = url.pathname.match(
+    /^\/conversations\/([0-9a-f-]{8,})(\/(messages|knowledge|attachments)(\/(.+))?)?$/,
+  );
   if (convMatch) {
-    const [, id, , sub] = convMatch;
+    const [, id, , sub, , subArg] = convMatch;
 
     if (req.method === "GET" && sub === "messages") {
       sendJson(res, 200, { messages: conversationMessages(id!) });
       return;
+    }
+    // Standing attachments for one conversation. User-only routes, exactly
+    // like a project's: no tool reaches this module, so the sandbox stays
+    // something the user grants rather than something the model widens.
+    if (sub === "attachments") {
+      if (req.method === "GET" && !subArg) {
+        sendJson(res, 200, { attachments: listConversationAttachments(id!) });
+        return;
+      }
+      if (req.method === "POST" && !subArg) {
+        try {
+          const body = JSON.parse((await readBody(req)) || "{}");
+          sendJson(res, 200, {
+            attachment: attachToConversation(id!, String(body?.path ?? ""), String(body?.note ?? "")),
+          });
+        } catch (err) {
+          sendJson(res, 400, { error: { message: (err as Error).message } });
+        }
+        return;
+      }
+      if (req.method === "DELETE" && subArg) {
+        detachFromConversation(id!, decodeURIComponent(subArg));
+        sendJson(res, 200, { detached: decodeURIComponent(subArg) });
+        return;
+      }
     }
     if (req.method === "GET" && sub === "knowledge") {
       sendJson(res, 200, { facts: conversationKnowledge(id!) });
@@ -1262,6 +1374,7 @@ async function handle(
   setMemorySession(conversationId);
   setPlanSession(conversationId);
   setBrowseSession(conversationId);
+  setConversationSession(conversationId);
 
   const id = `chatcmpl-${randomUUID()}`;
   const created = Math.floor(Date.now() / 1000);

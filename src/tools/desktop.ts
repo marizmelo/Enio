@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { config } from "../config.js";
 import { detectPlatform } from "../platform.js";
 import { readImage } from "../vision.js";
@@ -253,7 +253,18 @@ const screenshotTool: ToolDef = {
     // Straight into the vision path, so the model gets text rather than a file
     // path it cannot look at.
     const reading = await readImage(file, args.question ? String(args.question) : undefined);
-    return `Screenshot saved to ${file}${note}\n\n${reading.text}`;
+    return {
+      text: `Screenshot saved to ${file}${note}\n\n${reading.text}`,
+      // The text above is a vision-model READING of the screen; the widget
+      // shows the actual pixels so the user can check it. basename() is
+      // correct because the file was just written into the workspace root,
+      // which is where clients resolve relative paths.
+      widget: {
+        type: "image",
+        path: basename(file),
+        ...(args.question ? { caption: String(args.question) } : {}),
+      },
+    };
   },
 };
 

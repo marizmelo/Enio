@@ -35,6 +35,9 @@ export const savePipeline = (fields) =>
 export const deletePipeline = (id) => call(`/pipelines/${id}`, { method: "DELETE" });
 /** The execution log: past runs with each step's reply, artifacts, error. */
 export const listRuns = (id) => call(`/pipelines/${id}/runs`).then((d) => d.runs);
+/** Export a vouched pipeline as a skill, so plain chat can find and run it. */
+export const savePipelineAsSkill = (id) =>
+  call(`/pipelines/${id}/skill`, { method: "POST" }).then((d) => d.skill);
 export const composePipeline = (prompt) =>
   call("/pipelines/compose", { method: "POST", body: JSON.stringify({ prompt }) });
 /** Mine the trace history for repeated tool sequences; returns unsaved

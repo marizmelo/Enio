@@ -45,6 +45,20 @@ export function Message({
       )}
 
 
+      {/* Images come BEFORE the text: the text is a reading of the picture,
+          so the evidence sits above the claim — see the shot first, then what
+          the model made of it. Other widgets stay below (the text is the
+          answer; they are a quicker view of the same answer). */}
+      {widgets.some((w) => w.type === "image") && (
+        <div className="flex w-full max-w-[85%] flex-col gap-2">
+          {widgets
+            .filter((w) => w.type === "image")
+            .map((w, i) => (
+              <Widget key={`image-${i}`} widget={w} onOpenFile={onOpenFile} />
+            ))}
+        </div>
+      )}
+
       {waiting ? (
         <Thinking startedAt={startedAt} chars={thinking} />
       ) : (
@@ -96,11 +110,13 @@ export function Message({
 
       {/* Below the text, never instead of it. The sentence is the answer; this
           is the same answer in a form that is quicker to read. */}
-      {widgets.length > 0 && (
+      {widgets.some((w) => w.type !== "image") && (
         <div className="flex w-full max-w-[85%] flex-col gap-2">
-          {widgets.map((w, i) => (
-            <Widget key={`${w.type}-${i}`} widget={w} />
-          ))}
+          {widgets
+            .filter((w) => w.type !== "image")
+            .map((w, i) => (
+              <Widget key={`${w.type}-${i}`} widget={w} onOpenFile={onOpenFile} />
+            ))}
         </div>
       )}
     </div>

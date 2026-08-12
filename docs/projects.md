@@ -67,6 +67,13 @@ fail a turn.
 `run_command` runs in the sole attached folder when there is exactly one, and
 takes an `in` parameter naming an alias when there are several.
 
+Conversations can hold standing attachments of their own (**Add to
+conversation…** in the composer's + menu) with the same alias grammar, the
+same refusals (no attaching `/`, your home folder, or enio's own data), and
+the same 120-character note cap — refused, never truncated. When a project is
+open, its aliases win a name collision: the project is the context you
+deliberately opened, so a conversation attachment can never shadow it.
+
 ## Search
 
 The coder has a `search_code` tool: query in, ranked `path:line` locations

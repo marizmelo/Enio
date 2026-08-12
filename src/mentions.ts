@@ -2,6 +2,7 @@ import { readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { config } from "./config.js";
 import { activeProject } from "./project.js";
+import { conversationMounts } from "./conversation-attachments.js";
 import { loadSkills, type Skill } from "./skills.js";
 import { SPECIALISTS } from "./specialists.js";
 import type { Registry } from "./tools/index.js";
@@ -88,12 +89,13 @@ export function workspaceFiles(max = 400): string[] {
     }
   };
   const project = activeProject();
-  if (project) {
-    for (const a of project.attachments) {
-      if (out.length >= max) break;
-      if (a.kind === "file") out.push(a.alias);
-      else walk(a.path, 0, a.path, a.alias + "/");
-    }
+  // Project mounts, then conversation mounts, then the workspace — the same
+  // precedence safePath resolves with.
+  const mounts = [...(project?.attachments ?? []), ...conversationMounts()];
+  for (const a of mounts) {
+    if (out.length >= max) break;
+    if (a.kind === "file") out.push(a.alias);
+    else walk(a.path, 0, a.path, a.alias + "/");
   }
   walk(config.workspace, 0, config.workspace, "");
   return out.sort();

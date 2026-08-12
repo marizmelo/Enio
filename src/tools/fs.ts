@@ -4,6 +4,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { config } from "../config.js";
 import { extractPdfText, looksLikePdf } from "../pdf.js";
 import { activeProject, findMount } from "../project.js";
+import { conversationMounts, findConversationMount } from "../conversation-attachments.js";
 import type { ToolDef } from "../types.js";
 
 /**
@@ -26,27 +27,38 @@ import type { ToolDef } from "../types.js";
  * neither. Every root here was attached or configured by the user; nothing
  * the model does can add one.
  */
+/** Resolve a path inside one mount, with the containment check. Shared by
+ *  project and conversation mounts — the alias grammar is identical, only
+ *  who granted the mount differs. */
+function resolveInMount(mount: { alias: string; path: string; kind: string }, rest: string[]): string {
+  if (mount.kind === "file") {
+    if (rest.length > 0) {
+      throw new Error(`${mount.alias} is an attached file, not a folder.`);
+    }
+    return mount.path;
+  }
+  const root = mount.path;
+  const target = resolve(root, rest.join(sep));
+  if (target !== root && !target.startsWith(root + sep)) {
+    throw new Error(`Path escapes the attached folder "${mount.alias}".`);
+  }
+  return target;
+}
+
 export function safePath(userPath: string): string {
   const raw = String(userPath);
   const active = activeProject();
+  const segments = raw.split(/[\\/]+/).filter((s) => s.length > 0 && s !== ".");
   if (active) {
-    const segments = raw.split(/[\\/]+/).filter((s) => s.length > 0 && s !== ".");
-    const mount = segments.length > 0 ? findMount(segments[0]!) : null;
-    if (mount) {
-      const rest = segments.slice(1);
-      if (mount.kind === "file") {
-        if (rest.length > 0) {
-          throw new Error(`${mount.alias} is an attached file, not a folder.`);
-        }
-        return mount.path;
-      }
-      const root = mount.path;
-      const target = resolve(root, rest.join(sep));
-      if (target !== root && !target.startsWith(root + sep)) {
-        throw new Error(`Path escapes the attached folder "${mount.alias}".`);
-      }
-      return target;
-    }
+    // Project mounts first, conversation mounts second: the project is the
+    // context the user deliberately opened, so its names win a collision
+    // (attach-time deduping means new collisions cannot happen; this order
+    // covers a project attached after the conversation took the name).
+    const mount =
+      segments.length > 0
+        ? (findMount(segments[0]!) ?? findConversationMount(segments[0]!))
+        : null;
+    if (mount) return resolveInMount(mount, segments.slice(1));
 
     const outRoot = resolve(active.outDir);
     const target = resolve(outRoot, raw);
@@ -60,17 +72,25 @@ export function safePath(userPath: string): string {
       }
       return target;
     }
-    const aliases = active.attachments.map((a) => a.alias).join(", ") || "none attached";
+    const aliases =
+      [...active.attachments, ...conversationMounts()].map((a) => a.alias).join(", ") ||
+      "none attached";
     throw new Error(
       `Path escapes the project. Start with an attachment name (${aliases}) or use a plain relative path.`,
     );
   }
 
+  const conversationMount =
+    segments.length > 0 ? findConversationMount(segments[0]!) : null;
+  if (conversationMount) return resolveInMount(conversationMount, segments.slice(1));
+
   const root = resolve(config.workspace);
   const target = resolve(root, raw);
   if (target !== root && !target.startsWith(root + sep)) {
+    const aliases = conversationMounts().map((a) => a.alias).join(", ");
     throw new Error(
-      `Path escapes the workspace. Everything must live under ${root}.`,
+      `Path escapes the workspace. Everything must live under ${root}` +
+        (aliases ? `, or start with an attachment name (${aliases}).` : `.`),
     );
   }
   return target;
@@ -81,13 +101,18 @@ export function safePath(userPath: string): string {
  *  is what gets typed back, so the two must agree. */
 const rel = (abs: string): string => {
   const active = activeProject();
-  if (active) {
-    for (const a of active.attachments) {
+  // Same precedence as safePath — project mounts, then conversation mounts —
+  // so what a tool prints is exactly what resolves back.
+  const mountLists = [active?.attachments ?? [], conversationMounts()];
+  for (const list of mountLists) {
+    for (const a of list) {
       if (abs === a.path) return a.alias;
       if (a.kind === "folder" && abs.startsWith(a.path + sep)) {
         return join(a.alias, relative(a.path, abs));
       }
     }
+  }
+  if (active) {
     const outDir = resolve(active.outDir);
     if (abs === outDir || abs.startsWith(outDir + sep)) return relative(outDir, abs) || ".";
   }

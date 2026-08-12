@@ -813,6 +813,58 @@ Window mode is now a rect read from the accessibility tree, taken after enio
 is hidden so "the front window" is the user's, not enio's. Coordinates here
 are crop geometry, not a click target, so the click-by-name rule is intact.
 
+### Attach-to-scope, MCP management, pipeline→skill, screenshots-in-thread (August 2026)
+
+**Conversation attachments are a sessions column, not a table.** Standing
+folder/file grants scoped to one conversation — the same `Attachment` shape,
+refusals (assertAttachable), alias rules and 120-char note cap as projects,
+riding `sessions.attachments` as JSON because the list is small, read whole,
+written whole, and shares the row's lifetime. Precedence: project aliases win
+resolution (the project is the context the user deliberately opened), and
+attach-time deduping means new collisions cannot even be minted. The routes
+are user-only, like everything that widens the sandbox: no tool touches the
+module, so "nothing the model does can add a root" stays literally true.
+Rejected: a second alias-mount system — safePath grew one shared
+`resolveInMount` and a second lookup, not a parallel path.
+
+**MCP connections are managed, not just hand-edited.** `/mcp/servers` CRUD +
+`enio mcp` + a Connections dialog, all writing the same mcp.json (unknown
+fields preserved, tmp+rename atomic) and rebuilding the registry on every
+change — tools appear and vanish with no restart. Adding a server runs its
+command on reload; that is identical to hand-editing the file, so it is gated
+by auth (like everything on loopback), not by a flag. Status is captured per
+server during load and served with the config, so a failed connection shows
+its error string rather than a hopeful dot. **Bug fixed on the way:**
+`loadMcpTools` never closed the previous load's connections, so every
+registry rebuild leaked MCP child processes — latent while rebuilds were
+rare, fatal once editing a connection triggers one. It now closes before
+connecting, and a regression test counts.
+
+**Pipeline nodes inherit their ability's server; nodes carry no server
+field.** `abilityServers()` prefix-matches the ability's `requiredServer`
+against connected servers — the same rule availability uses — and rides the
+node's overrides exactly like `@server` rides a chat turn. A per-node server
+field was rejected: that is a draft (or the composer) widening its own
+reach, where an ability declaration is a closed list a person edited into
+the code.
+
+**A proven pipeline can become a skill, and the skill is both trigger and
+outline.** Export writes the catalogue-visible discoverability layer: a
+description saying when, a body that calls run_pipeline with the exact saved
+name, and the numbered step outline as context. Vouched-only (the
+run_pipeline rule), and never overwrites — an existing skill is the user's
+document. A stale skill after a pipeline rename is accepted: run_pipeline's
+refusal lists what IS eligible, so the failure explains itself, which beats
+either silent re-pointing or a sync obligation.
+
+**Screenshots render in the thread as an image widget.** Fourth arm of the
+closed Widget union, carrying a workspace-relative path (never content — the
+renderer resolves it through the same preview bridge as every file). The
+text stays the complete answer; the widget exists because the text is a
+vision-model *reading* and the pixels are the check on it — the same session
+that motivated this watched the reader claim enio was visible in a capture
+it had just been hidden from. Live-stream-only, like clock and weather.
+
 **The execution log is the run row, shown.** `pipeline_runs.node_results`
 always stored each step's reply and artifacts; nothing displayed it, so a
 finished run communicated only status rings. `GET /pipelines/:id/runs` +

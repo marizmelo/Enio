@@ -80,6 +80,11 @@ selected by name rather than written on the spot:
 
 The last two are the only ones withheld without Accessibility permission.
 
+**Screenshots show up in the thread.** The reply's text is the vision
+model's reading of the screen; the desktop also shows the captured image
+under it, because a reading is sometimes wrong and the pixels are the check.
+Click it to open the full-size capture.
+
 **Screenshots leave enio out.** A screenshot is meant to answer "what is on
 my screen", and enio's own window is never that answer — it is in front
 because you just typed into it, and leaving it in means the model reads its

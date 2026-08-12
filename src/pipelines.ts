@@ -15,9 +15,10 @@ import { getDb } from "./memory/db.js";
 import { startSession } from "./memory/store.js";
 import { contextBudget } from "./model-settings.js";
 import { complete, repairJson } from "./model.js";
-import { loadSkills } from "./skills.js";
+import { loadSkills, skillsDir } from "./skills.js";
 import { setMemorySession } from "./tools/memory.js";
 import { setBrowseSession } from "./tools/browse.js";
+import { setConversationSession } from "./conversation-attachments.js";
 import { setPlanSession } from "./tools/desktop.js";
 import type { Registry } from "./tools/index.js";
 import type { Message, ToolDef } from "./types.js";
@@ -297,6 +298,81 @@ export function listRuns(pipelineId: string, limit = 10): PipelineRunRecord[] {
   });
 }
 
+/**
+ * Exports a vouched pipeline as a skill: the discoverability layer.
+ *
+ * The skill catalogue rides every prompt, so after this a natural-language
+ * ask ("give me my news brief") finds the flow without the user naming it --
+ * the skill's body triggers run_pipeline with the exact saved name, and
+ * carries the step outline as context. Vouching is the same rule as
+ * run_pipeline itself: only a pipeline reality has tested may teach agents
+ * to reach for it. Never overwrites: a skill is the user's document once it
+ * exists, and an export must not silently replace their edits.
+ */
+export function exportPipelineSkill(pipelineId: string): { name: string; dir: string } {
+  const pipeline = getPipeline(pipelineId);
+  if (!pipeline) throw new Error(`No pipeline with id ${pipelineId}.`);
+  if (!hasSuccessfulRun(pipelineId)) {
+    throw new Error("Run it successfully once first — a skill points agents at a flow that works.");
+  }
+
+  const slug = pipeline.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64)
+    .replace(/-+$/g, "");
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug)) {
+    throw new Error(`"${pipeline.name}" does not reduce to a usable skill name.`);
+  }
+
+  const dir = join(skillsDir(), slug);
+  if (existsSync(dir)) {
+    throw new Error(`A skill named "${slug}" already exists — it will not be overwritten.`);
+  }
+
+  const valid = validatePipeline(pipeline.nodes, pipeline.edges);
+  const order = valid.ok ? valid.order : pipeline.nodes.map((n) => n.id);
+  const steps = order
+    .map((id, i) => {
+      const node = pipeline.nodes.find((n) => n.id === id)!;
+      const title = getAbility(node.abilityId)?.title ?? node.abilityId;
+      const firstLine = node.prompt.split("\n")[0]!.slice(0, 100);
+      return `${i + 1}. ${title}${firstLine ? ` — ${firstLine}` : ""}`;
+    })
+    .join("\n");
+
+  const purpose = pipeline.description || pipeline.name;
+  const body = `---
+name: ${slug}
+description: >-
+  Runs the saved pipeline "${pipeline.name}". Use when the user wants
+  ${purpose.replace(/\s+/g, " ").slice(0, 160)}.
+---
+
+# ${slug}
+
+Call the \`run_pipeline\` tool with \`name: "${pipeline.name}"\` — the exact
+name, verbatim. The pipeline runs each step itself; do not perform the steps
+by hand.
+
+## What it does
+
+${steps}
+
+## Rules
+
+- Every step runs under its own approval gates (email stays dry-run, desktop
+  actions still propose plans), so triggering this is safe to do directly.
+- If run_pipeline answers that no pipeline has that name, it was renamed or
+  deleted. Tell the user and stop — its refusal lists what IS available.
+`;
+
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "SKILL.md"), body);
+  return { name: slug, dir };
+}
+
 export function deletePipeline(id: string): void {
   getDb().prepare(`DELETE FROM pipelines WHERE id = ?`).run(id);
   getDb().prepare(`DELETE FROM pipeline_runs WHERE pipeline_id = ?`).run(id);
@@ -565,6 +641,25 @@ export function stopPipeline(id: string): boolean {
  *  different hat. */
 let inPipelineRun = false;
 
+/**
+ * The MCP servers an ability's node turns may use: the ability's declared
+ * requiredServer, prefix-matched against what is actually connected -- the
+ * same rule abilityAvailability applies. An ability without a declaration
+ * inherits nothing, so an ordinary node's tool set is exactly its
+ * specialist's.
+ */
+function abilityServers(ability: { requiredServer?: string }, registry: Registry): string[] {
+  if (!ability.requiredServer) return [];
+  const prefix = ability.requiredServer.toLowerCase();
+  return [
+    ...new Set(
+      registry.all
+        .map((t) => t.server)
+        .filter((s): s is string => !!s && s.toLowerCase().startsWith(prefix)),
+    ),
+  ];
+}
+
 export async function runPipeline(
   pipeline: Pipeline,
   registry: Registry,
@@ -589,6 +684,7 @@ export async function runPipeline(
   setMemorySession(sessionId);
   setPlanSession(sessionId);
   setBrowseSession(sessionId);
+  setConversationSession(sessionId);
 
   const results = new Map<string, NodeResult>();
   const skills = loadSkills().skills;
@@ -672,6 +768,11 @@ export async function runPipeline(
             specialist: ability.specialist,
             skills: skill ? skills.filter((s) => s.name === skill) : [],
             files: incomingFiles.slice(0, 5),
+            // The ability's declared server need, resolved against what is
+            // actually connected. Abilities declare, nodes inherit -- a
+            // per-node server field would be the model (or a draft) widening
+            // its own reach; this stays a closed list.
+            servers: abilityServers(ability, registry),
           },
         );
         artifacts.push({ type: "text", text: result.reply });

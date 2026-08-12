@@ -10,6 +10,7 @@ import { closeMcp } from "./tools/mcp.js";
 import { closeBrowser } from "./tools/browser.js";
 import { setMemorySession } from "./tools/memory.js";
 import { setBrowseSession } from "./tools/browse.js";
+import { setConversationSession } from "./conversation-attachments.js";
 import { setPlanSession } from "./tools/desktop.js";
 import { conversationMessages, endSession, indexPending, listConversations, startSession, stats } from "./memory/store.js";
 import { completeMention, mentionContext, parseMentions } from "./mentions.js";
@@ -104,6 +105,7 @@ export async function repl(opts: { showThinking: boolean; resume?: string }): Pr
   setMemorySession(sessionId);
   setPlanSession(sessionId);
   setBrowseSession(sessionId);
+  setConversationSession(sessionId);
 
   const s = stats();
   console.log(

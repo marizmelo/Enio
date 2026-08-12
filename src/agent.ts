@@ -16,6 +16,7 @@ import { toolText, toWireTool, type Message, type ToolCall, type Widget } from "
 import { contextBudget } from "./model-settings.js";
 import { extractPdfText, looksLikePdf } from "./pdf.js";
 import { activeProject } from "./project.js";
+import { conversationMounts } from "./conversation-attachments.js";
 import { neutralizeControlTokens } from "./sanitize.js";
 import { unsupportedSpecifics } from "./grounding.js";
 
@@ -461,6 +462,23 @@ function projectBlock(): string {
   return lines.join("\n");
 }
 
+/** The conversation's own standing attachments, named the same way a
+ *  project's are. Aliases and user notes only — file contents still reach
+ *  the model exclusively through tools, via the sanitize chokepoint. */
+function conversationBlock(): string {
+  const mounts = conversationMounts();
+  if (mounts.length === 0) return "";
+  const maxListed = Math.min(48, Math.max(12, Math.round(contextBudget() / 160)));
+  const listed = mounts
+    .slice(0, maxListed)
+    .map((a) => `${a.alias}${a.kind === "folder" ? "/" : ""}${a.note ? ` — ${a.note}` : ""}`);
+  const more = mounts.length - listed.length;
+  return [
+    `The user attached to this conversation: ${listed.join("; ")}${more > 0 ? `; and ${more} more` : ""}.`,
+    `Use these names as the first path segment to read them.`,
+  ].join("\n");
+}
+
 /**
  * Runs one user turn to completion, including any tool round-trips.
  *
@@ -587,6 +605,7 @@ export async function runTurn(
     invoked,
     invoked ? "" : skillCatalogue(),
     projectBlock(),
+    conversationBlock(),
     preferenceBlock(),
     memoryBlock,
     exemplars,
@@ -962,6 +981,9 @@ export async function runTurn(
           ? [project.name, project.description, project.instructions,
              ...project.attachments.map((a) => `${a.alias} ${a.path} ${a.note}`)]
           : []),
+        // Conversation attachments are legitimate sources the same way the
+        // project's are — their aliases and notes appear in the overlay.
+        ...conversationMounts().map((a) => `${a.alias} ${a.path} ${a.note}`),
       ];
       const invented = unsupportedSpecifics(reply, sources);
       if (invented.length > 0) {

@@ -9,15 +9,20 @@ import { appendMention, attachedFiles, enableDesktopControl, fetchCapabilities }
 import { FilesDialog } from "@/components/FilesDialog";
 import { FileViewer } from "@/components/FileViewer";
 import {
+  attachToConversation,
+  conversationAttachments,
   conversationMessages,
   createConversation,
+  detachFromConversation,
   listConversations,
   pendingPlans,
 } from "@/lib/conversations";
 import { HistoryDialog } from "@/components/HistoryDialog";
 import { ProjectsDialog } from "@/components/ProjectsDialog";
 import { PipelinesDialog } from "@/components/PipelinesDialog";
+import { ConnectionsDialog } from "@/components/ConnectionsDialog";
 import {
+  attachToProject,
   closeProject as closeProjectApi,
   currentProject,
   openProject as openProjectApi,
@@ -61,6 +66,11 @@ export function App() {
   // The active project, as the server reports it. Null when nothing is open —
   // which is also every fresh boot, since activation is process memory there.
   const [project, setProject] = useState(null);
+  // Standing attachments scoped to the open conversation — loaded whenever
+  // the conversation changes, so restore and history switches carry them.
+  const [convAttachments, setConvAttachments] = useState([]);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const [attachError, setAttachError] = useState("");
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [pipelinesOpen, setPipelinesOpen] = useState(false);
   const [recipesOpen, setRecipesOpen] = useState(false);
@@ -149,9 +159,57 @@ export function App() {
   // a project without this left the attach menu offering the previous
   // project's files — or none of the new one's.
   useEffect(() => {
-    window.maple?.setProjectRoots?.(project?.attachments ?? []);
+    // Project roots first: the main process resolves previews first-match,
+    // and the server gives the project the same precedence.
+    window.maple?.setProjectRoots?.([
+      ...(project?.attachments ?? []),
+      ...convAttachments,
+    ]);
     if (backendReady) fetchCapabilities().then(setCapabilities);
-  }, [project, backendReady]);
+  }, [project, convAttachments, backendReady]);
+
+  useEffect(() => {
+    setAttachError("");
+    if (!backendReady || !conversationId) {
+      setConvAttachments([]);
+      return;
+    }
+    conversationAttachments(conversationId)
+      .then(setConvAttachments)
+      .catch(() => setConvAttachments([]));
+  }, [conversationId, backendReady]);
+
+  /** The attach menu's standing scope: the open project when there is one,
+   *  else this conversation. Failures surface verbatim — the server's
+   *  refusal prose (caps, unattachable roots) is the explanation. */
+  const attachStanding = useCallback(async () => {
+    setAttachError("");
+    const title = project
+      ? "Attach files or folders to this project"
+      : "Attach files or folders to this conversation";
+    const paths = (await window.maple?.pickProjectPaths?.(title)) ?? [];
+    for (const p of paths) {
+      try {
+        if (project) {
+          await attachToProject(project.id, p, "");
+        } else {
+          let convId = conversationId;
+          if (!convId) {
+            convId = await createConversation();
+            setConversationId(convId);
+          }
+          const a = await attachToConversation(convId, p, "");
+          setConvAttachments((prev) => [...prev, a]);
+        }
+      } catch (err) {
+        setAttachError(String(err?.message ?? err));
+      }
+    }
+    if (project && paths.length > 0) {
+      const state = await projectState().catch(() => null);
+      if (state?.project) setProject(state.project);
+    }
+  }, [project, conversationId]);
 
   // A stored transcript, plus any approval still waiting on this conversation.
   // The plan card only ever travelled over the live stream, so without asking
@@ -462,6 +520,17 @@ export function App() {
         onOpenChange={setPipelinesOpen}
         abilities={capabilities.abilities ?? []}
       />
+      <ConnectionsDialog
+        open={connectionsOpen}
+        onOpenChange={(open) => {
+          setConnectionsOpen(open);
+          // Refetch on close, not only on in-app changes: the same file is
+          // editable from the CLI and the API, and the mention menu reads
+          // the cached capabilities.
+          if (!open) fetchCapabilities().then(setCapabilities);
+        }}
+        onChanged={() => fetchCapabilities().then(setCapabilities)}
+      />
 
       <ProjectsDialog
         open={projectsOpen}
@@ -571,6 +640,35 @@ export function App() {
         <PermissionNotice backendReady={backendReady} />
       </div>
 
+      {attachError && (
+        <p className="shrink-0 px-4 pb-1 text-xs text-destructive">{attachError}</p>
+      )}
+      {/* Standing conversation attachments: present for the whole thread, so
+          they live above the composer rather than inside one message. */}
+      {!project && convAttachments.length > 0 && (
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5 px-4 pb-1.5">
+          {convAttachments.map((a) => (
+            <span
+              key={a.alias}
+              title={a.path}
+              className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-2 py-0.5 text-[11px]"
+            >
+              <span className="font-mono">{a.alias}{a.kind === "folder" ? "/" : ""}</span>
+              <button
+                className="text-muted-foreground hover:text-destructive"
+                title="Detach from this conversation"
+                onClick={async () => {
+                  await detachFromConversation(conversationId, a.alias).catch(() => {});
+                  setConvAttachments((prev) => prev.filter((x) => x.alias !== a.alias));
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       <Composer
         ref={composerRef}
         value={input}
@@ -582,6 +680,8 @@ export function App() {
         capabilities={capabilities}
         sessionFiles={sessionFiles}
         conversationId={conversationId}
+        onAttachStanding={attachStanding}
+        onManageConnections={() => setConnectionsOpen(true)}
         onAttached={(names) =>
           setSessionFiles((prev) => [...new Set([...prev, ...names])])
         }

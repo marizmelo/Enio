@@ -486,3 +486,96 @@ test("saving after a draft run adopts it, so the pipeline is born vouched", asyn
   const other = pipelines.savePipeline({ name: "would-be-thief", nodes: [node("n1", "prompt")], edges: [] });
   assert.equal(pipelines.adoptRun("draft-run", other.id), false);
 });
+
+test("a node inherits its ability's MCP server; others get nothing", async () => {
+  const { buildRegistry } = await import("./tools/index.js");
+  const base = await buildRegistry();
+  let toggled = 0;
+  const mcpTool: import("./types.js").ToolDef = {
+    name: "home__toggle",
+    description: "toggle a light",
+    parameters: { type: "object", properties: {}, required: [] },
+    origin: "mcp",
+    server: "home-assistant",
+    async run() {
+      toggled++;
+      return "toggled";
+    },
+  };
+  const registry = {
+    all: [...base.all, mcpTool],
+    byName: new Map([...base.byName, [mcpTool.name, mcpTool]]),
+    dropped: base.dropped,
+  };
+
+  // automate-house declares requiredServer "home": its node turns see the
+  // connected server's tools even though the operator specialist does not.
+  const withServer = pipelines.savePipeline({
+    name: "lights-flow",
+    nodes: [{ id: "n1", abilityId: "automate-house", prompt: "toggle the light" }],
+    edges: [],
+  });
+  scriptModel([
+    { toolCall: { name: "home__toggle", args: {} } },
+    { content: "Light toggled." },
+  ]);
+  let result = await pipelines.runPipeline(withServer, registry, () => {});
+  globalThis.fetch = originalFetch;
+  assert.equal(result.status, "succeeded");
+  assert.equal(toggled, 1, "the MCP tool ran inside the node's turn");
+
+  // An ability with no declaration inherits nothing: the same call is an
+  // unknown tool inside a prompt node, and the stub never executes.
+  const without = pipelines.savePipeline({
+    name: "no-server-flow",
+    nodes: [{ id: "n1", abilityId: "prompt", prompt: "toggle the light" }],
+    edges: [],
+  });
+  scriptModel([
+    { toolCall: { name: "home__toggle", args: {} } },
+    { content: "Could not." },
+  ]);
+  result = await pipelines.runPipeline(without, registry, () => {});
+  globalThis.fetch = originalFetch;
+  assert.equal(toggled, 1, "no inheritance without a declared server");
+});
+
+test("export as skill: vouched only, parses cleanly, never overwrites", async () => {
+  const { getDb } = await import("./memory/db.js");
+  const { loadSkills } = await import("./skills.js");
+  const pipeline = pipelines.savePipeline({
+    name: "Morning News Brief",
+    description: "gather AI news and write a brief",
+    nodes: [
+      { id: "n1", abilityId: "web-search", prompt: "find today's AI news" },
+      { id: "n2", abilityId: "create-document", prompt: "write the brief" },
+    ],
+    edges: [{ from: "n1", to: "n2" }],
+  });
+
+  // Unvouched: refused with the run-first message.
+  assert.throws(() => pipelines.exportPipelineSkill(pipeline.id), /Run it successfully once/);
+
+  getDb()
+    .prepare(
+      `INSERT INTO pipeline_runs (id, pipeline_id, started_at, finished_at, status) VALUES ('skill-run', ?, 1, 2, 'succeeded')`,
+    )
+    .run(pipeline.id);
+
+  const skill = pipelines.exportPipelineSkill(pipeline.id);
+  assert.equal(skill.name, "morning-news-brief");
+
+  // The written file must actually load as a skill, or the export is noise.
+  const set = loadSkills();
+  const loaded = set.skills.find((s) => s.name === "morning-news-brief");
+  assert.ok(loaded, `not loaded; problems: ${JSON.stringify(set.problems)}`);
+  assert.ok(loaded!.description.length > 0);
+  // The exact (spaced) pipeline name is the trigger, steps ride in order.
+  assert.ok(loaded!.body.includes('name: "Morning News Brief"'));
+  const first = loaded!.body.indexOf("1. Web search");
+  const second = loaded!.body.indexOf("2. Create document");
+  assert.ok(first > -1 && second > first, loaded!.body);
+
+  // Never overwrites: the skill is the user's document now.
+  assert.throws(() => pipelines.exportPipelineSkill(pipeline.id), /already exists/);
+});

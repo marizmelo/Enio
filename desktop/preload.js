@@ -36,8 +36,8 @@ contextBridge.exposeInMainWorld("maple", {
 
   /** Folder/file picker for project attachments. Absolute paths, no copying —
    *  the server's guards decide whether each one is attachable. */
-  pickProjectPaths() {
-    return ipcRenderer.invoke("pick-project-paths");
+  pickProjectPaths(title) {
+    return ipcRenderer.invoke("pick-project-paths", title);
   },
 
   /** Tell the main process which project roots are open, so previews,

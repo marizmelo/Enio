@@ -5,6 +5,7 @@ import { endSession, indexPending, startSession } from "./memory/store.js";
 import { runTurn } from "./agent.js";
 import { buildRegistry } from "./tools/index.js";
 import { setMemorySession } from "./tools/memory.js";
+import { setConversationSession } from "./conversation-attachments.js";
 import { complete } from "./model.js";
 import type { Message } from "./types.js";
 
@@ -165,6 +166,7 @@ export async function runHeartbeat(
       const registry = await buildRegistry();
       const sessionId = startSession();
       setMemorySession(sessionId);
+      setConversationSession(sessionId);
       const history: Message[] = [];
       const result = await runTurn(
         `Check the following and report what you find, briefly and factually. ` +

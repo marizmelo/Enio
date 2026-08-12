@@ -94,7 +94,7 @@ export function projectsRoot(): string {
 
 /* ------------------------------------------------------------- validation */
 
-function checkCap(field: keyof typeof CAPS, value: string): void {
+export function checkCap(field: keyof typeof CAPS, value: string): void {
   if (value.length > CAPS[field]) {
     throw new Error(
       `${field} is ${value.length} characters; the cap is ${CAPS[field]}. ` +
@@ -130,7 +130,7 @@ function realish(path: string): string {
   }
 }
 
-function assertAttachable(path: string): { real: string; kind: "file" | "folder" } {
+export function assertAttachable(path: string): { real: string; kind: "file" | "folder" } {
   if (!existsSync(path)) throw new Error(`${path} does not exist.`);
   const real = realpathSync(path);
   const stat = statSync(real);
@@ -293,7 +293,7 @@ export function deleteProject(id: string): void {
 
 /* ------------------------------------------------------------ attachments */
 
-function dedupedAlias(base: string, taken: Set<string>): string {
+export function dedupedAlias(base: string, taken: Set<string>): string {
   // Basenames arrive as filesystem names; the alias is a path segment the
   // model will type back, so it must stay one segment and nothing fancier.
   const cleaned = base.replace(/[^\w.-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "item";

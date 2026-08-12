@@ -247,6 +247,11 @@ function migrate(d: Database.Database): void {
   // pipelines are addressed by name everywhere a person types one, and the
   // lookup is re-done at run time so a deleted pipeline fails loudly.
   addColumn(d, "tasks", "pipeline", "TEXT");
+  // Standing attachments scoped to one conversation: a JSON Attachment list,
+  // the same shape projects use. A column rather than a table because the
+  // list is small, read whole, and written whole -- and it rides the row
+  // whose lifetime it shares.
+  addColumn(d, "sessions", "attachments", "TEXT");
 
   // Pipelines get their own tables rather than riding the plans table on
   // purpose: planSteps() coerces unknown step kinds to applescript and

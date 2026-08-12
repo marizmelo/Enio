@@ -103,6 +103,18 @@ setup, with the steps one click away.
 ## Files and attachments
 
 Attach a file with the **+** menu, by dragging it in, or by pasting an image.
+An attachment made this way belongs to **one message**.
+
+**Add to conversation…** in the same menu is the standing version: pick any
+folder or file on disk and it stays readable for the whole conversation — a
+chip above the composer shows it, with an × to detach. The agent addresses it
+by its alias as the first path segment (attach `~/Projects/thesis` and
+"summarise thesis/chapter2.md" just works), and reopening the conversation
+later brings the access back with it. With a [project](projects.md) open the
+same item reads **Add to project…** and the grant lands on the project
+instead — standing context follows the widest scope you have open. The roots
+the agent can read are always ones you granted by hand; nothing the model
+does can add one.
 The workspace list in that menu shows a thumbnail for anything previewable —
 four screenshots are indistinguishable by name and obvious by picture. With a
 [project](projects.md) open, **From project…** opens a browser over the

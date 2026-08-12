@@ -26,7 +26,7 @@ import type { JsonSchema, ToolDef } from "../types.js";
  * this working and not.
  */
 
-interface ServerConfig {
+export interface ServerConfig {
   command: string;
   args?: string[];
   env?: Record<string, string>;
@@ -45,6 +45,23 @@ interface Connection {
 
 const connections: Connection[] = [];
 
+export interface McpServerStatus {
+  name: string;
+  disabled: boolean;
+  connected: boolean;
+  toolCount: number;
+  error?: string;
+}
+
+// What the last load actually achieved, per configured server. The dialog
+// shows this instead of pretending: a server that failed to start reports
+// its error string, not a hopeful spinner.
+let lastStatus: McpServerStatus[] = [];
+
+export function mcpStatus(): McpServerStatus[] {
+  return lastStatus;
+}
+
 /** Function names on the wire must match ^[a-zA-Z0-9_-]{1,64}$. */
 function wireName(server: string, tool: string): string {
   const clean = `${server}__${tool}`.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -54,6 +71,13 @@ function wireName(server: string, tool: string): string {
 export async function loadMcpTools(
   onLog: (msg: string) => void = () => {},
 ): Promise<ToolDef[]> {
+  // Close what the previous load opened. Without this every registry rebuild
+  // leaked the old servers' child processes and stacked duplicate
+  // connections -- latent while rebuilds were rare, hot now that editing a
+  // connection triggers one.
+  await closeMcp();
+  lastStatus = [];
+
   let parsed: McpFile;
   try {
     parsed = JSON.parse(await readFile(config.mcpConfigPath, "utf8")) as McpFile;
@@ -64,6 +88,9 @@ export async function loadMcpTools(
     return [];
   }
 
+  for (const [name, cfg] of Object.entries(parsed.mcpServers ?? {})) {
+    if (cfg.disabled) lastStatus.push({ name, disabled: true, connected: false, toolCount: 0 });
+  }
   const servers = Object.entries(parsed.mcpServers ?? {}).filter(
     ([, cfg]) => !cfg.disabled,
   );
@@ -78,6 +105,12 @@ export async function loadMcpTools(
     ));
   } catch {
     onLog("[mcp] SDK not installed; skipping MCP servers.");
+    for (const [name] of servers) {
+      lastStatus.push({
+        name, disabled: false, connected: false, toolCount: 0,
+        error: "MCP SDK not installed",
+      });
+    }
     return [];
   }
 
@@ -125,11 +158,19 @@ export async function loadMcpTools(
         }
 
         const skipped = (listed.tools?.length ?? 0) - exposed;
+        lastStatus.push({ name, disabled: false, connected: true, toolCount: exposed });
         onLog(
           `[mcp] ${name}: ${exposed} tool${exposed === 1 ? "" : "s"}` +
             (skipped > 0 ? ` (${skipped} filtered out)` : ""),
         );
       } catch (err) {
+        lastStatus.push({
+          name,
+          disabled: false,
+          connected: false,
+          toolCount: 0,
+          error: (err as Error).message,
+        });
         onLog(`[mcp] ${name} failed to start: ${(err as Error).message}`);
       }
     }),

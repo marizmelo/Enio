@@ -5,6 +5,7 @@ import { endSession, indexPending, startSession } from "./memory/store.js";
 import { runTurn } from "./agent.js";
 import { buildRegistry } from "./tools/index.js";
 import { setMemorySession } from "./tools/memory.js";
+import { setConversationSession } from "./conversation-attachments.js";
 import { listWatches, runHeartbeat } from "./heartbeat.js";
 import { listPipelines, runPipeline } from "./pipelines.js";
 import type { Message } from "./types.js";
@@ -183,6 +184,7 @@ export async function runTask(
     } else {
       const sessionId = startSession();
       setMemorySession(sessionId);
+      setConversationSession(sessionId);
 
       const history: Message[] = [];
       const result = await runTurn(

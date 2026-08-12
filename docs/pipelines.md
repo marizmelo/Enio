@@ -123,6 +123,19 @@ holds — the tool grants orchestration convenience, not one new capability.
 A pipeline step cannot start another pipeline; one hop is the rule
 everywhere.
 
+**Save as skill** goes one step further: on any proven pipeline the canvas
+offers a button that writes a [skill](skills.md) naming when to use the flow
+and how to trigger it. After that, plain words are enough — *"give me my
+morning brief"* finds the skill and runs the pipeline, no pipeline vocabulary
+required. The export never overwrites an existing skill, and if you later
+rename or delete the pipeline the skill's trigger fails honestly (the refusal
+lists what is available) rather than improvising the steps by hand.
+
+Steps that need an outside connection get it automatically: an ability that
+declares an [MCP server](mcp.md) requirement — home automation and Home
+Assistant, today — inherits that server's tools inside its step, exactly the
+way `@server` grants them for one chat turn.
+
 ## Scheduled pipelines
 
 A [task](tasks.md) can trigger a pipeline instead of a prompt:

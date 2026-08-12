@@ -1,4 +1,4 @@
-import { Paperclip, Briefcase, FileText, Folder, Plug, Sparkles, Users } from "lucide-react";
+import { Paperclip, Briefcase, FileText, Folder, FolderOpen, Plug, Sparkles, Users } from "lucide-react";
 import { TipButton } from "@/components/TipButton";
 import { useThumbnail } from "@/components/AttachmentChips";
 import {
@@ -33,6 +33,8 @@ export function AttachMenu({
   onInsertSkill,
   onPickFiles,
   onBrowseProject,
+  onAttachStanding,
+  onManageConnections,
   disabled,
 }) {
   const { files = [], servers = [], skills = [], agents = [], project = null } = capabilities;
@@ -63,6 +65,14 @@ export function AttachMenu({
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start" side="top" className="w-64">
+        {/* Standing scope first: files and folders granted for the whole
+            project or conversation, not one message. The label names where
+            the grant lands so the same gesture never surprises. */}
+        <DropdownMenuItem onSelect={onAttachStanding}>
+          <FolderOpen className="mr-2 size-4" />
+          {project ? "Add to project…" : "Add to conversation…"}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuLabel>Add to this message</DropdownMenuLabel>
         <DropdownMenuSeparator />
 
@@ -131,7 +141,7 @@ export function AttachMenu({
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             {servers.length === 0 ? (
-              <DropdownMenuItem disabled>No MCP servers configured</DropdownMenuItem>
+              <DropdownMenuItem disabled>No connections yet</DropdownMenuItem>
             ) : (
               servers.map((s) => (
                 <DropdownMenuItem key={s} onSelect={() => onInsertMention(s)}>
@@ -139,6 +149,10 @@ export function AttachMenu({
                 </DropdownMenuItem>
               ))
             )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onManageConnections}>
+              Manage connections…
+            </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
 
