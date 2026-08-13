@@ -190,6 +190,11 @@ When the agent writes a document — *"build me a resume"* ends in `resume.md`
 the reply. It stays pinned until you close it, save a copy somewhere, or
 discard it.
 
+The split is adjustable by dragging the divider, and the header's expand
+button takes the canvas **fullscreen** — the whole window for writing, one
+click to bring the conversation back. [Notes](notes.md) open fullscreen by
+default, since opening one is choosing to write.
+
 **It is a real file in a real folder.** The panel's header shows the path —
 your workspace (`~/enio-workspace`), or the project's own folder when one is
 open — and clicking it reveals the file in Finder. Everything else follows

@@ -715,7 +715,9 @@ export function App() {
         open={notesOpen}
         onOpenChange={setNotesOpen}
         onOpen={(noteName) =>
-          setCanvas({ path: `.notes/${noteName}`, openedBy: "user", rev: Date.now() })
+          // Fullscreen by default: opening a note is choosing to write, and
+          // writing wants the width. The header toggle brings chat back.
+          setCanvas({ path: `.notes/${noteName}`, openedBy: "user", rev: Date.now(), full: true })
         }
       />
       <ConnectionsDialog
@@ -782,7 +784,16 @@ export function App() {
           when a canvas is pinned. Resizable, and the split remembers where
           you left it (autoSaveId persists to localStorage). Nothing inside
           the left column changes shape or order. */}
-      <ResizablePanelGroup direction="horizontal" autoSaveId="canvas-split" className="min-h-0 flex-1">
+      {/* Keyed on the mode: remounting the group is what lets a lone canvas
+          panel normalize to the full width, and keeps the saved split layout
+          from absorbing a one-panel arrangement. */}
+      <ResizablePanelGroup
+        key={canvas?.full ? "canvas-full" : "canvas-split"}
+        direction="horizontal"
+        autoSaveId={canvas?.full ? undefined : "canvas-split"}
+        className="min-h-0 flex-1"
+      >
+      {!canvas?.full && (
       <ResizablePanel defaultSize={58} minSize={35} className="flex min-w-0 flex-col">
       <div className="relative flex min-h-0 flex-1 flex-col">
       <main ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
@@ -923,14 +934,21 @@ export function App() {
         }}
       />
       </ResizablePanel>
+      )}
 
       {canvas && (
         <>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={42} minSize={22} maxSize={60}>
+          {!canvas.full && <ResizableHandle withHandle />}
+          <ResizablePanel
+            defaultSize={canvas.full ? 100 : 42}
+            minSize={canvas.full ? 100 : 22}
+            maxSize={canvas.full ? 100 : 60}
+          >
             <CanvasPanel
               path={canvas.path}
               rev={canvas.rev}
+              full={!!canvas.full}
+              onToggleFull={() => setCanvas((c) => (c ? { ...c, full: !c.full } : c))}
               onClose={() => setCanvas(null)}
               onDiscarded={() => setCanvas(null)}
               className="h-full"

@@ -5,6 +5,8 @@ import {
   Eye,
   FolderOpen,
   Loader2,
+  Maximize2,
+  Minimize2,
   Pencil,
   Save,
   Trash2,
@@ -49,7 +51,7 @@ const VIDEO = /\.(mp4|mov|webm)$/i;
 const AUDIO = /\.(mp3|m4a|wav)$/i;
 const MARKDOWN = /\.(md|markdown)$/i;
 
-export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
+export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarded, className }) {
   const [kind, setKind] = useState("loading"); // loading|text|media|blocked
   const [buffer, setBuffer] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -340,6 +342,17 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
             {preview ? <Pencil className="size-3.5" /> : <Eye className="size-3.5" />}
             {preview ? "Edit" : "Preview"}
           </Button>
+        )}
+        {/* The whole window, or the split beside the thread. Writing wants
+            the width; steering the agent wants the chat — one click apart. */}
+        {onToggleFull && (
+          <button
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            title={full ? "Show the conversation" : "Fullscreen"}
+            onClick={onToggleFull}
+          >
+            {full ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+          </button>
         )}
         <button
           className="shrink-0 text-muted-foreground hover:text-foreground"
