@@ -9,6 +9,14 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { renderMarkdownish } from "@/lib/markdown";
 
 /**
@@ -24,9 +32,11 @@ import { renderMarkdownish } from "@/lib/markdown";
  *
  * Editing is deliberately shared with real editors rather than replacing
  * them: Save writes back, "Open in app" hands the file to whatever the
- * system considers its editor, Reveal reaches Finder's full Open With menu,
- * and the Google Docs handoff copies the buffer and opens docs.new — an
- * honest no-auth bridge (a real upload needs OAuth, deferred).
+ * system considers its editor, and Reveal reaches Finder's full Open With
+ * menu. A "Google Docs" button was built and removed: without a real
+ * integration it was copy-and-paste wearing a logo, and a button that
+ * implies a connection Enio does not have is a small lie. The honest form
+ * of that idea is an MCP connection, when one exists.
  */
 
 const MEDIA = /\.(png|jpe?g|gif|webp|bmp|avif|svg|mp4|mov|webm|mp3|m4a|wav)$/i;
@@ -45,7 +55,6 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
   const [banner, setBanner] = useState(false);
   const [error, setError] = useState("");
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const [toast, setToast] = useState("");
   // What the panel last loaded from disk, so the poll can tell "the file
   // moved on" apart from "my own save landed".
   const diskMtime = useRef(0);
@@ -134,11 +143,6 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
     return () => clearInterval(timer);
   }, [path, load]);
 
-  const flash = (text) => {
-    setToast(text);
-    setTimeout(() => setToast(""), 3000);
-  };
-
   const save = async () => {
     const result = await window.maple?.saveFileContent?.(path, buffer);
     if (result?.ok) {
@@ -163,12 +167,6 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
     const result = await window.maple?.trashFile?.(path);
     if (result?.ok) onDiscarded();
     else setError(result?.reason ?? "Could not move it to the Trash.");
-  };
-
-  const toDocs = async () => {
-    await window.maple?.copyText?.(buffer);
-    window.maple?.openExternal?.("https://docs.new");
-    flash("Copied — paste into the new doc.");
   };
 
   const name = path.split("/").pop();
@@ -230,7 +228,6 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
         </div>
       )}
       {error && <p className="shrink-0 border-b px-3 py-1.5 text-xs text-destructive">{error}</p>}
-      {toast && <p className="shrink-0 border-b px-3 py-1.5 text-xs text-muted-foreground">{toast}</p>}
       {readOnly && kind === "text" && (
         <p className="shrink-0 border-b px-3 py-1.5 text-xs text-muted-foreground">
           Too large to edit here safely — shown read-only. Open it in an app to edit.
@@ -284,26 +281,32 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
             <Save className="size-3.5" /> Save
           </Button>
         )}
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 gap-1 px-2 text-xs"
-          title="Open in the system's default app — for other apps, use the path above to reveal in Finder and pick Open With"
-          onClick={() => window.maple?.openInDefaultApp?.(path)}
-        >
-          <AppWindow className="size-3.5" /> Open in app
-        </Button>
-        {kind === "text" && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 px-2 text-xs"
-            title="Copies the document and opens a new Google Doc to paste into"
-            onClick={toDocs}
-          >
-            Google Docs
-          </Button>
-        )}
+        {/* Desktop entries are always real; web apps join this menu when a
+            connection that can actually receive the file exists -- a button
+            implying an integration Enio does not have would be a small lie,
+            which is why the clipboard-to-docs.new version was removed. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs">
+              <AppWindow className="size-3.5" /> Open with…
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="top" className="w-56">
+            <DropdownMenuItem onSelect={() => window.maple?.openInDefaultApp?.(path)}>
+              Default app
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => window.maple?.openWithApp?.(path)}>
+              Choose an app…
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => window.maple?.revealFile?.(path)}>
+              Show in Finder
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] font-normal text-muted-foreground">
+              Web apps appear here when a connection can receive this file.
+            </DropdownMenuLabel>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button
           size="sm"
           variant="outline"

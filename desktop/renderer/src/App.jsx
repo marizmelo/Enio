@@ -23,6 +23,7 @@ import { PipelinesDialog } from "@/components/PipelinesDialog";
 import { ConnectionsDialog } from "@/components/ConnectionsDialog";
 import { CanvasPanel } from "@/components/CanvasPanel";
 import { BootScreen } from "@/components/BootScreen";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
   attachToProject,
   closeProject as closeProjectApi,
@@ -637,11 +638,12 @@ export function App() {
         }}
       />
 
-      {/* Split view: the whole thread+composer run becomes the left column
-          when a canvas is pinned. The right panel is a sibling, so nothing
-          inside the left column changes shape or order. */}
-      <div className="flex min-h-0 flex-1">
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* Split view: the whole thread+composer run becomes the left panel
+          when a canvas is pinned. Resizable, and the split remembers where
+          you left it (autoSaveId persists to localStorage). Nothing inside
+          the left column changes shape or order. */}
+      <ResizablePanelGroup direction="horizontal" autoSaveId="canvas-split" className="min-h-0 flex-1">
+      <ResizablePanel defaultSize={58} minSize={35} className="flex min-w-0 flex-col">
       <div className="relative flex min-h-0 flex-1 flex-col">
       <main ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
         {!backendReady ? (
@@ -774,18 +776,23 @@ export function App() {
           setSpeakReplies((on) => !on);
         }}
       />
-      </div>
+      </ResizablePanel>
 
       {canvas && (
-        <CanvasPanel
-          path={canvas.path}
-          rev={canvas.rev}
-          onClose={() => setCanvas(null)}
-          onDiscarded={() => setCanvas(null)}
-          className="w-[44%] min-w-[300px] max-w-[560px] shrink-0 border-l"
-        />
+        <>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={42} minSize={22} maxSize={60}>
+            <CanvasPanel
+              path={canvas.path}
+              rev={canvas.rev}
+              onClose={() => setCanvas(null)}
+              onDiscarded={() => setCanvas(null)}
+              className="h-full"
+            />
+          </ResizablePanel>
+        </>
       )}
-      </div>
+      </ResizablePanelGroup>
     </div>
     </TooltipProvider>
   );

@@ -61,6 +61,11 @@ contextBridge.exposeInMainWorld("maple", {
     return ipcRenderer.invoke("open-in-default-app", relPath);
   },
 
+  /** Pick an application and open the file in it (a real Open With…). */
+  openWithApp(relPath) {
+    return ipcRenderer.invoke("open-with-app", relPath);
+  },
+
   /** Modification time, for noticing edits made in external editors. */
   statFile(relPath) {
     return ipcRenderer.invoke("stat-file", relPath);

@@ -200,9 +200,7 @@ all reading and writing the same bytes on disk.
 gets a Preview toggle. Or hand it to a real editor: **Open in app** launches
 the system's default editor for that file type, and Finder's full *Open
 With* menu is one Reveal away. Edits made outside show up in the panel
-within a couple of seconds. **Google Docs** copies the document and opens a
-fresh doc in your browser to paste into — an honest handoff, since a true
-upload would need a Google sign-in Enio doesn't have.
+within a couple of seconds.
 
 **Or iterate in chat.** With the canvas pinned, your next message carries
 one visible word — `@canvas` — which Enio resolves to the pinned file and

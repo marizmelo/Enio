@@ -896,12 +896,15 @@ guard stays untouched. *Hidden steering rejected*: while pinned, the file
 and @coder mentions are appended into the visible message -- the
 approval-sheet principle; the transcript shows why the turn edited that
 file. Editing is deliberately shared with real editors (Open in app, Finder
-Open With, a clipboard handoff to Google Docs -- true upload needs OAuth,
-deferred) with a 2s mtime poll keeping disk, panel and agent one loop.
-Deliberately not built: canvas persistence across restarts (condition:
-users reopen conversations to keep editing); a narrow-window overlay mode;
-mention steering for paths with spaces; svg source editing in-panel (svg
-previews as media; one reader stays honest).
+Open With) with a 2s mtime poll keeping disk, panel and agent one loop.
+A "Google Docs" button shipped for a day and was removed: it was clipboard
+copy plus opening docs.new -- paste-it-yourself wearing a product logo --
+and a button that implies an integration Enio does not have is a small
+lie. The honest form is a real Docs connection (MCP/OAuth), if it is ever
+wanted. Deliberately not built: canvas persistence across restarts
+(condition: users reopen conversations to keep editing); a narrow-window
+overlay mode; svg source editing in-panel (svg previews as media; one
+reader stays honest).
 
 **Provenance generalises: the frame states who answered and what was read,
 because the reply cannot.** The same measurement that killed the MCP prompt

@@ -698,6 +698,28 @@ ipcMain.handle("trash-file", async (_event, relPath) => {
   }
 });
 
+/** A real "Open With…": pick an application, open the file in it. The
+ *  native picker starts in /Applications and refuses non-apps, and the
+ *  launch goes through open(1) -- no path from the renderer ever names an
+ *  executable directly. */
+ipcMain.handle("open-with-app", async (_event, relPath) => {
+  const full = resolveInWorkspace(relPath);
+  if (!full || !fs.existsSync(full)) return { ok: false, reason: "That file is no longer there." };
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Open with…",
+    defaultPath: "/Applications",
+    properties: ["openFile"],
+    filters: [{ name: "Applications", extensions: ["app"] }],
+  });
+  if (result.canceled || !result.filePaths[0]) return { ok: true, cancelled: true };
+  return new Promise((resolve) => {
+    require("node:child_process").execFile(
+      "open", ["-a", result.filePaths[0], full],
+      (err) => resolve(err ? { ok: false, reason: err.message } : { ok: true }),
+    );
+  });
+});
+
 /** Open a workspace file in whatever the system considers its editor.
  *  Finder's full "Open With" menu comes free via reveal-file. */
 ipcMain.handle("open-in-default-app", async (_event, relPath) => {
