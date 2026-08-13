@@ -69,6 +69,13 @@ import {
 } from "./memory/store.js";
 import { graphView } from "./memory/traces.js";
 import { listPreferences, removePreference } from "./memory/learning.js";
+import {
+  availableAgents,
+  cancelHandoffRun,
+  HandoffRefused,
+  listHandoffRuns,
+  startHandoffRun,
+} from "./handoffs.js";
 import { ABILITIES, abilityAvailability } from "./abilities.js";
 import {
   adoptRun,
@@ -548,6 +555,34 @@ async function handle(
   const summaryRoute = /^\/memory\/summaries\/([A-Za-z0-9-]+)$/.exec(url.pathname);
   if (summaryRoute && req.method === "DELETE") {
     sendJson(res, forgetSummary(summaryRoute[1]!) ? 200 : 404, { ok: true });
+    return;
+  }
+
+  /**
+   * Handoff runs: a reviewed handoff file, executed by the user's own CLI
+   * agent as a background job. Thin routes; the machine is handoffs.ts.
+   */
+  if (req.method === "GET" && url.pathname === "/handoffs") {
+    sendJson(res, 200, { agents: availableAgents(), runs: listHandoffRuns() });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/handoffs/run") {
+    try {
+      const body = JSON.parse((await readBody(req)) || "{}") as {
+        path?: string;
+        provider?: string;
+      };
+      const run = startHandoffRun(String(body.path ?? ""), String(body.provider ?? ""));
+      sendJson(res, 202, { run });
+    } catch (err) {
+      const status = err instanceof HandoffRefused ? 409 : 500;
+      sendJson(res, status, { error: { message: (err as Error).message } });
+    }
+    return;
+  }
+  const handoffCancel = /^\/handoffs\/([a-z0-9-]+)$/.exec(url.pathname);
+  if (handoffCancel && req.method === "DELETE") {
+    sendJson(res, cancelHandoffRun(handoffCancel[1]!) ? 200 : 404, { ok: true });
     return;
   }
 

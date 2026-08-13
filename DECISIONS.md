@@ -1538,3 +1538,24 @@ about X" works without any marker phrase. Rejected: labelling the
 sections harder ("background, possibly unrelated") -- the MCP provenance
 experiment already measured prompt labels failing to restrain this model
 size; withholding beats warning.
+
+**The handoff runs itself, through the user's own agent.** The
+deliberately-not-built entry for launching CLI agents had a condition --
+users ask -- and it fired: clipboard-plus-browser was an errand, and the
+ask was "run it inside enio as a task". The consent surface question that
+entry raised is answered by pinning everything the click implies: the
+payload is exactly the reviewed handoff file, the runner is the user's
+own already-authenticated CLI (claude -p, codex exec, gemini -- enio
+holds no API keys and never will for this), and the flags force
+non-interactive read-only runs, so the agent can only answer, never act.
+Do not loosen those flags to make a run "more useful"; an agent that
+acts is a different feature with a different consent surface. Runs are
+process-state like model downloads -- a restart forgets the status,
+never the answer file, which lands beside the handoff as
+answer-*-<agent>.md (prefix changed so the send button does not offer
+to ship an answer back out). CLI discovery searches PATH plus the homes
+PATH misses under launchd (~/.local/bin, the node bin dir, homebrew).
+The web ferry stays as the labeled fallback for providers with no CLI
+installed. Also fixed here: the ferry failed SILENTLY when the file or
+provider did not resolve -- a button that does nothing is the one
+failure mode worse than an error, and both paths now say what happened.

@@ -209,15 +209,22 @@ such model exists — most hit the bandwidth wall before the capacity wall —
 the local option is withheld rather than greyed, and the arrow goes
 straight to the cloud handoff.
 
-The reply that wrote a handoff gets a **Send to** button: it copies the
-whole file to your clipboard and opens your chosen AI — the desktop app if
-it is installed, the web app if not. Claude, ChatGPT, Codex and Gemini are
-offered; the one you pick becomes the default until you pick another.
+The reply that wrote a handoff gets an **Ask** button. If you have the
+provider's own CLI agent installed — `claude`, `codex` or `gemini` — Enio
+runs the handoff through it as a background job: the button shows the
+elapsed time, and the answer comes back as a file beside the handoff
+(`answer-…-claude.md`), one click from the canvas. The agent runs under
+*your* account and *its* sign-in — Enio holds no API keys — and it is
+forced into non-interactive, read-only mode, so it can only answer, never
+act on your machine. The one you pick becomes the default until you pick
+another.
 
-Nothing calls any cloud API, and "send" never transmits anything: the
-prompt reaches the other model when you paste it there, under your own
-account, after reading it. The handoff is a file on your disk until then,
-which keeps the decision — and the data — yours.
+Providers without an installed CLI fall back to the ferry: copy the file,
+open their web app, you paste. Labeled as exactly that in the menu.
+
+Either way the payload is the handoff file you can read first, and it
+leaves this machine only on your click — which keeps the decision, and
+the data, yours.
 
 ## A note on Ollama's MLX engine
 

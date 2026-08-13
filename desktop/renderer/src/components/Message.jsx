@@ -177,7 +177,9 @@ export function Message({
         artifacts
           .filter((a) => /(^|\/)handoff-[^/]*\.md$/i.test(a.path))
           .slice(0, 1)
-          .map((a) => <SendToAi key={a.path} path={a.path} />)}
+          .map((a) => (
+            <SendToAi key={a.path} path={a.path} onOpenArtifact={onOpenArtifact} />
+          ))}
 
       <SourcesFooter sources={sources} onOpenFile={onOpenFile} />
 
