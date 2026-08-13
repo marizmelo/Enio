@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import { homedir } from "node:os";
@@ -117,6 +117,22 @@ export interface HandoffDeps {
   timeoutMs?: number;
 }
 
+/**
+ * Every agent process — headless run and interactive sign-in alike —
+ * starts in this dedicated, empty scratch folder. Claude Code (and its
+ * kin) grant capabilities per folder: a "do you trust this folder?"
+ * answered once during sign-in covers every later run, and because the
+ * folder is empty by construction, trusting it grants access to nothing.
+ * The workspace was considered and rejected as this cwd: a trusted folder
+ * is readable context to an agent CLI, and the payload must stay exactly
+ * the reviewed handoff file — not whatever else lives near it.
+ */
+function agentScratchDir(): string {
+  const dir = join(config.dataDir, "agent-scratch");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 const runs = new Map<string, HandoffRun>();
 const children = new Map<string, ReturnType<typeof spawn>>();
 const MAX_RUNS_KEPT = 20;
@@ -193,17 +209,13 @@ export function startHandoffRun(
   const settled = listHandoffRuns().filter((r) => r.status !== "running");
   for (const old of settled.slice(MAX_RUNS_KEPT)) runs.delete(old.id);
 
-  // cwd is enio's own data dir, not the workspace and not $HOME: the flags
-  // already forbid writes, and a scratch cwd means even a misbehaving CLI
-  // has nothing of the user's in reach as ".".
-  //
   // The nesting markers are dropped from the env: when enio itself was
   // launched from inside a Claude Code session (development, mostly), the
   // child claude CLI sees them and behaves as a nested instance. The
   // user's auth variables pass through untouched.
   const { CLAUDECODE: _cc, CLAUDE_CODE_ENTRYPOINT: _ce, ...env } = process.env;
   const child = spawn(resolved.bin, resolved.args, {
-    cwd: config.dataDir,
+    cwd: agentScratchDir(),
     env,
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -332,6 +344,10 @@ export async function openSignin(
     `#!/bin/sh\n` +
       `# Sign in to ${agent?.name ?? provider} so enio's Ask button can run it.\n` +
       `# Close this window when you are done.\n` +
+      // The same empty folder the headless runs use, so the trust question
+      // some CLIs ask on first start is answered once, here, about a
+      // folder with nothing in it.
+      `cd ${JSON.stringify(agentScratchDir())} || exit 1\n` +
       `exec ${JSON.stringify(resolved.bin)}${args ? ` ${args}` : ""}\n`,
     { encoding: "utf8", mode: 0o755 },
   );

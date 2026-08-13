@@ -151,6 +151,9 @@ test("sign-in writes a .command that execs the resolved CLI, and launches it", a
   assert.match(file, /signin-claude\.command$/);
   const body = readFileSync(file, "utf8");
   assert.match(body, /^#!\/bin\/sh/);
+  // Sign-in and headless runs share one empty cwd, so a folder-trust
+  // prompt answered here covers every later run — and covers nothing.
+  assert.match(body, /cd ".*agent-scratch" \|\| exit 1/);
   assert.match(body, /exec "\/fake\/bin\/claude"/);
   const { statSync } = await import("node:fs");
   assert.ok(statSync(file).mode & 0o100, "executable");
