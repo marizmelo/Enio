@@ -285,6 +285,9 @@ export async function route(
         // open. A note-in-an-app stays with the operator (the example
         // below); a document that should exist as a file is the coder's.
         `"build me a resume" -> {"specialist": "coder"}\n` +
+        // The handoff flow: composing a prompt-file for a frontier model is
+        // document work, and the ask-bigger-model skill rides the turn.
+        `"ask a bigger model to write this" -> {"specialist": "coder"}\n` +
         `"write a document about our launch plan" -> {"specialist": "coder"}\n` +
         `"what did I say I was working on" -> {"specialist": "librarian"}\n` +
         `"did Sam reply about the invoice" -> {"specialist": "mail"}\n` +

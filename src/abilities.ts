@@ -181,6 +181,29 @@ export const ABILITIES: Ability[] = [
     requiredTools: ["run_command"],
   },
   {
+    id: "ask-bigger-model",
+    title: "Ask a bigger model",
+    description:
+      "Too big for the local model? Prepare a complete prompt to paste into Claude or ChatGPT.",
+    // The honest half of running a small model: the long tail it cannot do
+    // is real, and the graceful answer is packaging, not pretending. The
+    // handoff file carries everything the frontier model cannot see from
+    // here -- and nothing calls any cloud API; pasting is the user's act,
+    // which is the whole privacy story.
+    icon: "arrow-up-right",
+    specialist: "coder",
+    skill: "ask-bigger-model",
+    promptTemplate: "/ask-bigger-model @coder ___",
+    suggestions: [
+      "write a 5,000-word strategy memo from my notes",
+      "design the architecture for my app idea in depth",
+      "rework my resume with detailed feedback on every section",
+    ],
+    inputs: ["text", "document"],
+    outputs: ["document"],
+    requiredTools: ["write_file"],
+  },
+  {
     id: "read-email",
     title: "Read email",
     description: "Search and read your mailbox.",

@@ -11,6 +11,7 @@ import {
 } from "@xyflow/react";
 import {
   AppWindow,
+  ArrowUpRight,
   Brain,
   Camera,
   ChevronRight,
@@ -51,6 +52,7 @@ import {
 
 const ICONS = {
   "pencil-line": PencilLine,
+  "arrow-up-right": ArrowUpRight,
   globe: Globe,
   "file-search": FileSearch,
   "file-pen": FilePen,

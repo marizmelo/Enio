@@ -187,6 +187,19 @@ prompt processing rather than token generation. Maple also holds far less
 context (see the budget table above). Try both — switching costs one click and
 a model load.
 
+## When the local model is not enough
+
+A small model has a long tail it cannot do — a 5,000-word memo, a deep
+architecture review. The graceful answer is packaging, not pretending: pick
+**Ask a bigger model** on the launcher (or say it in chat), and Enio writes
+a *handoff file* — your request restated, plus everything a frontier model
+cannot see from here: the relevant context from your conversation, files,
+and project, made self-contained. It opens in the canvas; review it, press
+Copy, and paste it into Claude or ChatGPT under your own account.
+
+Nothing calls any cloud API. The handoff is a file on your disk until you
+paste it somewhere, which keeps the decision — and the data — yours.
+
 ## A note on Ollama's MLX engine
 
 Since v0.30 (May 2026), Ollama on Apple Silicon can serve **safetensors**

@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   AppWindow,
   ArrowLeft,
+  ArrowUpRight,
   Brain,
   Camera,
   Clapperboard,
@@ -28,6 +29,7 @@ import logo from "../../../assets/enio-logo.svg";
  *  whole icon set. */
 const ICONS = {
   "message-circle": MessageCircle,
+  "arrow-up-right": ArrowUpRight,
   globe: Globe,
   "file-search": FileSearch,
   "file-pen": FilePen,

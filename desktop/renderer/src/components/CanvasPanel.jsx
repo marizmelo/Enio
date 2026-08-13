@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AppWindow,
+  Copy,
   Eye,
   FolderOpen,
   Pencil,
@@ -55,6 +56,7 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
   const [banner, setBanner] = useState(false);
   const [error, setError] = useState("");
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [toast, setToast] = useState("");
   // What the panel last loaded from disk, so the poll can tell "the file
   // moved on" apart from "my own save landed".
   const diskMtime = useRef(0);
@@ -143,6 +145,11 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
     return () => clearInterval(timer);
   }, [path, load]);
 
+  const flash = (text) => {
+    setToast(text);
+    setTimeout(() => setToast(""), 3000);
+  };
+
   const save = async () => {
     const result = await window.maple?.saveFileContent?.(path, buffer);
     if (result?.ok) {
@@ -228,6 +235,7 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
         </div>
       )}
       {error && <p className="shrink-0 border-b px-3 py-1.5 text-xs text-destructive">{error}</p>}
+      {toast && <p className="shrink-0 border-b px-3 py-1.5 text-xs text-muted-foreground">{toast}</p>}
       {readOnly && kind === "text" && (
         <p className="shrink-0 border-b px-3 py-1.5 text-xs text-muted-foreground">
           Too large to edit here safely — shown read-only. Open it in an app to edit.
@@ -307,6 +315,20 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
             </DropdownMenuLabel>
           </DropdownMenuContent>
         </DropdownMenu>
+        {kind === "text" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1 px-2 text-xs"
+            title="Copy the whole document — e.g. to paste into a web app"
+            onClick={async () => {
+              await window.maple?.copyText?.(buffer);
+              flash("Copied.");
+            }}
+          >
+            <Copy className="size-3.5" /> Copy
+          </Button>
+        )}
         <Button
           size="sm"
           variant="outline"

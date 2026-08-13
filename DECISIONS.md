@@ -880,6 +880,21 @@ sends canvas_path) -- the bubble stays readable, no client needs to know
 which agent owns write_file, an explicit @agent still wins, and paths the
 mention grammar cannot express (spaces) work anyway.
 
+**The long tail gets a handoff, not an attempt.** Some asks genuinely
+exceed a 4B model, and both failure modes on offer were bad: try anyway and
+underdeliver, or refuse flatly. The ask-bigger-model ability packages
+instead -- a coder turn (guided by a shipped skill) writes a self-contained
+handoff file with the request and every piece of local context a frontier
+model cannot see, the canvas opens it, and Copy + a browser finishes the
+job under the user's own account. Nothing automatically calls any cloud
+API; pasting is the user's act, which is the entire privacy story. Rejected:
+wiring a frontier API key in as an automatic fallback -- it would be
+quieter, and quiet is the problem, since data leaving the machine is
+exactly the decision that must stay loud. Idea taken from Vasques'
+"chief of staff" writeup, whose handoff agent was the one piece enio
+lacked; his forty-tools-one-agent failure and specialists-with-curated-
+tools fix independently replicate the architecture here.
+
 **The models list states speed, not just fit.** Prompted by an article on
 the wave of newcomers hitting the "bandwidth wall": on Apple Silicon,
 capacity decides whether a model loads and memory bandwidth decides whether

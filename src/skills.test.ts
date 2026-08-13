@@ -208,3 +208,16 @@ describe("read_skill tool", () => {
     assert.equal(skillTools.length, 1);
   });
 });
+
+test("the shipped ask-bigger-model skill parses and stands alone", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync("examples/skills/ask-bigger-model/SKILL.md", "utf8");
+  const skill = parseSkill(source, "/tmp/x", "fallback");
+  assert.equal(skill.name, "ask-bigger-model");
+  // The catalogue line is all the model sees before deciding; it has to
+  // carry the whole trigger.
+  assert.match(skill.description, /too big for the local model/i);
+  // The two rules the handoff lives or dies by.
+  assert.match(skill.body, /stand alone/i);
+  assert.match(skill.body, /Do not do the task locally/i);
+});
