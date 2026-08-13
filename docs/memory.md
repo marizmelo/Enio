@@ -82,3 +82,27 @@ because a fact whose transcript is deleted cannot survive a reindex:
 
 There is no silent default. `/clear` only clears the conversation on screen; it
 does not touch what is on disk.
+
+## Seeing what it knows
+
+The desktop app has a **Memory** button in the top bar. It lists everything
+memory holds and lets you prune it in place:
+
+- **Facts** — pin, unpin, or forget each one. Pinned facts ride in every
+  turn; the rest only when they look related.
+- **Preferences** — the standing instructions injected into every turn.
+- **Conversation summaries** — what past conversations contribute to new
+  ones. Forgetting a summary removes it from context but keeps the
+  conversation itself (that lives in History). A full `enio reindex`
+  re-derives all summaries from the transcripts — they are derived data,
+  and rebuildability is the point.
+
+The **Graph** tab draws the knowledge graph — the people, projects and
+tools Enio has heard about and the relations between them, sized by how
+often each is mentioned. The same graph is behind `enio graph "topic"` and
+the inspector.
+
+Worth knowing while pruning: the conversation you are in is the authority
+on *what you are asking*; memory is background about *you*; files are
+evidence a tool reads and cites. When an answer seems steered by something
+from another conversation, the summaries list is where to look.

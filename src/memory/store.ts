@@ -75,6 +75,61 @@ export async function rememberFact(
   return { stored: true };
 }
 
+/** Everything the facts table holds, for the desktop's Memory dialog. */
+export function listFacts(): Array<{
+  id: number;
+  text: string;
+  pinned: boolean;
+  source: string;
+  createdAt: number;
+}> {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, text, pinned, source, created_at AS createdAt
+         FROM facts ORDER BY pinned DESC, id DESC`,
+    )
+    .all() as Array<{ id: number; text: string; pinned: number; source: string; createdAt: number }>;
+  return rows.map((r) => ({ ...r, pinned: r.pinned === 1 }));
+}
+
+export function setFactPinned(id: number, pinned: boolean): boolean {
+  return (
+    getDb().prepare(`UPDATE facts SET pinned = ? WHERE id = ?`).run(pinned ? 1 : 0, id)
+      .changes > 0
+  );
+}
+
+/** The summaries feeding every turn's memory block, newest first. */
+export function listSummaries(limit = 50): Array<{
+  sessionId: string;
+  summary: string;
+  startedAt: number;
+}> {
+  return getDb()
+    .prepare(
+      `SELECT id AS sessionId, summary, started_at AS startedAt
+         FROM sessions WHERE summary IS NOT NULL
+        ORDER BY started_at DESC LIMIT ?`,
+    )
+    .all(limit) as Array<{ sessionId: string; summary: string; startedAt: number }>;
+}
+
+/**
+ * Remove one conversation's summary (and its embedding) from the memory
+ * block without touching the transcript. `indexed` stays 1 so the next
+ * background indexing pass does not quietly regenerate what was just
+ * forgotten — but `enio reindex` will, deliberately: summaries are derived,
+ * and a full rebuild rebuilding everything is the invariant, not a leak.
+ * The transcript itself is forgotten in the History dialog, not here.
+ */
+export function forgetSummary(sessionId: string): boolean {
+  return (
+    getDb()
+      .prepare(`UPDATE sessions SET summary = NULL, embedding = NULL WHERE id = ? AND summary IS NOT NULL`)
+      .run(sessionId).changes > 0
+  );
+}
+
 export function forgetFact(idOrText: string): boolean {
   const db = getDb();
   const asId = Number(idOrText);

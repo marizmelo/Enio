@@ -41,6 +41,7 @@ import {
 } from "@/lib/projects";
 import { PermissionNotice } from "@/components/PermissionNotice";
 import { currentModel } from "@/lib/recipes";
+import { MemoryDialog } from "@/components/MemoryDialog";
 import { RecipesDialog } from "@/components/RecipesDialog";
 import { speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
 
@@ -99,6 +100,7 @@ export function App() {
   const [attachError, setAttachError] = useState("");
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [pipelinesOpen, setPipelinesOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   // A file opened from the thread. The arrows walk that message's attachments,
@@ -643,14 +645,29 @@ export function App() {
   // Only when the handoff skill is actually installed: a button that sends
   // "/ask-bigger-model" into a system without the skill produces a model
   // staring at an unparsed slash command.
+  //
+  // The last real question rides along VERBATIM. Told only "package what I
+  // was trying to do above", a 4B in a restored thread packaged a task from
+  // its memory block instead of the conversation — background about the
+  // user mistaken for the task. Quoting the question puts the target in the
+  // message itself: selection, not judgement. Mention sigils are stripped
+  // from the quote so it cannot re-steer the turn it rides in.
   const askBigger = (capabilities.abilities ?? []).some(
     (a) => a.id === "ask-bigger-model" && a.availability === "available",
   )
-    ? () =>
+    ? () => {
+        const lastQuestion = [...messages]
+          .reverse()
+          .find((m) => m.role === "user" && !/^\/ask-bigger-model/.test(m.content ?? ""))
+          ?.content?.replace(/[@/]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 240);
         send(
-          "/ask-bigger-model @coder The answer above was not what I wanted. " +
-            "Package what I was trying to do into a handoff prompt for a bigger model.",
-        )
+          "/ask-bigger-model @coder The answer was not enough. Package this task " +
+            `into a handoff prompt for a bigger model${lastQuestion ? `: "${lastQuestion}"` : "."}`,
+        );
+      }
     : undefined;
 
   const tryUpgrade = upgrade
@@ -676,6 +693,7 @@ export function App() {
         }}
         onHistory={() => setHistoryOpen(true)}
         onPipelines={() => setPipelinesOpen(true)}
+        onMemory={() => setMemoryOpen(true)}
         meeting={meeting}
         onToggleMeeting={capabilities.voice?.transcription ? toggleMeeting : undefined}
         onRecipes={isMac ? () => setRecipesOpen(true) : undefined}
@@ -689,6 +707,7 @@ export function App() {
         onOpenChange={setPipelinesOpen}
         abilities={capabilities.abilities ?? []}
       />
+      <MemoryDialog open={memoryOpen} onOpenChange={setMemoryOpen} />
       <ConnectionsDialog
         open={connectionsOpen}
         onOpenChange={(open) => {

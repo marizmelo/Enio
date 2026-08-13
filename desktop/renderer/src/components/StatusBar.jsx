@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookMarked, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, Workflow, X } from "lucide-react";
+import { BookMarked, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, Workflow, X } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -38,6 +38,7 @@ export function StatusBar({
   onFiles,
   onProjects,
   onPipelines,
+  onMemory,
   meeting,
   onToggleMeeting,
   onCloseProject,
@@ -100,6 +101,12 @@ export function StatusBar({
             "this worked, make it repeatable". */}
         <TipButton tip="Pipelines" className="size-7" onClick={onPipelines}>
           <Workflow className="size-4" />
+        </TipButton>
+        {/* What Enio remembers about you -- and the way to prune it. Beside
+            the other standing surfaces because memory speaks in every turn,
+            and a thing with that reach must be one click from any thread. */}
+        <TipButton tip="Memory" className="size-7" onClick={onMemory}>
+          <Brain className="size-4" />
         </TipButton>
         {/* Start and stop are user acts here, never tool calls -- the one
             design decision that makes a fabricated "I stopped and here is

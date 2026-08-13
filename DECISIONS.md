@@ -1497,3 +1497,26 @@ Two consequences recorded rather than hidden:
   to be an adapter in higher precision over a frozen base, which is also the
   only version that keeps `enio reindex` meaningful — raw transcripts stay the
   source of truth and the adapter is derived, exactly as the graph is.
+
+**Memory got a face, and the handoff stopped trusting context.** A live
+handoff turn packaged a task from the MEMORY BLOCK -- a network project
+out of last week's session summaries -- while the visible thread was
+about a lease. Two answers, one structural and one surface. Structural:
+the escalation arrow now quotes the user's last question verbatim in the
+steering message (mention sigils stripped so the quote cannot re-steer
+the turn), because "package what I was trying to do above" asks a 4B to
+pick the task out of context, and picking is exactly what it gets wrong;
+quoting turns it into selection. Surface: a Memory dialog in the desktop
+-- facts (pin/unpin/forget), preferences, and the per-turn session
+summaries with a per-item forget -- because memory was writable from
+chat and the CLI but listable NOWHERE outside the separate inspector,
+and a thing that speaks in every turn's prompt must be auditable where
+the turns happen. Forgetting a summary nulls the derived summary and
+keeps the transcript (History owns conversations); the next background
+index pass will not resurrect it, `enio reindex` deliberately will,
+because summaries are derived data and a full rebuild rebuilding
+everything is the invariant. The graph view reuses the inspector's
+dependency-free force layout and the pipeline composer's ReactFlow --
+no new library for a view. The layer rule the dialog teaches: the
+thread is the task, memory is background about the user, files are
+evidence -- and none of the three may impersonate another.
