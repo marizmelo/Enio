@@ -157,8 +157,44 @@ async function drain(mine) {
  * finished — which on a long answer was the difference between speech feeling
  * live and feeling like a recording.
  */
+/**
+ * Markdown, as a person would read it aloud.
+ *
+ * The voice was performing the notation: "hash hash Cold Brew asterisk
+ * asterisk" -- reading the source instead of the document. This mirrors the
+ * grammar renderMarkdownish renders (headings, bold, bullets, inline code,
+ * links) and sits inside speak() itself, so every utterance passes through
+ * whether it came from the stream splitter or the read-aloud button. URLs
+ * become their host: nobody wants a path read out character by character.
+ */
+export function spokenText(raw) {
+  return String(raw ?? "")
+    // A whole fenced block is named, not performed; a stray fence from a
+    // block split across streamed sentences is dropped.
+    .replace(/```[a-z]*\n[\s\S]*?```/gi, " code block. ")
+    .replace(/```[a-z]*\n?/gi, " ")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*\n]+)\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, "$1")
+    .replace(/^[-*+]\s+/gm, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/\|/g, " ")
+    .replace(/https?:\/\/\S+/g, (u) => {
+      try {
+        return new URL(u).hostname.replace(/^www\./, "");
+      } catch {
+        return "a link";
+      }
+    })
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}
+
 export function speak(text) {
-  const trimmed = (text ?? "").trim();
+  const trimmed = spokenText(text);
   if (!trimmed) return Promise.resolve();
   queue.push({ text: trimmed, blob: null });
   // Kicked off here rather than only in the drain loop, so the first sentence

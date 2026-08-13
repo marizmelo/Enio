@@ -240,6 +240,7 @@ export function App() {
       tools: m.tools ?? [],
       agent: m.agent ?? null,
       sources: m.sources ?? [],
+      artifacts: m.artifacts ?? [],
       restored: true,
     }));
     const lastTs = transcript.length > 0 ? transcript[transcript.length - 1].ts : null;
@@ -431,6 +432,7 @@ export function App() {
       let assistant = "";
       const tools = [];
       const widgets = [];
+      const artifacts = [];
       let agent = null;
       let thinking = 0;
       // Text streamed but not yet handed to the voice.
@@ -455,7 +457,13 @@ export function App() {
             agent = event.route;
           } else if (event.type === "artifact") {
             for (const item of event.items ?? []) {
-              if (item.type !== "document" || !item.path) continue;
+              if (!item.path) continue;
+              // The chip under the reply: click-to-open for whatever the
+              // turn created, document or not.
+              if (!artifacts.some((a) => a.path === item.path)) {
+                artifacts.push({ type: item.type, path: item.path });
+              }
+              if (item.type !== "document") continue;
               // Chips + mention resolution for anything the turn wrote,
               // whether or not it opens.
               setSessionFiles((prev) => [...new Set([...prev, item.path])]);
@@ -504,6 +512,7 @@ export function App() {
               content: assistant,
               tools: [...tools],
               widgets: [...widgets],
+              artifacts: [...artifacts],
               agent,
               sources: sources.map((s) => ({ ...s })),
               thinking,
@@ -661,6 +670,7 @@ export function App() {
                   onOpenFile={(names, index) =>
                     setViewing({ files: names.map((path) => ({ path })), index })
                   }
+                  onOpenArtifact={(path) => setCanvas({ path, openedBy: "user", rev: 1 })}
                 />
                 {/* The line under history. Without it a resumed transcript is
                     pixel-identical to a live reply, and a tail that happens to

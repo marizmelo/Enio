@@ -6,6 +6,7 @@ import { embed, embedBatch } from "./embed.js";
 import { chunkTranscript, extractTriples, summarize } from "./extract.js";
 import type { Triple } from "./schema.js";
 import { extractSources, type Source } from "../sources.js";
+import { extractArtifacts } from "../artifacts.js";
 
 const now = () => Date.now();
 
@@ -632,6 +633,9 @@ export interface StoredMessage {
   sources?: Array<{ tool: string; items: Source[] }>;
   /** Which agent answered — restored from the trace, "single" rows skipped. */
   agent?: string;
+  /** Files this reply created, recovered from its tools' own output — the
+   *  same extraction that opens the canvas live. */
+  artifacts?: Array<{ type: string; path: string }>;
 }
 
 /**
@@ -708,6 +712,16 @@ export function conversationMessages(sessionId: string): StoredMessage[] {
     }
     const items = extractSources(step.name, args, step.output ?? "");
     if (items.length > 0) (target.sources ??= []).push({ tool: step.name, items });
+
+    // What the reply created rides with it, so a restored conversation keeps
+    // the click-to-open chips a live one has.
+    for (const made of extractArtifacts(step.name, step.output ?? "")) {
+      if (!made.path) continue;
+      const list = (target.artifacts ??= []);
+      if (!list.some((a) => a.path === made.path)) {
+        list.push({ type: made.type, path: made.path });
+      }
+    }
   }
 
   return messages;

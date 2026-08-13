@@ -109,3 +109,21 @@ describe("spoken replies", () => {
     );
   });
 });
+
+describe("spokenText", () => {
+  test("reads the document, not the notation", async () => {
+    const { spokenText } = await import(SPEECH);
+    // The reported failure verbatim: a markdown reply was performed as
+    // "hash hash Cold Brew asterisk asterisk" instead of read.
+    assert.equal(
+      spokenText("## Cold Brew\n\n- **Steep** grounds for `12` hours."),
+      "Cold Brew\n\nSteep grounds for 12 hours.",
+    );
+    assert.equal(spokenText("see [the guide](https://example.com/a/b)"), "see the guide");
+    // A bare URL becomes its host -- nobody wants a path read out.
+    assert.equal(spokenText("docs at https://www.example.com/deep/path"), "docs at example.com");
+    // A fenced block is named, never performed.
+    assert.match(spokenText("Run this:\n```js\nconst x = 1;\n```"), /code block/);
+    assert.ok(!spokenText("```").includes("`"), "a stray fence is dropped");
+  });
+});

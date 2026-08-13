@@ -22,6 +22,8 @@ import { setConversationSession } from "./conversation-attachments.js";
 import { setPlanSession } from "./tools/desktop.js";
 import type { Registry } from "./tools/index.js";
 import type { Message, ToolDef } from "./types.js";
+export { extractArtifacts, type Artifact } from "./artifacts.js";
+import { extractArtifacts, type Artifact } from "./artifacts.js";
 
 /**
  * Pipelines: abilities composed into a graph the *harness* owns.
@@ -69,13 +71,6 @@ export interface Pipeline {
   lastRunAt: number | null;
 }
 
-export interface Artifact {
-  type: PortType;
-  /** Present for file-kind artifacts; a path the fs tools can re-resolve. */
-  path?: string;
-  /** Present for text artifacts. */
-  text?: string;
-}
 
 export interface NodeResult {
   nodeId: string;
@@ -588,22 +583,6 @@ export async function composePipeline(
  * verbatim-string tests so a reworded tool message fails loudly here instead
  * of silently dropping a pipeline's hand-off.
  */
-export function extractArtifacts(tool: string, output: string): Artifact[] {
-  const artifacts: Artifact[] = [];
-  if (tool === "write_file") {
-    const m = /^Wrote \d+ bytes to (.+)$/m.exec(output);
-    if (m) artifacts.push({ type: "document", path: m[1]!.trim() });
-  } else if (tool === "take_screenshot") {
-    const m = /Screenshot saved to (.+?\.png)/.exec(output);
-    if (m) artifacts.push({ type: "image", path: m[1]!.trim() });
-  } else if (tool === "send_email") {
-    const m = /^Saved to (.+?\.eml)$/m.exec(output);
-    if (m) artifacts.push({ type: "email_draft", path: m[1]!.trim() });
-  } else if (tool === "propose_plan") {
-    if (/^Proposed, not run\./.test(output)) artifacts.push({ type: "plan" });
-  }
-  return artifacts;
-}
 
 /** Paths the fs tools can re-resolve: workspace-absolute becomes relative;
  *  anything already relative is passed through untouched. */

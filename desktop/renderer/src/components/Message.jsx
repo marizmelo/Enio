@@ -4,7 +4,7 @@ import { Widget } from "@/components/Widget";
 import { AttachmentPreviews } from "@/components/AttachmentPreviews";
 import { SourcesFooter } from "@/components/Sources";
 import { MessageActions } from "@/components/MessageActions";
-import { Info, Plug } from "lucide-react";
+import { FileText, Info, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { renderMarkdownish } from "@/lib/markdown";
 
@@ -20,6 +20,7 @@ export function Message({
   tools = [],
   widgets = [],
   sources = [],
+  artifacts = [],
   files = [],
   notices = [],
   thinking = 0,
@@ -27,6 +28,7 @@ export function Message({
   error = false,
   streaming = false,
   onOpenFile,
+  onOpenArtifact,
 }) {
   const isUser = role === "user";
   const waiting = streaming && !isUser && !error && content.length === 0;
@@ -112,6 +114,26 @@ export function Message({
           only on the replies. */}
       {!waiting && !streaming && !error && content.trim() && (
         <MessageActions content={content} canSpeak={!isUser} />
+      )}
+
+      {/* Files this reply created, as buttons rather than prose: the text
+          may name the file, but a name in a sentence is not a way to open
+          it. Click pins the file in the canvas. */}
+      {!isUser && artifacts.length > 0 && (
+        <div className="flex max-w-[85%] flex-wrap gap-1.5">
+          {artifacts.map((a) => (
+            <button
+              key={a.path}
+              type="button"
+              title="Open in canvas"
+              onClick={() => onOpenArtifact?.(a.path)}
+              className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs hover:bg-muted"
+            >
+              <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="font-mono">{a.path}</span>
+            </button>
+          ))}
+        </div>
       )}
 
       <SourcesFooter sources={sources} onOpenFile={onOpenFile} />
