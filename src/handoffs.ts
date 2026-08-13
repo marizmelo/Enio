@@ -133,6 +133,27 @@ function agentScratchDir(): string {
   return dir;
 }
 
+/**
+ * When enio itself was launched from inside a Claude Code session
+ * (development, mostly), the whole CLAUDE and ANTHROPIC variable family
+ * in the environment belongs to that parent session — base URLs, session ids,
+ * auth-refresh markers — and a child claude inheriting them authenticates
+ * as a nested instance instead of as the user, which reads as "not logged
+ * in" with credentials sitting right there in the Keychain. The nesting
+ * marker tells us the contamination source exists; only then is the
+ * family stripped, so a user who deliberately exports ANTHROPIC_API_KEY
+ * for their own CLI keeps it in every normal launch.
+ */
+function cleanedEnv(): NodeJS.ProcessEnv {
+  if (!process.env.CLAUDECODE) return { ...process.env };
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (/^(CLAUDE|ANTHROPIC|BAGGAGE$|AI_AGENT$)/i.test(key)) continue;
+    env[key] = value;
+  }
+  return env;
+}
+
 const runs = new Map<string, HandoffRun>();
 const children = new Map<string, ReturnType<typeof spawn>>();
 const MAX_RUNS_KEPT = 20;
@@ -209,14 +230,9 @@ export function startHandoffRun(
   const settled = listHandoffRuns().filter((r) => r.status !== "running");
   for (const old of settled.slice(MAX_RUNS_KEPT)) runs.delete(old.id);
 
-  // The nesting markers are dropped from the env: when enio itself was
-  // launched from inside a Claude Code session (development, mostly), the
-  // child claude CLI sees them and behaves as a nested instance. The
-  // user's auth variables pass through untouched.
-  const { CLAUDECODE: _cc, CLAUDE_CODE_ENTRYPOINT: _ce, ...env } = process.env;
   const child = spawn(resolved.bin, resolved.args, {
     cwd: agentScratchDir(),
-    env,
+    env: cleanedEnv(),
     stdio: ["pipe", "pipe", "pipe"],
   });
   children.set(id, child);
