@@ -191,15 +191,23 @@ a model load.
 
 A small model has a long tail it cannot do — a 5,000-word memo, a deep
 architecture review. The graceful answer is packaging, not pretending: pick
-**Ask a bigger model** on the launcher (or say it in chat), and Enio writes
+**Ask a cloud AI** on the launcher (or say it in chat), and Enio writes
 a *handoff file* — your request restated, plus everything a frontier model
 cannot see from here: the relevant context from your conversation, files,
 and project, made self-contained.
 
 There is also an ↗ under every reply. An answer that missed is the other
 time a bigger model earns its cost, and whether it missed is your call, not
-the model's — so the button is always there, and pressing it packages the
-task the same way.
+the model's — so the button is always there. When this machine can genuinely
+run something bigger, the arrow offers both directions and names the
+difference that matters: **package for a cloud AI** (most capable — your
+words leave this machine when you paste them) or **try a bigger local
+model** (stays private), named concretely — the one model from the
+catalogue that is more capable than what is running *and* decodes at a
+pace you would sit through, with its estimated speed. On machines where no
+such model exists — most hit the bandwidth wall before the capacity wall —
+the local option is withheld rather than greyed, and the arrow goes
+straight to the cloud handoff.
 
 The reply that wrote a handoff gets a **Send to** button: it copies the
 whole file to your clipboard and opens your chosen AI — the desktop app if

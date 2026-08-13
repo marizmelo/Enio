@@ -182,3 +182,20 @@ describe("handoff turns persist through the harness, not the model", () => {
     assert.match(saved, /# Handoff: Self/);
   });
 });
+
+test("a restored conversation keeps the handoff artifact without inventing a tool badge", async () => {
+  const registry = await buildRegistry();
+  const sessionId = store.startSession();
+  scriptModel(["# Handoff: Restored Case\n\nBody."]);
+  const result = await runTurn("package this", [], registry, sessionId, {}, {
+    skills: [handoffSkill],
+  });
+  assert.ok(result.handoffFile);
+  const restored = store.conversationMessages(sessionId);
+  const reply = restored.find((m) => m.role === "assistant");
+  assert.ok(
+    reply?.artifacts?.some((a) => a.path === result.handoffFile),
+    "artifact re-derived from the trace",
+  );
+  assert.ok(!(reply?.tools ?? []).includes("handoff_saved"), "no invented tool badge");
+});

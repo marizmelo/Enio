@@ -31,6 +31,8 @@ export function Message({
   onOpenFile,
   onOpenArtifact,
   onAskBigger,
+  upgrade = null,
+  onTryUpgrade,
 }) {
   const isUser = role === "user";
   const waiting = streaming && !isUser && !error && content.length === 0;
@@ -142,6 +144,8 @@ export function Message({
           content={content}
           canSpeak={!isUser}
           onAskBigger={!isUser ? onAskBigger : undefined}
+          upgrade={upgrade}
+          onTryUpgrade={!isUser ? onTryUpgrade : undefined}
         />
       )}
 

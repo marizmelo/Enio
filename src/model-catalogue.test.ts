@@ -101,3 +101,48 @@ describe("speed estimates", () => {
     });
   });
 });
+
+describe("recommendUpgrade", () => {
+  const QWEN4B = "mlx-community/Qwen3-4B-Instruct-2507-4bit";
+  const MOE = "mlx-community/Qwen3-30B-A3B-4bit";
+  const GB = 1_000_000_000;
+
+  test("a 32GB M4 running the 4B is pointed at the MoE, not the dense 14B", async () => {
+    const { recommendUpgrade } = await import("./model-catalogue.js");
+    const up = recommendUpgrade(QWEN4B, 32 * GB, "Apple M4");
+    // The 14B fits too but decodes ~9 tok/s on this bandwidth; the MoE is
+    // bigger AND faster because only active experts are read per token.
+    assert.equal(up?.id, MOE);
+    assert.ok(up!.tokensPerSecond! >= 25, `moe tps: ${up!.tokensPerSecond}`);
+  });
+
+  test("a machine already on the biggest usable model gets nothing", async () => {
+    const { recommendUpgrade } = await import("./model-catalogue.js");
+    assert.equal(recommendUpgrade(MOE, 32 * GB, "Apple M4"), null);
+  });
+
+  test("a 24GB machine is honestly pointed at the 8B, not the MoE it cannot hold", async () => {
+    const { recommendUpgrade } = await import("./model-catalogue.js");
+    const up = recommendUpgrade(QWEN4B, 24 * GB, "Apple M4");
+    assert.equal(up?.id, "mlx-community/Qwen3-8B-4bit");
+    assert.equal(up?.pace, "usable");
+  });
+
+  test("an unknown chip withholds rather than recommending an unmeasured wait", async () => {
+    const { recommendUpgrade } = await import("./model-catalogue.js");
+    assert.equal(recommendUpgrade(QWEN4B, 64 * GB, "Intel Core i9"), null);
+  });
+
+  test("a tiny machine that can hold nothing bigger gets nothing", async () => {
+    const { recommendUpgrade } = await import("./model-catalogue.js");
+    assert.equal(recommendUpgrade(QWEN4B, 8 * GB, "Apple M1"), null);
+  });
+
+  test("a current model outside the catalogue compares as smaller than everything", async () => {
+    const { recommendUpgrade } = await import("./model-catalogue.js");
+    // Maple's id is not in the catalogue; the recommendation floor drops to
+    // zero and the best usable model wins.
+    const up = recommendUpgrade("maple-1b-ternary", 32 * GB, "Apple M4");
+    assert.equal(up?.id, MOE);
+  });
+});

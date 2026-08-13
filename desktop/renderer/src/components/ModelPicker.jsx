@@ -28,7 +28,20 @@ export function ModelPicker({ backendReady }) {
   const [available, setAvailable] = useState([]);
   const [switching, setSwitching] = useState(false);
   const [browsing, setBrowsing] = useState(false);
+  const [highlight, setHighlight] = useState(null);
   const [error, setError] = useState("");
+
+  // The escalation menu under a reply lives across the window from this
+  // picker; an event is the door between them. Opening resets nothing else,
+  // and the highlight names the model the recommendation was about.
+  useEffect(() => {
+    const onBrowse = (e) => {
+      setHighlight(e.detail?.highlight ?? null);
+      setBrowsing(true);
+    };
+    window.addEventListener("enio:browse-models", onBrowse);
+    return () => window.removeEventListener("enio:browse-models", onBrowse);
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -58,6 +71,9 @@ export function ModelPicker({ backendReady }) {
       // The dialog switches through here too, so the menu behind it cannot be
       // left naming the model that stopped running a minute ago.
       await refresh();
+      // Whoever derives state from the running model (the upgrade
+      // recommendation under replies) re-reads on this.
+      window.dispatchEvent(new CustomEvent("enio:model-switched"));
     } catch (err) {
       setError(String(err?.message ?? err));
       throw err;
@@ -104,8 +120,12 @@ export function ModelPicker({ backendReady }) {
       </DropdownMenu>
       <ModelsDialog
         open={browsing}
-        onOpenChange={setBrowsing}
+        onOpenChange={(next) => {
+          setBrowsing(next);
+          if (!next) setHighlight(null);
+        }}
         onSwitched={pick}
+        highlight={highlight}
       />
     </>
   );

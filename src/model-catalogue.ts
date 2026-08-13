@@ -221,3 +221,53 @@ export function speedFor(
     pace: tps >= 25 ? "fast" : tps >= 10 ? "usable" : "slow",
   };
 }
+
+/** What "try a bigger local model" concretely means on this machine. */
+export interface Upgrade {
+  id: string;
+  label: string;
+  tokensPerSecond: number | null;
+  pace: SpeedEstimate["pace"];
+}
+
+/**
+ * The private half of "this answer wasn't enough": a catalogue model that is
+ * genuinely more capable than the current one AND that this machine runs at
+ * a pace someone would sit through. Null when no such model exists, and the
+ * menu item is withheld rather than greyed -- most base machines hit the
+ * bandwidth wall long before they hit the capacity wall, and "download a
+ * bigger model" is a mirage there. Advice this specific is only worth giving
+ * when it is true.
+ *
+ * Capability is ordered by total bytes -- the same proxy the catalogue is
+ * sorted by. Crude, but it agrees with every pairwise comparison in the
+ * list, and inventing a capability score would imply a measurement nobody
+ * made. A current model not in the catalogue (Maple, a hand-rolled server)
+ * compares as smaller than everything, which is the right bias for the one
+ * model that actually ships that way.
+ */
+export function recommendUpgrade(
+  currentId: string | null,
+  machineBytes = totalmem(),
+  chip: string | null = machineChip(),
+): Upgrade | null {
+  const current = currentId ? catalogueModel(currentId) : undefined;
+  const floor = current?.bytes ?? 0;
+  const candidates = CATALOGUE.filter((m) => {
+    if (m.id === currentId || m.bytes <= floor) return false;
+    if (fitFor(m.bytes, machineBytes) === "over") return false;
+    const { pace } = speedFor(m, chip);
+    // An unknown chip yields no estimate, and recommending an unmeasured
+    // wait is how this feature would lie. Slow is an answer: withhold.
+    return pace === "fast" || pace === "usable";
+  });
+  if (candidates.length === 0) return null;
+  const best = candidates.reduce((a, b) => (b.bytes > a.bytes ? b : a));
+  const speed = speedFor(best, chip);
+  return {
+    id: best.id,
+    label: best.label,
+    tokensPerSecond: speed.tokensPerSecond,
+    pace: speed.pace,
+  };
+}

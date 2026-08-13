@@ -40,6 +40,7 @@ import {
   projectState,
 } from "@/lib/projects";
 import { PermissionNotice } from "@/components/PermissionNotice";
+import { currentModel } from "@/lib/recipes";
 import { RecipesDialog } from "@/components/RecipesDialog";
 import { speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
 
@@ -61,6 +62,9 @@ export function App() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [capabilities, setCapabilities] = useState({});
+  // The one local model worth escalating to on this machine, or null --
+  // computed server-side from the catalogue, bandwidth and current model.
+  const [upgrade, setUpgrade] = useState(null);
   // Files attached since startup. capabilities.files is fetched once, so
   // without this a file pasted a moment ago is not recognised as a file --
   // by the composer's chips or by the thread's previews.
@@ -170,6 +174,25 @@ export function App() {
   // for the rest of the session with nothing to retry it.
   useEffect(() => {
     if (backendReady) fetchCapabilities().then(setCapabilities);
+  }, [backendReady]);
+
+  // Re-read after a model switch: the recommendation is relative to what is
+  // running, and yesterday's upgrade is today's current model.
+  useEffect(() => {
+    if (!backendReady) return undefined;
+    let live = true;
+    const read = () =>
+      currentModel()
+        .then((m) => {
+          if (live) setUpgrade(m.upgrade ?? null);
+        })
+        .catch(() => {});
+    read();
+    window.addEventListener("enio:model-switched", read);
+    return () => {
+      live = false;
+      window.removeEventListener("enio:model-switched", read);
+    };
   }, [backendReady]);
 
   // Mirror the open project's roots into the main process, which owns the
@@ -630,6 +653,13 @@ export function App() {
         )
     : undefined;
 
+  const tryUpgrade = upgrade
+    ? () =>
+        window.dispatchEvent(
+          new CustomEvent("enio:browse-models", { detail: { highlight: upgrade.id } }),
+        )
+    : undefined;
+
   return (
     <TooltipProvider delayDuration={300}>
     <div className="flex h-screen flex-col bg-background">
@@ -762,6 +792,8 @@ export function App() {
                   }
                   onOpenArtifact={(path) => setCanvas({ path, openedBy: "user", rev: 1 })}
                   onAskBigger={askBigger}
+                  upgrade={upgrade}
+                  onTryUpgrade={tryUpgrade}
                 />
                 {/* The line under history. Without it a resumed transcript is
                     pixel-identical to a live reply, and a tail that happens to

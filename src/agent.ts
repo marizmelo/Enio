@@ -1051,6 +1051,19 @@ export async function runTurn(
       await writeFile(target, `${body}\n`, "utf8");
       handoffFile = rel;
       handlers.onNotice?.(`Handoff saved to ${rel}.`);
+      // Into the trace in the tool step's own dialect, so a restored
+      // conversation re-derives the Send to chip the way it re-derives
+      // every other artifact -- from what actually happened, not from a
+      // column kept in step by hand.
+      steps.push({
+        seq: steps.length,
+        kind: "harness",
+        name: "handoff_saved",
+        args: "{}",
+        output: `Wrote ${Buffer.byteLength(body) + 1} bytes to ${rel}`,
+        error: null,
+        durationMs: 0,
+      });
     } catch {
       // The reply still carries the full prompt; losing the file must not
       // cost the answer.

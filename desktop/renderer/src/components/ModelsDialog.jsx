@@ -33,7 +33,7 @@ const gb = (bytes) => `${(bytes / 1e9).toFixed(1)} GB`;
  * the running model, because that would restart the model server mid-sentence
  * as a side effect of "get me this one for later".
  */
-export function ModelsDialog({ open, onOpenChange, onSwitched }) {
+export function ModelsDialog({ open, onOpenChange, onSwitched, highlight = null }) {
   const [data, setData] = useState(null);
   const [download, setDownload] = useState(null);
   const [switching, setSwitching] = useState("");
@@ -155,6 +155,8 @@ export function ModelsDialog({ open, onOpenChange, onSwitched }) {
                     m.id === data?.current
                       ? "border-primary/50 bg-muted/50"
                       : "hover:bg-muted/50",
+                    // An already-downloaded upgrade highlights here instead.
+                    m.id === highlight && m.id !== data?.current && "border-primary/60 bg-primary/5",
                   )}
                 >
                   <span className="w-4 shrink-0 text-primary">
@@ -206,7 +208,12 @@ export function ModelsDialog({ open, onOpenChange, onSwitched }) {
               {rest.map((m) => (
                 <li
                   key={m.id}
-                  className="flex items-center gap-3 rounded border p-2.5 text-sm"
+                  className={cn(
+                    "flex items-center gap-3 rounded border p-2.5 text-sm",
+                    // The model the escalation menu was pointing at, so the
+                    // eye lands where the click was aimed.
+                    m.id === highlight && "border-primary/60 bg-primary/5",
+                  )}
                 >
                   <HardDrive className="size-4 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1">

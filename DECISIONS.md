@@ -946,6 +946,23 @@ the `# Handoff:` topic line slugged, else a timestamp -- grammar, never
 judgement. A model that does manage to write the file itself is left
 alone, detected by the same extractor the artifact chips use.
 
+The third pass split "bigger" by the fact that matters: privacy
+direction. "Bigger model" was ambiguous between a cloud handoff and a
+bigger LOCAL model, and the two differ in where the words go. The arrow
+now opens a two-item menu when -- and only when -- this machine can
+genuinely run something better: recommendUpgrade() picks the one
+catalogue model more capable than the current one (ordered by bytes; a
+current model outside the catalogue, i.e. Maple, floors at zero) that
+fits AND paces at least "usable" on this chip's bandwidth. No such model
+-- most base machines hit the bandwidth wall first -- and the item is
+withheld rather than greyed, the arrow going straight to the cloud
+handoff as before. An unknown chip also withholds: recommending an
+unmeasured wait is how the feature would lie. The launcher tile renamed
+to "Ask a cloud AI" (the id and skill keep the old name; saved pipelines
+store ids); "(not private)" was considered and rejected as the label
+because nothing leaves automatically -- the honest phrasing is that your
+words leave when you paste them, and the description says exactly that.
+
 The reply that produced a handoff (tool-written or harness-saved -- the
 artifact frame carries both) gets a Send to button:
 clipboard plus opening the chosen AI, desktop app if installed, web app if

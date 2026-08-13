@@ -24,7 +24,7 @@ import {
   removeConversationFiles,
   removeFile,
 } from "./files.js";
-import { CATALOGUE, fitFor, machineChip, machineMemory, speedFor } from "./model-catalogue.js";
+import { CATALOGUE, fitFor, machineChip, machineMemory, recommendUpgrade, speedFor } from "./model-catalogue.js";
 import {
   DownloadRefused,
   cancelDownload,
@@ -592,6 +592,9 @@ async function handle(
         fit: fitFor(m.bytes),
         speed: speedFor(m),
       })),
+      // The one model worth escalating to locally, or null. Computed here so
+      // the client never re-derives capability ordering from the list.
+      upgrade: recommendUpgrade(currentModelId()),
       download: downloadState(),
     });
     return;

@@ -664,14 +664,14 @@ export function conversationMessages(sessionId: string): StoredMessage[] {
     )
     .all(sessionId) as StoredMessage[];
 
-  let steps: Array<{ startedAt: number; name: string; args: string; output: string }>;
+  let steps: Array<{ startedAt: number; kind: string; name: string; args: string; output: string }>;
   let routed: Array<{ startedAt: number; specialist: string }>;
   try {
     steps = db
       .prepare(
-        `SELECT t.started_at AS startedAt, s.name, s.args, s.output
+        `SELECT t.started_at AS startedAt, s.kind, s.name, s.args, s.output
            FROM turns t JOIN turn_steps s ON s.turn_id = t.id
-          WHERE t.session_id = ? AND s.kind = 'tool' AND s.name IS NOT NULL
+          WHERE t.session_id = ? AND s.kind IN ('tool', 'harness') AND s.name IS NOT NULL
           ORDER BY t.started_at ASC, s.seq ASC`,
       )
       .all(sessionId) as typeof steps;
@@ -703,16 +703,21 @@ export function conversationMessages(sessionId: string): StoredMessage[] {
   for (const step of steps) {
     const target = assistants.find((m) => m.ts >= step.startedAt);
     if (!target) continue;
-    (target.tools ??= []).push(step.name);
+    // A harness step is not a tool the model ran: no badge, no sources —
+    // a restored reply must not grow a chip its live rendering never had.
+    // Its artifact still rides below, which is the whole reason it is here.
+    if (step.kind !== "harness") {
+      (target.tools ??= []).push(step.name);
 
-    let args: Record<string, unknown> = {};
-    try {
-      args = JSON.parse(step.args || "{}");
-    } catch {
-      /* an unparseable argument record still leaves the tool name usable */
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(step.args || "{}");
+      } catch {
+        /* an unparseable argument record still leaves the tool name usable */
+      }
+      const items = extractSources(step.name, args, step.output ?? "");
+      if (items.length > 0) (target.sources ??= []).push({ tool: step.name, items });
     }
-    const items = extractSources(step.name, args, step.output ?? "");
-    if (items.length > 0) (target.sources ??= []).push({ tool: step.name, items });
 
     // What the reply created rides with it, so a restored conversation keeps
     // the click-to-open chips a live one has.

@@ -198,10 +198,15 @@ export const ABILITIES: Ability[] = [
     requiredTools: ["run_command"],
   },
   {
+    // The id and skill keep the old name -- saved pipelines store ids, and
+    // the skill folder is on users' disks. The title says "cloud" because
+    // once a LOCAL upgrade is also on offer (the escalation menu under
+    // replies), "bigger model" stopped naming which direction the data goes
+    // -- and that direction is the fact that matters.
     id: "ask-bigger-model",
-    title: "Ask a bigger model",
+    title: "Ask a cloud AI",
     description:
-      "Too big for the local model? Prepare a complete prompt to paste into Claude or ChatGPT.",
+      "Package a complete prompt for Claude, ChatGPT, Codex or Gemini. Nothing leaves until you paste it.",
     // The honest half of running a small model: the long tail it cannot do
     // is real, and the graceful answer is packaging, not pretending. The
     // handoff file carries everything the frontier model cannot see from

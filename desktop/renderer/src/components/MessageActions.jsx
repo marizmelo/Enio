@@ -1,6 +1,13 @@
 import { useState } from "react";
-import { ArrowUpRight, Check, Copy, Square, Volume2 } from "lucide-react";
+import { ArrowUpRight, Check, Copy, Cpu, Globe, Square, Volume2 } from "lucide-react";
 import { TipButton } from "@/components/TipButton";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { speakAll, stopSpeaking } from "@/lib/speech";
 
 /**
@@ -9,7 +16,7 @@ import { speakAll, stopSpeaking } from "@/lib/speech";
  * Under the message rather than beside it: these act on a finished reply, and
  * putting them inline would put them in the way of reading it.
  */
-export function MessageActions({ content, canSpeak = true, onAskBigger }) {
+export function MessageActions({ content, canSpeak = true, onAskBigger, upgrade, onTryUpgrade }) {
   const [copied, setCopied] = useState(false);
   const [playing, setPlaying] = useState(false);
 
@@ -61,15 +68,54 @@ export function MessageActions({ content, canSpeak = true, onAskBigger }) {
       )}
       {/* The escape hatch for a disappointing answer. On every reply, not
           just failures, because "not what I wanted" is the user's judgement
-          -- the one call the local model must never make about itself. */}
-      {onAskBigger && (
+          -- the one call the local model must never make about itself.
+
+          Two escalations exist and they differ in the fact that matters
+          most, privacy direction -- so when this machine can genuinely run
+          something bigger (the server computed that, not a guess) the arrow
+          opens a choice. When it cannot, the item is withheld rather than
+          greyed and the arrow goes straight to the cloud handoff. */}
+      {onAskBigger && !(upgrade && onTryUpgrade) && (
         <TipButton
-          tip="Ask a bigger model — package this for Claude, ChatGPT or Gemini"
+          tip="Ask a bigger model — package this for a cloud AI"
           className="size-7"
           onClick={onAskBigger}
         >
           <ArrowUpRight className="size-3.5" />
         </TipButton>
+      )}
+      {onAskBigger && upgrade && onTryUpgrade && (
+        <DropdownMenu>
+          {/* A plain Button, not TipButton: the tooltip's root would swallow
+              the slotted trigger props and the menu would never open. */}
+          <DropdownMenuTrigger asChild>
+            <Button size="icon" variant="ghost" className="size-7" title="Ask a bigger model">
+              <ArrowUpRight className="size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={onAskBigger}>
+              <Globe className="size-3.5" />
+              <span className="flex flex-col">
+                <span>Package for a cloud AI</span>
+                <span className="text-[11px] text-muted-foreground">
+                  most capable — nothing leaves until you paste it
+                </span>
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onTryUpgrade}>
+              <Cpu className="size-3.5" />
+              <span className="flex flex-col">
+                <span>Try {upgrade.label} locally</span>
+                <span className="text-[11px] text-muted-foreground">
+                  {upgrade.tokensPerSecond
+                    ? `~${upgrade.tokensPerSecond} tok/s on this machine — stays private`
+                    : "stays private"}
+                </span>
+              </span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </div>
   );

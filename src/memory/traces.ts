@@ -20,7 +20,10 @@ import { getDb } from "./db.js";
 
 export interface StepRecord {
   seq: number;
-  kind: "model" | "tool";
+  /** "harness" marks an act of the loop itself (a handoff save) rather than
+   *  a model or tool step -- restored conversations derive artifacts from it
+   *  without growing a tool badge no live turn ever showed. */
+  kind: "model" | "tool" | "harness";
   name?: string | null;
   args?: string | null;
   output?: string | null;
