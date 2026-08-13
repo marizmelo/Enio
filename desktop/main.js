@@ -733,6 +733,46 @@ ipcMain.handle("open-in-default-app", async (_event, relPath) => {
   return failure === "";
 });
 
+/**
+ * The affordances behind find_file's result rows: files Spotlight located,
+ * usually OUTSIDE the workspace, where resolveInWorkspace rightly refuses.
+ *
+ * Guards, because the path arrives absolute from the renderer: it must be
+ * inside the home directory (the same bound the search itself has) and must
+ * exist. Reveal works on anything — Finder selection is inert. Open
+ * additionally refuses directories and anything with an execute bit: the
+ * default-app handler for a document is safe, LAUNCHING a found binary is a
+ * different act than either the user or this feature asked for.
+ */
+function foundFileTarget(absPath) {
+  const p = String(absPath ?? "");
+  if (!path.isAbsolute(p)) return null;
+  const home = app.getPath("home");
+  const full = path.resolve(p);
+  if (full !== home && !full.startsWith(home + path.sep)) return null;
+  if (!fs.existsSync(full)) return null;
+  return full;
+}
+
+ipcMain.handle("reveal-found-file", (_event, absPath) => {
+  const full = foundFileTarget(absPath);
+  if (!full) return false;
+  shell.showItemInFolder(full);
+  return true;
+});
+
+ipcMain.handle("open-found-file", async (_event, absPath) => {
+  const full = foundFileTarget(absPath);
+  if (!full) return { ok: false, reason: "That file is out of reach." };
+  const stat = fs.statSync(full);
+  if (!stat.isFile()) return { ok: false, reason: "Not a file — use Show in Finder." };
+  if (stat.mode & 0o111) {
+    return { ok: false, reason: "That file is executable — open it from Finder if you mean to run it." };
+  }
+  const failure = await shell.openPath(full);
+  return failure === "" ? { ok: true } : { ok: false, reason: failure };
+});
+
 /** Modification time, for the canvas's external-edit poll. The disk is the
  *  shared state between enio, the agent and any editor the user opened the
  *  file in -- watching it is what makes those one loop. */

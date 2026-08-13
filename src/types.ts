@@ -63,7 +63,14 @@ export type Widget =
    * it. `path` is workspace-relative so clients resolve it through the same
    * bridge every other file preview uses; content never rides the stream.
    */
-  | { type: "image"; path: string; caption?: string };
+  | { type: "image"; path: string; caption?: string }
+  /**
+   * Files located by name, usually outside the workspace, where no other
+   * affordance can reach them. Absolute paths: the desktop offers Open and
+   * Show in Finder through guarded IPC, and a client without the renderer
+   * loses nothing — the text lists the same locations.
+   */
+  | { type: "found_files"; paths: string[] };
 
 /**
  * What a tool hands back.

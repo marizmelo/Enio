@@ -151,6 +151,16 @@ contextBridge.exposeInMainWorld("maple", {
     return ipcRenderer.invoke("open-external", url);
   },
 
+  /** Show a file find_file located (absolute path, home-bounded) in Finder. */
+  revealFoundFile(absPath) {
+    return ipcRenderer.invoke("reveal-found-file", absPath);
+  },
+
+  /** Open a located file in its default app. Refuses executables. */
+  openFoundFile(absPath) {
+    return ipcRenderer.invoke("open-found-file", absPath);
+  },
+
   /** The cloud AIs a handoff can go to, with which have desktop apps here. */
   aiProviders() {
     return ipcRenderer.invoke("ai-providers");

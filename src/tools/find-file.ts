@@ -76,14 +76,20 @@ export function findFileTool(deps: FindFileDeps = {}): ToolDef {
         return `No files or folders named like "${query}" under ${home}. Spotlight only sees what it has indexed.`;
       }
 
-      const shown = paths.slice(0, MAX_RESULTS).map((p) => p.replace(home, "~"));
+      const capped = paths.slice(0, MAX_RESULTS);
+      const shown = capped.map((p) => p.replace(home, "~"));
       const more = paths.length > MAX_RESULTS ? `\n…and ${paths.length - MAX_RESULTS} more.` : "";
-      return (
-        `${paths.length} match${paths.length === 1 ? "" : "es"}:\n` +
-        shown.join("\n") +
-        more +
-        `\n\nThese are locations only. To work with one, the user can attach it to the conversation.`
-      );
+      return {
+        text:
+          `${paths.length} match${paths.length === 1 ? "" : "es"}:\n` +
+          shown.join("\n") +
+          more +
+          `\n\nThese are locations only. To work with one, the user can attach it to the conversation.`,
+        // The desktop draws these as rows with Open and Show in Finder —
+        // user clicks, never model calls; the text above stands alone
+        // everywhere else.
+        widget: { type: "found_files", paths: capped },
+      };
     },
   };
 }

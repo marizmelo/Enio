@@ -18,12 +18,19 @@ describe("find_file", () => {
         return `${homedir()}/Documents/tax-2024.pdf\n`;
       },
     });
-    const out = toolText(await tool.run({ query: "tax-2024" }));
+    const result = await tool.run({ query: "tax-2024" });
+    const out = toolText(result);
     assert.equal(seen!.bin, "mdfind");
     assert.deepEqual(seen!.args, ["-onlyin", homedir(), "-name", "tax-2024"]);
     assert.match(out, /1 match/);
     assert.match(out, /~\/Documents\/tax-2024\.pdf/);
     assert.match(out, /locations only/i);
+    // The widget carries ABSOLUTE paths — the desktop's Open/Reveal buttons
+    // act on them directly, while the text keeps the readable ~ form.
+    assert.deepEqual((result as { widget?: { type: string; paths: string[] } }).widget, {
+      type: "found_files",
+      paths: [`${homedir()}/Documents/tax-2024.pdf`],
+    });
   });
 
   test("a hostile query is data, not shell", async () => {
@@ -56,9 +63,15 @@ describe("find_file", () => {
     const many = findFileTool({
       run: async () => Array.from({ length: 60 }, (_, i) => `${homedir()}/f${i}.txt`).join("\n"),
     });
-    const out = toolText(await many.run({ query: "f" }));
+    const result = await many.run({ query: "f" });
+    const out = toolText(result);
     assert.match(out, /60 matches/);
     assert.match(out, /…and 20 more\./);
+    assert.equal(
+      (result as { widget?: { paths: string[] } }).widget?.paths.length,
+      40,
+      "widget capped with the text",
+    );
   });
 
   test("a failed search reports the failure, never throws", async () => {

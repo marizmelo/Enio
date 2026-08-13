@@ -2,6 +2,7 @@ import { ClockWidget } from "@/components/widgets/ClockWidget";
 import { WeatherWidget } from "@/components/widgets/WeatherWidget";
 import { PlanWidget } from "@/components/widgets/PlanWidget";
 import { ImageWidget } from "@/components/widgets/ImageWidget";
+import { FoundFilesWidget } from "@/components/widgets/FoundFilesWidget";
 
 /**
  * Dispatches a widget payload to its renderer.
@@ -17,6 +18,7 @@ const RENDERERS = {
   weather: WeatherWidget,
   plan: PlanWidget,
   image: ImageWidget,
+  found_files: FoundFilesWidget,
 };
 
 export function Widget({ widget, onOpenFile }) {
