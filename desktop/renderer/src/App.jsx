@@ -22,6 +22,7 @@ import { ProjectsDialog } from "@/components/ProjectsDialog";
 import { PipelinesDialog } from "@/components/PipelinesDialog";
 import { ConnectionsDialog } from "@/components/ConnectionsDialog";
 import { CanvasPanel } from "@/components/CanvasPanel";
+import { BootScreen } from "@/components/BootScreen";
 import {
   attachToProject,
   closeProject as closeProjectApi,
@@ -643,7 +644,12 @@ export function App() {
       <div className="flex min-w-0 flex-1 flex-col">
       <div className="relative flex min-h-0 flex-1 flex-col">
       <main ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
-        {messages.length === 0 ? (
+        {!backendReady ? (
+          // Booting used to render the launcher greyed and silent -- which
+          // reads as broken, not busy. The main process narrates each phase;
+          // this is where that narration belongs.
+          <BootScreen status={status} />
+        ) : messages.length === 0 ? (
           // Tiles prefill and hand over the caret; the user finishes the
           // sentence, so the turn is theirs. The old wiring sent immediately.
           <EmptyState
