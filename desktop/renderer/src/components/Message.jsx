@@ -6,7 +6,7 @@ import { SourcesFooter } from "@/components/Sources";
 import { MessageActions } from "@/components/MessageActions";
 import { FileText, Info, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { renderMarkdownish } from "@/lib/markdown";
+import { escapeHtml, renderMarkdownish } from "@/lib/markdown";
 
 /**
  * One turn. User text is rendered through the same escaping path as model
@@ -32,6 +32,29 @@ export function Message({
 }) {
   const isUser = role === "user";
   const waiting = streaming && !isUser && !error && content.length === 0;
+
+  // A created file named in the reply becomes a live link to the canvas.
+  // Exact, not guessed: only paths this turn's tools actually wrote are
+  // linkified, so prose that merely resembles a filename stays prose. Runs
+  // on the rendered HTML because the paths were escaped with everything
+  // else, making the escaped string a safe literal to match.
+  let html = renderMarkdownish(content);
+  const linked = new Set();
+  if (!isUser) {
+    for (const a of artifacts) {
+      const needle = escapeHtml(a.path);
+      if (!html.includes(needle)) continue;
+      linked.add(a.path);
+      html = html
+        .split(needle)
+        .join(
+          `<a data-canvas-file="${needle}" title="Open in canvas" class="cursor-pointer font-mono underline decoration-dotted underline-offset-2">${needle}</a>`,
+        );
+    }
+  }
+  // The chip is the fallback for files the reply never named -- when the
+  // text carries the link, a second button saying the same thing is noise.
+  const chipArtifacts = artifacts.filter((a) => !linked.has(a.path));
 
   return (
     <div className={cn("flex flex-col gap-1.5", isUser ? "items-end" : "items-start")}>
@@ -102,8 +125,8 @@ export function Message({
             streaming &&
               "after:ml-0.5 after:inline-block after:h-4 after:w-1.5 after:translate-y-0.5 after:animate-pulse after:bg-current",
           )}
-          onClick={onBodyClick}
-          dangerouslySetInnerHTML={{ __html: renderMarkdownish(content) }}
+          onClick={(e) => onBodyClick(e, onOpenArtifact)}
+          dangerouslySetInnerHTML={{ __html: html }}
         />
       )}
 
@@ -119,9 +142,9 @@ export function Message({
       {/* Files this reply created, as buttons rather than prose: the text
           may name the file, but a name in a sentence is not a way to open
           it. Click pins the file in the canvas. */}
-      {!isUser && artifacts.length > 0 && (
+      {!isUser && chipArtifacts.length > 0 && (
         <div className="flex max-w-[85%] flex-wrap gap-1.5">
-          {artifacts.map((a) => (
+          {chipArtifacts.map((a) => (
             <button
               key={a.path}
               type="button"
@@ -187,7 +210,15 @@ export function Message({
  * browser through the main process: the renderer has no navigation of its own,
  * and a page loading inside the chat window would be a trap with no way back.
  */
-function onBodyClick(event) {
+function onBodyClick(event, onOpenArtifact) {
+  // A created file's name in the prose IS the reference -- clicking it pins
+  // the file in the canvas, same as the chip it replaces.
+  const canvasFile = event.target.closest("[data-canvas-file]");
+  if (canvasFile) {
+    event.preventDefault();
+    onOpenArtifact?.(canvasFile.getAttribute("data-canvas-file"));
+    return;
+  }
   const link = event.target.closest("a[data-link]");
   if (link) {
     event.preventDefault();
