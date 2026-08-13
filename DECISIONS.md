@@ -1633,3 +1633,21 @@ long paragraph); a .notes project-alias guard (an alias literally named
 ".notes" would shadow the store in the renderer's resolver -- recorded,
 not special-cased, because aliases are user-chosen and the collision is
 vanishingly unlikely).
+
+**Finding a file is not reading it.** "Where is my tax PDF" was
+unanswerable: every filesystem tool is hard-scoped to the workspace, and
+the router's honest best was a coder saying "can't". But that scope
+protects CONTENTS and writes -- a filename is neither, and macOS already
+keeps an index of every name. find_file asks Spotlight (mdfind, pinned
+-onlyin the home directory, arguments through execFile so no shell ever
+sees the query) and returns locations only. Reading stays a separate
+act: read_file still refuses anything outside the granted roots, so the
+user attaching the found file remains the consent that opens it. The
+tool lives on the librarian deliberately -- no web, no shell, so a
+filename can reach the reply and nowhere else -- and that fills the
+librarian's sixth slot. Withheld off macOS rather than shipped broken.
+Rejected: a find that also reads ("just show me the file") -- it would
+collapse the find/read boundary that keeps the workspace sandbox a
+grant instead of a suggestion; and locate/find(1) walks -- Spotlight's
+index answers in milliseconds and honors the system's own privacy
+exclusions for free.

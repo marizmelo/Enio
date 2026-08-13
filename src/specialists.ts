@@ -107,7 +107,7 @@ export const SPECIALISTS: Specialist[] = [
   {
     name: "librarian",
     description:
-      "Anything about the user themselves, their preferences, earlier conversations, or the documents in their library.",
+      "Anything about the user themselves, their preferences, earlier conversations, the documents in their library, or finding a file on this computer by name.",
     systemPrompt:
       `You manage what is known about the user.\n\n` +
       `Call recall before answering questions about them — do not guess from ` +
@@ -119,8 +119,11 @@ export const SPECIALISTS: Specialist[] = [
       `documents they filed in their library folders. When they ask about ` +
       `their saved documents, notes, papers or records, use library_search ` +
       `and quote what it returns, naming the file it came from.\n\n` +
-      `If memory holds nothing relevant, say so rather than inventing continuity.`,
-    tools: ["recall", "remember", "set_preference", "library_search", "read_skill"],
+      `If memory holds nothing relevant, say so rather than inventing continuity.\n\n` +
+      `find_file locates files anywhere on this computer by name — locations ` +
+      `only, never contents. Report the paths it returns; to read one, tell ` +
+      `the user to attach it to the conversation.`,
+    tools: ["recall", "remember", "set_preference", "library_search", "find_file", "read_skill"],
   },
   {
     name: "mail",
@@ -298,6 +301,10 @@ export async function route(
         // "my files" without the library framing stays with the coder, whose
         // search_code covers the working workspace.
         `"find my notes about the tax audit" -> {"specialist": "librarian"}\n` +
+        // "Where is <file> on my computer" is a name search, which is the
+        // librarian's find_file -- not the coder, whose search is scoped to
+        // the workspace and reads as "can't do that" for anything outside it.
+        `"where is my tax return pdf on this computer" -> {"specialist": "librarian"}\n` +
         `"did Sam reply about the invoice" -> {"specialist": "mail"}\n` +
         `"write a note with my grocery list" -> {"specialist": "operator"}\n` +
         `"add lunch to my calendar for noon" -> {"specialist": "operator"}\n` +

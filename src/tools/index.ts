@@ -7,6 +7,7 @@ import { buildWebTools } from "./web.js";
 import { browseTools } from "./browse.js";
 import { memoryTools } from "./memory.js";
 import { libraryTools } from "./library.js";
+import { findFileTool } from "./find-file.js";
 import { skillTools } from "./skills.js";
 import { visionTools } from "./vision.js";
 import { emailTools } from "./email.js";
@@ -100,6 +101,9 @@ export async function buildRegistry(
     // every tool (the librarian owns this one); an unrouted agent keeps its
     // web reach and loses the library instead.
     ...libraryTools,
+    // Spotlight is macOS; elsewhere the tool is withheld rather than shipped
+    // broken -- a tool that can only fail burns the model's attention.
+    ...(process.platform === "darwin" ? [findFileTool()] : []),
   ];
   const mcp = await loadMcpTools(onLog);
 
