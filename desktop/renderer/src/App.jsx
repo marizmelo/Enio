@@ -23,6 +23,14 @@ import { PipelinesDialog } from "@/components/PipelinesDialog";
 import { ConnectionsDialog } from "@/components/ConnectionsDialog";
 import { CanvasPanel } from "@/components/CanvasPanel";
 import { BootScreen } from "@/components/BootScreen";
+import { startMeetingRecorder } from "@/lib/meeting-recorder";
+import {
+  cancelMeeting,
+  meetingState as fetchMeetingState,
+  sendSegment,
+  startMeeting as startMeetingApi,
+  stopMeeting as stopMeetingApi,
+} from "@/lib/meetings";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
   attachToProject,
@@ -73,6 +81,12 @@ export function App() {
   // the conversation changes, so restore and history switches carry them.
   const [convAttachments, setConvAttachments] = useState([]);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+  // Meeting capture: server-owned state, poll-shaped like the model
+  // download (a meeting outlives any one request). The recorder handle
+  // lives in a ref because it is imperative machinery, not render state.
+  const [meeting, setMeeting] = useState(null);
+  const meetingRecorderRef = useRef(null);
+  const meetingHandledRef = useRef(null);
   // The pinned canvas: a file the agent wrote (or the user opened) shown
   // beside the thread. Renderer-session state, like widgets -- a restored
   // conversation does not reopen it. rev bumps when the agent rewrites the
@@ -186,6 +200,57 @@ export function App() {
       .then(setConvAttachments)
       .catch(() => setConvAttachments([]));
   }, [conversationId, backendReady]);
+
+  /** Start/stop are USER acts -- the whole meeting pipeline is harness-owned
+   *  from here on, which is what makes a model fabricating "I stopped the
+   *  recording, here is the summary" structurally impossible. */
+  const toggleMeeting = useCallback(async () => {
+    if (meetingRecorderRef.current) {
+      meetingRecorderRef.current.stop();
+      meetingRecorderRef.current = null;
+      try {
+        setMeeting(await stopMeetingApi());
+      } catch (err) {
+        setAttachError(String(err?.message ?? err));
+      }
+      return;
+    }
+    try {
+      const state = await startMeetingApi();
+      setMeeting(state);
+      meetingHandledRef.current = null;
+      meetingRecorderRef.current = await startMeetingRecorder({
+        onSegment: (wav, seq) => void sendSegment(wav, seq),
+      });
+    } catch (err) {
+      // getUserMedia refusal or a server 409/503 -- either way the honest
+      // move is to tell the server the meeting is off.
+      await cancelMeeting().catch(() => {});
+      setMeeting(null);
+      setAttachError(String(err?.message ?? err));
+    }
+  }, []);
+
+  // Poll while anything is in flight; on done, open the file in the canvas
+  // exactly once (re-polls of a finished state must not re-open it).
+  useEffect(() => {
+    if (!meeting || ["done", "failed", "cancelled"].includes(meeting.status)) return;
+    const timer = setInterval(async () => {
+      const state = await fetchMeetingState().catch(() => null);
+      if (!state) return;
+      setMeeting(state);
+      if (state.status === "done" && state.file && meetingHandledRef.current !== state.id) {
+        meetingHandledRef.current = state.id;
+        setSessionFiles((prev) => [...new Set([...prev, state.file])]);
+        setCanvas({ path: state.file, openedBy: "agent", rev: 1 });
+      }
+      if (state.status === "failed" && meetingHandledRef.current !== state.id) {
+        meetingHandledRef.current = state.id;
+        setAttachError(`Meeting capture failed: ${state.error ?? "unknown error"}`);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [meeting]);
 
   /** The attach menu's standing scope: the open project when there is one,
    *  else this conversation. Failures surface verbatim — the server's
@@ -567,6 +632,8 @@ export function App() {
         }}
         onHistory={() => setHistoryOpen(true)}
         onPipelines={() => setPipelinesOpen(true)}
+        meeting={meeting}
+        onToggleMeeting={capabilities.voice?.transcription ? toggleMeeting : undefined}
         onRecipes={isMac ? () => setRecipesOpen(true) : undefined}
         onFiles={() => setFilesOpen(true)}
       />
@@ -661,6 +728,7 @@ export function App() {
               composerRef.current?.focus?.();
             }}
             onOpenPipelines={() => setPipelinesOpen(true)}
+            onRecordMeeting={capabilities.voice?.transcription ? toggleMeeting : undefined}
             onEnableDesktop={async () => {
               await enableDesktopControl();
               // The registry just changed shape; the tiles follow it.

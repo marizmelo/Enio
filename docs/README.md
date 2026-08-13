@@ -35,6 +35,7 @@ No API keys. No account. Nothing leaves your computer.
 | [Browsing](browsing.md) | Reading the web as a session |
 | [Skills](skills.md) | Teaching it know-how, in markdown, with no code |
 | [Scheduled tasks](tasks.md) | Cron-driven runs through the ordinary turn path |
+| [Meetings](meetings.md) | Record, transcribe and summarize locally — into memory |
 | [MCP servers](mcp.md) | Adding third-party tools |
 | [Configuration](configuration.md) | Every environment variable |
 | [Remote access](remote-access.md) | Reaching it from a phone or another network |

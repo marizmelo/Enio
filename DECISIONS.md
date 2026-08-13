@@ -880,6 +880,37 @@ sends canvas_path) -- the bubble stays readable, no client needs to know
 which agent owns write_file, an explicit @agent still wins, and paths the
 mention grammar cannot express (spaces) work anyway.
 
+**Meeting capture: the harness owns the lifecycle, and silence is
+structurally unsummarizable.** The reference design -- start/stop as tools
+the model calls -- failed twice in its author's own telling: asked to
+"record AND summarise afterwards", the model called stop_recording and then
+fabricated a complete summary of a meeting that had not happened; and
+Whisper turned 70 seconds of room tone into noise tokens the model
+confidently summarised into decisions with names. Both classes die here by
+construction: start and stop are user acts in the UI (no tool can reach the
+routes), and below 200 transcript chars there is NO summary model call --
+the file says "Nothing intelligible was recorded", proven in the test by a
+fetch stub that throws on any model call.
+
+Audio arrives as ~45s WAV segments, one choice answering three verified
+constraints at once: the renderer heap (Float32 accumulation is ~11.5MB per
+minute -- segments flush it), Node's request timeout (an hour of WAV is
+~115MB in one body), and the whisper worker's strictly serial FIFO (a
+segment transcribes in seconds, so dictation queued behind a meeting never
+starves; the FIFO's order-matched responses are also why cancel ignores a
+late result instead of aborting the slot). A dropped segment becomes a
+literal "[audio missing]" line -- deterministic honesty over silent
+splicing. The summary is map/reduce with one complete() call PER SECTION
+("list only what appears; if none, output exactly none" -- classification-
+shaped), never one open "write the minutes" pass; grounding flags are
+APPENDED as a Verify section, never fed back for a rewrite. Deliberately
+not built: system-audio capture (condition: a maintained ScreenCaptureKit
+tap worth the packaging cost); speaker diarization (condition: word-level
+timestamps plus speaker embeddings that fit beside the chat model); a live
+transcript view (condition: users ask -- the poll already carries
+transcriptChars); CLI recording (condition: anyone recording without the
+desktop app).
+
 **The long tail gets a handoff, not an attempt.** Some asks genuinely
 exceed a 4B model, and both failure modes on offer were bad: try anyway and
 underdeliver, or refuse flatly. The ask-bigger-model ability packages

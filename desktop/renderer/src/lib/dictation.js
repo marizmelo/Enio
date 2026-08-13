@@ -10,7 +10,7 @@
 
 const TARGET_RATE = 16000;
 
-function encodeWav(samples, sampleRate) {
+export function encodeWav(samples, sampleRate) {
   const buffer = new ArrayBuffer(44 + samples.length * 2);
   const view = new DataView(buffer);
   const ascii = (offset, text) => {
@@ -43,7 +43,7 @@ function encodeWav(samples, sampleRate) {
 }
 
 /** Average every N input samples into one output sample. */
-function downsample(input, fromRate, toRate) {
+export function downsample(input, fromRate, toRate) {
   if (fromRate === toRate) return input;
   const ratio = fromRate / toRate;
   const out = new Float32Array(Math.floor(input.length / ratio));

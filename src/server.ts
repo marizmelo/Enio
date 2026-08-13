@@ -82,6 +82,14 @@ import {
   type PipelineNode,
 } from "./pipelines.js";
 import { addServer, readMcpConfig, removeServer, setServerDisabled } from "./mcp-config.js";
+import {
+  MeetingRefused,
+  addSegment,
+  cancelMeeting,
+  meetingState,
+  startMeeting,
+  stopMeeting,
+} from "./meetings.js";
 import { mcpStatus } from "./tools/mcp.js";
 import {
   attachToConversation,
@@ -395,6 +403,80 @@ async function handle(
    * than waiting for the load: the caller has nothing to do with the answer,
    * and holding the request open would only give it something to time out.
    */
+  /**
+   * Meeting capture. Thin on purpose: routes parse and reply, the tested
+   * module owns every decision. Start and stop are USER acts arriving here
+   * from the desktop's record button -- no tool anywhere can reach these,
+   * which is what makes a fabricated "I stopped the recording and here is
+   * the summary" structurally impossible.
+   */
+  if (req.method === "POST" && url.pathname === "/meetings/start") {
+    try {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      sendJson(res, 200, { meeting: startMeeting(body?.topic ? String(body.topic) : undefined) });
+    } catch (err) {
+      if (err instanceof MeetingRefused) {
+        sendJson(res, err.message.includes("install") ? 503 : 409, {
+          error: { message: err.message },
+        });
+      } else {
+        sendJson(res, 400, { error: { message: (err as Error).message } });
+      }
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/meetings/segment") {
+    const seq = Number(url.searchParams.get("seq"));
+    if (!Number.isInteger(seq) || seq < 0) {
+      sendJson(res, 400, { error: { message: "seq must be a non-negative integer" } });
+      return;
+    }
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of req) {
+      size += (chunk as Buffer).length;
+      // A 45s segment is ~1.4MB; 8MB is generous headroom, and anything
+      // past it is not a segment.
+      if (size > 8 * 1024 * 1024) {
+        sendJson(res, 413, { error: { message: "Segment too large." } });
+        return;
+      }
+      chunks.push(chunk as Buffer);
+    }
+    const wav = Buffer.concat(chunks);
+    if (wav.length < 44) {
+      sendJson(res, 400, { error: { message: "Not a WAV file." } });
+      return;
+    }
+    try {
+      sendJson(res, 202, { meeting: addSegment(wav, seq) });
+    } catch (err) {
+      sendJson(res, err instanceof MeetingRefused ? 409 : 500, {
+        error: { message: (err as Error).message },
+      });
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/meetings/stop") {
+    try {
+      sendJson(res, 202, { meeting: stopMeeting() });
+    } catch (err) {
+      sendJson(res, err instanceof MeetingRefused ? 409 : 500, {
+        error: { message: (err as Error).message },
+      });
+    }
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/meetings") {
+    // null is a real answer: nothing recording, same contract as /model/download.
+    sendJson(res, 200, { meeting: meetingState() });
+    return;
+  }
+  if (req.method === "DELETE" && url.pathname === "/meetings") {
+    sendJson(res, 200, { cancelled: cancelMeeting() });
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/v1/audio/warm") {
     void warmVoice();
     sendJson(res, 202, { warming: true });

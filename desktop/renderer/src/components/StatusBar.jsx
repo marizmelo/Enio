@@ -1,4 +1,5 @@
-import { BookMarked, Briefcase, CircleHelp, FolderOpen, History, MessageSquarePlus, Workflow, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { BookMarked, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, Workflow, X } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -37,6 +38,8 @@ export function StatusBar({
   onFiles,
   onProjects,
   onPipelines,
+  meeting,
+  onToggleMeeting,
   onCloseProject,
 }) {
   return (
@@ -98,6 +101,27 @@ export function StatusBar({
         <TipButton tip="Pipelines" className="size-7" onClick={onPipelines}>
           <Workflow className="size-4" />
         </TipButton>
+        {/* Start and stop are user acts here, never tool calls -- the one
+            design decision that makes a fabricated "I stopped and here is
+            the summary" impossible. Hidden entirely when transcription is
+            not installed: an affordance that cannot work is not shown. */}
+        {onToggleMeeting && (
+          <TipButton
+            tip={meeting?.status === "recording" ? "Stop recording" : "Record a meeting"}
+            className={`size-7 ${meeting?.status === "recording" ? "text-destructive" : ""}`}
+            onClick={onToggleMeeting}
+          >
+            <Disc className={`size-4 ${meeting?.status === "recording" ? "animate-pulse" : ""}`} />
+          </TipButton>
+        )}
+        {meeting?.status === "recording" && (
+          <RecordingClock startedAt={meeting.startedAt} />
+        )}
+        {(meeting?.status === "transcribing" || meeting?.status === "summarizing") && (
+          <span className="text-xs text-muted-foreground">
+            {meeting.status === "transcribing" ? "transcribing…" : "writing notes…"}
+          </span>
+        )}
         <TipButton tip="Files" className="size-7" onClick={onFiles}>
           <FolderOpen className="size-3.5" />
         </TipButton>
@@ -175,4 +199,17 @@ function ContextMeter({ context }) {
       </TooltipContent>
     </Tooltip>
   );
+}
+
+/** Elapsed mm:ss while recording — a wait that visibly counts. */
+function RecordingClock({ startedAt }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const s = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+  const mm = String(Math.floor(s / 60)).padStart(2, "0");
+  const ss = String(s % 60).padStart(2, "0");
+  return <span className="text-xs tabular-nums text-destructive">{mm}:{ss}</span>;
 }

@@ -3,6 +3,7 @@ import {
   AppWindow,
   ArrowLeft,
   ArrowUpRight,
+  Disc,
   Brain,
   Camera,
   Clapperboard,
@@ -67,7 +68,7 @@ const ICONS = {
  * because a person can act on "set ENIO_DESKTOP=1" where the model can only
  * fail.
  */
-export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, onEnableDesktop, disabled }) {
+export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, onRecordMeeting, onEnableDesktop, disabled }) {
   const [enabling, setEnabling] = useState(false);
   const [lockedId, setLockedId] = useState(null);
   const locked = lockedId ? abilities.find((a) => a.id === lockedId) : null;
@@ -139,6 +140,22 @@ export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, onEnabl
             <Workflow className="size-5" />
             <span className="leading-tight">Build a pipeline</span>
           </button>
+
+          {/* Client-only for the same reason, plus one more: starting a
+              recording is a USER act, never a tool call -- the design rule
+              the whole meeting pipeline hangs on. Shown only when
+              transcription is installed. */}
+          {onRecordMeeting && (
+            <button
+              disabled={disabled}
+              title="Record a meeting — transcribed and summarized locally"
+              onClick={onRecordMeeting}
+              className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed px-2 py-3 text-xs transition-colors hover:bg-muted"
+            >
+              <Disc className="size-5" />
+              <span className="leading-tight">Record a meeting</span>
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex w-full max-w-md flex-col gap-3">
