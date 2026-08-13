@@ -24,7 +24,7 @@ import {
   removeConversationFiles,
   removeFile,
 } from "./files.js";
-import { CATALOGUE, fitFor, machineMemory } from "./model-catalogue.js";
+import { CATALOGUE, fitFor, machineChip, machineMemory, speedFor } from "./model-catalogue.js";
 import {
   DownloadRefused,
   cancelDownload,
@@ -479,10 +479,14 @@ async function handle(
       current: currentModelId(),
       available: availableModels(),
       machineMemory: machineMemory(),
+      // Which chip the estimates were made FOR rides along, so the dialog
+      // can say "estimated for Apple M4" instead of implying measurement.
+      machineChip: machineChip(),
       catalogue: CATALOGUE.map((m) => ({
         ...m,
         installed: installed.has(m.id),
         fit: fitFor(m.bytes),
+        speed: speedFor(m),
       })),
       download: downloadState(),
     });

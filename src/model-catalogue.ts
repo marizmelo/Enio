@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { totalmem } from "node:os";
 
 /**
@@ -33,6 +34,10 @@ export interface CatalogueModel {
    *  the model merely being known to load. Surfaced so the list does not
    *  imply more confidence than there is. */
   measured?: boolean;
+  /** Bytes actually read per generated token, when that is less than the
+   *  download -- mixture-of-experts models touch only their active experts.
+   *  Dense models omit it and the download size is the answer. */
+  activeBytes?: number;
 }
 
 const GB = 1_000_000_000;
@@ -86,6 +91,10 @@ export const CATALOGUE: CatalogueModel[] = [
     label: "Qwen3 30B A3B",
     bytes: 17.19 * GB,
     note: "Mixture of experts: 3B active, so quicker than its size suggests.",
+    // ~3.3B of 30.5B parameters touched per token; the rest of the experts
+    // sit resident but unread. This is the number that makes MoE the answer
+    // to the bandwidth wall, and why speed cannot be read off the download.
+    activeBytes: 1.9 * GB,
   },
 ];
 
@@ -138,4 +147,77 @@ export function fitFor(bytes: number, machineBytes = totalmem()): Fit {
 
 export function machineMemory(): number {
   return totalmem();
+}
+
+/* ------------------------------------------------------- speed, honestly */
+
+/**
+ * Memory bandwidth per Apple Silicon chip, GB/s.
+ *
+ * The article-length version: on this hardware, capacity decides whether a
+ * model LOADS and bandwidth decides whether it is USABLE -- generation
+ * reads every active weight once per token, so tokens/second is bounded by
+ * bandwidth over bytes-per-token. A dense 70B fits on a 64GB machine and
+ * then generates ~4 tok/s: a model you watch, not one you use. fitFor()
+ * answers the first question; this table answers the second.
+ *
+ * Where a chip ships in more than one memory configuration, the number here
+ * is the LOWEST -- an estimate that flatters the hardware teaches the exact
+ * mistake this exists to prevent.
+ */
+const CHIP_BANDWIDTH_GBPS: Record<string, number> = {
+  "Apple M1": 68, "Apple M1 Pro": 200, "Apple M1 Max": 400, "Apple M1 Ultra": 800,
+  "Apple M2": 100, "Apple M2 Pro": 200, "Apple M2 Max": 400, "Apple M2 Ultra": 800,
+  "Apple M3": 100, "Apple M3 Pro": 150, "Apple M3 Max": 300, "Apple M3 Ultra": 800,
+  "Apple M4": 120, "Apple M4 Pro": 273, "Apple M4 Max": 410,
+};
+
+let cachedChip: string | null | undefined;
+
+/** The chip name as macOS reports it, cached; null off-macOS or unknown. */
+export function machineChip(): string | null {
+  if (cachedChip !== undefined) return cachedChip;
+  try {
+    cachedChip = execSync("sysctl -n machdep.cpu.brand_string", { timeout: 2000 })
+      .toString()
+      .trim() || null;
+  } catch {
+    cachedChip = null;
+  }
+  return cachedChip;
+}
+
+/** Decode throughput lands well under the theoretical bandwidth ceiling --
+ *  attention, cache traffic and the runtime all eat share. 0.6 matches
+ *  measured MLX decode rates on M-series within the tolerance an estimate
+ *  deserves; it is a rule of thumb, and is labelled as one everywhere it
+ *  surfaces. */
+const DECODE_EFFICIENCY = 0.6;
+
+export interface SpeedEstimate {
+  /** Rounded tokens/second, or null when the chip is unknown. */
+  tokensPerSecond: number | null;
+  /** The honest sentence: responsive / usable / "you'll watch it". */
+  pace: "fast" | "usable" | "slow" | null;
+}
+
+/**
+ * Estimated generation speed for a catalogue model on this machine.
+ *
+ * Null on an unknown chip rather than a guess: no number beats a wrong
+ * number, and the fit column still works. Advisory like fitFor -- nothing
+ * blocks a download.
+ */
+export function speedFor(
+  model: Pick<CatalogueModel, "bytes" | "activeBytes">,
+  chip: string | null = machineChip(),
+): SpeedEstimate {
+  const bandwidth = chip ? CHIP_BANDWIDTH_GBPS[chip] : undefined;
+  if (!bandwidth) return { tokensPerSecond: null, pace: null };
+  const bytesPerToken = model.activeBytes ?? model.bytes;
+  const tps = Math.round(((bandwidth * GB) / bytesPerToken) * DECODE_EFFICIENCY);
+  return {
+    tokensPerSecond: tps,
+    pace: tps >= 25 ? "fast" : tps >= 10 ? "usable" : "slow",
+  };
 }

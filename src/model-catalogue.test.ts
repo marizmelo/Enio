@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { existsSync } from "node:fs";
-import { test } from "node:test";
+import { describe, test } from "node:test";
 import { CATALOGUE, catalogueModel, fitFor, footprint } from "./model-catalogue.js";
 import { DownloadRefused, downloadScriptPath, startDownload } from "./model-download.js";
 
@@ -59,4 +59,45 @@ test("a repo id outside the catalogue is refused before anything is spawned", ()
 test("catalogueModel finds by exact id only", () => {
   assert.ok(catalogueModel(CATALOGUE[0]!.id));
   assert.equal(catalogueModel(CATALOGUE[0]!.id.toUpperCase()), undefined);
+});
+
+describe("speed estimates", () => {
+  test("bandwidth divides by bytes-per-token; MoE reads only its active experts", async () => {
+    const { speedFor, CATALOGUE } = await import("./model-catalogue.js");
+    const dense8b = CATALOGUE.find((m) => m.label === "Qwen3 8B")!;
+    const moe = CATALOGUE.find((m) => m.label === "Qwen3 30B A3B")!;
+
+    // On a base M4 (120 GB/s): the 4.6GB dense model is usable, and the
+    // 17GB MoE -- nearly four times the download -- is FASTER, because only
+    // ~1.9GB of experts are read per token. Speed cannot be read off size,
+    // which is the whole point of estimating it.
+    const dense = speedFor(dense8b, "Apple M4");
+    const mixture = speedFor(moe, "Apple M4");
+    assert.ok(dense.tokensPerSecond! > 10, `dense: ${dense.tokensPerSecond}`);
+    assert.ok(
+      mixture.tokensPerSecond! > dense.tokensPerSecond!,
+      `MoE (${mixture.tokensPerSecond}) should beat dense (${dense.tokensPerSecond})`,
+    );
+  });
+
+  test("a big dense model on a base chip is called what it is", async () => {
+    const { speedFor } = await import("./model-catalogue.js");
+    // A dense ~40GB download (70B at 4-bit) on a base M1: loads on a big
+    // machine, generates ~1 tok/s -- the trap the estimate exists to name.
+    const trap = speedFor({ bytes: 40_000_000_000 }, "Apple M1");
+    assert.equal(trap.pace, "slow");
+    assert.ok(trap.tokensPerSecond! < 5);
+  });
+
+  test("an unknown chip gets no number rather than a wrong one", async () => {
+    const { speedFor } = await import("./model-catalogue.js");
+    assert.deepEqual(speedFor({ bytes: 2_000_000_000 }, null), {
+      tokensPerSecond: null,
+      pace: null,
+    });
+    assert.deepEqual(speedFor({ bytes: 2_000_000_000 }, "Intel Core i9"), {
+      tokensPerSecond: null,
+      pace: null,
+    });
+  });
 });

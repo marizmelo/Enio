@@ -118,6 +118,28 @@ slightly too large does not refuse to load, it just makes tokens arrive every
 few seconds, which reads as Enio being slow rather than as a choice you can
 undo.
 
+## Will it be usable?
+
+Fitting is half the question. On Apple Silicon, **capacity decides whether a
+model loads and memory bandwidth decides whether it is usable** — generation
+reads every active weight once per token, so tokens-per-second is bounded by
+the chip's bandwidth divided by the bytes read per token. The most expensive
+mistake in local AI is a model your hardware can hold but cannot run: a dense
+70B fits on a big MacBook and then generates about four tokens a second — a
+model you watch, not one you use.
+
+Each downloadable model therefore also shows an **estimated speed for this
+Mac's chip** — `~30 tok/s · responsive`, or in red, *you'll watch it, not use
+it*. Believe these numbers over your instincts; the biggest model in the list
+is rarely the one you want. Two things worth knowing:
+
+- **Mixture-of-experts models break the size rule.** Qwen3 30B A3B downloads
+  17GB but reads only ~2GB of experts per token, so it generates *faster*
+  than dense models a third its size. Speed cannot be read off the download.
+- The estimate is theoretical bandwidth times a measured efficiency factor —
+  a rule of thumb, like the fit column, and shown only when the chip is one
+  Enio knows. An unknown chip gets no number rather than a wrong one.
+
 ## The context budget
 
 This is the number the meter measures against, and it is **not** the model's

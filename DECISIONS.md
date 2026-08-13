@@ -880,6 +880,22 @@ sends canvas_path) -- the bubble stays readable, no client needs to know
 which agent owns write_file, an explicit @agent still wins, and paths the
 mention grammar cannot express (spaces) work anyway.
 
+**The models list states speed, not just fit.** Prompted by an article on
+the wave of newcomers hitting the "bandwidth wall": on Apple Silicon,
+capacity decides whether a model loads and memory bandwidth decides whether
+it is usable, and a beautiful installer makes that trap SHARPER -- people
+download the biggest thing in the list, it fits, and it generates four
+tokens a second. fitFor() answered only the first question. speedFor()
+answers the second: chip bandwidth (a table keyed by
+machdep.cpu.brand_string, lowest configuration when a chip ships several)
+divided by bytes-read-per-token (the download for dense models; activeBytes
+for mixture-of-experts, which is why a 17GB MoE outruns a 5GB dense model
+and why speed cannot be read off size), times a measured 0.6 decode
+efficiency. Estimates are labelled as estimates, an unknown chip gets no
+number rather than a wrong one, and nothing blocks a download -- the same
+advisory stance as fit. Rejected: benchmarking on first run (minutes of fan
+noise to learn what arithmetic already says within tolerance).
+
 **The canvas: the harness detects creation, and the desktop owns the pen.**
 When a turn writes a document, the file opens in a panel beside the thread.
 Four rejections shaped it. *Model-announces rejected*: which file a turn

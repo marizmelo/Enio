@@ -216,6 +216,7 @@ export function ModelsDialog({ open, onOpenChange, onSwitched }) {
                         {gb(m.bytes)}
                       </span>
                       <FitWarning fit={m.fit} />
+                      <SpeedNote speed={m.speed} />
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">
                       {m.note}
@@ -260,6 +261,34 @@ export function ModelsDialog({ open, onOpenChange, onSwitched }) {
  * the machine is otherwise idle, that they want it regardless. A warning that
  * blocks would be wrong more often than the warning itself is.
  */
+/**
+ * The other half of "can this Mac run it": fit says whether the weights
+ * LOAD, this says whether the tokens come out at a speed you would use.
+ * Capacity and bandwidth are different numbers, and the expensive mistake
+ * in local AI is a model your hardware can hold but cannot run. An
+ * estimate, labelled as one; unknown chips show nothing rather than guess.
+ */
+function SpeedNote({ speed }) {
+  if (!speed || speed.tokensPerSecond === null) return null;
+  const cls =
+    speed.pace === "slow"
+      ? "text-destructive"
+      : speed.pace === "usable"
+        ? "text-amber-500"
+        : "text-muted-foreground";
+  const word =
+    speed.pace === "slow"
+      ? "you'll watch it, not use it"
+      : speed.pace === "usable"
+        ? "usable"
+        : "responsive";
+  return (
+    <span className={`shrink-0 text-xs tabular-nums ${cls}`} title="Estimated from this Mac's memory bandwidth — generation reads every active weight once per token">
+      ~{speed.tokensPerSecond} tok/s · {word}
+    </span>
+  );
+}
+
 function FitWarning({ fit }) {
   if (fit === "fits" || !fit) return null;
   const over = fit === "over";
