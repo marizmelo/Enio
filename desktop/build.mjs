@@ -17,6 +17,20 @@ const outdir = path.join(__dirname, "renderer", "dist");
 
 mkdirSync(outdir, { recursive: true });
 
+// esbuild treats a bare identifier as a global, so an unimported JSX
+// component bundles fine and crashes at render with a ReferenceError. Lint
+// before bundling so that class of bug fails the build instead of the window.
+function runLint() {
+  const bin = path.join(__dirname, "node_modules", ".bin", "eslint");
+  const result = spawnSync(bin, ["renderer/src"], {
+    cwd: __dirname,
+    stdio: "inherit",
+  });
+  if (result.status !== 0) {
+    throw new Error("Lint failed.");
+  }
+}
+
 function runTailwind() {
   const bin = path.join(__dirname, "node_modules", ".bin", "tailwindcss");
   const result = spawnSync(
@@ -34,6 +48,7 @@ function runTailwind() {
 }
 
 async function run() {
+  runLint();
   runTailwind();
 
   const result = await build({

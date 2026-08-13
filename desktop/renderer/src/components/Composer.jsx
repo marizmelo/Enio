@@ -7,7 +7,6 @@ import {
   useState,
 } from "react";
 import { ArrowUp, Loader2, Mic, Square, Volume2, VolumeX } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { TipButton } from "@/components/TipButton";
 import { Textarea } from "@/components/ui/textarea";
 import { AttachMenu } from "@/components/AttachMenu";

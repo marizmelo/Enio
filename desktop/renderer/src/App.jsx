@@ -378,7 +378,8 @@ export function App() {
         /* Fresh chat is the fallback for every failure mode here. */
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deliberately re-runs only when the backend comes up, not on every
+    // dependency the body reads — this is boot restore, not a live sync.
   }, [backendReady]);
 
   const openConversation = useCallback(async (conv) => {

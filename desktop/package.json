@@ -8,15 +8,20 @@
   "license": "Apache-2.0",
   "scripts": {
     "build": "node build.mjs",
+    "lint": "eslint renderer/src",
     "start": "node scripts/name-dev-bundle.mjs && npm run build && electron .",
     "dist": "npm run build && electron-builder --mac --arm64",
     "icon": "electron scripts/make-icon.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@tailwindcss/cli": "^4.3.3",
     "electron": "^32.0.0",
     "electron-builder": "^25.0.0",
     "esbuild": "^0.28.1",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
+    "globals": "^17.11.0",
     "tailwindcss": "^4.3.3"
   },
   "build": {

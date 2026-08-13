@@ -5,12 +5,19 @@ A local AI agent: tools, memory, skills, scheduled tasks. Runs against Maple
 
 ```sh
 npm run typecheck
-npm test          # 211 tests, no model server needed — the model is stubbed
+npm test          # 524 tests, no model server needed — the model is stubbed
 npm run build     # tsc; dist/ is what actually runs
+npm run lint      # the renderer only; tsc does not see desktop/renderer
 ```
 
 Always run the tests. They stub the model, so they're fast and need nothing
 running.
+
+The lint exists for one bug class the rest of the toolchain cannot see: the
+renderer is plain JSX, esbuild treats a bare identifier as a global, so an
+unimported component builds green and throws at render. It runs inside the
+desktop build too, so that failure is a build failure rather than a white
+window.
 
 ---
 
