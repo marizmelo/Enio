@@ -1,5 +1,5 @@
 import type { ToolDef } from "../types.js";
-import { rememberFact, searchFacts, searchGraph } from "../memory/store.js";
+import { rememberFact, searchFacts, searchGraph, searchSummaries } from "../memory/store.js";
 import { addPreference } from "../memory/learning.js";
 
 /**
@@ -86,9 +86,10 @@ export const memoryTools: ToolDef[] = [
       const query = String(args.query ?? "").trim();
       if (!query) return "Error: empty query.";
 
-      const [facts, graph] = await Promise.all([
+      const [facts, graph, summaries] = await Promise.all([
         searchFacts(query, 8),
         searchGraph(query, 10),
+        searchSummaries(query, 3),
       ]);
 
       const parts: string[] = [];
@@ -104,6 +105,15 @@ export const memoryTools: ToolDef[] = [
                   `- ${g.subject} ${g.relation.toLowerCase().replace(/_/g, " ")} ${g.object}`,
               )
               .join("\n"),
+        );
+      }
+      // Past conversations answer recall on demand — calling this tool IS
+      // the deliberate ask. They no longer ride ambiently in the memory
+      // block, so this is the only path to them for questions that do not
+      // use a past-referring phrase.
+      if (summaries.length > 0) {
+        parts.push(
+          "Earlier conversations:\n" + summaries.map((s) => `- ${s}`).join("\n"),
         );
       }
       return parts.length > 0

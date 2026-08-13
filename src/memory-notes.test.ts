@@ -121,14 +121,25 @@ describe("recentSummaries", () => {
     );
   });
 
-  test("the memory block carries them with day labels, whatever the query", async () => {
-    // Nothing about this query resembles either summary — that is the point:
-    // recency is its own channel, not a lucky similarity hit.
-    const block = await buildMemoryBlock("completely unrelated question about cheese");
+  test("a question about the past gets them, with day labels", async () => {
+    // Nothing about this query RESEMBLES either summary — recency is its own
+    // channel, not a lucky similarity hit. But the question must actually be
+    // about the past: "yesterday" is the marker that opens the channel.
+    const block = await buildMemoryBlock("what was I doing yesterday?");
     assert.match(block, /Recent sessions:/);
     assert.match(block, /\(today\) worked on the parser today/);
     assert.match(block, /\(yesterday\) set up the deploy pipeline/);
     assert.doesNotMatch(block, /ancient history/);
+  });
+
+  test("a question about the present gets no summaries at all", async () => {
+    // The scar this guards: summaries rode into every turn, and a live
+    // handoff packaged last week's summarised project as the current task.
+    // A summary records what happened once; only facts and the graph are
+    // ambient context.
+    const block = await buildMemoryBlock("completely unrelated question about cheese");
+    assert.doesNotMatch(block, /Recent sessions:/);
+    assert.doesNotMatch(block, /Earlier conversations:/);
   });
 });
 

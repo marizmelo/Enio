@@ -71,3 +71,25 @@ describe("memory management", () => {
     assert.equal(store.forgetSummary(sessionId), false);
   });
 });
+
+describe("referencesPast", () => {
+  test("past-referring phrasings open the summary channel; present ones do not", () => {
+    for (const q of [
+      "what was I doing yesterday?",
+      "remind me what we discussed",
+      "where did we leave off",
+      "you mentioned a deploy step earlier",
+      "recap last week",
+    ]) {
+      assert.equal(store.referencesPast(q), true, q);
+    }
+    for (const q of [
+      "write me a resume",
+      "find the security deposit in my lease notes",
+      "package this task for a bigger model",
+      "what is the weather like",
+    ]) {
+      assert.equal(store.referencesPast(q), false, q);
+    }
+  });
+});

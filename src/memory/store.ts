@@ -402,16 +402,61 @@ export function recentSummaries(limit = 3): Array<{ summary: string; startedAt: 
 /* ---------- retrieval for prompt injection ------------------------------ */
 
 /**
+ * Whether a question is actually about the past. A closed marker list, not a
+ * judgement call: the phrases below are how people refer to earlier
+ * conversations, and substring matching is the whole mechanism.
+ *
+ * This gate exists because summaries used to ride into EVERY turn, and a
+ * summary is a record of what happened once — not, like a fact, something
+ * durably true of the user. Presented ambiently the two are
+ * indistinguishable to a small model, and a live handoff turn packaged last
+ * week's summarised project as the current task. Facts and the graph stay
+ * ambient; conversations are remembered when asked about, and the `recall`
+ * tool covers the deliberate ask.
+ */
+const PAST_MARKERS = [
+  "yesterday",
+  "last time",
+  "last week",
+  "last month",
+  "last night",
+  "earlier",
+  "previously",
+  "previous conversation",
+  "we discussed",
+  "we talked",
+  "we were",
+  "you said",
+  "you told",
+  "you mentioned",
+  "remind me",
+  "what did we",
+  "what was i",
+  "where was i",
+  "where did we",
+  "left off",
+  "recap",
+  "catch me up",
+  "our conversation",
+] as const;
+
+export function referencesPast(query: string): boolean {
+  const q = query.toLowerCase();
+  return PAST_MARKERS.some((m) => q.includes(m));
+}
+
+/**
  * Assembles the memory block prepended to the system prompt. Budgeted in
  * characters because a small model's attention is the scarce resource here —
  * a 4000-char dump of marginally-relevant history measurably degrades answers
  * compared with 800 chars of the right thing.
  */
 export async function buildMemoryBlock(query: string): Promise<string> {
+  const wantsPast = referencesPast(query);
   const [facts, graph, summaries] = await Promise.all([
     searchFacts(query, 8),
     searchGraph(query, 10),
-    searchSummaries(query, 2),
+    wantsPast ? searchSummaries(query, 2) : Promise.resolve([] as string[]),
   ]);
 
   const sections: string[] = [];
@@ -435,14 +480,16 @@ export async function buildMemoryBlock(query: string): Promise<string> {
     );
   }
 
-  // Recency alongside similarity: the last two days' sessions, whatever the
-  // question. This is what lets "where was I" and "what was I doing
-  // yesterday" mean something — nothing about those words matches a summary
-  // about deploy scripts. Deduped against the similarity hits, clipped hard
-  // (attention is the scarce resource), and last, so the whole-block
-  // truncation below cuts recency before it cuts relevance.
+  // Recency alongside similarity: the last two days' sessions — but only
+  // when the question refers to the past at all. This channel exists because
+  // "what was I doing yesterday" resembles yesterday's summary by accident
+  // at best; the day boundary is the real relation, and similarity cannot
+  // express it. Those questions carry the markers, so the gate keeps the
+  // channel's purpose while ending the ambient drip. Deduped against the
+  // similarity hits, clipped hard, and last, so the whole-block truncation
+  // below cuts recency before it cuts relevance.
   const already = new Set(summaries);
-  const recent = recentSummaries().filter((r) => !already.has(r.summary));
+  const recent = wantsPast ? recentSummaries().filter((r) => !already.has(r.summary)) : [];
   if (recent.length > 0) {
     const today = new Date().toDateString();
     sections.push(

@@ -60,11 +60,19 @@ state is surfaced rather than silent: `/capabilities` reports
 to embed this session). The embedding model lives in
 `~/.enio/embeddings-cache`, downloaded once on first use.
 
-Alongside similarity there is one channel of pure **recency**: the last two
-days' session summaries ride into every conversation, labelled *today* or
-*yesterday*. "What was I doing yesterday" resembles yesterday's summary only
-by accident — the day boundary is the actual relation, and similarity search
-cannot express it.
+What rides into a turn depends on what kind of thing it is. **Facts and the
+knowledge graph are ambient** — they describe you durably, and the ones that
+look relevant accompany every question. **Conversation summaries are not**:
+a summary records what happened once, and injected ambiently a small model
+can mistake last week's topic for today's task. Summaries appear only when
+the question actually refers to the past — "yesterday", "last time",
+"remind me", "what did we…" — or when the agent looks them up deliberately
+with its `recall` tool.
+
+Within that gate there is one channel of pure **recency**: the last two
+days' session summaries, labelled *today* or *yesterday*. "What was I doing
+yesterday" resembles yesterday's summary only by accident — the day
+boundary is the actual relation, and similarity search cannot express it.
 
 Long conversations get one more protection. When a session outgrows the
 context window, the older part is folded into a running summary; that fold is

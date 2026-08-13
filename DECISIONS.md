@@ -1520,3 +1520,21 @@ dependency-free force layout and the pipeline composer's ReactFlow --
 no new library for a view. The layer rule the dialog teaches: the
 thread is the task, memory is background about the user, files are
 evidence -- and none of the three may impersonate another.
+
+**Summaries are recall, not ambience.** The follow-up to the memory-block
+incident, closing its actual cause: conversation summaries (two similar +
+the last 48h unconditionally) rode into EVERY turn beside the facts, and
+to a 4B the two kinds are indistinguishable there -- but they are not the
+same kind of thing. A fact is durably true of the user; a summary is a
+record of what happened once. Now facts and the graph stay ambient, and
+summaries appear only when the question refers to the past, gated by a
+closed marker list (referencesPast: "yesterday", "last time", "remind
+me", "what did we"...) -- grammar, not judgement, the house
+transformation. The recency channel's documented purpose ("what was I
+doing yesterday" cannot be found by similarity) survives intact, because
+those questions carry the markers by construction. The deliberate ask is
+covered too: recall now returns matching summaries, so "did we ever talk
+about X" works without any marker phrase. Rejected: labelling the
+sections harder ("background, possibly unrelated") -- the MCP provenance
+experiment already measured prompt labels failing to restrain this model
+size; withholding beats warning.
