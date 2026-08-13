@@ -865,6 +865,21 @@ vision-model *reading* and the pixels are the check on it — the same session
 that motivated this watched the reader claim enio was visible in a capture
 it had just been hidden from. Live-stream-only, like clock and weather.
 
+**First real use of the canvas found the gap one layer earlier: nothing
+wrote a file.** "Build me a resume" produced prose in the reply -- the
+router sent it to the researcher (who cannot write), and even pinned to the
+coder, a prompt that said only "you work with code" answered in chat rather
+than calling write_file. Two fixes, one per layer: router examples ("build
+me a resume" -> coder -- documents are files and write_file lives there;
+a note-in-an-app stays with the operator), and the coder's prompt now says
+documents are part of its job and a document is a FILE, saved with
+write_file, not text in a reply. The canvas itself was never broken; it had
+nothing to open. Also from that session: while the canvas is pinned the
+steering word is `@canvas`, resolved server-side to the pinned path (client
+sends canvas_path) -- the bubble stays readable, no client needs to know
+which agent owns write_file, an explicit @agent still wins, and paths the
+mention grammar cannot express (spaces) work anyway.
+
 **The canvas: the harness detects creation, and the desktop owns the pen.**
 When a turn writes a document, the file opens in a panel beside the thread.
 Four rejections shaped it. *Model-announces rejected*: which file a turn

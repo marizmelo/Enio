@@ -1362,7 +1362,15 @@ async function handle(
   // typed into the desktop app reached the model as literal text, which looks
   // like the feature is broken rather than absent. Anything unrecognised is
   // left verbatim, so an email address is still never eaten.
-  const mentions = parseMentions(String(lastUser.content ?? ""), mentionContext(registry));
+  const ctx = mentionContext(registry);
+  // What "@canvas" means this turn: the file the desktop has pinned beside
+  // the thread. Client-supplied, never inferred -- and it resolves through
+  // the same sandbox every attachment does, so a bad path is a refusal.
+  ctx.canvasPath =
+    typeof payload?.canvas_path === "string" && payload.canvas_path.trim()
+      ? payload.canvas_path.trim()
+      : null;
+  const mentions = parseMentions(String(lastUser.content ?? ""), ctx);
   const prompt = mentions.text;
   const overrides = {
     specialist: mentions.specialist,

@@ -205,12 +205,11 @@ fresh doc in your browser to paste into — an honest handoff, since a true
 upload would need a Google sign-in Enio doesn't have.
 
 **Or iterate in chat.** With the canvas pinned, your next message carries
-the file with it — the bubble shows `@coder … @resume.md`, the same mention
-grammar the launcher uses, so what you read is exactly what was sent. Ask
-for the change in plain words; the file is rewritten and the panel reloads.
-If you had unsaved edits, it asks before replacing them. (A file whose name
-contains spaces can't ride a mention — the panel still works; name the file
-in your message instead.)
+one visible word — `@canvas` — which Enio resolves to the pinned file and
+to the agent that can edit it. Ask for the change in plain words; the file
+is rewritten and the panel reloads. If you had unsaved edits, it asks
+before replacing them. Mentioning an agent explicitly wins: `@researcher
+what does @canvas claim?` asks about the document instead of rewriting it.
 
 **Leaving.** *Save a copy…* opens the native save dialog (unsaved edits are
 saved first, so the copy matches what you see). *Discard* moves the file to

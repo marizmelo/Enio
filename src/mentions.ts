@@ -47,6 +47,9 @@ export interface MentionContext {
   specialists: string[];
   servers: string[];
   files: string[];
+  /** The file pinned in the desktop's canvas, if any. What "@canvas" means
+   *  for this turn -- supplied by the client, never inferred. */
+  canvasPath?: string | null;
 }
 
 /** Everything that can be mentioned, for both resolution and tab completion. */
@@ -141,8 +144,23 @@ export function parseMentions(raw: string, ctx: MentionContext): Mentions {
     // are handled before this ever runs.
   }
 
+  // Set when @canvas resolved; applied after the pass so an explicit
+  // @agent anywhere in the message still wins.
+  let canvasWantsEditor = false;
+
   result.text = result.text.replace(AT, (match, lead: string, token: string) => {
     const lower = token.toLowerCase();
+
+    // "@canvas" is the pinned document, named by what the user is looking at
+    // rather than by the path they would otherwise have to type -- and the
+    // panel beside the thread shows exactly which file that is. Resolved to
+    // the real path here, so the stored transcript stays readable and no
+    // client has to know which agent owns write_file.
+    if (lower === "canvas" && ctx.canvasPath) {
+      if (!result.files.includes(ctx.canvasPath)) result.files.push(ctx.canvasPath);
+      canvasWantsEditor = true;
+      return `${lead}${ctx.canvasPath}`;
+    }
 
     if (ctx.specialists.includes(lower)) {
       result.specialist = lower;
@@ -168,6 +186,11 @@ export function parseMentions(raw: string, ctx: MentionContext): Mentions {
     if (!token.includes("@") && !token.includes(".") ) result.unresolved.push(token);
     return match;
   });
+
+  // Editing the pinned file needs the agent that holds write_file; an
+  // explicit mention beats it, so "@researcher @canvas ..." still asks the
+  // researcher about the document rather than rewriting it.
+  if (canvasWantsEditor && !result.specialist) result.specialist = "coder";
 
   result.text = result.text.trim();
   return result;

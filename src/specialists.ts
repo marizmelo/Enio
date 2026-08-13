@@ -78,7 +78,18 @@ export const SPECIALISTS: Specialist[] = [
     description:
       "Reading, writing, running, debugging or explaining code and files in the working folders.",
     systemPrompt:
-      `You work with code in the user's working folders.\n\n` +
+      `You work with files in the user's working folders — code, and the ` +
+      `documents they ask you to write.\n\n` +
+      // Documents were the silent failure here: asked for a resume, a model
+      // whose prompt only said "you work with code" wrote prose into the
+      // reply and never called write_file -- so nothing landed on disk and
+      // the canvas had nothing to open. The tile's own "save it as a
+      // markdown file" was not enough; the instruction has to be where the
+      // turn's whole framing is.
+      `When the request is for a document — a resume, letter, report, notes, ` +
+      `a plan — write it and SAVE it with write_file as markdown, then say ` +
+      `where it went. Producing the text in the reply alone is not doing the ` +
+      `task: the user asked for a document, and a document is a file.\n\n` +
       `Look before you edit: search or list, then read the file rather than ` +
       `assuming its contents. search_code returns path:line locations — use ` +
       `those paths exactly as printed. After a change, run the relevant test ` +
@@ -268,6 +279,13 @@ export async function route(
         `Examples:\n` +
         `"what's new with the Vision Pro" -> {"specialist": "researcher"}\n` +
         `"why is my test failing" -> {"specialist": "coder"}\n` +
+        // Documents are files, and write_file lives on the coder -- "build
+        // me a resume" routed to the researcher, which can only answer in
+        // prose, so nothing landed on disk and the canvas had nothing to
+        // open. A note-in-an-app stays with the operator (the example
+        // below); a document that should exist as a file is the coder's.
+        `"build me a resume" -> {"specialist": "coder"}\n` +
+        `"write a document about our launch plan" -> {"specialist": "coder"}\n` +
         `"what did I say I was working on" -> {"specialist": "librarian"}\n` +
         `"did Sam reply about the invoice" -> {"specialist": "mail"}\n` +
         `"write a note with my grocery list" -> {"specialist": "operator"}\n` +

@@ -391,21 +391,14 @@ export function App() {
       let trimmed = text.trim();
       if (!trimmed || streaming || !backendReady) return;
 
-      // Canvas steering, in the open: the pinned file and the agent that can
-      // edit it are appended INTO the visible message -- the launcher's own
-      // mention grammar, and the approval-sheet principle (what you read in
-      // the bubble is what was sent). An explicit @agent in the text wins;
-      // idempotent, so a retry cannot stack mentions. A path the mention
-      // grammar cannot express (spaces) is skipped -- the canvas still
-      // works, addressing just falls back to prose.
-      if (canvas && /^[A-Za-z0-9][\w./-]*$/.test(canvas.path)) {
-        if (!attachedFiles(trimmed, [canvas.path]).includes(canvas.path)) {
-          trimmed = `${trimmed} @${canvas.path}`;
-        }
-        const agentNames = (capabilities.agents ?? []).map((a) => a.name);
-        if (attachedFiles(trimmed, agentNames).length === 0) {
-          trimmed = `@coder ${trimmed}`;
-        }
+      // Canvas steering, in the open: one visible word. The server resolves
+      // @canvas to the pinned file and, unless the message names an agent
+      // explicitly, to the agent that can edit it -- so the bubble reads
+      // "make it shorter @canvas" rather than a path and an agent name, and
+      // a path no mention grammar could express (spaces) still works.
+      // Idempotent: send() rewrites from the raw input each time.
+      if (canvas && !/(^|\s)@canvas(\s|$)/i.test(trimmed)) {
+        trimmed = `${trimmed} @canvas`;
       }
 
       setInput("");
@@ -454,6 +447,7 @@ export function App() {
           history.map(({ role, content }) => ({ role, content })),
           controller.signal,
           convId,
+          canvas?.path ?? null,
         )) {
           if (event.type === "tool") {
             tools.push(event.name);

@@ -178,3 +178,33 @@ describe("invoked skill block", () => {
     assert.equal(invokedSkillBlock([]), "");
   });
 });
+
+describe("@canvas", () => {
+  test("resolves to the pinned file and the agent that can edit it", () => {
+    const m = parseMentions("make the summary shorter @canvas", {
+      ...ctx(),
+      canvasPath: "my resume draft.md",
+    });
+    // The path replaces the word in the text (the transcript stays readable),
+    // the file attaches, and the turn lands on the editor -- including for a
+    // path the mention grammar itself could never express.
+    assert.deepEqual(m.files, ["my resume draft.md"]);
+    assert.equal(m.specialist, "coder");
+    assert.match(m.text, /my resume draft\.md/);
+  });
+
+  test("an explicit agent wins; without a pinned file the word is left alone", () => {
+    const m = parseMentions("@researcher what does @canvas claim?", {
+      ...ctx(),
+      canvasPath: "notes.md",
+    });
+    assert.equal(m.specialist, "researcher");
+    assert.deepEqual(m.files, ["notes.md"]);
+
+    // No canvas pinned: "@canvas" is somebody's word, not a mention -- the
+    // never-eat rule that keeps email addresses safe applies here too.
+    const bare = parseMentions("the @canvas element in HTML", ctx());
+    assert.match(bare.text, /@canvas/);
+    assert.equal(bare.specialist, null);
+  });
+});
