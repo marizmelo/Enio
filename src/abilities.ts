@@ -148,6 +148,22 @@ export const ABILITIES: Ability[] = [
     requiredTools: ["search_code"],
   },
   {
+    id: "library",
+    title: "My library",
+    description: "Search the documents you keep in your library folders.",
+    icon: "library",
+    specialist: "librarian",
+    promptTemplate: "@librarian Search my library for ___",
+    suggestions: [
+      "the paper about context windows",
+      "my apartment lease terms",
+      "notes from the January planning doc",
+    ],
+    inputs: ["text"],
+    outputs: ["text"],
+    requiredTools: ["library_search"],
+  },
+  {
     id: "create-document",
     title: "Create document",
     description: "Write a document and save it as a markdown file.",

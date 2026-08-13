@@ -6,6 +6,7 @@ import { shellTools } from "./shell.js";
 import { buildWebTools } from "./web.js";
 import { browseTools } from "./browse.js";
 import { memoryTools } from "./memory.js";
+import { libraryTools } from "./library.js";
 import { skillTools } from "./skills.js";
 import { visionTools } from "./vision.js";
 import { emailTools } from "./email.js";
@@ -92,6 +93,13 @@ export async function buildRegistry(
     ...searchTools,
     ...buildWebTools(),
     ...browseTools,
+    // Last on purpose: this order is the priority list single-agent mode
+    // truncates against, and slotting library_search higher pushed web_search
+    // past the 16-tool ceiling -- a silent capability loss the pipelines
+    // suite caught as "web-search ability does not exist". Routed mode keeps
+    // every tool (the librarian owns this one); an unrouted agent keeps its
+    // web reach and loses the library instead.
+    ...libraryTools,
   ];
   const mcp = await loadMcpTools(onLog);
 

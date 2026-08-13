@@ -288,6 +288,45 @@ async function main(): Promise<void> {
       console.log(
         `\nRebuilt from ${report.sessions} session(s): ${report.triples} triples.`,
       );
+      // The library index is derived the same way -- the files on disk are
+      // the source of truth -- so a full rebuild owns it too.
+      const { resetLibrary, scanLibrary } = await import("./library.js");
+      console.log("Rebuilding the document library from disk...");
+      resetLibrary();
+      const lib = await scanLibrary({ onProgress: (m) => console.log(m) });
+      console.log(`Library: ${lib.files} file(s), ${lib.chunks} chunk(s) indexed.`);
+      break;
+    }
+
+    case "library": {
+      const { libraryRoot, libraryStatus, scanLibrary } = await import("./library.js");
+      if (rest[0] === "scan") {
+        const report = await scanLibrary({ onProgress: (m) => console.log(m) });
+        console.log(
+          `Scanned ${report.files} file(s): ${report.indexed} (re)indexed, ` +
+            `${report.removed} removed, ${report.chunks} chunk(s).`,
+        );
+        break;
+      }
+      const status = libraryStatus();
+      console.log(`Library at ${libraryRoot()}`);
+      if (status.categories.length === 0) {
+        console.log(
+          `Empty. Drop files there to make them searchable; ` +
+            `each subfolder you create is a category.`,
+        );
+        break;
+      }
+      for (const cat of status.categories) {
+        console.log(`  ${cat.name.padEnd(16)} ${cat.files} file(s), ${cat.chunks} chunk(s)`);
+      }
+      console.log(`${status.docs} document(s), ${status.chunks} chunk(s) total.`);
+      if (status.pendingEmbeddings > 0) {
+        console.log(
+          `${status.pendingEmbeddings} chunk(s) awaiting embeddings (keyword-only until then); ` +
+            `they retry on the next scan.`,
+        );
+      }
       break;
     }
 
@@ -1207,6 +1246,8 @@ enio — a local agent with tools and persistent memory
 
   enio index              summarise and extract from unindexed conversations
   enio reindex            rebuild the whole graph from the raw log
+  enio library            what the document library holds, per category
+  enio library scan       index new and changed files in the library folders
   enio stats              what memory currently holds
   enio graph "topic"      show what the graph knows about something
   enio remember "..."     pin a fact by hand

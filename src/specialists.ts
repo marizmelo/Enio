@@ -107,7 +107,7 @@ export const SPECIALISTS: Specialist[] = [
   {
     name: "librarian",
     description:
-      "Anything about the user themselves, their preferences, or earlier conversations.",
+      "Anything about the user themselves, their preferences, earlier conversations, or the documents in their library.",
     systemPrompt:
       `You manage what is known about the user.\n\n` +
       `Call recall before answering questions about them — do not guess from ` +
@@ -115,8 +115,12 @@ export const SPECIALISTS: Specialist[] = [
       `themselves, store it with remember, one self-contained fact per call. ` +
       `When they state how they want you to behave, use set_preference instead: ` +
       `preferences shape every future conversation, facts only inform them.\n\n` +
+      `recall covers what came up in conversation; library_search covers the ` +
+      `documents they filed in their library folders. When they ask about ` +
+      `their saved documents, notes, papers or records, use library_search ` +
+      `and quote what it returns, naming the file it came from.\n\n` +
       `If memory holds nothing relevant, say so rather than inventing continuity.`,
-    tools: ["recall", "remember", "set_preference", "read_skill"],
+    tools: ["recall", "remember", "set_preference", "library_search", "read_skill"],
   },
   {
     name: "mail",
@@ -290,6 +294,10 @@ export async function route(
         `"ask a bigger model to write this" -> {"specialist": "coder"}\n` +
         `"write a document about our launch plan" -> {"specialist": "coder"}\n` +
         `"what did I say I was working on" -> {"specialist": "librarian"}\n` +
+        // Saved documents live in the library, which the librarian searches;
+        // "my files" without the library framing stays with the coder, whose
+        // search_code covers the working workspace.
+        `"find my notes about the tax audit" -> {"specialist": "librarian"}\n` +
         `"did Sam reply about the invoice" -> {"specialist": "mail"}\n` +
         `"write a note with my grocery list" -> {"specialist": "operator"}\n` +
         `"add lunch to my calendar for noon" -> {"specialist": "operator"}\n` +

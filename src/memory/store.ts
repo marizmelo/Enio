@@ -135,8 +135,9 @@ const THRESHOLDS = {
 const modeFor = (qvec: Float32Array | null) =>
   qvec ? THRESHOLDS.semantic : THRESHOLDS.lexical;
 
-/** Crude lexical overlap, used only when embeddings are unavailable. */
-function keywordScore(query: string, text: string): number {
+/** Crude lexical overlap, used only when embeddings are unavailable.
+ *  Exported for the library, which degrades the same way facts do. */
+export function keywordScore(query: string, text: string): number {
   const q = new Set(query.toLowerCase().split(/\W+/).filter((w) => w.length > 2));
   if (q.size === 0) return 0;
   const t = new Set(text.toLowerCase().split(/\W+/));
@@ -170,7 +171,7 @@ export function searchFactsKeyword(query: string, limit = 8): ScoredFact[] {
 }
 
 /** FTS5 treats plenty of punctuation as syntax; quote each term to be safe. */
-function toFtsQuery(raw: string): string {
+export function toFtsQuery(raw: string): string {
   const terms = raw.split(/\W+/).filter((w) => w.length > 1);
   return terms.length ? terms.map((t) => `"${t}"`).join(" OR ") : `"${raw}"`;
 }

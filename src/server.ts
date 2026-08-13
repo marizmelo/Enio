@@ -90,6 +90,7 @@ import {
   startMeeting,
   stopMeeting,
 } from "./meetings.js";
+import { libraryStatus, scanLibrary } from "./library.js";
 import { mcpStatus } from "./tools/mcp.js";
 import {
   attachToConversation,
@@ -154,6 +155,14 @@ export async function serve(): Promise<void> {
   setBrowseSession(sessionId);
   setConversationSession(sessionId);
   const token = ensureToken();
+
+  // The document library keeps itself fresh on search (throttled), so this
+  // timer is not correctness -- it embeds new drops ahead of the first query
+  // instead of making that query pay the extraction. It lives here rather
+  // than on the tasks scheduler because the scheduler only runs under
+  // `enio daemon`, and the library should not need a second process.
+  void scanLibrary().catch(() => {});
+  setInterval(() => void scanLibrary().catch(() => {}), 5 * 60_000).unref();
 
   const server = createServer((req, res) => {
     handle(req, res, registryRef.current, sessionId, token, rebuildRegistry).catch((err) => {
@@ -474,6 +483,19 @@ async function handle(
   }
   if (req.method === "DELETE" && url.pathname === "/meetings") {
     sendJson(res, 200, { cancelled: cancelMeeting() });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/library") {
+    sendJson(res, 200, { library: libraryStatus() });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/library/scan") {
+    try {
+      sendJson(res, 200, { report: await scanLibrary() });
+    } catch (err) {
+      sendJson(res, 500, { error: { message: (err as Error).message } });
+    }
     return;
   }
 

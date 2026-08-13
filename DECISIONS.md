@@ -1013,6 +1013,92 @@ opening a saved pipeline overlays its latest run (statuses, per-step output
 on click, produced file paths). No new storage -- the gap was presentation,
 not data.
 
+### The document library (August 2026)
+
+Drop-folders under `workspace/library/` whose files are chunked, embedded and
+searchable per category (any first-level subfolder is one). Three shapes were
+on the table; the choice was where the derived text *lives*, because that
+decides what it costs.
+
+**An unknown category degrades to an unscoped search, measured not guessed.**
+The first cut refused invented category names with the real list — the usual
+closed-list discipline. The first live trace showed why that is wrong *here*:
+asked about a lease, the 4B passed `category: "lease agreements"`, was
+refused, retried with `"lease"`, was refused again, and told the user it
+couldn't find anything — while the answer sat in `personal/` unsearched. The
+refusal also sat *before* the throttled rescan, so a freshly edited file
+stayed unindexed too. A closed list is right when the wrong choice would act;
+here the wrong choice only scopes, so the honest degradation is to drop the
+scope, search everything, and open the result with the correction and the
+real folder names.
+
+**Chunks in the `facts` table, rejected on the hot path.** `searchFacts` is a
+full-table JS cosine scan that `buildMemoryBlock` runs on *every turn*. A few
+hundred documents at ~10 chunks each puts thousands of embedding blobs on
+that path, and the hits would compete with identity facts inside the same
+4000-char block — the user's name crowded out by paragraphs of a lease.
+Reindex semantics were also wrong: `resetDerived()` deliberately spares
+facts (they answer to `discardConversation`), while library rows must die
+with a rescan. Same word, different lifecycle.
+
+**Extending the project index, rejected as an instance but mined as a
+pattern.** It is lexical-only and keyed per project; the library needs
+semantic recall and is global. What it lent: the `(mtime, size)` diff, the
+scan-on-search throttle, FTS5-with-triggers, magic-bytes PDF handling, and
+the 512KB text ceiling.
+
+**What was built: dedicated derived tables + one `library_search` tool on the
+librarian.** The files on disk are the source of truth and the tables are a
+cache, so `enio reindex` wipes and rescans them — the memory invariant
+holding by construction rather than by discipline. Retrieval costs nothing
+until the librarian explicitly calls the tool, whose results carry the chunk
+text itself plus the workspace-relative path: `read_file` stays coder-only
+(disjointness), so a hit must answer on its own, and the path is
+@-mentionable when the user wants the whole document. Semantic and lexical
+scores stay on separate thresholds and are never ranked against each other —
+semantic first, FTS/bm25 fills the remainder — the shared-threshold scar
+applied in advance. Chunks are 1800 chars because `embed()` silently
+truncates input at 2000: a bigger chunk doesn't fail, it just loses its tail
+from the embedding, which is the worst kind of wrong.
+
+**No watcher.** Nothing in the codebase watches a folder and the library
+didn't earn the first one: search triggers a throttled rescan (≤5s stale for
+the question just asked) and the server rescans every 5 minutes for
+embedding-ahead-of-query. The periodic scan lives in `serve()` rather than on
+the tasks scheduler because the scheduler only runs under `enio daemon`, and
+the library must not need a second process. A real watcher becomes worth it
+when scan latency at real library sizes draws complaints, not before.
+
+**No vector store, still.** Brute-force cosine over float32 blobs, the house
+norm. Honest ceiling: fine to roughly ~10k chunks (~1k documents) on this
+hardware; past that, search latency grows linearly and *that* is the moment
+to revisit — with the same SQLite file, not a new database.
+
+**Embeddings degrade, scans backfill.** A scan while embeddings are down
+stores NULL vectors; the chunks are still FTS/keyword-searchable, and every
+later scan retries the NULLs (the `backfillEntityEmbeddings` pattern). An
+attachment-style rule holds throughout: a file that cannot be indexed is
+skipped, never an error — scans must not be failable by one bad PDF.
+
+**The registry order is a priority list, and it bit again.** Slotting
+`library_search` next to the memory tools pushed `web_search` past the
+16-tool ceiling *in single-agent mode only* — the pipelines suite caught
+"web-search ability does not exist" while every routed path worked. The tool
+now sits last in the builtin order: an unrouted agent keeps its web reach and
+loses the library, which is the right trade for a mode that is already
+truncating. The routed path is unaffected; the librarian owns the tool at
+5/6.
+
+Deliberately not built, each with its condition: **OCR for images and
+scanned PDFs** (the vision tier exists; worth wiring when a real library is
+mostly scans — until then a no-text-layer PDF indexes as zero chunks,
+honestly); **docx/Office extraction** (when a maintained pure-JS extractor
+is worth the dependency); **auto-injecting library hits into
+`buildMemoryBlock`** (when a measured relevance win justifies ~1k tokens on
+every turn of every conversation); **external library roots outside the
+workspace** (symlinks or a mount kind in `safePath` — when someone actually
+asks to index a folder they cannot move).
+
 ---
 
 ## Bugs that testing found

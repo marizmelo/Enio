@@ -548,6 +548,9 @@ export function ensureDirs(): void {
   mkdirSync(config.machineStateDir, { recursive: true });
   mkdirSync(config.dataDir, { recursive: true });
   mkdirSync(config.workspace, { recursive: true });
+  // The document library's drop-folder root. Created eagerly so it exists in
+  // Finder before anyone reads the docs: dropping a file in is the feature.
+  mkdirSync(join(config.workspace, "library"), { recursive: true });
 }
 
 export const dbPath = () => join(config.dataDir, "memory.db");

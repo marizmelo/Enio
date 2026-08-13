@@ -31,6 +31,7 @@ export function getDb(): Database.Database {
 /** FTS5 is absent from some SQLite builds (notably node:sqlite on macOS). We use
  *  better-sqlite3, which bundles it, but verify rather than assume. */
 export let ftsAvailable = false;
+export let libraryFtsAvailable = false;
 
 /** Add a column if it is not there yet. SQLite has no IF NOT EXISTS for
  *  columns, and re-adding one throws, so the check is a read of the table
@@ -276,6 +277,49 @@ function migrate(d: Database.Database): void {
       node_results TEXT NOT NULL DEFAULT '[]'
     );
   `);
+
+  // The document library. Unlike facts, these tables are wholly derived: the
+  // files on disk are the source of truth, so a wipe-and-rescan is always
+  // correct and reindex owns them. Paths are workspace-relative so what
+  // search prints is what read_file and @mentions accept.
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS library_docs (
+      path        TEXT PRIMARY KEY,
+      category    TEXT NOT NULL,
+      mtime       REAL NOT NULL,
+      size        INTEGER NOT NULL,
+      indexed_at  INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS library_chunks (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      doc_path    TEXT NOT NULL REFERENCES library_docs(path) ON DELETE CASCADE,
+      seq         INTEGER NOT NULL,
+      text        TEXT NOT NULL,
+      embedding   BLOB
+    );
+    CREATE INDEX IF NOT EXISTS library_chunks_doc ON library_chunks(doc_path);
+  `);
+  try {
+    d.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS library_fts USING fts5(
+        text, content='library_chunks', content_rowid='id'
+      );
+      CREATE TRIGGER IF NOT EXISTS library_ai AFTER INSERT ON library_chunks BEGIN
+        INSERT INTO library_fts(rowid, text) VALUES (new.id, new.text);
+      END;
+      CREATE TRIGGER IF NOT EXISTS library_ad AFTER DELETE ON library_chunks BEGIN
+        INSERT INTO library_fts(library_fts, rowid, text) VALUES ('delete', old.id, old.text);
+      END;
+      CREATE TRIGGER IF NOT EXISTS library_au AFTER UPDATE ON library_chunks BEGIN
+        INSERT INTO library_fts(library_fts, rowid, text) VALUES ('delete', old.id, old.text);
+        INSERT INTO library_fts(rowid, text) VALUES (new.id, new.text);
+      END;
+    `);
+    libraryFtsAvailable = true;
+  } catch {
+    // Same degradation as facts_fts: no FTS5, lexical search uses keyword overlap.
+    libraryFtsAvailable = false;
+  }
 }
 
 /* ---------- vector helpers ---------------------------------------------- */
