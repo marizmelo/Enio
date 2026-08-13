@@ -42,6 +42,7 @@ import {
 import { PermissionNotice } from "@/components/PermissionNotice";
 import { currentModel } from "@/lib/recipes";
 import { MemoryDialog } from "@/components/MemoryDialog";
+import { NotesDialog } from "@/components/NotesDialog";
 import { RecipesDialog } from "@/components/RecipesDialog";
 import { speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
 
@@ -101,6 +102,7 @@ export function App() {
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [pipelinesOpen, setPipelinesOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   // A file opened from the thread. The arrows walk that message's attachments,
@@ -694,6 +696,7 @@ export function App() {
         onHistory={() => setHistoryOpen(true)}
         onPipelines={() => setPipelinesOpen(true)}
         onMemory={() => setMemoryOpen(true)}
+        onNotes={() => setNotesOpen(true)}
         meeting={meeting}
         onToggleMeeting={capabilities.voice?.transcription ? toggleMeeting : undefined}
         onRecipes={isMac ? () => setRecipesOpen(true) : undefined}
@@ -708,6 +711,13 @@ export function App() {
         abilities={capabilities.abilities ?? []}
       />
       <MemoryDialog open={memoryOpen} onOpenChange={setMemoryOpen} />
+      <NotesDialog
+        open={notesOpen}
+        onOpenChange={setNotesOpen}
+        onOpen={(noteName) =>
+          setCanvas({ path: `.notes/${noteName}`, openedBy: "user", rev: Date.now() })
+        }
+      />
       <ConnectionsDialog
         open={connectionsOpen}
         onOpenChange={(open) => {
@@ -891,7 +901,9 @@ export function App() {
         conversationAttachments={convAttachments}
         placeholder={
           canvas
-            ? `Editing ${canvas.path.split("/").pop()} — describe a change`
+            ? canvas.path.startsWith(".notes/")
+              ? `Editing note "${canvas.path.split("/").pop().replace(/\.md$/, "")}" — describe a change`
+              : `Editing ${canvas.path.split("/").pop()} — describe a change`
             : undefined
         }
         onAttachStanding={attachStanding}

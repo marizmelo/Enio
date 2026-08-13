@@ -1576,3 +1576,60 @@ Automation permission, nothing parsed. Interactive things happen in the
 user's own terminal, visibly and once; headless things happen inside
 enio as jobs. The condition for revisiting: an agent CLI whose routine
 OPERATION (not just sign-in) demands a tty.
+
+**Notes is an app, and the interface is the prompt.** The first "sections
+as apps" surface, built on a thesis worth stating: the smaller the model,
+the more the interface matters. Chat hands a 4B an open request and
+unbounded context; "Tighten" on a highlighted range hands it a closed
+operation on a known span -- the interface did the routing, the selection
+did the context-scoping, and what reaches the model is the
+classification-shaped work it is actually good at. The verbs (tighten,
+expand, rewrite-to-instruction, continue) are revise.ts-species bounded
+transforms: guards before any model call, temperature 0, replacement out,
+{ok,reason} never throws -- and every result is PREVIEWED behind
+Accept/Reject, because a 4B rewrite varies and a bad one must cost a
+glance, never a keystroke. Verbs work on any canvas text file; comments
+only on managed notes.
+
+The store is workspace/.notes/, managed by CONVENTION: enio's processes
+are its only writers, and the UI never reveals the path -- no Open with,
+no Show in Finder, export is Save a copy. That convention, not any
+enforcement, is what makes quote-anchored comment threads reliable:
+anchors (quote + 40 chars of context) relocate on every read through an
+exact/contextual/whitespace-fuzzy ladder, orphan state is computed and
+never stored (restoring deleted text re-attaches a thread with zero
+bookkeeping), and a damaged sidecar is kept beside the note, never
+silently discarded. Every listing walker already skips dotfiles, so the
+collection stays out of @mentions and file dialogs for free -- and the
+flip side is recorded in the docs: .notes/ is PRIMARY user data in a
+hidden folder, and backups must include it.
+
+Two of the planner's own recommendations were reversed by verified facts,
+which is what plans are for. A server PUT for note bodies was rejected --
+main.js records rejecting exactly that route, and the "single writer
+module" it was meant to buy was illusory anyway, since chat's @canvas
+flow already writes pinned notes through write_file; revival condition: a
+non-desktop client that needs to edit notes. A server DELETE was rejected
+because the existing trashFile IPC already resolves .notes/ paths and
+macOS Trash with Put Back is strictly more reversible than any route.
+The one doctrine amendment is scoping, not reversal: the server mints
+notes and annotates sidecars because the managed store is enio's own
+data, while note bodies still save on the desktop behind the user's
+click.
+
+Everything read from disk -- selection, context windows, quotes, stored
+thread messages -- passes through neutralizeControlTokens before entering
+a prompt: a note containing a literal im_start marker must read as text,
+not as a role boundary, and nothing upstream sanitizes these paths.
+
+Deliberately not built, each with its condition: margin-bubble overlay
+and a floating selection toolbar (both blocked on a real editor component
+-- positioning against a textarea needs a mirror-div measurement, a known
+dead end; revisit if the textarea is ever replaced); multi-note search
+(the library covers retrieval; revisit around fifty notes); rename/move
+(revisit when users export a note just to rename it); word-level diff in
+the preview (revisit when users demonstrably miss a one-word change in a
+long paragraph); a .notes project-alias guard (an alias literally named
+".notes" would shadow the store in the renderer's resolver -- recorded,
+not special-cased, because aliases are user-chosen and the collision is
+vanishingly unlikely).

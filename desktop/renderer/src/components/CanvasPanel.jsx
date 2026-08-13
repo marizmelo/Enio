@@ -4,9 +4,11 @@ import {
   Copy,
   Eye,
   FolderOpen,
+  Loader2,
   Pencil,
   Save,
   Trash2,
+  Undo2,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +21,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { renderMarkdownish } from "@/lib/markdown";
+import { NoteComments } from "@/components/NoteComments";
+import { createThread, transformSelection } from "@/lib/notes";
 
 /**
  * The canvas: a generated file, pinned beside the conversation.
@@ -62,6 +66,114 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
   const diskMtime = useRef(0);
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
+
+  // --- selection verbs + managed-note state --------------------------------
+  const textareaRef = useRef(null);
+  const [sel, setSel] = useState({ start: 0, end: 0 });
+  // idle | working | preview — the verb result is PREVIEWED, never spliced
+  // straight in: a 4B rewrite varies, and a bad one must cost a glance.
+  const [transform, setTransform] = useState(null);
+  const [verbError, setVerbError] = useState("");
+  const [rewriteAsk, setRewriteAsk] = useState(false);
+  const [instruction, setInstruction] = useState("");
+  const [discussAsk, setDiscussAsk] = useState(false);
+  const [question, setQuestion] = useState("");
+  const [commentsRev, setCommentsRev] = useState(0);
+  // One-deep undo for accepted transforms: programmatic setBuffer breaks the
+  // native textarea undo everywhere in this panel already, so an explicit
+  // snapshot is the honest answer (the PlanWidget precedent).
+  const undoRef = useRef(null);
+  const [canUndo, setCanUndo] = useState(false);
+
+  const isNote = path.startsWith(".notes/");
+  const noteName = isNote ? path.slice(".notes/".length) : null;
+
+  /** Select and reveal a range in the editor — what a margin click means here. */
+  const locateRange = (start, end) => {
+    const area = textareaRef.current;
+    if (!area) return;
+    area.focus();
+    area.setSelectionRange(start, end);
+    // Approximate scroll: proportional position is close enough to bring
+    // the selection into view in a monospace textarea.
+    area.scrollTop = Math.max(0, (start / Math.max(1, area.value.length)) * area.scrollHeight - 80);
+    setSel({ start, end });
+  };
+
+  const runVerb = async (verb) => {
+    const area = textareaRef.current;
+    if (!area) return;
+    const start = area.selectionStart ?? 0;
+    const end = area.selectionEnd ?? 0;
+    setVerbError("");
+    setRewriteAsk(false);
+    setDiscussAsk(false);
+    setTransform({ status: "working", verb, start, end });
+    try {
+      const { replacement } = await transformSelection({
+        text: buffer,
+        start,
+        end,
+        verb,
+        instruction: verb === "rewrite" ? instruction : undefined,
+      });
+      setTransform({ status: "preview", verb, start, end, replacement });
+    } catch (err) {
+      setTransform(null);
+      setVerbError(String(err?.message ?? err));
+    }
+  };
+
+  const acceptTransform = () => {
+    if (transform?.status !== "preview") return;
+    const { start, end, replacement, verb } = transform;
+    undoRef.current = buffer;
+    setCanUndo(true);
+    // Continue inserts at the cursor (the server collapsed the range to its
+    // end); the other verbs replace the selection.
+    const from = verb === "continue" ? end : start;
+    setBuffer(buffer.slice(0, from) + replacement + buffer.slice(end));
+    setDirty(true);
+    setTransform(null);
+    setInstruction("");
+    requestAnimationFrame(() => locateRange(from, from + replacement.length));
+  };
+
+  const undoTransform = () => {
+    if (undoRef.current === null) return;
+    setBuffer(undoRef.current);
+    setDirty(true);
+    undoRef.current = null;
+    setCanUndo(false);
+  };
+
+  const startDiscuss = async () => {
+    const area = textareaRef.current;
+    if (!area || !noteName) return;
+    const start = area.selectionStart ?? 0;
+    const end = area.selectionEnd ?? 0;
+    if (start === end) {
+      setVerbError("Select the text to discuss first.");
+      return;
+    }
+    setVerbError("");
+    setDiscussAsk(false);
+    setTransform({ status: "working", verb: "discuss", start, end });
+    try {
+      await createThread(noteName, {
+        quote: buffer.slice(start, end),
+        prefix: buffer.slice(Math.max(0, start - 40), start),
+        suffix: buffer.slice(end, end + 40),
+        question: question.trim() || undefined,
+      });
+      setQuestion("");
+      setCommentsRev((r) => r + 1);
+      setTransform(null);
+    } catch (err) {
+      setTransform(null);
+      setVerbError(String(err?.message ?? err));
+    }
+  };
 
   const load = useCallback(async ({ clobber }) => {
     setError("");
@@ -172,8 +284,14 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
 
   const discard = async () => {
     const result = await window.maple?.trashFile?.(path);
-    if (result?.ok) onDiscarded();
-    else setError(result?.reason ?? "Could not move it to the Trash.");
+    if (result?.ok) {
+      // A note's comments go with it. Sidecar failure is a toastable shrug:
+      // an orphaned comments file beside a trashed note harms nothing.
+      if (isNote) await window.maple?.trashFile?.(`${path}.comments.json`).catch(() => {});
+      onDiscarded();
+    } else {
+      setError(result?.reason ?? "Could not move it to the Trash.");
+    }
   };
 
   const name = path.split("/").pop();
@@ -190,18 +308,27 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
           </p>
           {/* The real home. "Generated inside Enio" is still a normal file in
               a normal folder — this line plus Reveal is what makes that
-              legible, and what makes Trash's Put Back make sense. */}
-          <button
-            className="block max-w-full truncate text-[10px] text-muted-foreground hover:underline"
-            title="Show in Finder"
-            onClick={() => window.maple?.revealFile?.(path)}
-          >
-            {path.includes("/") ? (
-              <span className="font-mono">{path}</span>
-            ) : (
-              "in your workspace — show in Finder"
-            )}
-          </button>
+              legible, and what makes Trash's Put Back make sense. A managed
+              note is the one exception: never revealing the path IS the
+              convention that keeps external editors out of .notes/, which is
+              what keeps comment anchors trustworthy. */}
+          {isNote ? (
+            <p className="block max-w-full truncate text-[10px] text-muted-foreground">
+              Managed note — export with Save a copy
+            </p>
+          ) : (
+            <button
+              className="block max-w-full truncate text-[10px] text-muted-foreground hover:underline"
+              title="Show in Finder"
+              onClick={() => window.maple?.revealFile?.(path)}
+            >
+              {path.includes("/") ? (
+                <span className="font-mono">{path}</span>
+              ) : (
+                "in your workspace — show in Finder"
+              )}
+            </button>
+          )}
         </div>
         {kind === "text" && isMarkdown && (
           <Button
@@ -242,13 +369,171 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
         </p>
       )}
 
+      {/* Selection verbs: bounded transforms on the highlighted range — a
+          closed list, one model call each, previewed before anything lands.
+          On every text file; Discuss needs the managed store, so it is
+          visible-but-disabled elsewhere: the boundary stated, not hidden. */}
+      {editable && !preview && (
+        <div className="shrink-0 border-b px-2 py-1">
+          <div className="flex flex-wrap items-center gap-1">
+            {[
+              ["tighten", "Tighten", "Say the same thing in fewer words"],
+              ["expand", "Expand", "Develop the selection with more detail"],
+            ].map(([verb, label, tip]) => (
+              <Button
+                key={verb}
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-xs"
+                title={tip}
+                disabled={sel.start === sel.end || transform?.status === "working"}
+                onClick={() => runVerb(verb)}
+              >
+                {label}
+              </Button>
+            ))}
+            <Button
+              size="sm"
+              variant={rewriteAsk ? "secondary" : "ghost"}
+              className="h-6 px-2 text-xs"
+              title="Rewrite the selection to an instruction"
+              disabled={sel.start === sel.end || transform?.status === "working"}
+              onClick={() => setRewriteAsk((v) => !v)}
+            >
+              Rewrite…
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-xs"
+              title="Write what naturally follows the cursor"
+              disabled={transform?.status === "working"}
+              onClick={() => runVerb("continue")}
+            >
+              Continue
+            </Button>
+            <Button
+              size="sm"
+              variant={discussAsk ? "secondary" : "ghost"}
+              className="h-6 px-2 text-xs"
+              title={
+                isNote
+                  ? "Open a comment thread on the selection — the AI answers in it"
+                  : "Comments live in Notes — this file isn't a note."
+              }
+              disabled={!isNote || sel.start === sel.end || transform?.status === "working"}
+              onClick={() => setDiscussAsk((v) => !v)}
+            >
+              Discuss
+            </Button>
+            {transform?.status === "working" && (
+              <Loader2 className="ml-1 size-3.5 animate-spin text-muted-foreground" />
+            )}
+            {canUndo && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ml-auto h-6 gap-1 px-2 text-xs text-muted-foreground"
+                title="Undo the last accepted edit"
+                onClick={undoTransform}
+              >
+                <Undo2 className="size-3" /> Undo
+              </Button>
+            )}
+          </div>
+          {rewriteAsk && (
+            <form
+              className="flex items-center gap-1.5 px-1 pb-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (instruction.trim()) runVerb("rewrite");
+              }}
+            >
+              <input
+                value={instruction}
+                onChange={(e) => setInstruction(e.target.value)}
+                placeholder="How should it change? e.g. turn it into bullets"
+                autoFocus
+                className="h-6 min-w-0 flex-1 rounded border bg-transparent px-2 text-xs outline-none"
+              />
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" type="submit">
+                Go
+              </Button>
+            </form>
+          )}
+          {discussAsk && (
+            <form
+              className="flex items-center gap-1.5 px-1 pb-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                startDiscuss();
+              }}
+            >
+              <input
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="Ask about the selection (optional)"
+                autoFocus
+                className="h-6 min-w-0 flex-1 rounded border bg-transparent px-2 text-xs outline-none"
+              />
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" type="submit">
+                Start thread
+              </Button>
+            </form>
+          )}
+          {verbError && <p className="px-1 pb-1 text-[11px] text-destructive">{verbError}</p>}
+        </div>
+      )}
+
+      {/* The preview between verb and buffer: what came back, next to what
+          it replaces, and nothing changes until Accept. */}
+      {transform?.status === "preview" && (
+        <div className="shrink-0 space-y-1.5 border-b bg-muted/30 px-3 py-2">
+          {transform.verb !== "continue" && (
+            <div>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Selected
+              </p>
+              <p className="max-h-24 overflow-y-auto whitespace-pre-wrap font-mono text-xs opacity-70">
+                {buffer.slice(transform.start, transform.end)}
+              </p>
+            </div>
+          )}
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              {transform.verb === "continue" ? "Continuation" : "Replacement"}
+            </p>
+            <p className="max-h-40 overflow-y-auto whitespace-pre-wrap font-mono text-xs">
+              {transform.replacement}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Button size="sm" className="h-6 px-2.5 text-xs" onClick={acceptTransform}>
+              Accept
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-xs"
+              onClick={() => setTransform(null)}
+            >
+              Reject
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto">
         {kind === "text" && !preview && (
           <textarea
+            ref={textareaRef}
             className="h-full w-full resize-none bg-transparent p-3 font-mono text-xs leading-relaxed outline-none"
             value={buffer}
             readOnly={readOnly}
             spellCheck={false}
+            onSelect={(e) =>
+              setSel({ start: e.target.selectionStart ?? 0, end: e.target.selectionEnd ?? 0 })
+            }
             onChange={(e) => {
               setBuffer(e.target.value);
               setDirty(true);
@@ -282,6 +567,10 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
         )}
       </div>
 
+      {isNote && kind === "text" && (
+        <NoteComments name={noteName} rev={`${commentsRev}:${rev}`} onLocate={locateRange} />
+      )}
+
       {kind !== "missing" && (
       <footer className="flex shrink-0 flex-wrap items-center gap-1.5 border-t px-3 py-2">
         {editable && (
@@ -292,7 +581,10 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
         {/* Desktop entries are always real; web apps join this menu when a
             connection that can actually receive the file exists -- a button
             implying an integration Enio does not have would be a small lie,
-            which is why the clipboard-to-docs.new version was removed. */}
+            which is why the clipboard-to-docs.new version was removed.
+            Hidden for managed notes: handing a note to an external editor is
+            exactly what the .notes/ convention exists to prevent. */}
+        {!isNote && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs">
@@ -315,6 +607,7 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
             </DropdownMenuLabel>
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
         {kind === "text" && (
           <Button
             size="sm"

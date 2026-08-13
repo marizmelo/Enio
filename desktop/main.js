@@ -660,8 +660,12 @@ ipcMain.handle("save-file-as", async (_event, relPath) => {
  * - the size is capped at the read bound -- the buffer came from a read
  *   limited to VIEW_TEXT_LIMIT, so anything bigger was synthesized.
  * An HTTP route was rejected on purpose: the server's file API is read and
- * delete only, and overwriting the user's own work is exactly the kind of
- * irreversible act that stays on the desktop, behind the user's own click.
+ * delete only FOR THE USER'S FILES, and overwriting the user's own work is
+ * exactly the kind of irreversible act that stays on the desktop, behind
+ * the user's own click. The managed note store under .notes/ is the scoped
+ * exception: it is enio's own data, which the server mints and annotates
+ * (src/notes.ts) -- while note BODIES still save through this handler,
+ * behind the same click as everything else.
  */
 ipcMain.handle("save-file-content", (_event, relPath, text) => {
   const full = resolveInWorkspace(relPath);

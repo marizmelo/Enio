@@ -291,6 +291,7 @@ src/
   specialists.ts  routing and per-specialist tool sets
   skills.ts       SKILL.md loading, progressive disclosure
   mentions.ts     /skill and @mention parsing
+  notes.ts        the managed note store: transforms, comment anchors
   tasks.ts        scheduler
   suggest.ts      mines traces for what's worth automating
   vision.ts       images → text

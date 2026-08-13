@@ -32,6 +32,7 @@ No API keys. No account. Nothing leaves your computer.
 |---|---|
 | [Memory](memory.md) | Facts, preferences, examples, and the knowledge graph |
 | [Document library](library.md) | Drop-folders whose files become searchable in chat |
+| [Notes](notes.md) | A managed notebook: selection verbs, comment threads with the AI |
 | [Agents and routing](agents.md) | Why there are six agents and how one gets picked |
 | [Browsing](browsing.md) | Reading the web as a session |
 | [Skills](skills.md) | Teaching it know-how, in markdown, with no code |

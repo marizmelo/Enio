@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookMarked, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, Workflow, X } from "lucide-react";
+import { BookMarked, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, Workflow, X } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -39,6 +39,7 @@ export function StatusBar({
   onProjects,
   onPipelines,
   onMemory,
+  onNotes,
   meeting,
   onToggleMeeting,
   onCloseProject,
@@ -107,6 +108,11 @@ export function StatusBar({
             and a thing with that reach must be one click from any thread. */}
         <TipButton tip="Memory" className="size-7" onClick={onMemory}>
           <Brain className="size-4" />
+        </TipButton>
+        {/* The managed note collection -- the first section that is an app
+            rather than a door into the chat room. */}
+        <TipButton tip="Notes" className="size-7" onClick={onNotes}>
+          <NotebookPen className="size-4" />
         </TipButton>
         {/* Start and stop are user acts here, never tool calls -- the one
             design decision that makes a fabricated "I stopped and here is
