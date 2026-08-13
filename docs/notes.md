@@ -14,8 +14,13 @@ the asking, so what reaches the model is a small, bounded request it
 answers reliably.
 
 Open Notes from the notebook icon in the top bar. **New note** creates one
-and opens it in the canvas immediately; the first line is its title — there
-is no naming dialog, because the page is where the name belongs.
+and opens it in the canvas immediately with its placeholder title selected —
+type to name it. **The first line is the note's name**: the list, the
+canvas header, everything follows the `#` heading, so renaming a note is
+editing its first line. There is no naming dialog, because the page is
+where the name belongs. (The filename underneath never changes — it is a
+stable internal id, which is what keeps comment anchors and exports
+simple.)
 
 ## Where notes live
 

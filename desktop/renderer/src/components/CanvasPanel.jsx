@@ -239,6 +239,22 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
     load({ clobber: false });
   }, [path, rev, load]);
 
+  // A fresh note opens with its placeholder title selected, so typing names
+  // it — which is the answer to "how do I rename a note": the first line is
+  // the name, and this makes that discoverable without a dialog. One-shot
+  // per path; a deliberate return to the untitled text is left alone.
+  const titledRef = useRef(null);
+  useEffect(() => {
+    if (!isNote || kind !== "text" || titledRef.current === path) return;
+    const m = /^# (Untitled note)\b/.exec(buffer);
+    if (!m) return;
+    titledRef.current = path;
+    const area = textareaRef.current;
+    if (!area) return;
+    area.focus();
+    area.setSelectionRange(2, 2 + m[1].length);
+  }, [isNote, kind, buffer, path]);
+
   // The external-edit loop: TextEdit, VS Code, anything — a save there shows
   // up here within ~2s. Clean buffer reloads silently; dirty buffer gets the
   // same banner an agent rewrite does.
@@ -299,13 +315,19 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
   const name = path.split("/").pop();
   const isMarkdown = MARKDOWN.test(path);
   const editable = kind === "text" && !readOnly;
+  // A note is shown by its TITLE — the first heading, live from the buffer —
+  // because the filename is a stable internal id, not a name. Renaming a
+  // note IS editing its first line; the list and this header follow.
+  const noteTitle = isNote
+    ? /^#\s+(.+)$/m.exec(buffer)?.[1]?.trim() || name.replace(/\.md$/, "")
+    : null;
 
   return (
     <div className={`flex flex-col bg-background ${className ?? ""}`}>
       <header className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">
-            {name}
+            {isNote ? noteTitle : name}
             {dirty && <span className="ml-1.5 text-muted-foreground">•</span>}
           </p>
           {/* The real home. "Generated inside Enio" is still a normal file in
@@ -316,7 +338,7 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
               what keeps comment anchors trustworthy. */}
           {isNote ? (
             <p className="block max-w-full truncate text-[10px] text-muted-foreground">
-              Managed note — export with Save a copy
+              Managed note — the first line is its name · export with Save a copy
             </p>
           ) : (
             <button
