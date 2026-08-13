@@ -238,3 +238,25 @@ test("an empty category folder is a real category before anything is indexed", a
   const names = library.libraryCategories().map((c) => c.name);
   assert.ok(names.includes("receipts"));
 });
+
+test("what enio writes at the workspace root is searchable as 'created'", async () => {
+  const ws = process.env.ENIO_WORKSPACE!;
+  writeFileSync(
+    join(ws, "meeting-2026-08-13.md"),
+    "# Meeting\nDecision: the quantum launch ships in September.",
+  );
+  // Workspace subfolders are other machinery -- attachment copies must not
+  // resurface in search claiming to be library documents.
+  mkdirSync(join(ws, "attachments", "conv-1"), { recursive: true });
+  writeFileSync(join(ws, "attachments", "conv-1", "secret.txt"), "quantum attachment copy");
+
+  await library.scanLibrary({ embedder: fakeBatch });
+  const hits = await library.searchLibrary("quantum launch decision", { embedder: fakeEmbed });
+  const created = hits.find((h) => h.path === "meeting-2026-08-13.md");
+  assert.ok(created, "root file indexed");
+  assert.equal(created!.category, "created");
+  assert.ok(
+    hits.every((h) => !h.path.includes("attachments")),
+    "attachment copies stay out of the index",
+  );
+});

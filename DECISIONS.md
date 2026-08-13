@@ -1089,6 +1089,18 @@ loses the library, which is the right trade for a mode that is already
 truncating. The routed path is unaffected; the librarian owns the tool at
 5/6.
 
+**The workspace root joins the index as `created`; workspace subfolders do
+not.** Having "the workspace" and "the library" as two piles of files was
+confusing in practice, and the consolidation chosen was indexing, not
+moving: meeting notes and generated documents already land at the workspace
+root, so root *files* index under a `created` category and nothing changes
+paths. The whole-workspace option was rejected because subfolders are
+machinery — `attachments/` holds copies of conversation attachments, which
+would resurface in search results claiming to be library documents. The
+launcher keeps two search tiles with sharpened names ("Find in files" =
+where is X in project/code, coder; "My library" = what do my documents say,
+librarian) rather than merging tools across the disjointness line.
+
 Deliberately not built, each with its condition: **OCR for images and
 scanned PDFs** (the vision tier exists; worth wiring when a real library is
 mostly scans — until then a no-text-layer PDF indexes as zero chunks,

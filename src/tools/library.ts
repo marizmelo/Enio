@@ -50,7 +50,10 @@ export const libraryTools: ToolDef[] = [
         }
       }
 
-      const hits = await searchLibrary(query, { category });
+      // Four hits, not eight: chunks are ~1800 chars and tool output clips at
+      // 8000, so more would be silently truncated -- and every hit returned
+      // is also a cited source, where seven weak rows bury the real one.
+      const hits = await searchLibrary(query, { category, limit: 4 });
       if (hits.length === 0) {
         return (
           note +

@@ -161,3 +161,30 @@ test("page text appended after the list does not leak into the last snippet", ()
   assert.equal(found[1]!.snippet, "snippet two");
   assert.ok(!found[1]!.snippet!.includes("long article body"));
 });
+
+test("library hits cite every file they came from, and misses cite nothing", () => {
+  const out =
+    "[personal] library/personal/lease-notes.txt\nRent: $2,450 per month.\n\n---\n\n" +
+    "[created] meeting-2026-08-13.md\nSarah writes the release notes.";
+  const found = extractSources("library_search", { query: "rent" }, out);
+  assert.deepEqual(
+    found.map((s) => s.path),
+    ["library/personal/lease-notes.txt", "meeting-2026-08-13.md"],
+  );
+  assert.ok(found.every((s) => s.kind === "file"));
+
+  const miss = 'Nothing in the library matches "rent". Files dropped into /x become searchable; subfolders are categories.';
+  assert.deepEqual(extractSources("library_search", { query: "rent" }, miss), []);
+});
+
+/** Every file source has an empty url, so keying dedupe on url collapsed
+ *  DIFFERENT files into one row — surfaced when library_search began
+ *  returning several files at once. */
+test("two different files survive dedupe; the same file cited twice does not", () => {
+  const files = [
+    { kind: "file" as const, path: "a.md", url: "", title: "a.md" },
+    { kind: "file" as const, path: "b.md", url: "", title: "b.md" },
+    { kind: "file" as const, path: "a.md", url: "", title: "a.md" },
+  ];
+  assert.deepEqual(dedupeSources(files).map((s) => s.path), ["a.md", "b.md"]);
+});

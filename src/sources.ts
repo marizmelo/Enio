@@ -74,6 +74,19 @@ export function extractSources(
     return [{ kind: "file", path, url: "", title: path }];
   }
 
+  // A library hit put a chunk of the named file in front of the model, which
+  // is a reading in the FILE_TOOLS sense -- and the answer's own prose cannot
+  // be trusted to cite it (the MCP provenance measurement). The paths come
+  // from the result rather than the args because one search names many files.
+  if (name === "library_search") {
+    if (!result || /^Nothing in the library matches/m.test(result)) return [];
+    const hits: Source[] = [];
+    for (const [, path] of result.matchAll(/^\[[^\]\n]+\] (.+)$/gm)) {
+      hits.push({ kind: "file", path: path!.trim(), url: "", title: path!.trim() });
+    }
+    return hits;
+  }
+
   if (!isWebTool(name) || !result) return [];
 
   if (name === "web_search") {
@@ -168,12 +181,17 @@ function titleFrom(result: string, url: string): string {
 }
 
 /** Same page cited twice is one source. First mention wins, because it is the
- *  one carrying a search snippet. */
+ *  one carrying a search snippet. Files key on their path: every file source
+ *  has an empty url, and keying those on url collapsed *different* files into
+ *  one row -- found when library_search started returning several at once. */
 export function dedupeSources(sources: Source[]): Source[] {
   const seen = new Set<string>();
   const out: Source[] = [];
   for (const source of sources) {
-    const key = source.url.replace(/[#?].*$/, "").replace(/\/$/, "");
+    const key =
+      source.kind === "file"
+        ? `file:${source.path ?? ""}`
+        : source.url.replace(/[#?].*$/, "").replace(/\/$/, "");
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(source);

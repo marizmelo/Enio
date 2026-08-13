@@ -17,8 +17,11 @@ chat. Each subfolder you create is a **category**:
 ```
 
 The folder names are yours to choose — any first-level subfolder is a
-category, and files dropped at the root get the category `library`. Then just
-ask:
+category, and files dropped at the root get the category `library`. What
+enio writes for you joins the same index automatically: meeting notes and
+generated documents land at the workspace root and are searchable under the
+category `created`, so "find the action items from Tuesday's meeting" is a
+library question too. Then just ask:
 
 > search my library for the apartment lease terms
 >

@@ -133,8 +133,8 @@ export const ABILITIES: Ability[] = [
   },
   {
     id: "file-search",
-    title: "File search",
-    description: "Find where something lives in your project or workspace files.",
+    title: "Find in files",
+    description: "Find where something lives in your project or code — by name or exact text.",
     icon: "file-search",
     specialist: "coder",
     promptTemplate: "@coder Search my files for ___",
@@ -150,7 +150,8 @@ export const ABILITIES: Ability[] = [
   {
     id: "library",
     title: "My library",
-    description: "Search the documents you keep in your library folders.",
+    description:
+      "Ask your saved documents — and what enio wrote for you — by meaning, cited by file.",
     icon: "library",
     specialist: "librarian",
     promptTemplate: "@librarian Search my library for ___",

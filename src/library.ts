@@ -92,6 +92,25 @@ function candidates(): Array<{ path: string; absolute: string; category: string 
     }
   };
   walk(root);
+
+  // What enio writes lands at the workspace root -- meeting notes, generated
+  // documents -- and "search my notes from Tuesday's meeting" should just
+  // work. Root FILES only, as category "created": subfolders are other
+  // machinery (attachments/, project dirs) whose contents already have homes,
+  // and indexing them would put copies of every conversation attachment into
+  // search results claiming to be library documents.
+  try {
+    for (const entry of readdirSync(config.workspace, { withFileTypes: true })) {
+      if (!entry.isFile() || entry.name.startsWith(".")) continue;
+      out.push({
+        path: entry.name,
+        absolute: join(config.workspace, entry.name),
+        category: "created",
+      });
+    }
+  } catch {
+    /* workspace missing: the library half is still worth scanning */
+  }
   return out;
 }
 
@@ -292,7 +311,11 @@ export async function searchLibrary(
   scored.sort((a, b) => b.score - a.score);
 
   const hits = scored.slice(0, limit);
-  if (hits.length < limit && libraryFtsAvailable) {
+  // The lexical channel is a rescue, not a filler: it exists for the exact
+  // term embeddings miss (an invoice number, a filename). Topping up healthy
+  // semantic results with OR-matched FTS hits buried one real source under
+  // seven weak ones -- every "my" and "on" in the query matches something.
+  if (hits.length === 0 && libraryFtsAvailable) {
     const have = new Set(hits.map((h) => `${h.path}:${h.seq}`));
     try {
       const ftsRows = db
