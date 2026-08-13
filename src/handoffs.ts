@@ -332,7 +332,11 @@ export function startHandoffRun(
  * terminal, once; every run after that is headless.
  */
 const SIGNIN_ARGS: Record<string, string[]> = {
-  claude: [], // an unauthenticated interactive start goes straight to login
+  // Observed live: an unauthenticated start does NOT enter the login flow,
+  // it sits at the prompt with a status-line hint. The slash command as
+  // the initial input runs it immediately; worst case it lands as typed
+  // text in front of the user, which is still the right instruction.
+  claude: ["/login"],
   codex: ["login"],
   gemini: [], // first interactive start opens the auth picker
 };
