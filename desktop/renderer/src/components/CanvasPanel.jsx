@@ -59,6 +59,10 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
       if (url) {
         setKind("media");
         setMediaUrl(url);
+      } else if (!(await window.maple?.statFile?.(path))) {
+        setKind("missing");
+        setBlockedNote("This file was deleted or moved. Ask for it again to recreate it.");
+        return;
       } else {
         // Too big or unreadable: the panel degrades to the handoff actions,
         // never to a blank.
@@ -70,9 +74,17 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
       return;
     }
     const content = await window.maple?.readFilePreview?.(path);
-    if (!content || content.kind === "missing" || content.kind === "denied") {
+    if (!content || content.kind === "missing") {
+      // Deleted or moved since the chip was made. Every file action needs
+      // bytes on disk, so the panel says what happened and offers nothing
+      // it cannot do.
+      setKind("missing");
+      setBlockedNote("This file was deleted or moved. Ask for it again to recreate it.");
+      return;
+    }
+    if (content.kind === "denied") {
       setKind("blocked");
-      setBlockedNote("That file is no longer readable from here.");
+      setBlockedNote("That file is outside what Enio can reach from here.");
       return;
     }
     if (content.kind !== "text") {
@@ -113,6 +125,10 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
         diskMtime.current = stat.mtime;
         if (dirtyRef.current) setBanner(true);
         else load({ clobber: true });
+      } else if (!diskMtime.current) {
+        // The file appeared after opening on a missing path -- recreated by
+        // the agent or put back from the Trash. Pick it up.
+        load({ clobber: false });
       }
     }, 2000);
     return () => clearInterval(timer);
@@ -171,11 +187,15 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
               a normal folder — this line plus Reveal is what makes that
               legible, and what makes Trash's Put Back make sense. */}
           <button
-            className="block max-w-full truncate font-mono text-[10px] text-muted-foreground hover:underline"
+            className="block max-w-full truncate text-[10px] text-muted-foreground hover:underline"
             title="Show in Finder"
             onClick={() => window.maple?.revealFile?.(path)}
           >
-            {path}
+            {path.includes("/") ? (
+              <span className="font-mono">{path}</span>
+            ) : (
+              "in your workspace — show in Finder"
+            )}
           </button>
         </div>
         {kind === "text" && isMarkdown && (
@@ -249,7 +269,7 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
             <img src={mediaUrl} alt={name} className="max-h-full max-w-full object-contain" />
           </div>
         )}
-        {kind === "blocked" && (
+        {(kind === "blocked" || kind === "missing") && (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
             <p className="text-sm font-medium">{name}</p>
             <p className="text-xs text-muted-foreground">{blockedNote}</p>
@@ -257,6 +277,7 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
         )}
       </div>
 
+      {kind !== "missing" && (
       <footer className="flex shrink-0 flex-wrap items-center gap-1.5 border-t px-3 py-2">
         {editable && (
           <Button size="sm" className="h-7 gap-1 px-2.5 text-xs" disabled={!dirty} onClick={save}>
@@ -314,6 +335,7 @@ export function CanvasPanel({ path, rev, onClose, onDiscarded, className }) {
           </Button>
         )}
       </footer>
+      )}
     </div>
   );
 }
