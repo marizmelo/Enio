@@ -7,6 +7,7 @@ import {
   FolderOpen,
   Maximize2,
   Minimize2,
+  Pencil,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
