@@ -1651,3 +1651,19 @@ collapse the find/read boundary that keeps the workspace sandbox a
 grant instead of a suggestion; and locate/find(1) walks -- Spotlight's
 index answers in milliseconds and honors the system's own privacy
 exclusions for free.
+
+**A meeting is identified by what it was about.** Recording starts on one
+click with no topic dialog (deliberately), which left most meeting files
+identified by timestamp alone -- a filename that says WHEN and nothing
+about WHAT. Two additions. When no topic was given, the summarize
+pipeline derives a three-to-six word title from the notes -- one more
+closed ask riding the same map/reduce, absent below the silence threshold
+like every other model call -- and writes it into the file's Topic line;
+the user's own topic always wins. And the Notes panel gains a Meetings
+section listing every meeting note by topic and date, read off the disk
+each time because the files ARE the store (workspace root plus the active
+project's out dir, project first, matching safePath's read precedence).
+Meetings open in the canvas UNMANAGED -- Reveal and Open-with stay,
+because a meeting note is an ordinary exportable file, and the managed
+regime exists for comment anchors, which meetings do not have. The
+filename stays a timestamp: a stable id, the notes rule again.

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { NotebookPen, Plus } from "lucide-react";
+import { Disc, NotebookPen, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { listMeetingFiles } from "@/lib/meetings";
 import { createNote, listNotes } from "@/lib/notes";
 
 /**
@@ -24,21 +25,28 @@ const ago = (ts) => {
 
 export function NotesDialog({ open, onOpenChange, onOpen }) {
   const [notes, setNotes] = useState(null);
+  const [meetings, setMeetings] = useState([]);
   const [error, setError] = useState("");
 
   const refresh = useCallback(() => {
     listNotes()
       .then((d) => setNotes(d.notes ?? []))
       .catch((err) => setError(String(err?.message ?? err)));
+    // Meetings ride the same panel: both are things enio wrote down for
+    // you. A failed list degrades to an absent section, never an error
+    // blocking the notes above it.
+    listMeetingFiles()
+      .then((m) => setMeetings(m ?? []))
+      .catch(() => setMeetings([]));
   }, []);
 
   useEffect(() => {
     if (open) refresh();
   }, [open, refresh]);
 
-  const openNote = (name) => {
+  const openNote = (path) => {
     onOpenChange(false);
-    onOpen(name);
+    onOpen(path);
   };
 
   return (
@@ -53,7 +61,7 @@ export function NotesDialog({ open, onOpenChange, onOpen }) {
             onClick={async () => {
               try {
                 const { note } = await createNote();
-                openNote(note.name);
+                openNote(`.notes/${note.name}`);
               } catch (err) {
                 setError(String(err?.message ?? err));
               }
@@ -74,7 +82,7 @@ export function NotesDialog({ open, onOpenChange, onOpen }) {
               <li key={n.name}>
                 <button
                   type="button"
-                  onClick={() => openNote(n.name)}
+                  onClick={() => openNote(`.notes/${n.name}`)}
                   className="flex w-full items-baseline gap-2 rounded px-2.5 py-1.5 text-left text-sm hover:bg-muted"
                 >
                   <span className="min-w-0 flex-1 truncate">{n.title}</span>
@@ -83,6 +91,32 @@ export function NotesDialog({ open, onOpenChange, onOpen }) {
               </li>
             ))}
           </ul>
+
+          {meetings.length > 0 && (
+            <>
+              <p className="flex items-center gap-1.5 px-2.5 pt-3 pb-1 text-[11px] font-medium text-muted-foreground">
+                <Disc className="size-3" /> Meetings
+              </p>
+              <ul className="space-y-0.5">
+                {meetings.map((m) => (
+                  <li key={m.name}>
+                    <button
+                      type="button"
+                      onClick={() => openNote(m.name)}
+                      className="flex w-full items-baseline gap-2 rounded px-2.5 py-1.5 text-left text-sm hover:bg-muted"
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        {m.topic ?? "Meeting"}
+                      </span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {m.when ?? ago(m.updatedAt)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>

@@ -15,6 +15,17 @@ items, open questions — and the result opens beside the chat as
 [memory](memory.md), so "what did we decide about the budget last week"
 works in any later conversation.
 
+## Finding them again
+
+Every meeting is named by what it was about: if you gave no topic, a short
+title is derived from the notes and written into the file's `Topic:` line,
+so a meeting is never identified by its timestamp alone. The **Notes panel**
+(notebook icon, top bar) has a **Meetings** section listing every meeting
+note by topic and date — click one to open it in the canvas, where the
+usual actions apply: edit, Save a copy, Show in Finder, Discard to Trash.
+The files stay ordinary markdown in your workspace (or the project's `out/`
+when one is open).
+
 Nothing leaves your machine. Recording, transcription and summarization all
 run locally; the audio itself is deleted as soon as each piece is
 transcribed.

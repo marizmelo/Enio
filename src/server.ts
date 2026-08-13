@@ -114,6 +114,7 @@ import {
   MeetingRefused,
   addSegment,
   cancelMeeting,
+  listMeetingFiles,
   meetingState,
   startMeeting,
   stopMeeting,
@@ -507,6 +508,12 @@ async function handle(
   if (req.method === "GET" && url.pathname === "/meetings") {
     // null is a real answer: nothing recording, same contract as /model/download.
     sendJson(res, 200, { meeting: meetingState() });
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/meetings/files") {
+    // The written records, identified by topic — the Notes panel's
+    // Meetings section. Read off the disk each time; the files ARE the store.
+    sendJson(res, 200, { meetings: listMeetingFiles() });
     return;
   }
   if (req.method === "DELETE" && url.pathname === "/meetings") {

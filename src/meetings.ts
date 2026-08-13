@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -15,6 +16,7 @@ import { chunkTranscript } from "./memory/extract.js";
 import { endSession, indexPending, logMessage, startSession } from "./memory/store.js";
 import { contextBudget } from "./model-settings.js";
 import { complete } from "./model.js";
+import { activeProject } from "./project.js";
 import { safePath } from "./tools/fs.js";
 import { transcribeWav, whisperInstalled } from "./voice.js";
 
@@ -278,7 +280,7 @@ async function finalize(meeting: ActiveMeeting, opts: { note?: string }): Promis
       }
     } else {
       meeting.status = "summarizing";
-      const sections = await summarizeMeeting(transcript);
+      const sections = await summarizeMeeting(transcript, { deriveTitle: !meeting.topic });
       if ((meeting.status as string) === "cancelled") return;
 
       // Grounding, appended rather than rewritten: a second generation pass
@@ -289,7 +291,16 @@ async function finalize(meeting: ActiveMeeting, opts: { note?: string }): Promis
         .join("\n");
       const invented = unsupportedSpecifics(summaryText, [transcript]);
 
-      body = header + "\n";
+      // The user's topic wins; the derived title fills in only when they
+      // gave none. Either way the Topic line is what the Meetings list
+      // reads, so a timestamped filename stops being the identification.
+      const topic = meeting.topic ?? sections.title;
+      const titledHeader =
+        `# Meeting — ${dateLine}\n` +
+        (topic ? `\nTopic: ${topic}\n` : "") +
+        (opts.note ? `\n> ${opts.note}\n` : "");
+
+      body = titledHeader + "\n";
       if (sections.summary) body += `## Summary\n\n${sections.summary}\n\n`;
       if (sections.decisions) body += `## Decisions\n\n${sections.decisions}\n\n`;
       if (sections.actions) body += `## Action items\n\n${sections.actions}\n\n`;
@@ -349,6 +360,9 @@ export interface MeetingSections {
   decisions?: string;
   actions?: string;
   questions?: string;
+  /** Derived when the user gave no topic — the identification a file named
+   *  by timestamp otherwise never gets. */
+  title?: string;
 }
 
 const NOTES_PROMPT =
@@ -395,7 +409,10 @@ const SECTION_PROMPTS: Array<{ key: keyof MeetingSections; prompt: string }> = [
  * classification-shaped — the thing this model size does well — where one
  * combined generation pass is exactly where it pads and invents.
  */
-export async function summarizeMeeting(transcript: string): Promise<MeetingSections> {
+export async function summarizeMeeting(
+  transcript: string,
+  { deriveTitle = false }: { deriveTitle?: boolean } = {},
+): Promise<MeetingSections> {
   const chunks = chunkTranscript(transcript, 2500);
   const notes: string[] = [];
   for (const chunk of chunks) {
@@ -455,5 +472,83 @@ export async function summarizeMeeting(transcript: string): Promise<MeetingSecti
     const text = result.content.trim();
     if (text && !/^none[.!]?$/i.test(text)) sections[key] = text;
   }
+
+  // A name, only when nobody gave one: recording starts on one click with
+  // no topic dialog, so most meetings would otherwise be identified by
+  // timestamp alone. Naming from the notes is the same closed ask as the
+  // sections -- and its absence degrades to the date, never to a failure.
+  if (deriveTitle) {
+    const result = await complete(
+      [
+        {
+          role: "system",
+          content:
+            "Name this meeting in three to six words — the subject, not a sentence. " +
+            "Reply with ONLY the name, no quotes, no punctuation at the end.",
+        },
+        { role: "user", content: joined },
+      ],
+      [],
+      {},
+      undefined,
+      { temperature: 0 },
+    );
+    const title = result.content.trim().replace(/^["'#\s]+|["'.\s]+$/g, "").slice(0, 60);
+    if (title && !/^none$/i.test(title)) sections.title = title;
+  }
   return sections;
+}
+
+/* ---------- the meeting files, as a list ------------------------------- */
+
+export interface MeetingFileMeta {
+  /** Workspace-relative (or project-out) name the canvas can open. */
+  name: string;
+  /** The Topic line — the user's, or the derived title. Null for old files. */
+  topic: string | null;
+  /** The date text from the H1, human-shaped already. */
+  when: string | null;
+  updatedAt: number;
+}
+
+/**
+ * Every meeting note enio has written, identified by what it was about.
+ *
+ * Files, not a table: the meeting note on disk is the record, so the list
+ * is read off the disk each time — workspace root plus the active
+ * project's out dir, project first, matching the precedence safePath
+ * gives reads. Identification comes from the file's own head (H1 date,
+ * Topic line), because the filename is a timestamp on purpose — a stable
+ * id, like a note's — and a timestamp is not what a meeting was about.
+ */
+export function listMeetingFiles(): MeetingFileMeta[] {
+  const dirs: string[] = [];
+  const project = activeProject();
+  if (project?.outDir) dirs.push(project.outDir);
+  dirs.push(config.workspace);
+
+  const seen = new Set<string>();
+  const metas: MeetingFileMeta[] = [];
+  for (const dir of dirs) {
+    if (!existsSync(dir)) continue;
+    for (const entry of readdirSync(dir)) {
+      if (!/^meeting-.*\.md$/.test(entry) || seen.has(entry)) continue;
+      seen.add(entry);
+      try {
+        const full = join(dir, entry);
+        const stat = statSync(full);
+        if (!stat.isFile()) continue;
+        const head = readFileSync(full, "utf8").slice(0, 600);
+        metas.push({
+          name: entry,
+          topic: /^Topic:\s*(.+)$/m.exec(head)?.[1]?.trim() ?? null,
+          when: /^# Meeting — (.+)$/m.exec(head)?.[1]?.trim() ?? null,
+          updatedAt: stat.mtimeMs,
+        });
+      } catch {
+        // A file that vanished mid-list is not worth failing the list over.
+      }
+    }
+  }
+  return metas.sort((a, b) => b.updatedAt - a.updatedAt);
 }

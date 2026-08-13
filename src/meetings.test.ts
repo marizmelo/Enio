@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, beforeEach, test } from "node:test";
@@ -87,11 +87,13 @@ test("segments join in sequence order despite unordered completion", async () =>
   meetings.addSegment(wav, 0);
   meetings.addSegment(wav, 1);
   meetings.addSegment(wav, 2);
-  scriptModel(["notes", "summary text", "none", "none", "none"]);
+  scriptModel(["notes", "summary text", "none", "none", "none", "Friday Release Decision"]);
   meetings.stopMeeting();
   const state = await finished();
   assert.equal(state!.status, "done");
   const body = readFileSync(join(process.env.ENIO_WORKSPACE!, state!.file!), "utf8");
+  // No topic was given, so the derived title becomes the identification.
+  assert.match(body, /Topic: Friday Release Decision/);
   const zero = body.indexOf("ZERO");
   const one = body.indexOf("ONE");
   const two = body.indexOf("TWO");
@@ -106,7 +108,7 @@ test("a missing sequence number is said out loud, not spliced over", async () =>
   });
   meetings.addSegment(wav, 0);
   meetings.addSegment(wav, 2); // seq 1 never arrives
-  scriptModel(["notes", "summary", "none", "none", "none"]);
+  scriptModel(["notes", "summary", "none", "none", "none", "Budget Review"]);
   meetings.stopMeeting();
   const state = await finished();
   const body = readFileSync(join(process.env.ENIO_WORKSPACE!, state!.file!), "utf8");
@@ -185,6 +187,7 @@ test("an invented specific lands in the Verify section, untouched in the summary
     "none",
     "none",
     "none",
+    "Wiki Migration", // derived title (no topic given)
   ]);
   meetings.stopMeeting();
   const state = await finished();
@@ -231,6 +234,7 @@ test("the meeting is indexed into memory as an ordinary session", async () => {
     "none",
     "- Tom: write the audit report",
     "none",
+    "Audit Wrap-Up", // derived title (no topic given)
     "Audit wrap-up meeting: audit finishes next week, Tom writes the report.",
     "[]",
   ]);
@@ -253,7 +257,7 @@ test("the watchdog finalizes an abandoned recording", async () => {
     staleMs: 60,
   });
   meetings.addSegment(wav, 0);
-  scriptModel(["notes", "summary", "none", "none", "none"]);
+  scriptModel(["notes", "summary", "none", "none", "none", "Deployment Retro"]);
   // No stop call: the renderer died. The watchdog must finish the job.
   const state = await finished();
   assert.equal(state!.status, "done");
@@ -274,4 +278,28 @@ test("startMeeting purges week-old scratch dirs and leaves fresh ones", () => {
   assert.ok(!remaining.includes("ancient"), "old dir purged");
   assert.ok(remaining.includes("recent"), "fresh dir kept");
   meetings.cancelMeeting();
+});
+
+test("listMeetingFiles identifies files by their own head, newest first", () => {
+  const ws = process.env.ENIO_WORKSPACE!;
+  writeFileSync(
+    join(ws, "meeting-2020-01-01-0900.md"),
+    "# Meeting — 2020-01-01 09:00\n\nTopic: Ancient Planning\n\n## Transcript\n\nwords\n",
+  );
+  writeFileSync(
+    join(ws, "meeting-2020-01-02-0900.md"),
+    "# Meeting — 2020-01-02 09:00\n\nNothing intelligible was recorded.\n",
+  );
+  writeFileSync(join(ws, "not-a-meeting.md"), "# Notes\n");
+
+  const list = meetings.listMeetingFiles();
+  const ancient = list.find((m) => m.name === "meeting-2020-01-01-0900.md");
+  assert.equal(ancient?.topic, "Ancient Planning");
+  assert.equal(ancient?.when, "2020-01-01 09:00");
+  const topicless = list.find((m) => m.name === "meeting-2020-01-02-0900.md");
+  assert.equal(topicless?.topic, null);
+  assert.ok(!list.some((m) => m.name === "not-a-meeting.md"));
+  for (let i = 1; i < list.length; i++) {
+    assert.ok(list[i - 1]!.updatedAt >= list[i]!.updatedAt, "newest first");
+  }
 });

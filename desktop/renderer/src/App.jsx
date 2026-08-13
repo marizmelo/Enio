@@ -714,10 +714,11 @@ export function App() {
       <NotesDialog
         open={notesOpen}
         onOpenChange={setNotesOpen}
-        onOpen={(noteName) =>
-          // Fullscreen by default: opening a note is choosing to write, and
-          // writing wants the width. The header toggle brings chat back.
-          setCanvas({ path: `.notes/${noteName}`, openedBy: "user", rev: Date.now(), full: true })
+        onOpen={(path) =>
+          // Fullscreen by default: opening from this panel is choosing the
+          // document, note or meeting alike. The header toggle brings chat
+          // back. The dialog passes full relative paths, .notes/ included.
+          setCanvas({ path, openedBy: "user", rev: Date.now(), full: true })
         }
       />
       <ConnectionsDialog

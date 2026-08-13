@@ -55,3 +55,7 @@ export const meetingState = async () =>
 
 export const cancelMeeting = async () =>
   call("/meetings", { method: "DELETE", headers: await authHeaders() }).then((d) => d.cancelled);
+
+/** The written meeting notes on disk, identified by topic and date. */
+export const listMeetingFiles = async () =>
+  call("/meetings/files", { headers: await authHeaders() }).then((d) => d.meetings);
