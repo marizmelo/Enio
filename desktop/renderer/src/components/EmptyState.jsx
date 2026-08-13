@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowUpRight,
   Disc,
+  NotebookPen,
   Brain,
   Camera,
   Clapperboard,
@@ -70,7 +71,7 @@ const ICONS = {
  * because a person can act on "set ENIO_DESKTOP=1" where the model can only
  * fail.
  */
-export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, onRecordMeeting, onEnableDesktop, disabled }) {
+export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, onRecordMeeting, onOpenNotes, onEnableDesktop, disabled }) {
   const [enabling, setEnabling] = useState(false);
   const [lockedId, setLockedId] = useState(null);
   const locked = lockedId ? abilities.find((a) => a.id === lockedId) : null;
@@ -156,6 +157,21 @@ export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, onRecor
             >
               <Disc className="size-5" />
               <span className="leading-tight">Record a meeting</span>
+            </button>
+          )}
+          {/* Client-only like its neighbors: Notes is a surface, not a
+              pipeline step, and the launcher is where capabilities are
+              discovered — a notebook nobody can find is a notebook that
+              does not exist. */}
+          {onOpenNotes && (
+            <button
+              disabled={disabled}
+              title="Your notes and meeting records — AI helps in place"
+              onClick={onOpenNotes}
+              className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed px-2 py-3 text-xs transition-colors hover:bg-muted"
+            >
+              <NotebookPen className="size-5" />
+              <span className="leading-tight">Notes</span>
             </button>
           )}
         </div>

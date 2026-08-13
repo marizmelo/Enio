@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
+import { readBody, sendJson } from "./http-util.js";
+import { FEATURE_ROUTES } from "./routes/index.js";
 import { runTurn } from "./agent.js";
 import { claimModelServer } from "./runtime.js";
 import { buildRegistry, type Registry } from "./tools/index.js";
@@ -59,37 +61,9 @@ import {
   conversationKnowledge,
   conversationMessages,
   discardConversation,
-  forgetFact,
-  forgetSummary,
   listConversations,
-  listFacts,
-  listSummaries,
-  setFactPinned,
   startSession,
 } from "./memory/store.js";
-import { graphView } from "./memory/traces.js";
-import { listPreferences, removePreference } from "./memory/learning.js";
-import {
-  availableAgents,
-  cancelHandoffRun,
-  HandoffRefused,
-  listHandoffRuns,
-  openSignin,
-  startHandoffRun,
-} from "./handoffs.js";
-import {
-  createNote,
-  createThread,
-  deleteThread,
-  listNotes,
-  loadThreads,
-  locateQuote,
-  readNote,
-  replyThread,
-  resolveNote,
-  setThreadResolved,
-  transformSelection,
-} from "./notes.js";
 import { ABILITIES, abilityAvailability } from "./abilities.js";
 import {
   adoptRun,
@@ -110,16 +84,7 @@ import {
   type PipelineNode,
 } from "./pipelines.js";
 import { addServer, readMcpConfig, removeServer, setServerDisabled } from "./mcp-config.js";
-import {
-  MeetingRefused,
-  addSegment,
-  cancelMeeting,
-  listMeetingFiles,
-  meetingState,
-  startMeeting,
-  stopMeeting,
-} from "./meetings.js";
-import { libraryStatus, scanLibrary } from "./library.js";
+import { scanLibrary } from "./library.js";
 import { mcpStatus } from "./tools/mcp.js";
 import {
   attachToConversation,
@@ -441,289 +406,10 @@ async function handle(
    * than waiting for the load: the caller has nothing to do with the answer,
    * and holding the request open would only give it something to time out.
    */
-  /**
-   * Meeting capture. Thin on purpose: routes parse and reply, the tested
-   * module owns every decision. Start and stop are USER acts arriving here
-   * from the desktop's record button -- no tool anywhere can reach these,
-   * which is what makes a fabricated "I stopped the recording and here is
-   * the summary" structurally impossible.
-   */
-  if (req.method === "POST" && url.pathname === "/meetings/start") {
-    try {
-      const body = JSON.parse((await readBody(req)) || "{}");
-      sendJson(res, 200, { meeting: startMeeting(body?.topic ? String(body.topic) : undefined) });
-    } catch (err) {
-      if (err instanceof MeetingRefused) {
-        sendJson(res, err.message.includes("install") ? 503 : 409, {
-          error: { message: err.message },
-        });
-      } else {
-        sendJson(res, 400, { error: { message: (err as Error).message } });
-      }
-    }
-    return;
+  // Feature routes, one module each — see src/routes/index.ts.
+  for (const handleFeature of FEATURE_ROUTES) {
+    if (await handleFeature(req, res, url)) return;
   }
-  if (req.method === "POST" && url.pathname === "/meetings/segment") {
-    const seq = Number(url.searchParams.get("seq"));
-    if (!Number.isInteger(seq) || seq < 0) {
-      sendJson(res, 400, { error: { message: "seq must be a non-negative integer" } });
-      return;
-    }
-    const chunks: Buffer[] = [];
-    let size = 0;
-    for await (const chunk of req) {
-      size += (chunk as Buffer).length;
-      // A 45s segment is ~1.4MB; 8MB is generous headroom, and anything
-      // past it is not a segment.
-      if (size > 8 * 1024 * 1024) {
-        sendJson(res, 413, { error: { message: "Segment too large." } });
-        return;
-      }
-      chunks.push(chunk as Buffer);
-    }
-    const wav = Buffer.concat(chunks);
-    if (wav.length < 44) {
-      sendJson(res, 400, { error: { message: "Not a WAV file." } });
-      return;
-    }
-    try {
-      sendJson(res, 202, { meeting: addSegment(wav, seq) });
-    } catch (err) {
-      sendJson(res, err instanceof MeetingRefused ? 409 : 500, {
-        error: { message: (err as Error).message },
-      });
-    }
-    return;
-  }
-  if (req.method === "POST" && url.pathname === "/meetings/stop") {
-    try {
-      sendJson(res, 202, { meeting: stopMeeting() });
-    } catch (err) {
-      sendJson(res, err instanceof MeetingRefused ? 409 : 500, {
-        error: { message: (err as Error).message },
-      });
-    }
-    return;
-  }
-  if (req.method === "GET" && url.pathname === "/meetings") {
-    // null is a real answer: nothing recording, same contract as /model/download.
-    sendJson(res, 200, { meeting: meetingState() });
-    return;
-  }
-  if (req.method === "GET" && url.pathname === "/meetings/files") {
-    // The written records, identified by topic — the Notes panel's
-    // Meetings section. Read off the disk each time; the files ARE the store.
-    sendJson(res, 200, { meetings: listMeetingFiles() });
-    return;
-  }
-  if (req.method === "DELETE" && url.pathname === "/meetings") {
-    sendJson(res, 200, { cancelled: cancelMeeting() });
-    return;
-  }
-
-  if (req.method === "GET" && url.pathname === "/library") {
-    sendJson(res, 200, { library: libraryStatus() });
-    return;
-  }
-  if (req.method === "POST" && url.pathname === "/library/scan") {
-    try {
-      sendJson(res, 200, { report: await scanLibrary() });
-    } catch (err) {
-      sendJson(res, 500, { error: { message: (err as Error).message } });
-    }
-    return;
-  }
-
-  /**
-   * What memory holds about the user — the desktop's Memory dialog.
-   *
-   * One read route, thin mutation routes. Everything here is the management
-   * surface that was missing: facts and preferences were writable from chat
-   * and the CLI but listable nowhere, and the summaries feeding every turn's
-   * memory block were invisible outside the inspector.
-   */
-  if (req.method === "GET" && url.pathname === "/memory") {
-    sendJson(res, 200, {
-      facts: listFacts(),
-      preferences: listPreferences(),
-      summaries: listSummaries(),
-    });
-    return;
-  }
-  if (req.method === "GET" && url.pathname === "/memory/graph") {
-    const limit = Math.min(Number(url.searchParams.get("limit") ?? 150) || 150, 300);
-    sendJson(res, 200, graphView(limit));
-    return;
-  }
-  const factRoute = /^\/memory\/facts\/(\d+)$/.exec(url.pathname);
-  if (factRoute) {
-    const id = Number(factRoute[1]);
-    if (req.method === "DELETE") {
-      sendJson(res, forgetFact(String(id)) ? 200 : 404, { ok: true });
-      return;
-    }
-    if (req.method === "POST") {
-      const body = JSON.parse((await readBody(req)) || "{}") as { pinned?: boolean };
-      sendJson(res, setFactPinned(id, body?.pinned === true) ? 200 : 404, { ok: true });
-      return;
-    }
-  }
-  const prefRoute = /^\/memory\/preferences\/(\d+)$/.exec(url.pathname);
-  if (prefRoute && req.method === "DELETE") {
-    sendJson(res, removePreference(prefRoute[1]!) ? 200 : 404, { ok: true });
-    return;
-  }
-  const summaryRoute = /^\/memory\/summaries\/([A-Za-z0-9-]+)$/.exec(url.pathname);
-  if (summaryRoute && req.method === "DELETE") {
-    sendJson(res, forgetSummary(summaryRoute[1]!) ? 200 : 404, { ok: true });
-    return;
-  }
-
-  /**
-   * Handoff runs: a reviewed handoff file, executed by the user's own CLI
-   * agent as a background job. Thin routes; the machine is handoffs.ts.
-   */
-  if (req.method === "GET" && url.pathname === "/handoffs") {
-    sendJson(res, 200, { agents: availableAgents(), runs: listHandoffRuns() });
-    return;
-  }
-  if (req.method === "POST" && url.pathname === "/handoffs/run") {
-    try {
-      const body = JSON.parse((await readBody(req)) || "{}") as {
-        path?: string;
-        provider?: string;
-      };
-      const run = startHandoffRun(String(body.path ?? ""), String(body.provider ?? ""));
-      sendJson(res, 202, { run });
-    } catch (err) {
-      const status = err instanceof HandoffRefused ? 409 : 500;
-      sendJson(res, status, { error: { message: (err as Error).message } });
-    }
-    return;
-  }
-  const handoffCancel = /^\/handoffs\/([a-z0-9-]+)$/.exec(url.pathname);
-  if (handoffCancel && req.method === "DELETE") {
-    sendJson(res, cancelHandoffRun(handoffCancel[1]!) ? 200 : 404, { ok: true });
-    return;
-  }
-  /**
-   * The managed note store. Thin: validation and notes.ts calls only.
-   * No PUT (bodies save through the desktop's own handler — the recorded
-   * "the canvas edits, it never mints" decision) and no DELETE (macOS
-   * Trash via the desktop is strictly more reversible than any route).
-   */
-  if (req.method === "GET" && url.pathname === "/notes") {
-    sendJson(res, 200, { notes: listNotes() });
-    return;
-  }
-  if (req.method === "POST" && url.pathname === "/notes") {
-    const body = JSON.parse((await readBody(req)) || "{}") as { title?: string };
-    sendJson(res, 200, { note: createNote(body.title) });
-    return;
-  }
-  const noteRoute = /^\/notes\/([^/]+)(\/comments(?:\/([^/]+)(\/reply|\/resolve)?)?)?$/.exec(
-    url.pathname,
-  );
-  if (noteRoute && url.pathname !== "/notes/transform") {
-    const name = decodeURIComponent(noteRoute[1]!);
-    if (!resolveNote(name)) {
-      sendJson(res, 404, { error: { message: `Not a note: ${name}` } });
-      return;
-    }
-    const threadId = noteRoute[3] ? decodeURIComponent(noteRoute[3]) : null;
-    const tail = noteRoute[4] ?? null;
-
-    if (!noteRoute[2] && req.method === "GET") {
-      const note = readNote(name);
-      if (!note) sendJson(res, 404, { error: { message: "No such note." } });
-      else sendJson(res, 200, note);
-      return;
-    }
-    if (noteRoute[2] && !threadId) {
-      if (req.method === "GET") {
-        const { threads, damaged } = loadThreads(name);
-        const text = readNote(name)?.content ?? "";
-        sendJson(res, 200, {
-          damaged,
-          threads: threads.map((t) => {
-            const hit = locateQuote(text, t.quote, t.prefix, t.suffix);
-            return hit ? { ...t, ...hit, orphaned: false } : { ...t, orphaned: true };
-          }),
-        });
-        return;
-      }
-      if (req.method === "POST") {
-        const body = JSON.parse((await readBody(req)) || "{}") as {
-          quote?: string;
-          prefix?: string;
-          suffix?: string;
-          question?: string;
-        };
-        const out = await createThread(name, {
-          quote: String(body.quote ?? ""),
-          prefix: String(body.prefix ?? ""),
-          suffix: String(body.suffix ?? ""),
-          question: body.question ? String(body.question) : undefined,
-        });
-        if (out.ok) sendJson(res, 200, { thread: out.thread });
-        else sendJson(res, 400, { error: { message: out.reason } });
-        return;
-      }
-    }
-    if (threadId) {
-      if (tail === "/reply" && req.method === "POST") {
-        const body = JSON.parse((await readBody(req)) || "{}") as { text?: string };
-        const out = await replyThread(name, threadId, String(body.text ?? ""));
-        if (out.ok) sendJson(res, 200, { thread: out.thread });
-        else sendJson(res, 400, { error: { message: out.reason } });
-        return;
-      }
-      if (tail === "/resolve" && req.method === "POST") {
-        const body = JSON.parse((await readBody(req)) || "{}") as { resolved?: boolean };
-        const out = setThreadResolved(name, threadId, body.resolved === true);
-        if (out.ok) sendJson(res, 200, { thread: out.thread });
-        else sendJson(res, 404, { error: { message: out.reason } });
-        return;
-      }
-      if (!tail && req.method === "DELETE") {
-        const out = deleteThread(name, threadId);
-        sendJson(res, out.ok ? 200 : 404, out.ok ? { ok: true } : { error: { message: out.reason } });
-        return;
-      }
-    }
-  }
-  if (req.method === "POST" && url.pathname === "/notes/transform") {
-    const body = JSON.parse((await readBody(req)) || "{}") as {
-      text?: string;
-      start?: number;
-      end?: number;
-      verb?: string;
-      instruction?: string;
-    };
-    const out = await transformSelection({
-      text: String(body.text ?? ""),
-      start: Number(body.start),
-      end: Number(body.end),
-      verb: String(body.verb ?? ""),
-      instruction: body.instruction ? String(body.instruction) : undefined,
-    });
-    if (out.ok) sendJson(res, 200, { replacement: out.replacement });
-    else sendJson(res, 400, { error: { message: out.reason } });
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/handoffs/signin") {
-    try {
-      const body = JSON.parse((await readBody(req)) || "{}") as { provider?: string };
-      await openSignin(String(body.provider ?? ""));
-      sendJson(res, 200, { ok: true });
-    } catch (err) {
-      const status = err instanceof HandoffRefused ? 409 : 500;
-      sendJson(res, status, { error: { message: (err as Error).message } });
-    }
-    return;
-  }
-
   if (req.method === "POST" && url.pathname === "/v1/audio/warm") {
     void warmVoice();
     sendJson(res, 202, { warming: true });
@@ -1870,26 +1556,4 @@ async function handle(
   });
 }
 
-function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolvePromise, reject) => {
-    let data = "";
-    req.on("data", (chunk) => {
-      data += chunk;
-      if (data.length > 4_000_000) {
-        reject(new Error("Request body too large"));
-        req.destroy();
-      }
-    });
-    req.on("end", () => resolvePromise(data));
-    req.on("error", reject);
-  });
-}
 
-function sendJson(res: ServerResponse, status: number, payload: unknown): void {
-  const body = JSON.stringify(payload);
-  res.writeHead(status, {
-    "Content-Type": "application/json",
-    "Content-Length": Buffer.byteLength(body),
-  });
-  res.end(body);
-}

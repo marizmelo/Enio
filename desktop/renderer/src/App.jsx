@@ -814,6 +814,7 @@ export function App() {
             }}
             onOpenPipelines={() => setPipelinesOpen(true)}
             onRecordMeeting={capabilities.voice?.transcription ? toggleMeeting : undefined}
+            onOpenNotes={() => setNotesOpen(true)}
             onEnableDesktop={async () => {
               await enableDesktopControl();
               // The registry just changed shape; the tiles follow it.

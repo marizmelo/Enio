@@ -1667,3 +1667,28 @@ Meetings open in the canvas UNMANAGED -- Reveal and Open-with stay,
 because a meeting note is an ordinary exportable file, and the managed
 regime exists for comment anchors, which meetings do not have. The
 filename stays a timestamp: a stable id, the notes rule again.
+
+**The consolidation pass: reachability and file hygiene, not new
+machinery.** Prompted by the right question -- "can the agent
+orchestrate across all features?" -- whose answer is recorded here as
+doctrine: NO, by design. Orchestration belongs to the user (pipelines
+compose abilities), the harness (deterministic lifecycles: meetings,
+handoffs, plans), and conversation-by-selection (/skill, run_pipeline);
+the model classifies, it never chains. What "ready for orchestration"
+actually required was reachability -- every surface visible where things
+are discovered and composed -- and two gaps closed: a find-file ability
+(whole-computer by name, distinct from file-search's
+workspace-by-content) and a Notes tile on the launcher (client-only,
+like Record a meeting: a surface, not a pipeline step, because a
+notebook nobody can find does not exist).
+
+And the growth pressure landed where it actually was: server.ts, which
+had become the place every feature deposited a hundred lines of routes.
+The five newest feature blocks (meetings, library, memory, handoffs,
+notes) moved verbatim into src/routes/* -- each module returns true when
+it owned the request, server.ts tries them in order after the auth gate,
+and shared plumbing (readBody, sendJson) lives in http-util.ts. Behavior
+identical, smoke-tested route by route; new features add a file instead
+of growing the god-file. The older routes (chat, plans, models,
+projects, conversations) stay put until touching them has a second
+reason -- moving code that works, purely for symmetry, is churn.

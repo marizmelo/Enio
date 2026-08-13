@@ -148,6 +148,25 @@ export const ABILITIES: Ability[] = [
     requiredTools: ["search_code"],
   },
   {
+    // Whole-computer by NAME, where file-search is workspace by content —
+    // different question, different specialist, different blast radius
+    // (the librarian has no web and no shell beside a found filename).
+    id: "find-file",
+    title: "Find on my computer",
+    description: "Locate any file on this Mac by name. Locations only — nothing is read.",
+    icon: "file-search",
+    specialist: "librarian",
+    promptTemplate: "@librarian Where is ___ on my computer?",
+    suggestions: [
+      "my tax return pdf",
+      "the presentation from March",
+      "a folder called invoices",
+    ],
+    inputs: ["text"],
+    outputs: ["text"],
+    requiredTools: ["find_file"],
+  },
+  {
     id: "library",
     title: "My library",
     description:
