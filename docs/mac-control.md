@@ -1,15 +1,17 @@
 ---
-title: Controlling your Mac
+title: Controlling your computer
 layout: default
 nav_order: 8
 ---
 
-# Controlling your Mac
+# Controlling your computer
 
-Enio can read from your Mac's apps, open them, and — with your approval — click
-buttons, choose menu commands and type. This page covers what it can do, what
-needs permission, and where the line is between "it just does that" and "it
-asks first".
+Enio can read from your computer's apps, open them, and — with your approval —
+click buttons, choose menu commands and type. Today this is built on macOS
+(AppleScript, the accessibility tree, per-app Automation permissions); the
+ideas — propose, approve, then run — are not Mac-specific. This page covers
+what it can do, what needs permission, and where the line is between "it just
+does that" and "it asks first".
 
 ## The two switches
 
@@ -20,7 +22,7 @@ They answer different questions, and they are deliberately not one switch.
 | **Desktop control** | May it change anything at all? | off |
 | **Run safe recipes automatically** | May a *vouched* script run without asking? | off |
 
-The first is one deliberate click: pick **Control my Mac** (or **Screenshot**)
+The first is one deliberate click: pick **Control my computer** (or **Screenshot**)
 on the launcher and press **Enable desktop control**. The consent is recorded
 machine-wide and survives restarts; macOS still asks its own per-app
 Automation and Screen Recording permissions on first use, which is the layer

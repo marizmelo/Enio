@@ -283,7 +283,7 @@ function SpeedNote({ speed }) {
         ? "usable"
         : "responsive";
   return (
-    <span className={`shrink-0 text-xs tabular-nums ${cls}`} title="Estimated from this Mac's memory bandwidth — generation reads every active weight once per token">
+    <span className={`shrink-0 text-xs tabular-nums ${cls}`} title="Estimated from this machine's memory bandwidth — generation reads every active weight once per token">
       ~{speed.tokensPerSecond} tok/s · {word}
     </span>
   );
@@ -305,7 +305,7 @@ function FitWarning({ fit }) {
       }
     >
       <AlertTriangle className="size-3" />
-      {over ? "too big for this Mac" : "tight fit"}
+      {over ? "too big for this machine" : "tight fit"}
     </span>
   );
 }

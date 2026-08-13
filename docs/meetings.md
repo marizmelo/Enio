@@ -7,7 +7,7 @@ nav_order: 15
 # Meetings
 
 Press the record button (top bar, or the **Record a meeting** tile on a new
-chat) and Enio captures the meeting through your Mac's microphone. Press it
+chat) and Enio captures the meeting through your computer's microphone. Press it
 again to stop. Everything after that is automatic: the audio is transcribed
 locally with Whisper, a structured summary is written — decisions, action
 items, open questions — and the result opens beside the chat as
@@ -21,7 +21,7 @@ transcribed.
 
 ## What to expect
 
-- **Microphone only.** Enio hears what your Mac's mic hears — you, and
+- **Microphone only.** Enio hears what your computer's mic hears — you, and
   whoever is audible in the room. The other side of a headphones call is
   not captured.
 - **Where the file lands**: your workspace, or the open project's own

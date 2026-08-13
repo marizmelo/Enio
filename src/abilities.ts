@@ -269,8 +269,11 @@ export const ABILITIES: Ability[] = [
     },
   },
   {
+    // The id stays "control-mac" -- saved pipelines and composer examples
+    // store ability ids, so renaming it would orphan them. The title is what
+    // people read, and the capability is about the computer, not the brand.
     id: "control-mac",
-    title: "Control my Mac",
+    title: "Control my computer",
     description: "Propose app automations you approve before anything runs.",
     icon: "app-window",
     specialist: "operator",

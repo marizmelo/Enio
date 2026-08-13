@@ -929,7 +929,7 @@ export async function runTurn(
     if (!steps.some((st) => st.kind === "tool")) {
       reply =
         "I described doing that, but I did not actually run anything — nothing " +
-        'has changed on your Mac. Say "propose a plan to …" and I will write ' +
+        'has changed on your computer. Say "propose a plan to …" and I will write ' +
         "out the exact steps for you to approve.";
       handlers.onContent?.("\n\n" + reply);
       history.push({ role: "assistant", content: reply });

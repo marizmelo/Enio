@@ -98,7 +98,7 @@ ninety-second failed load.
 ## Will it fit?
 
 Every downloadable model is marked against **this machine's** memory, because
-whether a model fits is a fact about the Mac rather than about the model.
+whether a model fits is a fact about the machine rather than about the model.
 
 | Marking | Meaning |
 |---|---|

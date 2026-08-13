@@ -23,7 +23,7 @@ No API keys. No account. Nothing leaves your computer.
 | [Chatting](chatting.md) | The conversation loop, `/skill`, `@mention`, commands |
 | [Projects](projects.md) | Standing context: instructions, attached folders, project skills |
 | [Launcher and pipelines](pipelines.md) | Pick abilities as tiles, chain them into flows on a canvas |
-| [Controlling your Mac](mac-control.md) | Open apps, read windows, propose and approve plans |
+| [Controlling your computer](mac-control.md) | Open apps, read windows, propose and approve plans |
 | [Models](models.md) | Switching models, and what the context budget means |
 
 ## Everything else
@@ -60,7 +60,7 @@ selects rather than writes.
 
 **Nothing irreversible happens without you.** The model proposes; a person
 approves. It can read your calendar without asking and cannot send an email
-without a flag being set. When it wants to do something new on your Mac it
+without a flag being set. When it wants to do something new on your computer it
 writes down the exact script and stops — you read it, edit it if you like, test
 a single step, and only then does anything run.
 

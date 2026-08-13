@@ -10,7 +10,7 @@ The agent's HTTP endpoint binds to `127.0.0.1:8787`. To use it from your phone o
 
 ## Read this first
 
-The `coder` agent has `run_command`. Anyone who can reach this endpoint **with the API key** can run shell commands as your user on the Mac mini. Treat the key like an SSH private key.
+The `coder` agent has `run_command`. Anyone who can reach this endpoint **with the API key** can run shell commands as your user on the machine. Treat the key like an SSH private key.
 
 The endpoint requires a bearer token on every `/v1/*` request. Print it with:
 

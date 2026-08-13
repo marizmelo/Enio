@@ -54,7 +54,7 @@ See **[Getting started](docs/getting-started.md)** for permissions, the workspac
 
 **Keeps your documents.** Drop files into library folders — `research/`, `personal/`, whatever you name them — and they become searchable in chat, by meaning and by exact term, with the file cited. The index is derived from the files, never the reverse. → [Document library](docs/library.md)
 
-**Uses your Mac.** Opens apps, reads Mail, Calendar, Notes and Finder, and clicks buttons *by name* from the accessibility tree rather than by pixel. Anything that changes something is written down as a plan you read, edit, test a step at a time, and approve. Approve once and it becomes a recipe it selects rather than rewrites. → [Controlling your Mac](docs/mac-control.md)
+**Uses your computer.** Opens apps, reads Mail, Calendar, Notes and Finder, and clicks buttons *by name* from the accessibility tree rather than by pixel. Anything that changes something is written down as a plan you read, edit, test a step at a time, and approve. Approve once and it becomes a recipe it selects rather than rewrites. → [Controlling your computer](docs/mac-control.md)
 
 **Reads the web.** Search, fetch, and a real browser session that follows links across a site. → [Browsing](docs/browsing.md)
 
