@@ -280,6 +280,22 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
     setTimeout(() => setToast(""), 3000);
   };
 
+  // ⌘S / Ctrl+S saves the buffer — the reflex every editor honors. Routed
+  // through a ref so the listener registers once yet always calls the
+  // current save; preventDefault fires even when clean, because the
+  // browser's own "save page" dialog is never the right answer here.
+  const saveRef = useRef(null);
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        saveRef.current?.();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const save = async () => {
     const result = await window.maple?.saveFileContent?.(path, buffer);
     if (result?.ok) {
@@ -292,6 +308,10 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
     setError(result?.reason ?? "Could not save.");
     return false;
   };
+
+  // Refreshed every render: the shortcut saves only what the Save button
+  // would — an editable, dirty buffer — and is inert otherwise.
+  saveRef.current = kind === "text" && !readOnly && dirty ? save : null;
 
   /** The disk is always the copy's source: a dirty buffer is saved first, so
    *  what lands elsewhere is what the canvas shows. */

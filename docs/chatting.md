@@ -201,7 +201,8 @@ open — and clicking it reveals the file in Finder. Everything else follows
 from that: the canvas, the agent, and any editor you open the file in are
 all reading and writing the same bytes on disk.
 
-**Edit it anywhere.** Type directly in the panel and press Save; markdown
+**Edit it anywhere.** Type directly in the panel and press Save (or
+⌘S); markdown
 gets a Preview toggle. Or hand it to a real editor: **Open in app** launches
 the system's default editor for that file type, and Finder's full *Open
 With* menu is one Reveal away. Edits made outside show up in the panel
