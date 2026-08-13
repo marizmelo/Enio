@@ -21,6 +21,7 @@ import { HistoryDialog } from "@/components/HistoryDialog";
 import { ProjectsDialog } from "@/components/ProjectsDialog";
 import { PipelinesDialog } from "@/components/PipelinesDialog";
 import { ConnectionsDialog } from "@/components/ConnectionsDialog";
+import { CanvasPanel } from "@/components/CanvasPanel";
 import {
   attachToProject,
   closeProject as closeProjectApi,
@@ -70,6 +71,11 @@ export function App() {
   // the conversation changes, so restore and history switches carry them.
   const [convAttachments, setConvAttachments] = useState([]);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+  // The pinned canvas: a file the agent wrote (or the user opened) shown
+  // beside the thread. Renderer-session state, like widgets -- a restored
+  // conversation does not reopen it. rev bumps when the agent rewrites the
+  // pinned path, so the panel knows to reload.
+  const [canvas, setCanvas] = useState(null); // {path, openedBy, rev}
   const [attachError, setAttachError] = useState("");
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [pipelinesOpen, setPipelinesOpen] = useState(false);
@@ -311,6 +317,7 @@ export function App() {
     stopSpeaking();
     followRef.current = true;
     setShowJump(false);
+    setCanvas(null);
     const msgs = await restoreThread(conv.id).catch(() => []);
     setConversationId(conv.id);
     setMessages(msgs);
@@ -328,6 +335,7 @@ export function App() {
       setConversationId(active.latestConversation);
       setMessages(msgs);
     } else {
+      setCanvas(null);
       setMessages([]);
       setContext(null);
       setConversationId(await createConversation().catch(() => null));
@@ -348,6 +356,7 @@ export function App() {
     stopSpeaking();
     followRef.current = true;
     setShowJump(false);
+    setCanvas(null);
     setMessages([]);
     setContext(null);
     setConversationId(await createConversation().catch(() => null));
@@ -369,6 +378,7 @@ export function App() {
     stopSpeaking();
     followRef.current = true;
     setShowJump(false);
+    setCanvas(null);
     setMessages([]);
     setContext(null);
     // Created eagerly so the first turn already has an id to log under. An
@@ -378,8 +388,25 @@ export function App() {
 
   const send = useCallback(
     async (text) => {
-      const trimmed = text.trim();
+      let trimmed = text.trim();
       if (!trimmed || streaming || !backendReady) return;
+
+      // Canvas steering, in the open: the pinned file and the agent that can
+      // edit it are appended INTO the visible message -- the launcher's own
+      // mention grammar, and the approval-sheet principle (what you read in
+      // the bubble is what was sent). An explicit @agent in the text wins;
+      // idempotent, so a retry cannot stack mentions. A path the mention
+      // grammar cannot express (spaces) is skipped -- the canvas still
+      // works, addressing just falls back to prose.
+      if (canvas && /^[A-Za-z0-9][\w./-]*$/.test(canvas.path)) {
+        if (!attachedFiles(trimmed, [canvas.path]).includes(canvas.path)) {
+          trimmed = `${trimmed} @${canvas.path}`;
+        }
+        const agentNames = (capabilities.agents ?? []).map((a) => a.name);
+        if (attachedFiles(trimmed, agentNames).length === 0) {
+          trimmed = `@coder ${trimmed}`;
+        }
+      }
 
       setInput("");
       // Sending re-follows: whatever you were reading, you want to see your
@@ -432,6 +459,23 @@ export function App() {
             tools.push(event.name);
           } else if (event.type === "route") {
             agent = event.route;
+          } else if (event.type === "artifact") {
+            for (const item of event.items ?? []) {
+              if (item.type !== "document" || !item.path) continue;
+              // Chips + mention resolution for anything the turn wrote,
+              // whether or not it opens.
+              setSessionFiles((prev) => [...new Set([...prev, item.path])]);
+              // Auto-open is documents-only: code files written during
+              // project work must not pop panels mid-flow. And a pinned
+              // canvas is never stolen -- a second document is reachable
+              // through the file viewer.
+              if (!/\.(md|txt)$/i.test(item.path)) continue;
+              setCanvas((prev) => {
+                if (!prev) return { path: item.path, openedBy: "agent", rev: 1 };
+                if (prev.path === item.path) return { ...prev, rev: prev.rev + 1 };
+                return prev;
+              });
+            }
           } else if (event.type === "sources") {
             sources.push({ tool: event.tool, items: event.items });
           } else if (event.type === "widget") {
@@ -499,7 +543,7 @@ export function App() {
         abortRef.current = null;
       }
     },
-    [backendReady, capabilities.files, conversationId, messages, sessionFiles, speakReplies, streaming],
+    [backendReady, canvas, capabilities, conversationId, messages, sessionFiles, speakReplies, streaming],
   );
 
   return (
@@ -557,6 +601,10 @@ export function App() {
           index={viewing.index}
           onIndex={(index) => setViewing((v) => ({ ...v, index }))}
           onOpenChange={(next) => !next && setViewing(null)}
+          onEdit={(p) => {
+            setCanvas({ path: p, openedBy: "user", rev: 1 });
+            setViewing(null);
+          }}
         />
       )}
 
@@ -585,6 +633,11 @@ export function App() {
         }}
       />
 
+      {/* Split view: the whole thread+composer run becomes the left column
+          when a canvas is pinned. The right panel is a sibling, so nothing
+          inside the left column changes shape or order. */}
+      <div className="flex min-h-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col">
       <div className="relative flex min-h-0 flex-1 flex-col">
       <main ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
@@ -690,6 +743,11 @@ export function App() {
         sessionFiles={sessionFiles}
         conversationId={conversationId}
         conversationAttachments={convAttachments}
+        placeholder={
+          canvas
+            ? `Editing ${canvas.path.split("/").pop()} — describe a change`
+            : undefined
+        }
         onAttachStanding={attachStanding}
         onManageConnections={() => setConnectionsOpen(true)}
         onAttached={(names) =>
@@ -706,6 +764,18 @@ export function App() {
           setSpeakReplies((on) => !on);
         }}
       />
+      </div>
+
+      {canvas && (
+        <CanvasPanel
+          path={canvas.path}
+          rev={canvas.rev}
+          onClose={() => setCanvas(null)}
+          onDiscarded={() => setCanvas(null)}
+          className="w-[44%] min-w-[300px] max-w-[560px] shrink-0 border-l"
+        />
+      )}
+      </div>
     </div>
     </TooltipProvider>
   );

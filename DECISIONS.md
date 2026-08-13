@@ -865,6 +865,29 @@ vision-model *reading* and the pixels are the check on it — the same session
 that motivated this watched the reader claim enio was visible in a capture
 it had just been hidden from. Live-stream-only, like clock and weather.
 
+**The canvas: the harness detects creation, and the desktop owns the pen.**
+When a turn writes a document, the file opens in a panel beside the thread.
+Four rejections shaped it. *Model-announces rejected*: which file a turn
+created is recovered by extractArtifacts from the tool's own output -- the
+sources.ts pattern's third use; a 4B model cannot be trusted to report what
+it did. *Server write route rejected*: the file API stays read+delete; the
+canvas writes through new desktop IPC (save-file-content) behind the same
+resolveInWorkspace confinement previews use, with write-shaped guards -- the
+file must already exist (the canvas edits, never mints), the extension must
+be one the viewer reads as text, and the size is capped at the read bound.
+*Hard delete rejected*: Discard is shell.trashItem -- the file has a real
+home, Put Back works, and the server's "that file is your own work" delete
+guard stays untouched. *Hidden steering rejected*: while pinned, the file
+and @coder mentions are appended into the visible message -- the
+approval-sheet principle; the transcript shows why the turn edited that
+file. Editing is deliberately shared with real editors (Open in app, Finder
+Open With, a clipboard handoff to Google Docs -- true upload needs OAuth,
+deferred) with a 2s mtime poll keeping disk, panel and agent one loop.
+Deliberately not built: canvas persistence across restarts (condition:
+users reopen conversations to keep editing); a narrow-window overlay mode;
+mention steering for paths with spaces; svg source editing in-panel (svg
+previews as media; one reader stays honest).
+
 **Provenance generalises: the frame states who answered and what was read,
 because the reply cannot.** The same measurement that killed the MCP prompt
 rule (below) settled the pattern for agents and files. The routed agent now

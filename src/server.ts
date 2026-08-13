@@ -67,6 +67,7 @@ import {
   adoptRun,
   composePipeline,
   exportPipelineSkill,
+  extractArtifacts,
   hasSuccessfulRun,
   deletePipeline,
   getPipeline,
@@ -1449,6 +1450,14 @@ async function handle(
             const found = extractSources(name, lastArgs, result);
             if (found.length > 0) {
               res.write(`: sources ${JSON.stringify({ tool: name, items: found })}\n\n`);
+            }
+            // What the turn CREATED, recovered from the tool's own words --
+            // the same contract as sources: the model announces nothing, the
+            // harness parses what actually happened. A comment frame, so
+            // clients with no canvas lose nothing.
+            const made = extractArtifacts(name, result);
+            if (made.length > 0) {
+              res.write(`: artifact ${JSON.stringify({ tool: name, items: made })}\n\n`);
             }
           },
           // Same channel, same reason. A widget is decoration for a client that

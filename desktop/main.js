@@ -650,6 +650,101 @@ ipcMain.handle("save-file-as", async (_event, relPath) => {
   }
 });
 
+/**
+ * The canvas's write path. Confinement is resolveInWorkspace, the same rule
+ * every preview takes; the extra guards are the write-shaped ones:
+ * - the file must already exist -- the canvas edits, it never mints, so the
+ *   renderer cannot create files anywhere a mount reaches;
+ * - the extension must be one the viewer shows as text -- one allowlist for
+ *   what can be read as text and what may be written as text;
+ * - the size is capped at the read bound -- the buffer came from a read
+ *   limited to VIEW_TEXT_LIMIT, so anything bigger was synthesized.
+ * An HTTP route was rejected on purpose: the server's file API is read and
+ * delete only, and overwriting the user's own work is exactly the kind of
+ * irreversible act that stays on the desktop, behind the user's own click.
+ */
+ipcMain.handle("save-file-content", (_event, relPath, text) => {
+  const full = resolveInWorkspace(relPath);
+  if (!full) return { ok: false, reason: "That file is outside the workspace." };
+  if (!fs.existsSync(full)) return { ok: false, reason: "That file is no longer there." };
+  const ext = path.extname(full).toLowerCase();
+  if (ext !== "" && !VIEW_TEXT.test(full)) {
+    return { ok: false, reason: "Only text files can be edited here." };
+  }
+  const body = String(text ?? "");
+  if (Buffer.byteLength(body, "utf8") > VIEW_TEXT_LIMIT) {
+    return { ok: false, reason: "Too large to save from the editor." };
+  }
+  try {
+    fs.writeFileSync(full, body, "utf8");
+    return { ok: true, bytes: Buffer.byteLength(body, "utf8") };
+  } catch (err) {
+    return { ok: false, reason: String(err?.message ?? err) };
+  }
+});
+
+/** Discard a canvas draft: macOS Trash, not unlink. The file has a real home
+ *  (the workspace or a project folder), so Put Back restores it there --
+ *  reversible by design, which is also why the server's delete guard is not
+ *  loosened for this. */
+ipcMain.handle("trash-file", async (_event, relPath) => {
+  const full = resolveInWorkspace(relPath);
+  if (!full || !fs.existsSync(full)) return { ok: false, reason: "That file is no longer there." };
+  try {
+    await shell.trashItem(full);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: String(err?.message ?? err) };
+  }
+});
+
+/** Open a workspace file in whatever the system considers its editor.
+ *  Finder's full "Open With" menu comes free via reveal-file. */
+ipcMain.handle("open-in-default-app", async (_event, relPath) => {
+  const full = resolveInWorkspace(relPath);
+  if (!full || !fs.existsSync(full)) return false;
+  const failure = await shell.openPath(full);
+  return failure === "";
+});
+
+/** Modification time, for the canvas's external-edit poll. The disk is the
+ *  shared state between enio, the agent and any editor the user opened the
+ *  file in -- watching it is what makes those one loop. */
+ipcMain.handle("stat-file", (_event, relPath) => {
+  const full = resolveInWorkspace(relPath);
+  if (!full) return null;
+  try {
+    return { mtime: fs.statSync(full).mtimeMs };
+  } catch {
+    return null;
+  }
+});
+
+/** Media as a data URL for the canvas: images (svg included -- served via an
+ *  <img src=data:>, which never executes embedded scripts), video and audio,
+ *  under the same 20MB cap previews use. Over the cap returns null and the
+ *  panel degrades to handoff actions rather than a blank. */
+const CANVAS_MEDIA = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+  ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+  ".avif": "image/avif", ".svg": "image/svg+xml",
+  ".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm",
+  ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav",
+};
+ipcMain.handle("read-media", (_event, relPath) => {
+  const full = resolveInWorkspace(relPath);
+  if (!full) return null;
+  const mime = CANVAS_MEDIA[path.extname(full).toLowerCase()];
+  if (!mime) return null;
+  try {
+    const stat = fs.statSync(full);
+    if (!stat.isFile() || stat.size > VIEW_IMAGE_LIMIT) return null;
+    return `data:${mime};base64,${fs.readFileSync(full).toString("base64")}`;
+  } catch {
+    return null;
+  }
+});
+
 /** Show a workspace file in Finder. */
 ipcMain.handle("reveal-file", (_event, relPath) => {
   const full = resolveInWorkspace(relPath);

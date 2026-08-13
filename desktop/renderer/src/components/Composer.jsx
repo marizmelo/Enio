@@ -43,6 +43,7 @@ export const Composer = forwardRef(function Composer({
   conversationId = null,
   onAttached = () => {},
   conversationAttachments = [],
+  placeholder = "Message Enio…",
   onAttachStanding = () => {},
   onManageConnections = () => {},
   speakReplies = false,
@@ -369,7 +370,7 @@ export const Composer = forwardRef(function Composer({
         rows={1}
         value={value}
         disabled={streaming}
-        placeholder="Message Enio…"
+        placeholder={placeholder}
         className="max-h-[200px] min-h-[40px] resize-none"
         onPaste={handlePaste}
         onDrop={handleDrop}

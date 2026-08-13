@@ -31,7 +31,7 @@ const size = (bytes) =>
  * screenful of replacement characters — that reads as a corrupt file rather
  * than as the wrong viewer.
  */
-export function FileViewer({ files, index, onIndex, open, onOpenChange }) {
+export function FileViewer({ files, index, onIndex, open, onOpenChange, onEdit }) {
   const [content, setContent] = useState(null);
   const [actualSize, setActualSize] = useState(false);
 
@@ -102,6 +102,18 @@ export function FileViewer({ files, index, onIndex, open, onOpenChange }) {
               {actualSize ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
             </Button>
           )}
+          {onEdit &&
+            ((content?.kind === "text" && !content.truncated) || content?.kind === "image") && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7 shrink-0"
+                title="Open in canvas"
+                onClick={() => onEdit(path)}
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+            )}
           <Button
             size="icon"
             variant="ghost"

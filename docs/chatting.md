@@ -183,6 +183,44 @@ Files from a conversation you already discarded are still listed, marked
 *discarded conversation*. Hiding them would mean a storage screen that omits
 some of what is stored, and this is now the only place they can be found.
 
+## The canvas
+
+When the agent writes a document — *"build me a resume"* ends in `resume.md`
+— the file opens in a panel beside the conversation, not just a sentence in
+the reply. It stays pinned until you close it, save a copy somewhere, or
+discard it.
+
+**It is a real file in a real folder.** The panel's header shows the path —
+your workspace (`~/enio-workspace`), or the project's own folder when one is
+open — and clicking it reveals the file in Finder. Everything else follows
+from that: the canvas, the agent, and any editor you open the file in are
+all reading and writing the same bytes on disk.
+
+**Edit it anywhere.** Type directly in the panel and press Save; markdown
+gets a Preview toggle. Or hand it to a real editor: **Open in app** launches
+the system's default editor for that file type, and Finder's full *Open
+With* menu is one Reveal away. Edits made outside show up in the panel
+within a couple of seconds. **Google Docs** copies the document and opens a
+fresh doc in your browser to paste into — an honest handoff, since a true
+upload would need a Google sign-in Enio doesn't have.
+
+**Or iterate in chat.** With the canvas pinned, your next message carries
+the file with it — the bubble shows `@coder … @resume.md`, the same mention
+grammar the launcher uses, so what you read is exactly what was sent. Ask
+for the change in plain words; the file is rewritten and the panel reloads.
+If you had unsaved edits, it asks before replacing them. (A file whose name
+contains spaces can't ride a mention — the panel still works; name the file
+in your message instead.)
+
+**Leaving.** *Save a copy…* opens the native save dialog (unsaved edits are
+saved first, so the copy matches what you see). *Discard* moves the file to
+the macOS Trash — Put Back restores it to its folder. *Close* just unpins;
+the file stays where it is.
+
+The canvas auto-opens only for documents (`.md`, `.txt`) the agent writes —
+code files during project work don't pop panels. Any other text file, or an
+image, opens in it by hand: the pencil button in the file viewer.
+
 ## Conversations
 
 Every message is logged, so restarting the app restores the thread you were in.

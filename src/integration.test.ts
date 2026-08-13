@@ -197,6 +197,30 @@ describe("agent loop end to end", () => {
   });
 });
 
+describe("artifact channel", () => {
+  test("a live write_file result parses into a document artifact", async () => {
+    // pipelines.test.ts pins extractArtifacts against a HARDCODED string;
+    // this pins it against the tool's live output -- the seam that breaks
+    // silently if fs.ts ever rewords "Wrote N bytes to ...". The server's
+    // `: artifact` frame is one line over this exact pair.
+    const { extractArtifacts } = await import("./pipelines.js");
+    scriptModel([
+      { toolCall: { name: "write_file", args: { path: "canvas-probe.md", content: "# Draft" } } },
+      { content: "Written." },
+    ]);
+    const registry = await buildRegistry();
+    const outputs: Array<{ name: string; output: string }> = [];
+    await runTurn("write a draft", [], registry, store.startSession(), {
+      onToolEnd: (name, output) => outputs.push({ name, output }),
+    });
+    const write = outputs.find((o) => o.name === "write_file");
+    assert.ok(write, "write_file ran");
+    assert.deepEqual(extractArtifacts(write!.name, write!.output), [
+      { type: "document", path: "canvas-probe.md" },
+    ]);
+  });
+});
+
 describe("MCP provenance", () => {
   test("an MCP result says where it came from; a builtin's does not", async () => {
     // Attribution, not defence: the model must be able to tell "a server I do

@@ -46,6 +46,31 @@ contextBridge.exposeInMainWorld("maple", {
     return ipcRenderer.invoke("set-project-roots", roots);
   },
 
+  /** Write the canvas editor's buffer back to a workspace file. */
+  saveFileContent(relPath, text) {
+    return ipcRenderer.invoke("save-file-content", relPath, text);
+  },
+
+  /** Discard a canvas draft to the macOS Trash (Put Back works). */
+  trashFile(relPath) {
+    return ipcRenderer.invoke("trash-file", relPath);
+  },
+
+  /** Open a workspace file in the system's default app for it. */
+  openInDefaultApp(relPath) {
+    return ipcRenderer.invoke("open-in-default-app", relPath);
+  },
+
+  /** Modification time, for noticing edits made in external editors. */
+  statFile(relPath) {
+    return ipcRenderer.invoke("stat-file", relPath);
+  },
+
+  /** Media (image/svg/video/audio) as a data URL for the canvas preview. */
+  readMedia(relPath) {
+    return ipcRenderer.invoke("read-media", relPath);
+  },
+
   /** Save pasted or dropped image bytes into the workspace. */
   saveImage(name, base64, conversationId) {
     return ipcRenderer.invoke("save-image", { name, base64, conversationId });

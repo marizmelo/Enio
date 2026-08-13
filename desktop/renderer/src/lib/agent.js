@@ -25,6 +25,7 @@ export function parseSseEvent(block) {
   let context = null;
   let sources = null;
   let route = null;
+  let artifact = null;
   for (const line of block.split("\n")) {
     if (line.startsWith("data:")) {
       data = (data ?? "") + line.slice(5).trimStart();
@@ -52,6 +53,16 @@ export function parseSseEvent(block) {
       }
       const routeMatch = /^route\s+(\S+)$/.exec(comment);
       if (routeMatch) route = routeMatch[1];
+      const artifactMatch = /^artifact\s+(.+)$/.exec(comment);
+      if (artifactMatch) {
+        try {
+          artifact = JSON.parse(artifactMatch[1]);
+        } catch {
+          // Same rule as sources: the canvas is a nicety on top of an answer
+          // that already arrived, so a bad frame is dropped, not thrown.
+          artifact = null;
+        }
+      }
       const widgetMatch = /^widget\s+(.+)$/.exec(comment);
       if (widgetMatch) {
         try {
@@ -64,7 +75,7 @@ export function parseSseEvent(block) {
       }
     }
   }
-  return { data, tool, widget, think, notice, context, sources, route };
+  return { data, tool, widget, think, notice, context, sources, route, artifact };
 }
 
 /**
@@ -129,10 +140,11 @@ export async function* streamTurn(messages, signal, conversationId = null) {
       const block = buffer.slice(0, split);
       buffer = buffer.slice(split + 2);
 
-      const { data, tool, widget, think, notice, context, sources, route } = parseSseEvent(block);
+      const { data, tool, widget, think, notice, context, sources, route, artifact } = parseSseEvent(block);
       if (tool) yield { type: "tool", name: tool };
       if (sources) yield { type: "sources", ...sources };
       if (route) yield { type: "route", route };
+      if (artifact) yield { type: "artifact", ...artifact };
       if (widget) yield { type: "widget", widget };
       if (think !== null) yield { type: "think", chars: think };
       if (notice) yield { type: "notice", text: notice };
