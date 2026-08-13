@@ -36,7 +36,9 @@ video) are honest signposts, not features.
 
 ## Pipelines
 
-"Build a pipeline" opens a canvas where abilities chain into one flow:
+"Build a pipeline" — on the launcher, or the workflow button in the top bar
+once a conversation is underway — opens a canvas where abilities chain into
+one flow:
 describe what you want — *"research a topic and write a document about it"* —
 and a draft graph appears, ready to edit. Drag steps in from the palette,
 rewire the connections, click a step to edit its guidance, then run.

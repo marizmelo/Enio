@@ -1,4 +1,4 @@
-import { BookMarked, Briefcase, CircleHelp, FolderOpen, History, MessageSquarePlus, X } from "lucide-react";
+import { BookMarked, Briefcase, CircleHelp, FolderOpen, History, MessageSquarePlus, Workflow, X } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -36,6 +36,7 @@ export function StatusBar({
   onRecipes,
   onFiles,
   onProjects,
+  onPipelines,
   onCloseProject,
 }) {
   return (
@@ -91,6 +92,12 @@ export function StatusBar({
             <Briefcase className="size-3.5" />
           </TipButton>
         )}
+        {/* The launcher tile only exists before the first message, and a
+            pipeline is exactly the thing you reach for mid-conversation --
+            "this worked, make it repeatable". */}
+        <TipButton tip="Pipelines" className="size-7" onClick={onPipelines}>
+          <Workflow className="size-4" />
+        </TipButton>
         <TipButton tip="Files" className="size-7" onClick={onFiles}>
           <FolderOpen className="size-3.5" />
         </TipButton>

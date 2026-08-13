@@ -517,6 +517,7 @@ export function App() {
           setProject(null);
         }}
         onHistory={() => setHistoryOpen(true)}
+        onPipelines={() => setPipelinesOpen(true)}
         onRecipes={isMac ? () => setRecipesOpen(true) : undefined}
         onFiles={() => setFilesOpen(true)}
       />
