@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cancelHandoff, fetchHandoffs, runHandoff } from "@/lib/handoffs";
+import { cancelHandoff, fetchHandoffs, openSignin, runHandoff } from "@/lib/handoffs";
 
 /**
  * The last step of a handoff, run rather than ferried.
@@ -185,8 +185,31 @@ export function SendToAi({ path, onOpenArtifact }) {
         </div>
       </div>
       {failed && (
-        <p className="text-xs text-destructive" title={run.error}>
-          {agentName(run.provider)} failed: {run.error?.slice(0, 120)}
+        <p className="flex items-center gap-2 text-xs text-destructive" title={run.error}>
+          <span>
+            {agentName(run.provider)} failed: {run.error?.slice(0, 120)}
+          </span>
+          {/* The one interactive step, delegated to the real Terminal: a
+              .command file runs the CLI's own sign-in flow there. Once is
+              enough; after that every run is headless. */}
+          {/not signed in/i.test(run.error ?? "") && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await openSignin(run.provider);
+                  setRun(null);
+                  setCopied("Terminal opened — sign in there, then try again");
+                  setTimeout(() => setCopied(""), 6000);
+                } catch (err) {
+                  setError(String(err?.message ?? err));
+                }
+              }}
+              className="shrink-0 rounded border px-1.5 py-0.5 text-foreground hover:bg-muted"
+            >
+              Sign in…
+            </button>
+          )}
         </p>
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}

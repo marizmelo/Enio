@@ -74,6 +74,7 @@ import {
   cancelHandoffRun,
   HandoffRefused,
   listHandoffRuns,
+  openSignin,
   startHandoffRun,
 } from "./handoffs.js";
 import { ABILITIES, abilityAvailability } from "./abilities.js";
@@ -583,6 +584,17 @@ async function handle(
   const handoffCancel = /^\/handoffs\/([a-z0-9-]+)$/.exec(url.pathname);
   if (handoffCancel && req.method === "DELETE") {
     sendJson(res, cancelHandoffRun(handoffCancel[1]!) ? 200 : 404, { ok: true });
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/handoffs/signin") {
+    try {
+      const body = JSON.parse((await readBody(req)) || "{}") as { provider?: string };
+      await openSignin(String(body.provider ?? ""));
+      sendJson(res, 200, { ok: true });
+    } catch (err) {
+      const status = err instanceof HandoffRefused ? 409 : 500;
+      sendJson(res, status, { error: { message: (err as Error).message } });
+    }
     return;
   }
 

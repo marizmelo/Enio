@@ -1559,3 +1559,20 @@ The web ferry stays as the labeled fallback for providers with no CLI
 installed. Also fixed here: the ferry failed SILENTLY when the file or
 provider did not resolve -- a button that does nothing is the one
 failure mode worse than an error, and both paths now say what happened.
+
+**No terminal tool, and no hidden one either.** The sign-in wall raised
+the question directly: build a terminal into enio, or run one invisibly
+and surface prompts? Both rejected. A hidden pty means parsing someone
+else's TUI to guess when input is wanted -- the terminal version of
+clicking by pixel, brittle against every CLI release, plus invisible
+interactivity as a consent anti-pattern. An embedded terminal
+(xterm.js + node-pty, a native dep) is a real product bought to solve a
+once-per-provider moment -- and a terminal for the MODEL would be a
+different conversation entirely, one the run_command scoping already
+settled. What shipped instead: the auth-wall error grows a Sign in
+button that writes a .command file exec-ing the resolved CLI and opens
+it -- macOS runs those in Terminal.app natively, no AppleScript, no
+Automation permission, nothing parsed. Interactive things happen in the
+user's own terminal, visibly and once; headless things happen inside
+enio as jobs. The condition for revisiting: an agent CLI whose routine
+OPERATION (not just sign-in) demands a tty.

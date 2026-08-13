@@ -138,3 +138,21 @@ test("an auth wall on stdout with exit 0 is a failure with sign-in guidance, not
   assert.match(done.error!, /not signed in/i);
   assert.ok(!done.answerFile);
 });
+
+test("sign-in writes a .command that execs the resolved CLI, and launches it", async () => {
+  let opened = "";
+  const file = await handoffs.openSignin("claude", {
+    resolve: () => ({ bin: "/fake/bin/claude" }),
+    launch: (f) => {
+      opened = f;
+    },
+  });
+  assert.equal(opened, file);
+  assert.match(file, /signin-claude\.command$/);
+  const body = readFileSync(file, "utf8");
+  assert.match(body, /^#!\/bin\/sh/);
+  assert.match(body, /exec "\/fake\/bin\/claude"/);
+  const { statSync } = await import("node:fs");
+  assert.ok(statSync(file).mode & 0o100, "executable");
+  await assert.rejects(() => handoffs.openSignin("skynet"), handoffs.HandoffRefused);
+});

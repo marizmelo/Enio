@@ -21,3 +21,5 @@ export const fetchHandoffs = () => call("/handoffs");
 export const runHandoff = (path, provider) =>
   call("/handoffs/run", { method: "POST", body: JSON.stringify({ path, provider }) });
 export const cancelHandoff = (id) => call(`/handoffs/${id}`, { method: "DELETE" });
+export const openSignin = (provider) =>
+  call("/handoffs/signin", { method: "POST", body: JSON.stringify({ provider }) });

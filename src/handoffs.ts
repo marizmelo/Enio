@@ -291,3 +291,50 @@ export function startHandoffRun(
   child.stdin?.end(prompt);
   return { ...run };
 }
+
+/**
+ * The one interactive moment, delegated to the real Terminal.
+ *
+ * Sign-in is a TTY flow the CLI owns — menus, arrow keys, a browser
+ * round-trip — and parsing someone else's TUI from a hidden pty is the
+ * terminal version of clicking by pixel. So enio does not emulate it: a
+ * .command file runs the resolved binary, and `open` hands it to
+ * Terminal.app, which macOS does natively — no AppleScript, no Automation
+ * permission, nothing to parse. The user finishes sign-in in their own
+ * terminal, once; every run after that is headless.
+ */
+const SIGNIN_ARGS: Record<string, string[]> = {
+  claude: [], // an unauthenticated interactive start goes straight to login
+  codex: ["login"],
+  gemini: [], // first interactive start opens the auth picker
+};
+
+export async function openSignin(
+  provider: string,
+  deps: { resolve?: (id: string) => { bin: string } | null; launch?: (file: string) => void } = {},
+): Promise<string> {
+  const agent = AGENTS[provider];
+  const resolved = deps.resolve
+    ? deps.resolve(provider)
+    : agent
+      ? (() => {
+          const bin = findBin(agent.bin);
+          return bin ? { bin } : null;
+        })()
+      : null;
+  if (!agent && !resolved) throw new HandoffRefused(`Unknown agent "${provider}".`);
+  if (!resolved) throw new HandoffRefused(`The ${agent!.name} CLI is not installed.`);
+
+  const args = (SIGNIN_ARGS[provider] ?? []).map((a) => JSON.stringify(a)).join(" ");
+  const file = join(config.dataDir, `signin-${provider}.command`);
+  await writeFile(
+    file,
+    `#!/bin/sh\n` +
+      `# Sign in to ${agent?.name ?? provider} so enio's Ask button can run it.\n` +
+      `# Close this window when you are done.\n` +
+      `exec ${JSON.stringify(resolved.bin)}${args ? ` ${args}` : ""}\n`,
+    { encoding: "utf8", mode: 0o755 },
+  );
+  (deps.launch ?? ((f) => void spawn("open", [f], { stdio: "ignore" })))(file);
+  return file;
+}
