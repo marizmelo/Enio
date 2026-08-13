@@ -1531,7 +1531,7 @@ async function handle(
     let lastArgs: Record<string, unknown> = {};
 
     try {
-      await runTurn(
+      const result = await runTurn(
         prompt,
         history,
         registry,
@@ -1597,6 +1597,14 @@ async function handle(
         },
         overrides,
       );
+      // The file the HARNESS saved, announced through the same frame as one
+      // a tool wrote — the client cares that a document exists, not which
+      // half of the system persisted it.
+      if (result.handoffFile) {
+        res.write(
+          `: artifact ${JSON.stringify({ tool: "harness", items: [{ type: "document", path: result.handoffFile }] })}\n\n`,
+        );
+      }
     } catch (err) {
       emit({ content: `\n[error: ${(err as Error).message}]` });
     }

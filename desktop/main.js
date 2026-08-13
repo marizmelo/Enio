@@ -1036,6 +1036,59 @@ ipcMain.handle("open-external", (_event, url) => {
 });
 
 /**
+ * Where a handoff prompt can go. A closed list, not a config file: each
+ * entry pairs a verified app name with a verified web URL, and a guessed
+ * one opens nothing.
+ *
+ * "Send" means clipboard + open, never a URL query and never an API call.
+ * ?q= prefill works in a demo and dies on a real handoff — the file embeds
+ * documents, and browsers truncate long URLs silently. An API integration
+ * would need keys and would quietly delete the feature's privacy story:
+ * the prompt leaves this machine by the user pasting it, under their own
+ * account, after reading it.
+ */
+const AI_PROVIDERS = [
+  { id: "claude", name: "Claude", appName: "Claude", web: "https://claude.ai/new" },
+  { id: "chatgpt", name: "ChatGPT", appName: "ChatGPT", web: "https://chatgpt.com/" },
+  { id: "codex", name: "Codex", appName: null, web: "https://chatgpt.com/codex" },
+  { id: "gemini", name: "Gemini", appName: null, web: "https://gemini.google.com/app" },
+];
+
+const aiAppInstalled = (p) =>
+  Boolean(p.appName && fs.existsSync(`/Applications/${p.appName}.app`));
+
+ipcMain.handle("ai-providers", () =>
+  AI_PROVIDERS.map((p) => ({ id: p.id, name: p.name, installed: aiAppInstalled(p) })),
+);
+
+ipcMain.handle("send-to-ai", (_event, providerId, relPath) => {
+  const provider = AI_PROVIDERS.find((p) => p.id === providerId);
+  const full = provider ? resolveInWorkspace(relPath) : null;
+  if (!full) return null;
+
+  let stat;
+  try {
+    stat = fs.statSync(full);
+  } catch {
+    return null;
+  }
+  // A handoff is a markdown file the model wrote; anything near this cap is
+  // not one, and silently clipping a prompt would hand the frontier model a
+  // truncated task that reads as complete.
+  if (!stat.isFile() || stat.size > 1024 * 1024) return null;
+
+  clipboard.writeText(fs.readFileSync(full, "utf8"));
+  // The installed app when there is one, the web app when not — the same
+  // both-if-available rule as the canvas's Open with menu.
+  if (aiAppInstalled(provider)) {
+    spawn("open", ["-a", provider.appName]);
+    return { opened: "app", name: provider.name };
+  }
+  shell.openExternal(provider.web);
+  return { opened: "web", name: provider.name };
+});
+
+/**
  * Asking macOS for Accessibility access, which is what clicking by name needs.
  *
  * Two mechanisms, and it takes both. `isTrustedAccessibilityClient(true)`

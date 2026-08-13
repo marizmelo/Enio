@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Copy, Square, Volume2 } from "lucide-react";
+import { ArrowUpRight, Check, Copy, Square, Volume2 } from "lucide-react";
 import { TipButton } from "@/components/TipButton";
 import { speakAll, stopSpeaking } from "@/lib/speech";
 
@@ -9,7 +9,7 @@ import { speakAll, stopSpeaking } from "@/lib/speech";
  * Under the message rather than beside it: these act on a finished reply, and
  * putting them inline would put them in the way of reading it.
  */
-export function MessageActions({ content, canSpeak = true }) {
+export function MessageActions({ content, canSpeak = true, onAskBigger }) {
   const [copied, setCopied] = useState(false);
   const [playing, setPlaying] = useState(false);
 
@@ -58,6 +58,18 @@ export function MessageActions({ content, canSpeak = true }) {
       >
         {playing ? <Square className="size-3.5" /> : <Volume2 className="size-3.5" />}
       </TipButton>
+      )}
+      {/* The escape hatch for a disappointing answer. On every reply, not
+          just failures, because "not what I wanted" is the user's judgement
+          -- the one call the local model must never make about itself. */}
+      {onAskBigger && (
+        <TipButton
+          tip="Ask a bigger model — package this for Claude, ChatGPT or Gemini"
+          className="size-7"
+          onClick={onAskBigger}
+        >
+          <ArrowUpRight className="size-3.5" />
+        </TipButton>
       )}
     </div>
   );

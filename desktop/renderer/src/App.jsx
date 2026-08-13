@@ -617,6 +617,19 @@ export function App() {
     [backendReady, canvas, capabilities, conversationId, messages, sessionFiles, speakReplies, streaming],
   );
 
+  // Only when the handoff skill is actually installed: a button that sends
+  // "/ask-bigger-model" into a system without the skill produces a model
+  // staring at an unparsed slash command.
+  const askBigger = (capabilities.abilities ?? []).some(
+    (a) => a.id === "ask-bigger-model" && a.availability === "available",
+  )
+    ? () =>
+        send(
+          "/ask-bigger-model @coder The answer above was not what I wanted. " +
+            "Package what I was trying to do into a handoff prompt for a bigger model.",
+        )
+    : undefined;
+
   return (
     <TooltipProvider delayDuration={300}>
     <div className="flex h-screen flex-col bg-background">
@@ -748,6 +761,7 @@ export function App() {
                     setViewing({ files: names.map((path) => ({ path })), index })
                   }
                   onOpenArtifact={(path) => setCanvas({ path, openedBy: "user", rev: 1 })}
+                  onAskBigger={askBigger}
                 />
                 {/* The line under history. Without it a resumed transcript is
                     pixel-identical to a live reply, and a tail that happens to

@@ -20,15 +20,15 @@ the prompt itself.
 2. Gather what the request depends on: the relevant facts from this
    conversation, attached files (read them first), the project's purpose.
    Quote what matters, summarize the rest.
-3. Write the handoff as a markdown file named `handoff-<topic>.md` with
-   these sections:
+3. Reply with the handoff itself and nothing else — no preamble, no code
+   fences, no closing remarks. Enio saves your reply to a file the user
+   can send. Start with `# Handoff: <topic>` and use these sections:
    - **The task** — one paragraph.
    - **Context** — everything from step 2, self-contained.
    - **Constraints** — tone, format, length, anything the user specified.
    - **What good looks like** — one sentence.
-4. End the file with: `Paste this into https://claude.ai or https://chatgpt.com`
-5. Reply with one sentence saying where the file is. Do not attempt the
-   task yourself.
+4. End with: `Paste this into your AI of choice — Claude, ChatGPT, Codex or Gemini.`
+   Do not attempt the task yourself.
 
 ## Rules
 

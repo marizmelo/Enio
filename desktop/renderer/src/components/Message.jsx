@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Thinking } from "@/components/Thinking";
 import { Widget } from "@/components/Widget";
 import { AttachmentPreviews } from "@/components/AttachmentPreviews";
+import { SendToAi } from "@/components/SendToAi";
 import { SourcesFooter } from "@/components/Sources";
 import { MessageActions } from "@/components/MessageActions";
 import { FileText, Info, Plug } from "lucide-react";
@@ -29,6 +30,7 @@ export function Message({
   streaming = false,
   onOpenFile,
   onOpenArtifact,
+  onAskBigger,
 }) {
   const isUser = role === "user";
   const waiting = streaming && !isUser && !error && content.length === 0;
@@ -136,7 +138,11 @@ export function Message({
           you want to reuse or edit. Reading it back is not, so that button is
           only on the replies. */}
       {!waiting && !streaming && !error && content.trim() && (
-        <MessageActions content={content} canSpeak={!isUser} />
+        <MessageActions
+          content={content}
+          canSpeak={!isUser}
+          onAskBigger={!isUser ? onAskBigger : undefined}
+        />
       )}
 
       {/* Files this reply created, as buttons rather than prose: the text
@@ -158,6 +164,16 @@ export function Message({
           ))}
         </div>
       )}
+
+      {/* A handoff file's next step is leaving the machine, so the reply
+          that wrote one gets a send button — keyed on the filename the
+          skill mandates, which is the harness detecting from tool output,
+          never from the model announcing itself. */}
+      {!isUser &&
+        artifacts
+          .filter((a) => /(^|\/)handoff-[^/]*\.md$/i.test(a.path))
+          .slice(0, 1)
+          .map((a) => <SendToAi key={a.path} path={a.path} />)}
 
       <SourcesFooter sources={sources} onOpenFile={onOpenFile} />
 

@@ -926,6 +926,40 @@ exactly the decision that must stay loud. Idea taken from Vasques'
 lacked; his forty-tools-one-agent failure and specialists-with-curated-
 tools fix independently replicate the architecture here.
 
+The second pass made the handoff reachable from where it is actually
+wanted. An ↗ under every reply sends the packaging request -- on every
+reply, not on detected failures, because "that answer missed" is the
+user's judgement and asking the local model to detect its own inadequacy
+is precisely the judgement call it cannot make.
+
+Persistence moved to the harness in the same pass, forced by two live
+runs. The skill originally said "write the handoff as a file"; asked for
+real, the 4B composed the prompt in chat and skipped write_file, then on a
+second try composed it and CLAIMED "File saved" having called no tool at
+all -- a long generation followed by a remembered tool call is exactly the
+lifecycle step this model size drops. So the skill now says "reply with
+the handoff" (pure composition, the thing it is good at) and runTurn saves
+the reply as handoff-*.md deterministically -- the meetings split, applied
+again: the model writes prose, the harness owns structure and persistence.
+The filename honors one the reply claims (so its text stays true), else
+the `# Handoff:` topic line slugged, else a timestamp -- grammar, never
+judgement. A model that does manage to write the file itself is left
+alone, detected by the same extractor the artifact chips use.
+
+The reply that produced a handoff (tool-written or harness-saved -- the
+artifact frame carries both) gets a Send to button:
+clipboard plus opening the chosen AI, desktop app if installed, web app if
+not, last choice becoming the default (localStorage -- a UI habit, not
+machine policy). The provider list is closed: Claude, ChatGPT, Codex,
+Gemini. Rejected: URL prefill (?q=) -- real handoffs embed documents and
+overflow what browsers accept, so it demos well and truncates in anger,
+handing the frontier model a task that reads complete but is not; API
+integration, again (keys, and it deletes the paste-is-consent story).
+Deliberately not built: launching CLI agents (claude, codex, gemini
+binaries) with the prompt -- condition: terminal-first users ask, at which
+point it needs a consent surface, since a CLI agent acts on this machine
+rather than reading a paste.
+
 **The models list states speed, not just fit.** Prompted by an article on
 the wave of newcomers hitting the "bandwidth wall": on Apple Silicon,
 capacity decides whether a model loads and memory bandwidth decides whether

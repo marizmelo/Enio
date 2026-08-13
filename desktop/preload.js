@@ -151,6 +151,16 @@ contextBridge.exposeInMainWorld("maple", {
     return ipcRenderer.invoke("open-external", url);
   },
 
+  /** The cloud AIs a handoff can go to, with which have desktop apps here. */
+  aiProviders() {
+    return ipcRenderer.invoke("ai-providers");
+  },
+
+  /** Copy a handoff file to the clipboard and open the chosen AI. */
+  sendToAi(providerId, path) {
+    return ipcRenderer.invoke("send-to-ai", providerId, path);
+  },
+
   /** Whether macOS trusts this app for Accessibility. Null off macOS. */
   accessibilityStatus() {
     return ipcRenderer.invoke("accessibility-status");

@@ -194,11 +194,22 @@ architecture review. The graceful answer is packaging, not pretending: pick
 **Ask a bigger model** on the launcher (or say it in chat), and Enio writes
 a *handoff file* — your request restated, plus everything a frontier model
 cannot see from here: the relevant context from your conversation, files,
-and project, made self-contained. It opens in the canvas; review it, press
-Copy, and paste it into Claude or ChatGPT under your own account.
+and project, made self-contained.
 
-Nothing calls any cloud API. The handoff is a file on your disk until you
-paste it somewhere, which keeps the decision — and the data — yours.
+There is also an ↗ under every reply. An answer that missed is the other
+time a bigger model earns its cost, and whether it missed is your call, not
+the model's — so the button is always there, and pressing it packages the
+task the same way.
+
+The reply that wrote a handoff gets a **Send to** button: it copies the
+whole file to your clipboard and opens your chosen AI — the desktop app if
+it is installed, the web app if not. Claude, ChatGPT, Codex and Gemini are
+offered; the one you pick becomes the default until you pick another.
+
+Nothing calls any cloud API, and "send" never transmits anything: the
+prompt reaches the other model when you paste it there, under your own
+account, after reading it. The handoff is a file on your disk until then,
+which keeps the decision — and the data — yours.
 
 ## A note on Ollama's MLX engine
 

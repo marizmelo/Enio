@@ -8,7 +8,9 @@ import { skillCatalogue } from "./skills.js";
 import { invokedSkillBlock } from "./mentions.js";
 import type { Skill } from "./skills.js";
 import { safePath } from "./tools/fs.js";
-import { readFile } from "node:fs/promises";
+import { extractArtifacts } from "./artifacts.js";
+import { existsSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { isImage, readImage } from "./vision.js";
 import type { Registry } from "./tools/index.js";
 import { createHash } from "node:crypto";
@@ -121,6 +123,9 @@ export interface TurnResult {
   specialist: string;
   /** The question that produced this reply, so the caller can save an exemplar. */
   question: string;
+  /** Set when the harness saved the reply as a handoff file (see below):
+   *  the workspace-relative path a client can offer to send. */
+  handoffFile?: string;
 }
 
 /**
@@ -998,6 +1003,60 @@ export async function runTurn(
     }
   }
 
+  // A handoff turn ends with the harness saving the file, not the model.
+  // Asked twice live, a 4B first composed the prompt and skipped write_file,
+  // then composed it and CLAIMED "File saved" with zero tool calls — long
+  // generation followed by a remembered tool call is exactly the lifecycle
+  // step this model size drops. So the skill now says "reply with the
+  // handoff", which is pure composition, and persistence is deterministic
+  // here — the meetings split, applied again. The model writing the file
+  // itself still counts (checked via the same extractor the chips use).
+  let handoffFile: string | undefined;
+  if (
+    overrides.skills?.some((s) => s.name === "ask-bigger-model") &&
+    reply.trim().length > 0 &&
+    !steps.some(
+      (s) =>
+        s.kind === "tool" &&
+        s.name === "write_file" &&
+        extractArtifacts("write_file", s.output ?? "").some(
+          (a) => a.path != null && /(^|\/)handoff-[^/]*\.md$/i.test(a.path),
+        ),
+    )
+  ) {
+    try {
+      // A single outer fence is wrapping, not content.
+      let body = reply.trim();
+      const fenced = /^```[a-z]*\n([\s\S]*)\n```$/.exec(body);
+      if (fenced) body = fenced[1]!.trim();
+
+      // The name the reply claims wins, so the text stays true; else the
+      // topic line; else the timestamp. Grammar, never judgement.
+      const claimed = /\bhandoff-[A-Za-z0-9._-]{1,64}\.md\b/.exec(body ?? "");
+      const topic = /^#\s*Handoff[:\s—-]*(.{3,60})$/im.exec(body);
+      const slug = topic?.[1]
+        ?.toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 40);
+      const stamp = new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-");
+      const base = claimed?.[0]?.replace(/\.md$/, "") ?? (slug ? `handoff-${slug}` : `handoff-${stamp}`);
+
+      let rel = `${base}.md`;
+      let target = safePath(rel);
+      for (let n = 2; existsSync(target); n++) {
+        rel = `${base}-${n}.md`;
+        target = safePath(rel);
+      }
+      await writeFile(target, `${body}\n`, "utf8");
+      handoffFile = rel;
+      handlers.onNotice?.(`Handoff saved to ${rel}.`);
+    } catch {
+      // The reply still carries the full prompt; losing the file must not
+      // cost the answer.
+    }
+  }
+
   try {
     recordTurn({
       sessionId,
@@ -1022,6 +1081,7 @@ export async function runTurn(
     toolsUsed,
     specialist: specialistName || "single",
     question: userInput,
+    ...(handoffFile ? { handoffFile } : {}),
   };
 }
 
