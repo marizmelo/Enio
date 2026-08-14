@@ -254,6 +254,19 @@ function migrate(d: Database.Database): void {
   // whose lifetime it shares.
   addColumn(d, "sessions", "attachments", "TEXT");
 
+  // The scheduler lease: which process may fire cron jobs. One row, taken and
+  // refreshed by a guarded UPSERT, so desktop serve and a headless daemon can
+  // coexist without double-firing. Lives in the shared DB on purpose -- both
+  // processes already have it open in WAL mode, and a guarded write is atomic
+  // where a lock file needs a create/stat/unlink dance with races in between.
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS scheduler_lease (
+      id  INTEGER PRIMARY KEY CHECK (id = 1),
+      pid INTEGER NOT NULL,
+      at  INTEGER NOT NULL
+    );
+  `);
+
   // Pipelines get their own tables rather than riding the plans table on
   // purpose: planSteps() coerces unknown step kinds to applescript and
   // runScript's fallthrough is bash, so a pipeline row leaking into that

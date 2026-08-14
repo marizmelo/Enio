@@ -85,6 +85,7 @@ import {
 } from "./pipelines.js";
 import { addServer, readMcpConfig, removeServer, setServerDisabled } from "./mcp-config.js";
 import { scanLibrary } from "./library.js";
+import { startScheduler } from "./tasks.js";
 import { mcpStatus } from "./tools/mcp.js";
 import {
   attachToConversation,
@@ -152,11 +153,24 @@ export async function serve(): Promise<void> {
 
   // The document library keeps itself fresh on search (throttled), so this
   // timer is not correctness -- it embeds new drops ahead of the first query
-  // instead of making that query pay the extraction. It lives here rather
-  // than on the tasks scheduler because the scheduler only runs under
-  // `enio daemon`, and the library should not need a second process.
+  // instead of making that query pay the extraction. It stays off the tasks
+  // scheduler because the library should not depend on holding the lease.
   void scanLibrary().catch(() => {});
   setInterval(() => void scanLibrary().catch(() => {}), 5 * 60_000).unref();
+
+  // The desktop is the usual scheduler host: a schedule set in the UI must
+  // fire while the app is open, without asking anyone to also run a daemon.
+  // The lease inside startScheduler keeps this safe when `enio daemon` runs
+  // too -- one of them holds, the other stands by.
+  const scheduler = startScheduler((m) => console.log(m));
+  // stop() releases the lease so a standby daemon takes over within a tick
+  // instead of waiting out staleness. The signal handlers route Ctrl-C
+  // through "exit" -- without them a default-handled SIGINT skips the exit
+  // event entirely (claimModelServer installs them too, but only for Maple).
+  process.on("exit", () => scheduler.stop());
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, () => process.exit(0));
+  }
 
   const server = createServer((req, res) => {
     handle(req, res, registryRef.current, sessionId, token, rebuildRegistry).catch((err) => {

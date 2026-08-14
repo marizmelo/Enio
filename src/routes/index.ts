@@ -3,6 +3,8 @@ import { handle as library } from "./library-routes.js";
 import { handle as memory } from "./memory-routes.js";
 import { handle as handoffs } from "./handoffs-routes.js";
 import { handle as notes } from "./notes-routes.js";
+import { handle as tasks } from "./tasks-routes.js";
+import { handle as skills } from "./skills-routes.js";
 
 /**
  * The per-feature route modules, tried in order after the auth gate.
@@ -10,4 +12,4 @@ import { handle as notes } from "./notes-routes.js";
  * server.ts is organization, not behavior: every block moved verbatim,
  * and new features add a file here instead of a hundred lines there.
  */
-export const FEATURE_ROUTES = [meetings, library, memory, handoffs, notes];
+export const FEATURE_ROUTES = [meetings, library, memory, handoffs, notes, tasks, skills];

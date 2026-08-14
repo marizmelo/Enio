@@ -15,6 +15,7 @@ import {
   Brain,
   Camera,
   ChevronRight,
+  Clock,
   Code,
   FilePen,
   FileSearch,
@@ -49,6 +50,9 @@ import {
   stopPipeline,
   suggestPipelines,
 } from "@/lib/pipelines";
+import { clearSchedule, listTasks, setSchedule } from "@/lib/tasks";
+import { DAY_NAMES, composeSchedule, describeSchedule, parseSchedule } from "@/lib/schedule";
+import { SkillsPanel } from "@/components/SkillsPanel";
 
 const ICONS = {
   "pencil-line": PencilLine,
@@ -104,6 +108,14 @@ function AbilityNode({ data, selected }) {
 
 const nodeTypes = { ability: AbilityNode };
 
+function agoShort(ts) {
+  if (!ts) return null;
+  const days = Math.floor((Date.now() - ts) / 86_400_000);
+  if (days < 1) return "today";
+  if (days === 1) return "yesterday";
+  return days < 30 ? `${days}d ago` : `${Math.floor(days / 30)}mo ago`;
+}
+
 /** Column-per-topological-rank layout for composed graphs; no layout dep. */
 function layout(nodes, edges) {
   const rank = new Map(nodes.map((n) => [n.id, 0]));
@@ -153,6 +165,21 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
   // still an answer and deserves its own line.
   const [drafts, setDrafts] = useState(null);
   const [suggesting, setSuggesting] = useState(false);
+  // The list view's second face: the skills the flows sit beside.
+  const [tab, setTab] = useState("automations");
+  // pipelineId -> its auto-schedule task; user-named CLI tasks never land here.
+  const [schedules, setSchedules] = useState({});
+  const [schedulerRunning, setSchedulerRunning] = useState(true);
+  // The inline schedule editor: repeat + time, never a cron field. Cron is
+  // the storage format; composeSchedule writes it out of sight.
+  const [editorFor, setEditorFor] = useState(null);
+  const [editRepeat, setEditRepeat] = useState("daily");
+  const [editTime, setEditTime] = useState("09:00");
+  const [editDays, setEditDays] = useState([1]);
+  const [editDom, setEditDom] = useState(1);
+  // Two-click delete when a schedule exists — window.confirm is native, but
+  // an in-place arm-then-fire keeps the warning on the row it is about.
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const counter = useRef(0);
 
   const byId = useMemo(() => new Map(abilities.map((a) => [a.id, a])), [abilities]);
@@ -160,17 +187,80 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
 
   const refresh = useCallback(() => {
     listPipelines().then(setSaved).catch(() => setSaved([]));
+    listTasks()
+      .then((d) => {
+        setSchedulerRunning(d.schedulerRunning !== false);
+        const map = {};
+        for (const t of d.tasks ?? []) {
+          // isAutoSchedule is the server's claim check: a user's own
+          // "auto-daily" CLI task must not surface as a chip here.
+          if (t.isAutoSchedule) map[t.name.slice("auto-".length)] = t;
+        }
+        setSchedules(map);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
     if (open) {
       refresh();
       setView("list");
+      setTab("automations");
       setError("");
       setFinale("");
       setDrafts(null);
+      setEditorFor(null);
+      setConfirmDelete(null);
     }
   }, [open, refresh]);
+
+  /** Opens the editor seeded from the existing schedule, or sane defaults. */
+  const openScheduleEditor = (pipelineId, existingCron) => {
+    const form = existingCron ? parseSchedule(existingCron) : null;
+    setEditRepeat(form?.repeat ?? "daily");
+    setEditTime(form?.time ?? "09:00");
+    setEditDays(form?.days?.length ? form.days : [1]);
+    setEditDom(form?.dayOfMonth ?? 1);
+    setEditorFor((prior) => (prior === pipelineId ? null : pipelineId));
+  };
+
+  const saveSchedule = async (pipelineId) => {
+    const cron = composeSchedule({
+      repeat: editRepeat,
+      time: editTime,
+      days: editDays,
+      dayOfMonth: editDom,
+    });
+    if (!cron) {
+      setError("Pick at least one day.");
+      return;
+    }
+    setError("");
+    try {
+      await setSchedule(pipelineId, cron);
+      setEditorFor(null);
+      refresh();
+    } catch (err) {
+      setError(String(err?.message ?? err));
+    }
+  };
+
+  const unschedule = async (pipelineId) => {
+    setError("");
+    try {
+      await clearSchedule(pipelineId);
+      setEditorFor(null);
+      refresh();
+    } catch (err) {
+      setError(String(err?.message ?? err));
+    }
+  };
+
+  const toggleEditDay = (day) => {
+    setEditDays((prior) =>
+      prior.includes(day) ? prior.filter((d) => d !== day) : [...prior, day],
+    );
+  };
 
   /** Server graph → React Flow state. The ability's title/icon ride in
    *  node.data so the canvas needs no lookups while dragging. */
@@ -470,10 +560,32 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
     <Dialog open={open} onOpenChange={(next) => !running && onOpenChange(next)}>
       <DialogContent className="flex h-[80vh] w-[80vw] max-w-none flex-col gap-3 sm:max-w-none">
         <DialogHeader className="shrink-0">
-          <DialogTitle>Automations</DialogTitle>
+          <div className="flex items-center gap-3">
+            <DialogTitle>{view === "list" && tab === "skills" ? "Skills" : "Automations"}</DialogTitle>
+            {view === "list" && (
+              <nav className="flex gap-1 text-xs">
+                {[
+                  ["automations", "Automations"],
+                  ["skills", "Skills"],
+                ].map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setTab(id)}
+                    className={`rounded px-2.5 py-1 ${
+                      tab === id ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </nav>
+            )}
+          </div>
           <DialogDescription>
-            Chain abilities into one flow. Each step runs as its own narrow turn — the graph is
-            yours, and nothing runs until you press run.
+            {view === "list" && tab === "skills"
+              ? "Know-how Enio can follow — markdown files you own. Type /name in chat to run one directly."
+              : "Chain abilities into one flow. Each step runs as its own narrow turn — the graph is yours, and nothing runs until you press run."}
           </DialogDescription>
         </DialogHeader>
 
@@ -488,7 +600,9 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
           </div>
         )}
 
-        {view === "list" ? (
+        {view === "list" && tab === "skills" ? (
+          <SkillsPanel open={open && tab === "skills"} />
+        ) : view === "list" ? (
           <div className="flex min-h-0 flex-1 flex-col gap-2">
             <form
               className="flex gap-2"
@@ -513,38 +627,176 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
             <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
               {saved.length === 0 ? (
                 <p className="p-3 text-xs text-muted-foreground">
-                  No saved pipelines yet. Describe one above, or start from a blank canvas.
+                  No saved automations yet. Describe one above, or start from a blank canvas.
                 </p>
               ) : (
-                saved.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex w-full items-center gap-2 border-b px-3 py-2 last:border-b-0 hover:bg-muted"
-                  >
-                    <button
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                      onClick={() => openSaved(p)}
-                    >
-                      <ChevronRight className="size-3 shrink-0" />
-                      <span className="text-sm">{p.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {p.nodeCount} step{p.nodeCount === 1 ? "" : "s"}
-                      </span>
-                    </button>
-                    <button
-                      className="shrink-0 text-muted-foreground hover:text-destructive"
-                      title="Delete automation"
-                      onClick={async () => {
-                        await deletePipeline(p.id).catch(() => {});
-                        refresh();
-                      }}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </div>
-                ))
+                saved.map((p) => {
+                  const sched = schedules[p.id];
+                  return (
+                    <div key={p.id}>
+                      <div className="flex w-full items-center gap-2 border-b px-3 py-2 last:border-b-0 hover:bg-muted">
+                        <button
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                          onClick={() => openSaved(p)}
+                        >
+                          <ChevronRight className="size-3 shrink-0" />
+                          <span className="text-sm">{p.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {p.nodeCount} step{p.nodeCount === 1 ? "" : "s"}
+                          </span>
+                          {p.lastRunAt && (
+                            <span className="text-xs text-muted-foreground">
+                              · ran {agoShort(p.lastRunAt)}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          className={`flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] ${
+                            sched
+                              ? "text-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          } disabled:cursor-not-allowed disabled:opacity-40`}
+                          disabled={!p.vouched && !sched}
+                          title={
+                            !p.vouched && !sched
+                              ? "Run it successfully once first — a schedule fires unattended"
+                              : sched?.nextRun
+                                ? `Next run ${new Date(sched.nextRun).toLocaleString()}`
+                                : "Run this automation on a schedule"
+                          }
+                          onClick={() => openScheduleEditor(p.id, sched?.schedule)}
+                        >
+                          <Clock className="size-3" />
+                          {sched ? describeSchedule(sched.schedule) : "Schedule"}
+                        </button>
+                        <button
+                          className={`shrink-0 ${
+                            confirmDelete === p.id
+                              ? "text-destructive"
+                              : "text-muted-foreground hover:text-destructive"
+                          }`}
+                          title={
+                            sched && confirmDelete !== p.id
+                              ? `This automation runs on a schedule (${describeSchedule(sched.schedule)}) — click again to delete both`
+                              : confirmDelete === p.id
+                                ? "Click again to delete the automation and its schedule"
+                                : "Delete automation"
+                          }
+                          onClick={async () => {
+                            // Deleting a scheduled automation silently kills a
+                            // standing job, so it takes a second, armed click.
+                            if (sched && confirmDelete !== p.id) {
+                              setConfirmDelete(p.id);
+                              return;
+                            }
+                            setConfirmDelete(null);
+                            await deletePipeline(p.id).catch(() => {});
+                            refresh();
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                      {editorFor === p.id && (
+                        <form
+                          className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2 text-xs"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            saveSchedule(p.id);
+                          }}
+                        >
+                          <span className="text-muted-foreground">Repeats</span>
+                          <select
+                            autoFocus
+                            className="rounded-md border bg-background px-2 py-1"
+                            value={editRepeat}
+                            onChange={(e) => setEditRepeat(e.target.value)}
+                          >
+                            <option value="hourly">Every hour</option>
+                            <option value="daily">Every day</option>
+                            <option value="weekdays">Weekdays</option>
+                            <option value="weekly">Specific days</option>
+                            <option value="monthly">Monthly</option>
+                          </select>
+                          {editRepeat === "weekly" && (
+                            <span className="flex gap-1">
+                              {DAY_NAMES.map((label, day) => (
+                                <button
+                                  key={label}
+                                  type="button"
+                                  className={`rounded border px-1.5 py-0.5 ${
+                                    editDays.includes(day)
+                                      ? "bg-foreground text-background"
+                                      : "text-muted-foreground hover:text-foreground"
+                                  }`}
+                                  onClick={() => toggleEditDay(day)}
+                                >
+                                  {label}
+                                </button>
+                              ))}
+                            </span>
+                          )}
+                          {editRepeat === "monthly" && (
+                            <label className="flex items-center gap-1">
+                              <span className="text-muted-foreground">on day</span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={31}
+                                className="w-14 rounded-md border bg-background px-2 py-1"
+                                value={editDom}
+                                onChange={(e) => setEditDom(Number(e.target.value))}
+                              />
+                            </label>
+                          )}
+                          {editRepeat !== "hourly" && (
+                            <label className="flex items-center gap-1">
+                              <span className="text-muted-foreground">at</span>
+                              <input
+                                type="time"
+                                className="rounded-md border bg-background px-2 py-1"
+                                value={editTime}
+                                onChange={(e) => setEditTime(e.target.value)}
+                              />
+                            </label>
+                          )}
+                          <span className="ml-auto flex gap-2">
+                            <Button size="sm" type="submit">
+                              {sched ? "Update" : "Set schedule"}
+                            </Button>
+                            {sched && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                type="button"
+                                onClick={() => unschedule(p.id)}
+                              >
+                                Remove
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              type="button"
+                              onClick={() => setEditorFor(null)}
+                            >
+                              Cancel
+                            </Button>
+                          </span>
+                        </form>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
+
+            {!schedulerRunning && Object.keys(schedules).length > 0 && (
+              <p className="shrink-0 text-[11px] text-muted-foreground">
+                Schedules are paused right now — they fire while Enio is open, or while{" "}
+                <code>enio daemon</code> runs.
+              </p>
+            )}
 
             {drafts !== null && (
               <div className="max-h-40 shrink-0 overflow-y-auto rounded-md border">
@@ -616,7 +868,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
                   }
                 }}
               >
-                ← All pipelines
+                ← All automations
               </button>
               {composable.map((a) => {
                 const Icon = ICONS[a.icon] ?? Sparkles;

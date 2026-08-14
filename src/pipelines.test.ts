@@ -579,3 +579,63 @@ test("export as skill: vouched only, parses cleanly, never overwrites", async ()
   // Never overwrites: the skill is the user's document now.
   assert.throws(() => pipelines.exportPipelineSkill(pipeline.id), /already exists/);
 });
+
+test("renaming a pipeline cascades to the tasks that reference it by name", async () => {
+  const tasks = await import("./tasks.js");
+  const saved = pipelines.savePipeline({
+    name: "cascade-source",
+    nodes: [node("n1", "prompt")],
+    edges: [],
+  });
+  // Both the reserved auto-schedule name and a hand-named CLI task point at
+  // the pipeline by NAME; a rename that skipped either would rot it silently
+  // until the next fire.
+  tasks.addTask({ name: `auto-${saved.id}`, pipeline: "cascade-source", schedule: "0 9 * * *" });
+  tasks.addTask({ name: "my-cli-task", pipeline: "cascade-source", schedule: "0 8 * * *" });
+
+  pipelines.savePipeline({
+    id: saved.id,
+    name: "cascade-renamed",
+    nodes: saved.nodes,
+    edges: saved.edges,
+  });
+  assert.equal(tasks.getTask(`auto-${saved.id}`)?.pipeline, "cascade-renamed");
+  assert.equal(tasks.getTask("my-cli-task")?.pipeline, "cascade-renamed");
+
+  // Re-saving under the same name touches nothing.
+  pipelines.savePipeline({
+    id: saved.id,
+    name: "cascade-renamed",
+    nodes: saved.nodes,
+    edges: saved.edges,
+  });
+  assert.equal(tasks.getTask("my-cli-task")?.pipeline, "cascade-renamed");
+  tasks.removeTask("my-cli-task");
+  tasks.removeTask(`auto-${saved.id}`);
+  pipelines.deletePipeline(saved.id);
+});
+
+test("deleting a pipeline takes its schedules and their history with it", async () => {
+  const tasks = await import("./tasks.js");
+  const { getDb } = await import("./memory/db.js");
+  const saved = pipelines.savePipeline({
+    name: "doomed-flow",
+    nodes: [node("n1", "prompt")],
+    edges: [],
+  });
+  const t = tasks.addTask({
+    name: `auto-${saved.id}`,
+    pipeline: "doomed-flow",
+    schedule: "0 9 * * *",
+  });
+  getDb()
+    .prepare(`INSERT INTO task_runs (task_id, started_at, duration_ms, status) VALUES (?, 1, 5, 'ok')`)
+    .run(t.id);
+
+  pipelines.deletePipeline(saved.id);
+  assert.equal(tasks.getTask(`auto-${saved.id}`), null, "a schedule without its flow is meaningless");
+  const orphaned = getDb()
+    .prepare(`SELECT COUNT(*) AS n FROM task_runs WHERE task_id = ?`)
+    .get(t.id) as { n: number };
+  assert.equal(orphaned.n, 0, "task_runs follow via FK cascade");
+});

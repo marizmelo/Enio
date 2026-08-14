@@ -17,7 +17,8 @@ process.env.ENIO_ROUTING = "0";
 const tasks = await import("./tasks.js");
 const pipelines = await import("./pipelines.js");
 const suggest = await import("./suggest.js");
-const { closeDb } = await import("./memory/db.js");
+const lease = await import("./scheduler-lease.js");
+const { closeDb, getDb } = await import("./memory/db.js");
 
 after(() => {
   closeDb();
@@ -294,5 +295,92 @@ describe("pipeline tasks", () => {
       .prepare(`SELECT specialist FROM turns ORDER BY id DESC LIMIT 1`)
       .get() as { specialist: string };
     assert.equal(row.specialist, "researcher");
+  });
+});
+
+describe("scheduler lease", () => {
+  const clock = (pid: number, at: number) => ({ pid, now: () => at });
+  const wipe = () => getDb().prepare(`DELETE FROM scheduler_lease`).run();
+
+  test("an empty table is acquirable", () => {
+    wipe();
+    assert.equal(lease.tryAcquireLease(clock(100, 1_000_000)), true);
+    assert.deepEqual(lease.leaseInfo(clock(100, 1_000_001)), { fresh: true, pid: 100 });
+  });
+
+  test("a fresh holder keeps a second process on standby", () => {
+    wipe();
+    assert.equal(lease.tryAcquireLease(clock(100, 1_000_000)), true);
+    assert.equal(lease.tryAcquireLease(clock(200, 1_000_000 + 10_000)), false);
+    assert.equal(lease.leaseInfo(clock(200, 1_000_000 + 10_000)).pid, 100);
+  });
+
+  test("a stale lease is stolen", () => {
+    wipe();
+    assert.equal(lease.tryAcquireLease(clock(100, 1_000_000)), true);
+    const later = 1_000_000 + lease.LEASE_FRESH_MS + 1;
+    assert.equal(lease.tryAcquireLease(clock(200, later)), true);
+    assert.equal(lease.leaseInfo(clock(200, later)).pid, 200);
+  });
+
+  test("a superseded holder's refresh fails — that IS demotion", () => {
+    wipe();
+    assert.equal(lease.tryAcquireLease(clock(100, 1_000_000)), true);
+    // Process 200 steals after staleness; 100 comes back from a long stall
+    // and tries to refresh. The refresh must fail, or both fire every task.
+    const later = 1_000_000 + lease.LEASE_FRESH_MS + 1;
+    assert.equal(lease.tryAcquireLease(clock(200, later)), true);
+    assert.equal(lease.tryAcquireLease(clock(100, later + 1_000)), false);
+    assert.equal(lease.leaseInfo(clock(100, later + 1_000)).pid, 200);
+  });
+
+  test("release only removes our own claim", () => {
+    wipe();
+    assert.equal(lease.tryAcquireLease(clock(100, 1_000_000)), true);
+    lease.releaseLease(clock(200, 1_000_100));
+    assert.equal(lease.leaseInfo(clock(300, 1_000_200)).pid, 100, "holder survives");
+    lease.releaseLease(clock(100, 1_000_300));
+    assert.deepEqual(lease.leaseInfo(clock(300, 1_000_400)), { fresh: false, pid: null });
+  });
+
+  test("a holder's own refresh succeeds while fresh", () => {
+    wipe();
+    assert.equal(lease.tryAcquireLease(clock(100, 1_000_000)), true);
+    assert.equal(lease.tryAcquireLease(clock(100, 1_000_000 + 30_000)), true);
+  });
+});
+
+describe("updateTask", () => {
+  test("edits in place, preserving the id and its run history", () => {
+    const t = tasks.addTask({ name: "editable", prompt: "old prompt", schedule: "0 9 * * 1" });
+    getDb()
+      .prepare(
+        `INSERT INTO task_runs (task_id, started_at, duration_ms, status) VALUES (?, 1, 5, 'ok')`,
+      )
+      .run(t.id);
+
+    const updated = tasks.updateTask("editable", { schedule: "0 8 * * *", prompt: "new prompt" });
+    assert.equal(updated.id, t.id, "same row — remove+add would orphan the runs");
+    assert.equal(updated.schedule, "0 8 * * *");
+    assert.equal(updated.prompt, "new prompt");
+    assert.equal(tasks.runsFor("editable").length, 1, "history survives the edit");
+    tasks.removeTask("editable");
+  });
+
+  test("validates the merged row, not the patch alone", () => {
+    tasks.addTask({ name: "merged", prompt: "a prompt", schedule: "0 9 * * 1" });
+    assert.throws(() => tasks.updateTask("merged", { schedule: "not a cron" }), /invalid schedule/);
+    assert.throws(() => tasks.updateTask("merged", { prompt: "  " }), /needs a prompt/);
+    assert.throws(
+      () => tasks.updateTask("merged", { pipeline: "no-such-flow" }),
+      /prompt or a pipeline|no pipeline named/,
+    );
+    // Nothing above may have landed.
+    assert.equal(tasks.getTask("merged")?.prompt, "a prompt");
+    tasks.removeTask("merged");
+  });
+
+  test("a missing task is an error, not a silent create", () => {
+    assert.throws(() => tasks.updateTask("never-existed", { schedule: "0 9 * * 1" }), /no task/);
   });
 });

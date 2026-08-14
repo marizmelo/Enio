@@ -138,15 +138,34 @@ declares an [MCP server](mcp.md) requirement — home automation and Home
 Assistant, today — inherits that server's tools inside its step, exactly the
 way `@server` grants them for one chat turn.
 
-## Scheduled automations
+## Triggers
 
-A [task](tasks.md) can trigger an automation instead of a prompt:
+A saved automation can fire three ways, and all three are properties of the
+same flow rather than separate things to manage:
 
-```sh
-enio task add news-daily --cron "0 9 * * *" --automation ai-news-brief
-```
+- **On command** — press Run on the canvas, or ask in chat by name
+  (`run_pipeline`, described above).
+- **On a schedule** — the clock chip on the automation's row. Pick how it
+  repeats (every hour, every day, weekdays, specific days of the week, or
+  monthly) and the time of day; the chip then reads back in plain words —
+  *Daily at 9:00 AM* — with the next fire in its tooltip, and *Remove* clears
+  it. No cron anywhere: the expression is how schedules are stored, not how
+  they are shown (the CLI still accepts one for anything exotic, and such a
+  schedule reads *Custom schedule* in the panel). The chip stays disabled
+  until the automation has run successfully once — a schedule fires
+  unattended, so it takes the same vouching as everything else here. Deleting
+  a scheduled automation asks twice, because it also stops the standing job.
+- **By phrase** — *Save as skill*, described above: plain words in chat find
+  and run the flow.
 
-The trigger is deterministic — when the clock fires, the harness walks the
-graph directly, with no model and no routing between the schedule and the
-flow you built. The steps inside run as ordinary turns, exactly as when you
-press run yourself.
+The scheduled trigger is deterministic — when the clock fires, the harness
+walks the graph directly, with no model and no routing between the schedule
+and the flow you built. The steps inside run as ordinary turns, exactly as
+when you press run yourself. Schedules fire while the desktop app is open (or
+`enio serve` / `enio daemon` runs); see [scheduled tasks](tasks.md) for the
+machinery and the CLI, including scheduling a plain prompt rather than an
+automation.
+
+Renaming an automation carries its schedule along, and deleting one removes
+its schedule with it — a schedule pointing at a flow that no longer exists
+could only fail at the exact moment nobody is watching.

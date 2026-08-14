@@ -214,12 +214,21 @@ export function savePipeline(input: {
     // to one name, and every by-name consumer resolves first-match.
     const collision = listPipelines().find((p) => p.name === name && p.id !== input.id);
     if (collision) throw new Error(`A pipeline named "${name}" already exists.`);
-    db.prepare(`UPDATE pipelines SET name = ?, description = ?, graph = ? WHERE id = ?`).run(
-      name,
-      input.description?.trim() ?? existing.description,
-      graph,
-      input.id,
-    );
+    // tasks.pipeline stores the NAME, so a rename must cascade or every
+    // schedule pointing here rots silently until 3am. CLI-authored tasks
+    // cascade too -- they reference by the same name. The SQL lives here
+    // rather than in tasks.ts because tasks.ts already imports this module.
+    db.transaction(() => {
+      db.prepare(`UPDATE pipelines SET name = ?, description = ?, graph = ? WHERE id = ?`).run(
+        name,
+        input.description?.trim() ?? existing.description,
+        graph,
+        input.id,
+      );
+      if (existing.name !== name) {
+        db.prepare(`UPDATE tasks SET pipeline = ? WHERE pipeline = ?`).run(name, existing.name);
+      }
+    })();
     return getPipeline(input.id)!;
   }
   // No id but a name that already exists: the user means THAT pipeline.
@@ -369,8 +378,16 @@ ${steps}
 }
 
 export function deletePipeline(id: string): void {
-  getDb().prepare(`DELETE FROM pipelines WHERE id = ?`).run(id);
-  getDb().prepare(`DELETE FROM pipeline_runs WHERE pipeline_id = ?`).run(id);
+  const db = getDb();
+  // Read the row before deleting: tasks reference the pipeline by NAME, and
+  // a schedule is meaningless without its flow, so linked tasks go with it
+  // (their task_runs follow via FK cascade).
+  const existing = getPipeline(id);
+  db.transaction(() => {
+    db.prepare(`DELETE FROM pipelines WHERE id = ?`).run(id);
+    db.prepare(`DELETE FROM pipeline_runs WHERE pipeline_id = ?`).run(id);
+    if (existing) db.prepare(`DELETE FROM tasks WHERE pipeline = ?`).run(existing.name);
+  })();
 }
 
 /* --------------------------------------------------------------- examples */

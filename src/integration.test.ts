@@ -1114,3 +1114,35 @@ describe("the fabrication correction", () => {
     }
   });
 });
+
+describe("skill invocation trace", () => {
+  test("a turn with an invoked skill records a skill_invoked harness step", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "Written as asked." }]);
+
+    // /skill injects the body whole -- no read_skill call happens, so without
+    // the harness step this deliberate use would be invisible to usage stats.
+    await runTurn("/style-guide write the notice", [], registry, sessionId, {}, {
+      skills: [
+        {
+          name: "style-guide",
+          description: "house style",
+          dir: join(scratch, "style-guide"),
+          body: "Write plainly.",
+          allowedTools: null,
+          manualOnly: false,
+        },
+      ],
+    });
+
+    const row = getDb()
+      .prepare(
+        `SELECT args FROM turn_steps
+         WHERE kind = 'harness' AND name = 'skill_invoked' ORDER BY id DESC LIMIT 1`,
+      )
+      .get() as { args: string } | undefined;
+    assert.ok(row, "the invocation must leave a trace");
+    assert.deepEqual(JSON.parse(row!.args).names, ["style-guide"]);
+  });
+});

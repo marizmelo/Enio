@@ -53,6 +53,26 @@ tool to fetch what you just named would put the decision straight back.
 Set `disable-model-invocation: true` in the front matter to keep a skill out of
 the catalogue entirely — it then runs only when you name it.
 
+## The Skills tab
+
+Skills have a visible home in the desktop app: the **Skills** tab, next to
+your automations (the workflow button in the top bar). Each row shows the
+skill, where it lives (a *project* badge for project-local ones, *manual* for
+`disable-model-invocation`), and — the part no file listing can show —
+**whether it gets used**: how many conversations reached for it and when the
+last one was. A skill that has sat unused for months is either badly described
+or no longer needed, and this is where you find out.
+
+Two more things surface there. A skill whose SKILL.md fails to parse appears
+as a broken row with the reason, instead of silently dropping out of the
+catalogue. And when the model asks for a skill that doesn't exist, the name it
+asked for is listed — the model reaching for `meeting-notes` three times is a
+strong hint about what to write next.
+
+The tab is read-only on purpose: a skill is a folder of markdown you own.
+**Show in Finder** on any row takes you to it, and edits apply on the next
+message — nothing to reload.
+
 ## Finding what to write
 
 The usual way automation gets built is deciding in advance what *ought* to be

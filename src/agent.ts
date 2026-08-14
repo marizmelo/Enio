@@ -1100,6 +1100,23 @@ export async function runTurn(
     }
   }
 
+  // Invoked skills leave a trace. /skill (and an ability node's pinned
+  // skill) injects the body whole, so no read_skill step ever records the
+  // use -- without this, the deliberate invocations are exactly the ones
+  // usage stats would miss. Harness steps draw no badge and restore skips
+  // them, so the row is inert everywhere but the mining query.
+  if (overrides.skills && overrides.skills.length > 0) {
+    steps.push({
+      seq: steps.length,
+      kind: "harness",
+      name: "skill_invoked",
+      args: JSON.stringify({ names: overrides.skills.map((s) => s.name) }),
+      output: "",
+      error: null,
+      durationMs: 0,
+    });
+  }
+
   try {
     recordTurn({
       sessionId,

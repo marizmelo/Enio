@@ -1726,3 +1726,114 @@ voice mode (a cancellable or parallel whisper queue); a wake word (an
 always-on detector that is not whisper -- keeping the mic hot through
 the big model's own transcriber is the wrong tool and the wrong
 battery bill).
+
+---
+
+## The trigger model: tasks fold into automations, skills become visible (August 2026)
+
+Prompted by one question: "should we combine automations and skills? I don't
+want many concepts that try to achieve the same thing." The answer was no --
+and yes. Skills and automations are genuinely different kinds (a skill is
+*how*, an adjective; an automation is *what*, a noun; a skill shapes any turn
+it applies to, an automation IS the thing that runs), and merging them would
+re-create the blur that made the question necessary. But scheduled tasks were
+a real duplicate: a schedule is a *trigger property* of an automation, not a
+third thing, and it had the thinnest UI in the app (CLI only). So: tasks
+folded into the Automations panel as a clock chip, skills got a visible tab
+beside the flows, and the user-facing concept count went from four
+(skills/automations/tasks/recipes) toward two plus recipes.
+
+**The scheduler moved into serve(), guarded by a SQLite lease.** The
+scheduler only ran under `enio daemon` -- a schedule set in the desktop would
+silently never fire, the worst possible shape for a 9am task. Now serve()
+(which the desktop spawns) runs it too. Two processes both wanting to
+schedule is resolved by a one-row lease in the shared database, claimed and
+refreshed by a single guarded UPSERT (`WHERE pid = mine OR at < stale`,
+`changes > 0` ⇔ held). A lock file was considered and rejected: it needs a
+create/stat/unlink dance with a race in each gap, where the UPSERT is one
+atomic statement against a database both processes already hold open in WAL
+mode -- and demotion falls out for free, because a superseded holder's
+refresh is the same statement failing. Fires missed during a handover gap
+are dropped, never replayed: croner has no catch-up, and "ran twice" is
+strictly worse than "missed one".
+
+**Rename and delete cascade to schedules.** `tasks.pipeline` stores the
+pipeline's *name*; renaming or deleting a pipeline silently rotted every
+schedule pointing at it, discovered only at fire time. Both now cascade
+transactionally -- rename carries CLI-authored tasks too (they reference by
+the same name), delete removes the schedule with the flow, because a schedule
+without its flow can only ever fail at the exact moment nobody is watching.
+The SQL lives in pipelines.ts rather than tasks.ts because tasks.ts already
+imports pipelines.ts and the reverse edge would be a cycle.
+
+**Scheduling from the panel requires a successful run** -- the same vouching
+rule as run_pipeline eligibility, teaching the composer, and the skill
+export: a schedule fires unattended, so only a flow reality has tested gets
+one. The CLI's `task add` stays ungated on purpose; typing the command is its
+own vouching, and gating it would break existing workflows for symmetry's
+sake. The reserved task name `auto-<pipeline id>` is the entire
+panel-to-schedule mapping, but the prefix alone claims nothing: a task counts
+as a panel schedule only if the embedded uuid matches an existing pipeline,
+because a user's own CLI task named `auto-daily` is theirs.
+
+**`updateTask` exists now** because the only edit path was remove+add, which
+orphaned the task's whole run history on every schedule tweak.
+
+**Skill usage is mined from traces, with one new harness step.** The Skills
+tab shows uses and last-used per skill -- counted as DISTINCT turns, not
+read_skill rows, because the `file` parameter fires several calls per turn
+and row-counting inflated one use into three or four. The catch: `/skill`
+invocations inject the body whole (deliberately -- asking by name removes the
+decision), so no read_skill step ever records exactly the *deliberate* uses.
+A `kind: "harness"` `skill_invoked` step (the handoff_saved precedent)
+records them at turn end; restore skips harness badges, so the row is inert
+everywhere but the mining query. Misses ("No skill named X") land in an
+*unresolved* list rather than being attributed anywhere -- the model
+repeatedly reaching for a skill that doesn't exist is a finding about what to
+write next, not noise. Historical `/skill` uses before this change stay
+uncounted; scanning `turns.system_prompt` prose for them was considered and
+rejected as fragile.
+
+**The Skills tab is read-only.** A skill is a folder of markdown the user
+owns; the panel is a window onto it (name, source, usage, broken rows with
+the parse reason, Reveal in Finder), not a second editor to keep consistent
+with the first. The tab label is "Skills", not "Know-how" -- the docs and CLI
+already say skills to users, and introducing a third register to avoid a word
+the product already uses would be the exact concept-multiplication this
+change exists to reverse.
+
+**Known residual, recorded not fixed:** a scheduled *prompt* task runs
+through runTurn after repointing the process-global sessions
+(setMemorySession and friends). A task firing mid-interactive-turn can
+cross-contaminate at await points. Pre-existing class of bug, unchanged by
+moving the scheduler into serve() (the daemon shared the DB already);
+the fix is threading session identity through the turn instead of globals,
+which is its own change.
+
+**The schedule editor is a structured form, and cron appears nowhere in the
+UI.** The first version put the raw expression in the chip (`0 9 * * *`) with
+a preset menu and a "Custom cron…" field, on the theory that a humaniser was
+not worth building. The user rejected it on sight — "never show cron
+technical interfaces" — and the theory deserved it: cron is the *storage*
+format, and storage formats are not interfaces. The replacement is a closed
+form (repeat: hourly / daily / weekdays / specific days / monthly, plus a
+native time picker) that composes to cron out of sight, and a describer that
+reads back *only the shapes the builder writes* — "Daily at 9:00 AM", never
+syntax. What was actually rejected before was a general cron *parser*, and
+that part stands: the describer is not one, and a CLI-authored exotic
+expression displays as "Custom schedule" with the next-run tooltip carrying
+the real information, rather than being mis-translated into English that
+fires at a different time than it claims. The Custom-cron field is gone from
+the UI entirely; the CLI remains the technical surface for exotic schedules.
+
+Deliberately not built, each with its condition: a skill editor in the panel
+(when Reveal-and-edit measurably fails people); automatic skill revision from
+execution outcomes (when there is a trustworthy outcome signal -- today
+"the turn ended" says nothing about whether the skill helped); a prompt-task
+UI in the desktop (when someone asks -- the CLI covers it); a general cron
+parser/humaniser for arbitrary expressions (the describer covers the shapes
+the builder writes; a wrong parse of an exotic expression fires at a
+different time than its English claims, silently); folding *recipes* into
+automations (when desktop-action steps become composable into flows --
+today a recipe is a single approved script, and the approval sheet is its
+whole identity).

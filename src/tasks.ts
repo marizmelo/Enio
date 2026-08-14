@@ -8,6 +8,7 @@ import { setMemorySession } from "./tools/memory.js";
 import { setConversationSession } from "./conversation-attachments.js";
 import { listWatches, runHeartbeat } from "./heartbeat.js";
 import { listPipelines, runPipeline } from "./pipelines.js";
+import { releaseLease, tryAcquireLease } from "./scheduler-lease.js";
 import type { Message } from "./types.js";
 
 /**
@@ -110,6 +111,49 @@ export function listTasks(): Task[] {
 
 export function removeTask(name: string): boolean {
   return getDb().prepare(`DELETE FROM tasks WHERE name = ?`).run(name).changes > 0;
+}
+
+/**
+ * Edits a task in place, preserving its id and with it the task_runs
+ * history -- remove-and-re-add would orphan every past run. Validation runs
+ * on the merged row, so a patch cannot leave a task with both a prompt and
+ * a pipeline, or with neither.
+ */
+export function updateTask(
+  name: string,
+  patch: {
+    schedule?: string;
+    enabled?: boolean;
+    prompt?: string;
+    pipeline?: string | null;
+    specialist?: string | null;
+  },
+): Task {
+  const existing = getTask(name);
+  if (!existing) throw new Error(`no task named "${name}"`);
+
+  const schedule = patch.schedule ?? existing.schedule;
+  const check = validateSchedule(schedule);
+  if (!check.ok) throw new Error(`invalid schedule: ${check.reason}`);
+
+  const prompt = (patch.prompt ?? existing.prompt).trim();
+  const pipeline =
+    patch.pipeline === undefined ? existing.pipeline : patch.pipeline?.trim() || null;
+  if (pipeline && prompt) throw new Error("a task takes a prompt or a pipeline, not both");
+  if (!pipeline && !prompt) throw new Error("a task needs a prompt");
+  if (pipeline && !listPipelines().some((p) => p.name === pipeline)) {
+    throw new Error(`no pipeline named "${pipeline}" — save it in the pipeline builder first`);
+  }
+
+  const specialist = patch.specialist === undefined ? existing.specialist : patch.specialist;
+  const enabled = patch.enabled ?? existing.enabled;
+  getDb()
+    .prepare(
+      `UPDATE tasks SET prompt = ?, pipeline = ?, schedule = ?, specialist = ?, enabled = ?
+       WHERE name = ?`,
+    )
+    .run(prompt, pipeline, schedule, specialist, enabled ? 1 : 0, name);
+  return getTask(name)!;
 }
 
 export function setTaskEnabled(name: string, enabled: boolean): boolean {
@@ -241,9 +285,21 @@ export async function runTask(
  * `protect` prevents overlap: a task still running when its next slot arrives
  * is skipped rather than started twice, which for a model that takes tens of
  * seconds per turn is a real possibility.
+ *
+ * Both serve() and `enio daemon` call this, so it runs as holder or standby
+ * under the scheduler lease: only the holder registers cron jobs, a standby
+ * just retries acquisition each tick. Demotion is the lease refresh failing --
+ * jobs stop that same tick -- and a clean stop() releases the lease so the
+ * other process takes over within one tick rather than waiting out staleness.
  */
 export function startScheduler(onLog: (message: string) => void): { stop(): void } {
   const jobs = new Map<string, Cron>();
+  let holding = false;
+
+  const clearJobs = () => {
+    for (const job of jobs.values()) job.stop();
+    jobs.clear();
+  };
 
   const sync = () => {
     const tasks = listTasks().filter((t) => t.enabled);
@@ -294,14 +350,38 @@ export function startScheduler(onLog: (message: string) => void): { stop(): void
     }
   };
 
-  sync();
-  const rescan = setInterval(sync, 30_000);
+  // Lease strictly before jobs: a tick that loses the lease must tear its
+  // jobs down before another process's tick can build the same ones up.
+  const tick = () => {
+    const held = tryAcquireLease();
+    if (held && !holding) {
+      holding = true;
+      onLog("scheduler: holding the lease — this process fires scheduled tasks");
+    } else if (!held && holding) {
+      holding = false;
+      clearJobs();
+      onLog("scheduler: lost the lease — standing by");
+    }
+    // A standby that stays standby is silent: a line every 30s about nothing
+    // happening buries the ones that matter.
+    if (held) sync();
+  };
+
+  const held = tryAcquireLease();
+  if (held) {
+    holding = true;
+    sync();
+  } else {
+    onLog("scheduler: another process holds the lease — standing by");
+  }
+  const rescan = setInterval(tick, 30_000);
 
   return {
     stop() {
       clearInterval(rescan);
-      for (const job of jobs.values()) job.stop();
-      jobs.clear();
+      clearJobs();
+      if (holding) releaseLease();
+      holding = false;
     },
   };
 }
