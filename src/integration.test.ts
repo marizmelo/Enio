@@ -1078,3 +1078,39 @@ describe("tool-name typos", () => {
     assert.ok(content.includes("⟨im_start⟩"));
   });
 });
+
+describe("the fabrication correction", () => {
+  test("names the tools THIS turn has, never another specialist's", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+
+    // A reply that narrates an action with no tool call — the trigger.
+    // The correction rounds follow; what matters is the message the model
+    // is handed, captured from the history the turn built.
+    scriptModel([
+      { content: "I've created the automation for you." },
+      { content: "I could not do that." },
+      { content: "I could not do that." },
+    ]);
+
+    const history: Message[] = [];
+    await runTurn("create an automation", history, registry, sessionId);
+
+    const correction = history.find(
+      (m) => m.role === "user" && String(m.content).includes("Nothing you described"),
+    );
+    assert.ok(correction, "the correction was issued");
+    const text = String(correction!.content);
+
+    // The scar: this prompt used to hardcode open_app and propose_plan, so a
+    // coder that fabricated was told to call tools it could not see, and it
+    // flailed with whatever it did have. Every name offered must be real.
+    const offered = /tools you have: ([^.]+)\./.exec(text);
+    assert.ok(offered, `no tool list in the correction: ${text}`);
+    const names = offered![1]!.split(",").map((n) => n.trim());
+    const real = new Set(registry.all.map((t) => t.name));
+    for (const name of names) {
+      assert.ok(real.has(name), `correction offered a tool that does not exist: ${name}`);
+    }
+  });
+});

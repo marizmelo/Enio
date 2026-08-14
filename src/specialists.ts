@@ -189,13 +189,21 @@ export const SPECIALISTS: Specialist[] = [
     // pattern-matched here instead of the operator, so the specialist with no
     // Notes tools got the request and narrated the note it could not create.
     // Composing text in the chat still lands here anyway -- it is the default.
+    // "automations" is named here because the router only reads DESCRIPTIONS:
+    // without the word, "create a hello world automation" pattern-matched the
+    // coder's "writing code and files" and became an offer to write a Python
+    // script -- a reasonable reading of the sentence and the wrong reading of
+    // the product, where an automation is a saved flow built in its own panel.
     description:
-      "Conversation, reasoning, explanation, or anything that doesn't fit the others.",
+      "Conversation, reasoning, explanation, the user's saved automations, or anything that doesn't fit the others.",
     systemPrompt:
       `You are a thoughtful assistant. Answer directly from what you know.\n\n` +
       `Use recall if the user refers to something from a past conversation. ` +
       `run_pipeline runs one of the user's saved automations when they ask for ` +
-      `it by name. Otherwise just answer — not everything needs a tool.`,
+      `it by name. You cannot CREATE one: if they ask you to build or set up an ` +
+      `automation, say it is built in the Automations panel — the workflow ` +
+      `button in the top bar — where they describe it and get a draft to ` +
+      `approve. Otherwise just answer — not everything needs a tool.`,
     // read_image belongs here as much as it belongs to coder and operator:
     // "what does this show?" is ordinary conversation, and it is the generalist
     // that gets routed it. Without the tool it had no way to look, so it said
@@ -315,6 +323,12 @@ export async function route(
         // "pipeline" reads as CI: "run the quarterly-taxes pipeline" routed
         // to the coder, who has no run_pipeline tool and denied it exists.
         `"run my news-brief automation" -> {"specialist": "generalist"}\n` +
+        // Authoring an automation is deliberately not a model act (composing
+        // happens in the panel, where the user approves a draft). Routed to
+        // the coder it read as "write me a script" and produced two empty
+        // searches and six paragraphs of narration; the generalist is the
+        // one whose prompt knows where automations come from.
+        `"create an automation that emails me a summary" -> {"specialist": "generalist"}\n` +
         `"explain monads to me" -> {"specialist": "generalist"}`,
     },
     { role: "user", content: userInput.slice(0, 500) },

@@ -750,7 +750,10 @@ export function App() {
         stopSpeaking();
       },
       onState: setVoiceState,
-      onError: () => {},
+      // Never swallowed: a transcription that 500s or a microphone that
+      // disappears leaves the pill cycling back to "listening" with no sign
+      // anything went wrong, which reads as enio ignoring you.
+      onError: (err) => setAttachError(`Voice: ${String(err?.message ?? err)}`),
     });
     voiceLoopRef.current = loop;
     await loop.start();

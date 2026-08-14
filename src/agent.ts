@@ -333,12 +333,33 @@ export function claimsUnperformedAction(text: string): boolean {
   // completion claim is matched on any copula, with or without been/now.
   const verbs =
     "opened|closed|cleared|created|typed|clicked|pressed|launched|added|saved|deleted|moved|renamed";
-  return (
-    new RegExp(
-      `\\b(?:I(?:'ve| have| just)? (?:now )?(?:${verbs})|(?:has|have|is|are)(?: been| now)? (?:${verbs})|is now open|I (?:will|'ll) now\\b)`,
-      "i",
-    ).test(text)
+  const claim = new RegExp(
+    `\\b(?:I(?:'ve| have| just)? (?:now )?(?:${verbs})|(?:has|have|is|are)(?: been| now)? (?:${verbs})|is now open|I (?:will|'ll) now\\b)`,
+    "gi",
   );
+
+  // A hypothetical is not a claim. Watched happen: asked to build an
+  // automation, the model asked a good clarifying question -- "a script that
+  // runs when a certain condition is met (e.g., a file is created or
+  // modified)?" -- and "is created" tripped this guard. The correction then
+  // turned one sensible question into six paragraphs of narration and two
+  // empty searches. Conditional and temporal clauses are where a described
+  // action is being IMAGINED rather than reported, so a match inside one is
+  // discarded; a match anywhere else still fires.
+  // Bounded to the sentence the match sits in, so a hypothetical earlier in
+  // the reply cannot excuse a claim later in it. Abbreviations are flattened
+  // first: the sentence bound is "no . ? !", and "e.g." is full of periods —
+  // leaving them in made the guard find no sentence at all, which is exactly
+  // how the observed false positive survived a first fix.
+  const HYPOTHETICAL =
+    /\b(?:when|whenever|if|once|unless|until|after|before|whether|could|would|might|example)\b[^.?!]{0,80}$/i;
+  for (const match of text.matchAll(claim)) {
+    const before = text
+      .slice(Math.max(0, match.index - 100), match.index)
+      .replace(/\b(?:e\.g\.|i\.e\.|etc\.)/gi, " example ");
+    if (!HYPOTHETICAL.test(before)) return true;
+  }
+  return false;
 }
 
 export function looksDegenerate(text: string): boolean {
@@ -881,10 +902,19 @@ export async function runTurn(
         // user plainly you did not do it", and the model took that exit every
         // time -- retracting is one sentence, acting is a tool call. The easy
         // option has to be the right one.
+        //
+        // The tools are NAMED FROM THIS TURN, not hardcoded. The first
+        // version listed open_app and propose_plan, which belong to the
+        // operator -- so when a coder fabricated, the correction told it to
+        // call two tools it could not see, and it flailed with whatever it
+        // did have. Watched happen: "let's create a hello world automation"
+        // produced two empty search_code calls and six paragraphs of
+        // narration. A correction that names absent tools is worse than no
+        // correction, because it teaches the model the turn is broken.
         "(Nothing you described actually happened: you called no tool this turn. " +
-        "Do it now: open_app opens apps; propose_plan carries clicks, key presses " +
-        "and typing for the user to approve. Only if no tool can possibly do this, " +
-        "say you could not do it. Never describe an action as done.)",
+        `Do it now with the tools you have: ${activeTools.map((t) => t.name).join(", ")}. ` +
+        "Only if none of them can possibly do this, say plainly that you cannot. " +
+        "Never describe an action as done.)",
     });
     try {
       handlers.onContent?.("\n\n");

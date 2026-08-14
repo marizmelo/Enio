@@ -469,6 +469,31 @@ describe("fabricated action claims", () => {
     }
   });
 
+  test("a hypothetical is not a claim", async () => {
+    const { claimsUnperformedAction } = await import("./agent.js");
+    // Verbatim from the failure this guard CAUSED: asked to build an
+    // automation, the model asked a perfectly good clarifying question and
+    // "is created" — inside an example of a trigger condition — was read as
+    // a completion claim. The correction then produced six paragraphs of
+    // narration and two empty searches out of one sensible question.
+    for (const line of [
+      "A script that runs when a certain condition is met (e.g., a file is created or modified)?",
+      "Would you like a note that is created every morning?",
+      "If the folder is moved, the link breaks.",
+      "I can do that once the file is saved.",
+    ]) {
+      assert.equal(claimsUnperformedAction(line), false, `should NOT flag: ${line}`);
+    }
+
+    // And the guard still fires when a real claim shares the reply with a
+    // hypothetical — one imagined action does not launder the other.
+    assert.ok(
+      claimsUnperformedAction(
+        "If a file is created it will sync. I've opened Notes for you.",
+      ),
+    );
+  });
+
   test("ordinary answers are not flagged", async () => {
     const { claimsUnperformedAction } = await import("./agent.js");
     for (const line of [
