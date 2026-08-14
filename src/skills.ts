@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { config } from "./config.js";
+import { config, projectRoot } from "./config.js";
 import { activeProject } from "./project.js";
 
 /**
@@ -35,6 +35,12 @@ export interface Skill {
   allowedTools: string[] | null;
   /** Optional: excluded from the catalogue; only reachable by explicit name. */
   manualOnly: boolean;
+  /** Which root it was loaded from. */
+  origin: SkillOrigin;
+  /** True when this is a user copy standing in front of a shipped skill of
+   *  the same name — the state that needs saying out loud, because from then
+   *  on upstream improvements no longer reach it. */
+  overridesBuiltin: boolean;
 }
 
 export interface SkillProblem {
@@ -49,14 +55,43 @@ export interface SkillSet {
 
 export const skillsDir = (): string => join(config.dataDir, "skills");
 
-/** Global skills, then the active project's -- iterated in that order so a
- *  project skill with a global skill's name shadows it (the more specific
- *  intent wins), and project skills vanish the moment the project closes. */
+/**
+ * The skills that ship with enio, read from the repo rather than copied out
+ * of it.
+ *
+ * Copying was the original design and it froze them: `cpSync` with
+ * force:false never overwrites, so a skill improved upstream never reached
+ * anyone who had already installed it, and nothing on disk said whether a
+ * file was stock or edited. Reading them live means `git pull` updates them,
+ * which is the only way an improvement can arrive. Same shape as the
+ * pipeline example library, which has always read its shipped dir directly.
+ */
+export const builtinSkillsDir = (): string =>
+  // Overridable so a test can isolate it BY NAME rather than by accident --
+  // the machineStateDir lesson. These now live in the checkout, which every
+  // test inherits, so a suite that redirects only ENIO_DATA_DIR would still
+  // load the shipped catalogue into every prompt it measures.
+  process.env.ENIO_BUILTIN_SKILLS ?? join(projectRoot, "examples", "skills");
+
+/** Built-in, then global, then the active project's -- iterated in that
+ *  order so a later root shadows an earlier one by name. That is what makes
+ *  a user's own copy of a built-in win (their intent is the more specific
+ *  one), and what makes project skills vanish when the project closes. */
 export function skillRoots(): string[] {
-  const roots = [skillsDir()];
+  const roots = [builtinSkillsDir(), skillsDir()];
   const project = activeProject();
   if (project) roots.push(join(project.dir, "skills"));
   return roots;
+}
+
+/** Where a skill came from — the distinction the panel needs to label a row
+ *  and the edit path needs to decide whether to copy before writing. */
+export type SkillOrigin = "builtin" | "global" | "project";
+
+export function skillOrigin(dir: string): SkillOrigin {
+  if (dir.startsWith(builtinSkillsDir() + sep)) return "builtin";
+  if (dir.startsWith(skillsDir() + sep)) return "global";
+  return "project";
 }
 
 /**
@@ -100,7 +135,9 @@ export function loadSkills(): SkillSet {
 
       try {
         const skill = parseSkill(readFileSync(file, "utf8"), dir, entry);
-        // Later roots override: the map write is the shadowing rule.
+        // Later roots override: the map write is the shadowing rule. What is
+        // recorded here is that it HAPPENED, so the panel can say so.
+        skill.overridesBuiltin = byName.get(skill.name)?.origin === "builtin";
         byName.set(skill.name, skill);
       } catch (err) {
         // One malformed skill must not take the others down with it.
@@ -150,6 +187,9 @@ export function parseSkill(source: string, dir: string, fallbackName: string): S
     allowedTools: Array.isArray(allowed) ? allowed.map(String) : null,
     manualOnly:
       meta["disable-model-invocation"] === true || meta.disableModelInvocation === true,
+    origin: skillOrigin(dir),
+    // Set by loadSkills, which is the only place that can see a collision.
+    overridesBuiltin: false,
   };
 }
 
@@ -201,9 +241,21 @@ export function findSkill(name: string, set: SkillSet = loadSkills()): Skill | n
  * SKILL.md whose frontmatter no longer parses.
  */
 export function resolveSkillFile(name: string): { file: string; dir: string } | null {
+  return resolveSkillIn(skillRoots(), name);
+}
+
+/** The same resolution against one root — what "is there a user copy" and
+ *  "is there a built-in behind it" both need to ask separately. */
+export function resolveSkillIn(
+  roots: string[],
+  name: string,
+): { file: string; dir: string } | null {
   const wanted = name.trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(wanted) || wanted.includes("..")) return null;
-  for (const root of skillRoots()) {
+  // Reversed, because skillRoots() is ordered least-specific first (that is
+  // what makes the loader's shadowing work) and resolution wants the winner:
+  // the project copy over the global one over the built-in.
+  for (const root of [...roots].reverse()) {
     const dir = resolve(root, wanted);
     // The regex already forbids separators, so this cannot fail -- it is the
     // second lock, kept because the first is a pattern someone may loosen.

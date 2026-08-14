@@ -16,14 +16,14 @@ import {
   type RunningBackend,
 } from "./runtime.js";
 import { currentModelLabel, currentModelPath } from "./model-settings.js";
-import { findSkill, loadSkills, skillContents, skillsDir } from "./skills.js";
+import { builtinSkillsDir, findSkill, loadSkills, skillContents, skillsDir } from "./skills.js";
 import {
   addTask, getTask, listTasks, removeTask, runTask, runsFor,
   setTaskEnabled, startScheduler, validateSchedule,
 } from "./tasks.js";
 import { analyse, draftSkill } from "./suggest.js";
 import { visionStatus } from "./vision.js";
-import { cpSync, mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { BACKENDS } from "./backends.js";
 import {
@@ -368,16 +368,52 @@ async function main(): Promise<void> {
 
     case "skills": {
       if (rest.includes("--install-examples")) {
-        const from = join(projectRoot, "examples", "skills");
-        if (!existsSync(from)) {
-          console.error(`No bundled examples found at ${from}`);
-          process.exit(1);
+        // Kept because the docs and old scripts name it, but there is nothing
+        // to install any more: the bundled skills are read from the checkout.
+        console.log(
+          `The bundled skills are already available — they are read from\n` +
+            `${builtinSkillsDir()}, so updating enio updates them.\n\n` +
+            `Editing one makes your own copy in ${skillsDir()}, which takes\n` +
+            `precedence from then on. Run 'enio skills' to see what you have.`,
+        );
+        break;
+      }
+
+      /**
+       * Removes copies in the user's dir that are byte-identical to the
+       * bundled skill of the same name.
+       *
+       * Those exist because installing used to copy the examples out. They
+       * are pure shadow: the same bytes, standing in front of the built-in
+       * and stopping any future improvement from reaching it. Removing one
+       * loses nothing by construction — the identical content is still there
+       * — and an edited copy is never touched, because it is no longer
+       * identical and is the user's own work from that moment on.
+       */
+      if (rest.includes("--tidy")) {
+        const removed: string[] = [];
+        const kept: string[] = [];
+        if (existsSync(builtinSkillsDir())) {
+          for (const entry of readdirSync(builtinSkillsDir()).sort()) {
+            const shipped = join(builtinSkillsDir(), entry, "SKILL.md");
+            const mine = join(skillsDir(), entry, "SKILL.md");
+            if (!existsSync(shipped) || !existsSync(mine)) continue;
+            if (readFileSync(shipped, "utf8") === readFileSync(mine, "utf8")) {
+              rmSync(join(skillsDir(), entry), { recursive: true, force: true });
+              removed.push(entry);
+            } else {
+              kept.push(entry);
+            }
+          }
         }
-        mkdirSync(skillsDir(), { recursive: true });
-        // force:false so a skill you have edited is never silently overwritten.
-        cpSync(from, skillsDir(), { recursive: true, force: false, errorOnExist: false });
-        console.log(`Installed examples into ${skillsDir()}`);
-        console.log(`Run 'enio skills' to see them.`);
+        if (removed.length > 0) {
+          console.log(
+            `Unmodified copies removed, so these track updates again: ${removed.join(", ")}`,
+          );
+        }
+        if (kept.length > 0) {
+          console.log(`Your edited versions kept (they override the bundled ones): ${kept.join(", ")}`);
+        }
         break;
       }
 

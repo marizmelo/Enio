@@ -8,6 +8,9 @@ import { test } from "node:test";
 const scratch = mkdtempSync(join(tmpdir(), "enio-abilities-"));
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// The bundled skills live in the checkout now, so a suite that redirects
+// only the data dir would still load them into every prompt it measures.
+process.env.ENIO_BUILTIN_SKILLS = join(scratch, "builtin-skills");
 // The desktop-control setting is machine-wide; without this the test would
 // write the developer's real consent file.
 process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");

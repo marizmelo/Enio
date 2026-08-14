@@ -317,10 +317,17 @@ if ask "Set up image reading? (a 1.7GB vision model, loaded only while in use)";
   fi
 fi
 
-# ------------------------------------------------------ optional: skills
-if [ -d "$AGENT_DIR/examples/skills" ] && ask "Install the example skills? (commit messages, weekly review, research)"; then
-  ( cd "$AGENT_DIR" && node dist/index.js skills --install-examples ) \
-    || warn "Could not install example skills."
+# ------------------------------------------------------ skills
+# Nothing to install: the bundled skills are read from this checkout, so an
+# update brings improvements with it. Copying them out was the old design and
+# it froze them at whatever shipped the day you first installed. Editing one
+# still works -- the first save makes your own copy, which shadows the
+# bundled version from then on.
+# --tidy only removes copies that are byte-identical to the bundled version,
+# so nothing is lost and those skills start tracking updates again. It prints
+# what it did and says nothing when there is nothing to do.
+if [ -d "$AGENT_DIR/examples/skills" ]; then
+  ( cd "$AGENT_DIR" && node dist/index.js skills --tidy ) || true
 fi
 
 # ---------------------------------------------------- optional: inspector

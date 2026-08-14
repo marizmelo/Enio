@@ -7,6 +7,9 @@ import type { IncomingMessage } from "node:http";
 
 const scratch = mkdtempSync(join(tmpdir(), "enio-auth-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// The bundled skills live in the checkout now, so a suite that redirects
+// only the data dir would still load them into every prompt it measures.
+process.env.ENIO_BUILTIN_SKILLS = join(scratch, "builtin-skills");
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 
 const { ensureToken, readToken, extractToken, isAuthorized } = await import("./auth.js");

@@ -7,6 +7,9 @@ import { join } from "node:path";
 // Point every path at a scratch dir BEFORE anything imports config.
 const scratch = mkdtempSync(join(tmpdir(), "enio-test-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// The bundled skills live in the checkout now, so a suite that redirects
+// only the data dir would still load them into every prompt it measures.
+process.env.ENIO_BUILTIN_SKILLS = join(scratch, "builtin-skills");
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 
 const { repairJson, complete } = await import("./model.js");

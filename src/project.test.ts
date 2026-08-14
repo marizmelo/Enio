@@ -12,6 +12,9 @@ process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 // read from or written to the developer's real machine by a test.
 process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// The bundled skills live in the checkout now, so a suite that redirects
+// only the data dir would still load them into every prompt it measures.
+process.env.ENIO_BUILTIN_SKILLS = join(scratch, "builtin-skills");
 // A configured MCP server would otherwise be SPAWNED by buildRegistry:
 // the developer's own ~/.enio/mcp.json is real, and a suite that starts
 // npx servers hangs for minutes and depends on the machine.

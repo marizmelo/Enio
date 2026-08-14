@@ -1863,6 +1863,42 @@ validation: the check and the write have to be the same act, or a second
 process can slip between them. The server already writes SKILL.md anyway
 (`exportPipelineSkill`), so this is not a new kind of reach.
 
+**Bundled skills are read from the checkout, not copied out of it.** Installing
+used to `cpSync` `examples/skills/` into `~/.enio/skills/` with `force:false`,
+and the consequence went unnoticed until the editor made it urgent: a skill
+improved upstream never reached anyone who had already installed it, because
+the copy is never overwritten. Nothing on disk said whether a file was stock
+or edited, so there was no way to tell the two cases apart either. Reading
+them live from `examples/skills/` fixes both — `git pull` updates them, and
+provenance is simply which root a skill loaded from. This is what the pipeline
+example library has always done.
+
+The precedence rule was already there and did not change: later roots shadow
+earlier ones, so a user copy wins. What is new is that the loader records
+`overridesBuiltin` when that shadowing happens, because it is a state the user
+needs told — from that moment their copy stops receiving improvements, which
+is right (it is theirs) but must not be a surprise.
+
+**Editing a built-in copies it first.** Writing to the file in the checkout
+would be lost at the next `git pull` and would leave the repo dirty
+meanwhile, so the first save writes into `~/.enio/skills/` instead and the
+response says `forked: true`. **Reset** deletes that copy; it is refused
+unless a built-in exists behind it, so it can never remove the only copy of a
+skill. The old `--install-examples` is now a no-op that explains itself, and
+`--tidy` removes copies that are *byte-identical* to the bundled version —
+lossless by construction, since the identical content remains — so an
+existing install starts tracking updates again without anyone hand-deleting
+folders.
+
+Consequence worth naming: the bundled catalogue is now in every prompt,
+where before it was there only if you accepted the installer's offer. Seven
+skills is roughly 300 tokens against a 2000-token budget on Maple. That was
+caught by a compaction test losing its headroom, which is also how the new
+test-isolation rule arrived — `ENIO_BUILTIN_SKILLS` exists so a suite can
+redirect the bundled dir by name, since every test now inherits it from the
+checkout. If per-skill enable/disable is ever wanted, that measurement is the
+reason it would be.
+
 **Known residual, recorded not fixed:** a scheduled *prompt* task runs
 through runTurn after repointing the process-global sessions
 (setMemorySession and friends). A task firing mid-interactive-turn can

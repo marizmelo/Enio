@@ -38,3 +38,9 @@ export const saveSkillSource = (name, content) =>
     method: "PUT",
     body: JSON.stringify({ content }),
   });
+
+/** Drop your copy so the bundled version shows through again — and tracks
+ *  updates again with it. Refused when there is no bundled version behind it,
+ *  so this can never delete the only copy of a skill. */
+export const resetSkill = (name) =>
+  call(`/skills/${encodeURIComponent(name)}/source`, { method: "DELETE" });

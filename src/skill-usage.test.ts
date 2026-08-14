@@ -1,18 +1,21 @@
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const scratch = mkdtempSync(join(tmpdir(), "enio-skill-usage-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// The bundled skills live in the checkout now, so a suite that redirects
+// only the data dir would still load them into every prompt it measures.
+process.env.ENIO_BUILTIN_SKILLS = join(scratch, "builtin-skills");
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 process.env.ENIO_MCP_CONFIG = join(scratch, "none.json");
 process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");
 
 const { skillUsage } = await import("./skill-usage.js");
-const { loadSkills, skillsDir } = await import("./skills.js");
+const { builtinSkillsDir, loadSkills, skillsDir } = await import("./skills.js");
 const { getDb, closeDb } = await import("./memory/db.js");
 const tasksRoutes = await import("./routes/tasks-routes.js");
 const skillsRoutes = await import("./routes/skills-routes.js");
@@ -229,7 +232,8 @@ describe("skills route", () => {
     const healthy = skills.find((s: { name: string }) => s.name === "healthy-skill");
     assert.ok(healthy);
     assert.equal(healthy.broken, false);
-    assert.equal(healthy.source, "global");
+    assert.equal(healthy.origin, "global");
+    assert.equal(healthy.overridesBuiltin, false);
     assert.deepEqual(healthy.usage, { uses: 0, lastUsedAt: null });
 
     const bad = skills.find((s: { name: string }) => s.name === "broken-skill");
@@ -318,5 +322,85 @@ describe("skill source editing", () => {
     const fixed = `---\nname: unparseable-skill\ndescription: fixed in the editor\n---\n\nBody.\n`;
     assert.equal((await put("unparseable-skill", fixed)).status, 200);
     assert.ok(loadSkills().skills.some((s) => s.name === "unparseable-skill"));
+  });
+});
+
+describe("built-in versus user skills", () => {
+  const installBuiltin = (name: string, description: string) => {
+    const dir = join(builtinSkillsDir(), name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "SKILL.md"),
+      `---\nname: ${name}\ndescription: ${description}\n---\n\nShipped body.\n`,
+    );
+    return dir;
+  };
+
+  test("a bundled skill loads without being copied anywhere", () => {
+    installBuiltin("shipped-only", "ships with enio");
+    const found = loadSkills().skills.find((s) => s.name === "shipped-only");
+    assert.ok(found, "bundled skills are read from the checkout");
+    assert.equal(found!.origin, "builtin");
+    assert.equal(found!.overridesBuiltin, false);
+    // The whole point: nothing was written into the user's dir, so an update
+    // to the checkout reaches them.
+    assert.equal(existsSync(join(skillsDir(), "shipped-only")), false);
+  });
+
+  test("a user copy shadows the bundled one and says so", () => {
+    installBuiltin("shadowed", "the shipped description");
+    installSkill("shadowed", "my own description");
+    const found = loadSkills().skills.find((s) => s.name === "shadowed");
+    assert.equal(found!.description, "my own description", "the user's copy wins");
+    assert.equal(found!.origin, "global");
+    assert.equal(found!.overridesBuiltin, true, "and the panel must be able to say so");
+  });
+
+  test("editing a built-in writes a copy instead of the checkout", async () => {
+    const shippedDir = installBuiltin("forkable", "shipped version");
+    const shipped = readFileSync(join(shippedDir, "SKILL.md"), "utf8");
+
+    const { res, sent } = stubRes();
+    const edited = `---\nname: forkable\ndescription: my version\n---\n\nMine.\n`;
+    await skillsRoutes.handle(
+      stubReq("PUT", JSON.stringify({ content: edited })),
+      res,
+      urlFor("/skills/forkable/source"),
+    );
+    assert.equal(sent().status, 200);
+    assert.equal(sent().body.forked, true, "the save reports that it made a copy");
+    // The checkout is untouched: git pull would otherwise clobber the edit,
+    // and a dirty repo is its own problem.
+    assert.equal(readFileSync(join(shippedDir, "SKILL.md"), "utf8"), shipped);
+    assert.equal(
+      readFileSync(join(skillsDir(), "forkable", "SKILL.md"), "utf8"),
+      edited,
+      "the edit lands in the user's dir",
+    );
+    assert.equal(loadSkills().skills.find((s) => s.name === "forkable")?.description, "my version");
+  });
+
+  test("reset removes the copy and the built-in shows through again", async () => {
+    installBuiltin("resettable", "shipped version");
+    installSkill("resettable", "my version");
+    assert.equal(
+      loadSkills().skills.find((s) => s.name === "resettable")?.description,
+      "my version",
+    );
+
+    const { res, sent } = stubRes();
+    await skillsRoutes.handle(stubReq("DELETE"), res, urlFor("/skills/resettable/source"));
+    assert.equal(sent().status, 200);
+    const after = loadSkills().skills.find((s) => s.name === "resettable");
+    assert.equal(after?.description, "shipped version");
+    assert.equal(after?.origin, "builtin");
+  });
+
+  test("reset refuses when there is no built-in to fall back to", async () => {
+    installSkill("mine-alone", "only mine");
+    const { res, sent } = stubRes();
+    await skillsRoutes.handle(stubReq("DELETE"), res, urlFor("/skills/mine-alone/source"));
+    assert.equal(sent().status, 409, "this must never delete the only copy of a skill");
+    assert.ok(loadSkills().skills.some((s) => s.name === "mine-alone"));
   });
 });

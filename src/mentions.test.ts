@@ -6,6 +6,9 @@ import { join } from "node:path";
 
 const scratch = mkdtempSync(join(tmpdir(), "enio-mentions-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// The bundled skills live in the checkout now, so a suite that redirects
+// only the data dir would still load them into every prompt it measures.
+process.env.ENIO_BUILTIN_SKILLS = join(scratch, "builtin-skills");
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 process.env.ENIO_MCP_CONFIG = join(scratch, "none.json");
 
@@ -166,6 +169,7 @@ describe("invoked skill block", () => {
     const skill = {
       name: "x", description: "d", dir: "/tmp", body: "Do the thing.",
       allowedTools: null, manualOnly: false,
+      origin: "global" as const, overridesBuiltin: false,
     };
     const block = invokedSkillBlock([skill]);
     // Asking explicitly is meant to remove a decision; making the model call

@@ -11,6 +11,9 @@ import { join } from "node:path";
 // left four junk plans in the real ~/.enio database.
 const scratch = mkdtempSync(join(tmpdir(), "enio-plans-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// The bundled skills live in the checkout now, so a suite that redirects
+// only the data dir would still load them into every prompt it measures.
+process.env.ENIO_BUILTIN_SKILLS = join(scratch, "builtin-skills");
 // Machine-wide state (model choice, desktop-control consent) must never be
 // read from or written to the developer's real machine by a test.
 process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");

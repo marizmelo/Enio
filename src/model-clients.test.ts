@@ -9,6 +9,9 @@ import { join } from "node:path";
 // integration.test.ts, which opts into isolation by name.
 const scratch = mkdtempSync(join(tmpdir(), "enio-clients-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// The bundled skills live in the checkout now, so a suite that redirects
+// only the data dir would still load them into every prompt it measures.
+process.env.ENIO_BUILTIN_SKILLS = join(scratch, "builtin-skills");
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 delete process.env.ENIO_MACHINE_STATE_DIR;
 delete process.env.MAPLE_MACHINE_STATE_DIR;

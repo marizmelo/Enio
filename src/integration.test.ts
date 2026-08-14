@@ -6,6 +6,9 @@ import { join } from "node:path";
 
 const scratch = mkdtempSync(join(tmpdir(), "enio-int-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// The bundled skills live in the checkout now, so a suite that redirects
+// only the data dir would still load them into every prompt it measures.
+process.env.ENIO_BUILTIN_SKILLS = join(scratch, "builtin-skills");
 // Asked for by name: the client registry is machine-wide on purpose, so a
 // test that registers pids would otherwise read and rewrite the real one --
 // the desktop app's own claim included.
@@ -1132,6 +1135,8 @@ describe("skill invocation trace", () => {
           body: "Write plainly.",
           allowedTools: null,
           manualOnly: false,
+          origin: "global" as const,
+          overridesBuiltin: false,
         },
       ],
     });

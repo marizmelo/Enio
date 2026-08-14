@@ -11,6 +11,9 @@ import { test, before } from "node:test";
 const scratch = mkdtempSync(join(tmpdir(), "enio-files-"));
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// The bundled skills live in the checkout now, so a suite that redirects
+// only the data dir would still load them into every prompt it measures.
+process.env.ENIO_BUILTIN_SKILLS = join(scratch, "builtin-skills");
 mkdirSync(process.env.ENIO_WORKSPACE, { recursive: true });
 mkdirSync(process.env.ENIO_DATA_DIR, { recursive: true });
 

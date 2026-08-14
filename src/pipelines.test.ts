@@ -9,6 +9,9 @@ import type { RunEvent } from "./pipelines.js";
 const scratch = mkdtempSync(join(tmpdir(), "enio-pipelines-"));
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// The bundled skills live in the checkout now, so a suite that redirects
+// only the data dir would still load them into every prompt it measures.
+process.env.ENIO_BUILTIN_SKILLS = join(scratch, "builtin-skills");
 process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");
 process.env.ENIO_MCP_CONFIG = join(scratch, "no-such-mcp.json");
 // The executor drives full turns with a scripted model; routing would spend

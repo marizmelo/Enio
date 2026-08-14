@@ -8,6 +8,9 @@ import { deflateSync } from "node:zlib";
 
 const scratch = mkdtempSync(join(tmpdir(), "enio-vision-"));
 process.env.ENIO_DATA_DIR = join(scratch, "data");
+// The bundled skills live in the checkout now, so a suite that redirects
+// only the data dir would still load them into every prompt it measures.
+process.env.ENIO_BUILTIN_SKILLS = join(scratch, "builtin-skills");
 process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 process.env.ENIO_MCP_CONFIG = join(scratch, "none.json");
 process.env.ENIO_VISION_MODE = "auto";

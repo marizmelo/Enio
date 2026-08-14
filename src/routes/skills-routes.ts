@@ -1,8 +1,16 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname } from "node:path";
+import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { readBody, sendJson } from "../http-util.js";
-import { loadSkills, parseSkill, resolveSkillFile, skillsDir } from "../skills.js";
+import {
+  builtinSkillsDir,
+  loadSkills,
+  parseSkill,
+  resolveSkillFile,
+  resolveSkillIn,
+  skillOrigin,
+  skillsDir,
+} from "../skills.js";
 import { skillUsage } from "../skill-usage.js";
 
 /** The editor's cap. A SKILL.md is prose the model reads every turn; past
@@ -23,13 +31,13 @@ export async function handle(
   if (req.method === "GET" && url.pathname === "/skills") {
     const set = loadSkills();
     const { usage, unresolved } = skillUsage(set);
-    const globalRoot = skillsDir();
     const skills = [
       ...set.skills.map((s) => ({
         name: s.name,
         description: s.description,
         manualOnly: s.manualOnly,
-        source: s.dir.startsWith(globalRoot) ? "global" : "project",
+        origin: s.origin,
+        overridesBuiltin: s.overridesBuiltin,
         dir: s.dir,
         broken: false as const,
         usage: usage[s.name] ?? { uses: 0, lastUsedAt: null },
@@ -78,6 +86,29 @@ export async function handle(
       return true;
     }
 
+    /** Reset to built-in: drop the user's copy so the shipped one shows
+     *  through again — and starts tracking updates again with it. Only ever
+     *  removes a file in the GLOBAL dir, and only when a built-in of the
+     *  same name exists to fall back to, so this cannot delete the only
+     *  copy of anything. */
+    if (req.method === "DELETE") {
+      const mine = resolveSkillIn([skillsDir()], name);
+      const builtin = resolveSkillIn([builtinSkillsDir()], name);
+      if (!mine || !builtin) {
+        sendJson(res, 409, {
+          error: { message: "There is no built-in version of this skill to go back to." },
+        });
+        return true;
+      }
+      try {
+        rmSync(mine.dir, { recursive: true, force: true });
+        sendJson(res, 200, { ok: true });
+      } catch (err) {
+        sendJson(res, 500, { error: { message: (err as Error).message } });
+      }
+      return true;
+    }
+
     if (req.method === "PUT") {
       let body: { content?: string };
       try {
@@ -104,9 +135,25 @@ export async function handle(
         });
         return true;
       }
+      // Copy-on-write. A built-in lives in the repo, which `git pull`
+      // overwrites -- editing it there would lose the change at the next
+      // update AND make the repo dirty. So the first edit becomes the user's
+      // own copy, which then shadows it; Reset removes that copy again.
+      let target = found.file;
+      if (skillOrigin(found.dir) === "builtin") {
+        const mine = join(skillsDir(), name);
+        mkdirSync(mine, { recursive: true });
+        target = join(mine, "SKILL.md");
+      }
       try {
-        writeFileSync(found.file, content, "utf8");
-        sendJson(res, 200, { ok: true, mtime: statSync(found.file).mtimeMs });
+        writeFileSync(target, content, "utf8");
+        sendJson(res, 200, {
+          ok: true,
+          mtime: statSync(target).mtimeMs,
+          // True when this save just created the override, so the panel can
+          // say what happened rather than silently changing the row's label.
+          forked: target !== found.file,
+        });
       } catch (err) {
         sendJson(res, 500, { error: { message: (err as Error).message } });
       }

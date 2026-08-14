@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, BookOpen, FolderOpen } from "lucide-react";
-import { listSkills } from "@/lib/skills";
+import { listSkills, resetSkill } from "@/lib/skills";
 
 /**
  * The Skills panel: the know-how Enio has, made visible and editable.
@@ -25,16 +25,19 @@ function ago(ts) {
 export function SkillsPanel({ open, onEdit }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+  const [rev, setRev] = useState(0);
+  const [confirmReset, setConfirmReset] = useState(null);
 
   useEffect(() => {
     if (!open) return;
+    setConfirmReset(null);
     listSkills()
       .then((d) => {
         setData(d);
         setError("");
       })
       .catch((err) => setError(String(err?.message ?? err)));
-  }, [open]);
+  }, [open, rev]);
 
   const skills = data?.skills ?? [];
   const unresolved = data?.unresolved ?? [];
@@ -82,9 +85,25 @@ export function SkillsPanel({ open, onEdit }) {
               >
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-sm">{s.name}</span>
-                  {s.source === "project" && (
+                  {s.origin === "project" && (
                     <span className="rounded bg-muted px-1 text-[10px] text-muted-foreground">
                       project
+                    </span>
+                  )}
+                  {s.origin === "builtin" && (
+                    <span
+                      className="rounded bg-muted px-1 text-[10px] text-muted-foreground"
+                      title="Ships with Enio — updates when you update Enio. Editing it makes your own copy."
+                    >
+                      built-in
+                    </span>
+                  )}
+                  {s.overridesBuiltin && (
+                    <span
+                      className="rounded bg-muted px-1 text-[10px] text-muted-foreground"
+                      title="Your edited copy of a built-in skill. It no longer picks up updates — reset to go back."
+                    >
+                      yours · replaces built-in
                     </span>
                   )}
                   {s.manualOnly && (
@@ -103,6 +122,38 @@ export function SkillsPanel({ open, onEdit }) {
                   ? `${s.usage.uses} use${s.usage.uses === 1 ? "" : "s"} · ${ago(s.usage.lastUsedAt)}`
                   : "never used"}
               </span>
+              {s.overridesBuiltin && (
+                <button
+                  className={`shrink-0 text-[11px] ${
+                    confirmReset === s.name
+                      ? "text-destructive"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title={
+                    confirmReset === s.name
+                      ? "Click again to delete your copy and go back to the built-in"
+                      : "Discard your copy and use the built-in version again"
+                  }
+                  onClick={async () => {
+                    // Two clicks: this deletes the user's own edits, and the
+                    // built-in behind it is the only thing that makes that
+                    // recoverable — which is not the same as reversible.
+                    if (confirmReset !== s.name) {
+                      setConfirmReset(s.name);
+                      return;
+                    }
+                    setConfirmReset(null);
+                    try {
+                      await resetSkill(s.name);
+                      setRev((r) => r + 1);
+                    } catch (err) {
+                      setError(String(err?.message ?? err));
+                    }
+                  }}
+                >
+                  {confirmReset === s.name ? "Discard my copy?" : "Reset"}
+                </button>
+              )}
               <button
                 className="shrink-0 text-muted-foreground hover:text-foreground"
                 title="Show in Finder"

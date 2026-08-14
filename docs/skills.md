@@ -23,7 +23,7 @@ enio skills-new commit-message
 enio skills                     # what is installed
 ```
 
-Skills live in `~/.enio/skills/<name>/SKILL.md`:
+Your own skills live in `~/.enio/skills/<name>/SKILL.md`:
 
 ```markdown
 ---
@@ -39,6 +39,26 @@ Never mention tooling or assistance in the message.
 
 The `description` is what the model reads to decide whether the skill applies,
 so write it as the situation it covers, not as a title.
+
+## Bundled skills, and your own
+
+Enio ships with a handful of skills (commit messages, weekly review, research
+briefs and so on). They are **read from the installation itself**, not copied
+into your folder — so `git pull` brings improvements to them with it. The
+panel marks them **built-in**.
+
+Editing one makes it yours: the first save writes a copy into
+`~/.enio/skills/<name>/`, which takes precedence from then on, and the row
+reads **yours · replaces built-in**. That copy is now your document — it will
+not change under you, which also means later improvements to the bundled
+version stop reaching it. **Reset** on that row deletes your copy and puts the
+bundled one back in front; it is refused when there is no bundled version
+behind it, so it can never remove the only copy of a skill.
+
+If you installed enio before this and have unmodified copies of the bundled
+skills sitting in your folder, `enio skills --tidy` removes exactly those —
+the ones byte-identical to what ships — so they start tracking updates again.
+Anything you edited is left alone.
 
 ## Progressive disclosure
 
