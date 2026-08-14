@@ -52,7 +52,7 @@ const VIDEO = /\.(mp4|mov|webm)$/i;
 const AUDIO = /\.(mp3|m4a|wav)$/i;
 const MARKDOWN = /\.(md|markdown)$/i;
 
-export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarded, className }) {
+export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarded, className, hotkeys = true }) {
   const [kind, setKind] = useState("loading"); // loading|text|media|blocked
   const [buffer, setBuffer] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -317,6 +317,10 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
   // browser's own "save page" dialog is never the right answer here.
   const saveRef = useRef(null);
   useEffect(() => {
+    // Two panels can be mounted at once — a pinned document behind the Skills
+    // dialog's editor — and both listening on window would make one keystroke
+    // save two different files.
+    if (!hotkeys) return undefined;
     const onKey = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && !e.shiftKey && !e.altKey) {
         e.preventDefault();
@@ -325,7 +329,7 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [hotkeys]);
 
   const save = async () => {
     if (isSkill) {

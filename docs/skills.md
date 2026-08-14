@@ -72,10 +72,12 @@ catalogue. And when the model asks for a skill that doesn't exist, the name it
 asked for is listed — the model reaching for `meeting-notes` three times is a
 strong hint about what to write next.
 
-**Click a skill to edit it.** It opens in the [canvas](chatting.md#the-canvas)
-— the same editor the agent's documents use — with Preview, ⌘S, and the
-selection verbs (*Tighten*, *Expand*, *Rewrite…*, *Continue*) available on
-the text. Edits apply on the next message; nothing to reload. A broken skill
+**Click a skill to edit it.** The editor opens in the panel itself — the same
+one the agent's documents use, with Preview, ⌘S, and the selection verbs
+(*Tighten*, *Expand*, *Rewrite…*, *Continue*) — and **← All skills** goes
+back. It stays inside this window rather than pinning beside the
+conversation, because a skill is configuration: there is no chat to iterate
+against. Edits apply on the next message; nothing to reload. A broken skill
 opens the same way, which is the point: the row tells you what is wrong and
 the click takes you to where you fix it.
 

@@ -789,17 +789,10 @@ export function App() {
         onFiles={() => setFilesOpen(true)}
       />
 
-      <SkillsDialog
-        open={skillsOpen}
-        onOpenChange={setSkillsOpen}
-        onEdit={(name) => {
-          // Same gesture as opening a note: the panel hands the document to
-          // the canvas and gets out of the way. ".skill/" is a handle, not a
-          // workspace path — the panel resolves it over the API.
-          setSkillsOpen(false);
-          setCanvas({ path: `.skill/${name}`, openedBy: "user", rev: Date.now(), full: true });
-        }}
-      />
+      {/* Editing happens inside the dialog, not on the conversation canvas:
+          a skill is configuration, and that panel is for a document the chat
+          and the agent are working on together. */}
+      <SkillsDialog open={skillsOpen} onOpenChange={setSkillsOpen} />
 
       <PipelinesDialog
         open={pipelinesOpen}
@@ -1055,6 +1048,9 @@ export function App() {
               onClose={() => setCanvas(null)}
               onDiscarded={() => setCanvas(null)}
               className="h-full"
+              // The Skills dialog mounts an editor of its own on top; one
+              // ⌘S must not save two different files.
+              hotkeys={!skillsOpen}
             />
           </ResizablePanel>
         </>

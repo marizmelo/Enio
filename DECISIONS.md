@@ -1835,6 +1835,16 @@ markdown editor with preview, ⌘S and the selection verbs sitting one panel
 away. Clicking a row now opens its SKILL.md there, broken ones included,
 since a row that says what is wrong should take you to where it is fixed.
 
+The editor lives in the Skills dialog, not on the conversation canvas. The
+first version pinned the SKILL.md beside the chat and the user's reaction was
+immediate — "that does not work". Right: the canvas is for a document the
+chat and the agent are working on together, and a skill has no conversation
+to sit beside. It is the same component, hosted in the dialog the way the
+automations canvas is hosted in its own, list ↔ editor. Two CanvasPanels can
+now be mounted at once (a pinned document behind the dialog), so ⌘S binding
+became a prop: only the foreground one listens, or one keystroke saves two
+different files.
+
 Two things had to be right for that to be safe. **The file is addressed by
 name, never by path**: skills live in enio's own data dir, outside the
 workspace the canvas can otherwise reach, so the panel holds a `.skill/<name>`
