@@ -22,16 +22,16 @@ cd enio
 bash install.sh
 ```
 
-Idempotent — if the 5GB download dies halfway, re-run and it resumes. Optional components that fail are listed at the end and don't block anything else.
+About 2.5GB by default — the model is ~2.3GB and the Python runtime the rest. Idempotent: if a download dies halfway, re-run and it resumes. Optional extras are prompted (Maple's weights are another ~5GB, image reading 1.7GB), and any that fail are listed at the end without blocking the rest.
+
+The installer creates the `enio` command for you.
 
 ## Run
 
 ```sh
-node dist/index.js start          # CLI
-cd desktop && npm start           # or the desktop app
+enio start              # CLI
+npm run desktop         # or the desktop app
 ```
-
-Run `npm link` once to type `enio` instead of `node dist/index.js`.
 
 ```
 › what files are in my workspace

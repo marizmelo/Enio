@@ -100,7 +100,7 @@ export function StatusBar({
         {/* The launcher tile only exists before the first message, and a
             pipeline is exactly the thing you reach for mid-conversation --
             "this worked, make it repeatable". */}
-        <TipButton tip="Pipelines" className="size-7" onClick={onPipelines}>
+        <TipButton tip="Automations" className="size-7" onClick={onPipelines}>
           <Workflow className="size-4" />
         </TipButton>
         {/* What Enio remembers about you -- and the way to prune it. Beside

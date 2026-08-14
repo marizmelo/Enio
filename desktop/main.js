@@ -1183,6 +1183,26 @@ ipcMain.handle("request-accessibility", () => {
   return granted;
 });
 
+/**
+ * One instance, because a second one is never what was meant.
+ *
+ * Each instance spawns its own agent on 8787; the loser binds nothing and
+ * the window sits there looking started while every request fails — which
+ * reads as enio being broken rather than as two copies running. There is
+ * no merge to do (the state that matters is on disk and shared), so the
+ * second launch surfaces the first window and exits.
+ */
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  });
+}
+
 app.whenReady().then(() => {
   // The BrowserWindow `icon` option is ignored on macOS — the dock reads the
   // app bundle, and an unpackaged `electron .` has Electron's own. Setting it

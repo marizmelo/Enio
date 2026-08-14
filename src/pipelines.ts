@@ -811,12 +811,12 @@ export function buildPipelineTools(registry: () => Registry): ToolDef[] {
     {
       name: "run_pipeline",
       description:
-        "Run one of the user's saved pipelines by name. Use when the user asks to run a pipeline or flow they created. Only pipelines that have run successfully before are eligible.",
+        "Run one of the user's saved automations by name. Use when the user asks to run an automation, pipeline or flow they created. Only automations that have run successfully before are eligible.",
       origin: "builtin",
       parameters: {
         type: "object",
         properties: {
-          name: { type: "string", description: "The saved pipeline's exact name." },
+          name: { type: "string", description: "The saved automation's exact name." },
         },
         required: ["name"],
       },

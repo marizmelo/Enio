@@ -16,6 +16,7 @@
     "chat": "node dist/index.js chat",
     "serve": "node dist/index.js serve",
     "inspect": "node dist/index.js inspect",
+    "desktop": "npm start --prefix desktop",
     "typecheck": "tsc --noEmit",
     "lint": "npm run lint --prefix desktop",
     "test": "node --test dist/*.test.js"

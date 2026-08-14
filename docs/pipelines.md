@@ -1,10 +1,10 @@
 ---
-title: Launcher and pipelines
+title: Launcher and automations
 layout: default
 nav_order: 5
 ---
 
-# Launcher and pipelines
+# Launcher and automations
 
 Two ways to make a small model more accurate by narrowing *before* the model
 runs: pick the ability yourself, and chain abilities into a flow the harness
@@ -34,9 +34,9 @@ only ever shown tools that work — a dead-end tool burns its attention — but 
 `ENIO_DESKTOP=1`" where a model can only fail. Tiles marked *soon* (images,
 video) are honest signposts, not features.
 
-## Pipelines
+## Automations
 
-"Build a pipeline" — on the launcher, or the workflow button in the top bar
+"Build an automation" — on the launcher, or the workflow button in the top bar
 once a conversation is underway — opens a canvas where abilities chain into
 one flow:
 describe what you want — *"research a topic and write a document about it"* —
@@ -54,7 +54,7 @@ one ordinary narrow turn with its agent pinned, and what a step produces
 A step's prompt is **guidance, not a script**: inside a step the agent keeps
 its normal tools and judgement, exactly as in chat. Which also means every
 safety gate applies unchanged — email stays dry-run until `ENIO_EMAIL_SEND=1`,
-Mac automations still arrive as plans you approve, and a pipeline can never
+Mac automations still arrive as plans you approve, and an automation can never
 reach a tool chat could not.
 
 Connections are typed: a step that produces a document can feed one that
@@ -66,19 +66,19 @@ If a step fails, everything downstream of it is skipped and the partial
 results are kept; running again is a fresh run.
 
 **Run first, save after.** A canvas runs without a name — press Run and watch
-it work. Save unlocks once a run has executed, because a pipeline earns its
+it work. Save unlocks once a run has executed, because an automation earns its
 place by working, not by being written down: the run you just watched comes
-along with the save, so the pipeline arrives already trusted (see below).
+along with the save, so the automation arrives already trusted (see below).
 After the first save the button reads Update, and the name — any text you
 like — can be changed in place. Saving the same name again updates that
-pipeline rather than creating a copy.
+automation rather than creating a copy.
 
-**Stop.** A running pipeline can be stopped at any time. The step in flight
+**Stop.** A running automation can be stopped at any time. The step in flight
 is abandoned mid-stream, nothing after it starts, and the run is recorded as
-cancelled — a stopped run never counts as the pipeline having worked.
+cancelled — a stopped run never counts as the automation having worked.
 
 **The execution log.** Every run records what each step replied and every
-file it produced. Opening a saved pipeline lays its latest run over the
+file it produced. Opening a saved automation lays its latest run over the
 canvas — the status rings, each step's output (click a step to read it), and
 the files the run wrote, listed by path. Documents land in your workspace
 (`~/enio-workspace` unless you moved it with `ENIO_WORKSPACE`), or in the
@@ -97,40 +97,40 @@ canvas palette but not on the launcher — on its own it is just chat.
 ## Enio learns your flows
 
 There is nothing to manage here — no example library, no separate concept.
-**A pipeline that has run successfully teaches the composer.** The next time
-you describe a flow, your proven pipelines are the examples the draft is
-shaped by, alongside the few that ship with Enio (`examples/pipelines/`).
-The compose prompt you typed rides along as the pipeline's description, so
+**An automation that has run successfully teaches the composer.** The next time
+you describe a flow, your proven automations are the examples the draft is
+shaped by, alongside the few that ship with Enio (`examples/automations/`).
+The compose prompt you typed rides along as the automation's description, so
 the composer knows what request each flow answers.
 
-A pipeline that was saved but never ran teaches nothing, and a failed run
+An automation that was saved but never ran teaches nothing, and a failed run
 doesn't count — abandoned drafts and broken flows must not shape the next
 draft. It is the recipes rule again: reality vouches, not saving.
 
-**Suggest from my history** (in the pipelines dialog) goes one step further:
+**Suggest from my history** (in the automations dialog) goes one step further:
 Enio mines its own traces for tool sequences you have repeated at least three
 times and offers each as a draft graph. The mapping from tools to steps is a
 fixed lookup, never a guess, and a draft opens unsaved — you name it, save
 it, and one successful run later it too teaches the composer. It runs when
 you click, never in the background.
 
-## Agents can run your pipelines
+## Agents can run your automations
 
-Ask in chat — *"run the ai-news-brief pipeline"* — and the generalist runs it
+Ask in chat — *"run the ai-news-brief automation"* — and the generalist runs it
 with the `run_pipeline` tool. Selection, never authoring: the model picks
-from the closed list of **your saved pipelines that have already run
+from the closed list of **your saved automations that have already run
 successfully**, and an unknown or unproven name gets a refusal that lists
 what is eligible. Each step still runs as an ordinary turn, so every gate
 holds — the tool grants orchestration convenience, not one new capability.
-A pipeline step cannot start another pipeline; one hop is the rule
+An automation step cannot start another automation; one hop is the rule
 everywhere.
 
-**Save as skill** goes one step further: on any proven pipeline the canvas
+**Save as skill** goes one step further: on any proven automation the canvas
 offers a button that writes a [skill](skills.md) naming when to use the flow
 and how to trigger it. After that, plain words are enough — *"give me my
-morning brief"* finds the skill and runs the pipeline, no pipeline vocabulary
+morning brief"* finds the skill and runs the automation, no automation vocabulary
 required. The export never overwrites an existing skill, and if you later
-rename or delete the pipeline the skill's trigger fails honestly (the refusal
+rename or delete the automation the skill's trigger fails honestly (the refusal
 lists what is available) rather than improvising the steps by hand.
 
 Steps that need an outside connection get it automatically: an ability that
@@ -138,12 +138,12 @@ declares an [MCP server](mcp.md) requirement — home automation and Home
 Assistant, today — inherits that server's tools inside its step, exactly the
 way `@server` grants them for one chat turn.
 
-## Scheduled pipelines
+## Scheduled automations
 
-A [task](tasks.md) can trigger a pipeline instead of a prompt:
+A [task](tasks.md) can trigger an automation instead of a prompt:
 
 ```sh
-enio task add news-daily --cron "0 9 * * *" --pipeline ai-news-brief
+enio task add news-daily --cron "0 9 * * *" --automation ai-news-brief
 ```
 
 The trigger is deterministic — when the clock fires, the harness walks the

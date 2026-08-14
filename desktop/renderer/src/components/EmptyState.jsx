@@ -141,7 +141,7 @@ export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, onRecor
             className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed px-2 py-3 text-xs transition-colors hover:bg-muted"
           >
             <Workflow className="size-5" />
-            <span className="leading-tight">Build a pipeline</span>
+            <span className="leading-tight">Build an automation</span>
           </button>
 
           {/* Client-only for the same reason, plus one more: starting a

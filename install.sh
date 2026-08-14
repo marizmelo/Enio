@@ -235,6 +235,22 @@ say "Agent"
 ( cd "$AGENT_DIR" && npm run build ) || die "Build failed."
 mkdir -p "$WORKSPACE" "$DATA_DIR"
 
+# The `enio` command itself. `npm link` is the standard route and works
+# unprivileged wherever the global prefix is user-owned (nvm, homebrew node,
+# fnm); a system-owned prefix would need sudo, which an installer should
+# never take on its own. So the fallback is a symlink into ~/.local/bin --
+# already on PATH by this point, because uv needed the same thing.
+CLI_READY=0
+if ( cd "$AGENT_DIR" && npm link >/dev/null 2>&1 ) && command -v enio >/dev/null 2>&1; then
+  CLI_READY=1
+  printf '    linked: enio\n'
+elif mkdir -p "$HOME/.local/bin" && ln -sf "$AGENT_DIR/dist/index.js" "$HOME/.local/bin/enio"; then
+  CLI_READY=1
+  printf '    linked: ~/.local/bin/enio\n'
+else
+  warn "Could not create the 'enio' command — use 'node dist/index.js' instead."
+fi
+
 printf '    running tests\n'
 if ( cd "$AGENT_DIR" && npm test >/tmp/enio-test.log 2>&1 ); then
   # node --test marks its summary with '#' under the TAP reporter and with 'ℹ'
@@ -357,13 +373,18 @@ if [ ${#FAILED_OPTIONAL[@]} -gt 0 ]; then
   printf '    Everything else works. Re-run this script to retry them.\n'
 fi
 
+# The linked command when there is one, the long form when there is not --
+# printing `enio` at someone whose link failed is a worse first minute than
+# a longer command that works.
+if [ "$CLI_READY" = "1" ]; then CLI="enio"; else CLI="node dist/index.js"; fi
+
 if [ "$CAN_RUN_MAPLE" = "1" ]; then
 cat <<EOF
 
 ${BOLD}Start it${OFF}
 
     cd $AGENT_DIR
-    node dist/index.js start       ${DIM}# starts the model, then opens chat${OFF}
+    $CLI start                     ${DIM}# starts the model, then opens chat${OFF}
 EOF
 else
 cat <<EOF
@@ -373,13 +394,13 @@ ${BOLD}Start it${OFF}
     ollama serve &                 ${DIM}# if it isn't already running${OFF}
     cd $AGENT_DIR
     source $ENV_FILE
-    node dist/index.js chat        ${DIM}# 'start' is for the Maple runtime only${OFF}
+    $CLI chat                      ${DIM}# 'start' is for the Maple runtime only${OFF}
 EOF
 fi
 
 [ "$DESKTOP_READY" = "1" ] && cat <<EOF
 ${DIM}or the desktop app, which does the same with a window:${OFF}
-    cd $AGENT_DIR/desktop && npm start
+    cd $AGENT_DIR && npm run desktop
 EOF
 
 cat <<EOF

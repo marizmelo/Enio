@@ -107,6 +107,16 @@ prompt and its JSON key stay `specialist` — the first needs a migration to
 change and the other two are model-facing, where re-wording a working classifier
 buys nothing.
 
+**Users see "automations"; the code says "pipelines".** The same split, for
+the same reason. "Pipeline" is the accurate word for a graph of nodes the
+harness executes, and it is what `src/pipelines.ts`, the DB tables, the HTTP
+routes and `docs/pipelines.md` (a published URL) all say. "Automation" is
+what someone means when they want a thing that runs itself, so it is what the
+UI and the docs prose say. Model-facing text is the exception that proves it:
+the tool stays `run_pipeline` — renaming a working classifier's key buys
+nothing — but its *description* and the router examples use "automation",
+because that is the word arriving in the user's message.
+
 **One hop only.** Router → specialist → answer. No agent-to-agent conversation.
 Every hand-off compounds error and at this model size it compounds fast.
 

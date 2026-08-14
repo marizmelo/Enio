@@ -194,7 +194,7 @@ export const SPECIALISTS: Specialist[] = [
     systemPrompt:
       `You are a thoughtful assistant. Answer directly from what you know.\n\n` +
       `Use recall if the user refers to something from a past conversation. ` +
-      `run_pipeline runs one of the user's saved pipelines when they ask for ` +
+      `run_pipeline runs one of the user's saved automations when they ask for ` +
       `it by name. Otherwise just answer — not everything needs a tool.`,
     // read_image belongs here as much as it belongs to coder and operator:
     // "what does this show?" is ordinary conversation, and it is the generalist
@@ -314,7 +314,7 @@ export async function route(
         `"set an alarm for 7 tomorrow morning" -> {"specialist": "operator"}\n` +
         // "pipeline" reads as CI: "run the quarterly-taxes pipeline" routed
         // to the coder, who has no run_pipeline tool and denied it exists.
-        `"run the news-brief pipeline" -> {"specialist": "generalist"}\n` +
+        `"run my news-brief automation" -> {"specialist": "generalist"}\n` +
         `"explain monads to me" -> {"specialist": "generalist"}`,
     },
     { role: "user", content: userInput.slice(0, 500) },

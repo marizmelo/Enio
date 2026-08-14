@@ -273,7 +273,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
   const persist = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("Give the pipeline a name first.");
+      setError("Give the automation a name first.");
       return null;
     }
     setBusy(true);
@@ -470,7 +470,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
     <Dialog open={open} onOpenChange={(next) => !running && onOpenChange(next)}>
       <DialogContent className="flex h-[80vh] w-[80vw] max-w-none flex-col gap-3 sm:max-w-none">
         <DialogHeader className="shrink-0">
-          <DialogTitle>Pipelines</DialogTitle>
+          <DialogTitle>Automations</DialogTitle>
           <DialogDescription>
             Chain abilities into one flow. Each step runs as its own narrow turn — the graph is
             yours, and nothing runs until you press run.
@@ -533,7 +533,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
                     </button>
                     <button
                       className="shrink-0 text-muted-foreground hover:text-destructive"
-                      title="Delete pipeline"
+                      title="Delete automation"
                       onClick={async () => {
                         await deletePipeline(p.id).catch(() => {});
                         refresh();
@@ -594,7 +594,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
                 size="sm"
                 className="gap-1"
                 disabled={suggesting}
-                title="Find repeated tool sequences in your history and turn them into draft pipelines"
+                title="Find repeated tool sequences in your history and turn them into draft automations"
                 onClick={suggest}
               >
                 {suggesting ? <Loader2 className="size-3.5 animate-spin" /> : <History className="size-3.5" />}
@@ -711,7 +711,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
               <div className="mt-auto flex flex-col gap-1.5">
                 <input
                   className="rounded-md border bg-transparent px-2 py-1 text-xs"
-                  placeholder="Pipeline name"
+                  placeholder="Automation name"
                   value={name}
                   disabled={running}
                   onChange={(e) => setName(e.target.value)}
@@ -731,7 +731,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
                   disabled={busy || running || nodes.length === 0 || (!current?.id && !hasRun)}
                   title={
                     !current?.id && !hasRun
-                      ? "Run it once first — a pipeline is saved after you've seen it work"
+                      ? "Run it once first — an automation is saved after you've seen it work"
                       : undefined
                   }
                   onClick={persist}
@@ -745,7 +745,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
                     size="sm"
                     variant="outline"
                     disabled={busy || running}
-                    title="Write a skill so asking in plain words runs this pipeline"
+                    title="Write a skill so asking in plain words runs this automation"
                     onClick={async () => {
                       setError("");
                       try {
