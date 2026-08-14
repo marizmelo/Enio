@@ -33,12 +33,19 @@ function installBrowserStubs(marks: Mark[], t0: () => number) {
 
   (globalThis as any).Audio = class {
     private handlers: Record<string, Array<() => void>> = {};
+    private done = false;
     addEventListener(name: string, fn: () => void) {
       (this.handlers[name] ??= []).push(fn);
     }
-    pause() {}
+    // A real element fires "pause" when paused — the stub must too, because
+    // settling the drain after stopSpeaking() DEPENDS on that event.
+    pause() {
+      this.done = true;
+      for (const fn of this.handlers.pause ?? []) fn();
+    }
     play() {
       setTimeout(() => {
+        if (this.done) return;
         marks.push({ kind: "ended", at: Date.now() - t0() });
         for (const fn of this.handlers.ended ?? []) fn();
       }, PLAY_MS);
@@ -125,5 +132,29 @@ describe("spokenText", () => {
     // A fenced block is named, never performed.
     assert.match(spokenText("Run this:\n```js\nconst x = 1;\n```"), /code block/);
     assert.ok(!spokenText("```").includes("`"), "a stray fence is dropped");
+  });
+});
+
+describe("stopSpeaking settles the drain", () => {
+  test("a speak() promise resolves after a mid-playback stop", async () => {
+    const marks: Mark[] = [];
+    let start = 0;
+    installBrowserStubs(marks, () => start);
+    const { speak, stopSpeaking } = (await import(SPEECH)) as any;
+
+    start = Date.now();
+    const done = speak("A very long sentence that will be stopped.");
+    // Let synthesis finish and playback begin, then stop mid-play.
+    await new Promise((r) => setTimeout(r, 90));
+    stopSpeaking();
+
+    // The promise must settle promptly — a paused element never fires
+    // "ended", and before the pause listener this await hung forever,
+    // which a voice loop awaiting the drain would inherit.
+    const settled = await Promise.race([
+      done.then(() => true),
+      new Promise((r) => setTimeout(() => r(false), 300)),
+    ]);
+    assert.equal(settled, true, "drain settled after stopSpeaking()");
   });
 });

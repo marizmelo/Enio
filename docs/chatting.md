@@ -79,6 +79,28 @@ the moment you scroll up — so you can read back through a long reply while it 
 still being written. A **Jump to latest** button appears while you are scrolled
 away; sending a message always returns you to the bottom.
 
+## Voice conversation
+
+Press the waveform button beside the speaker toggle and talk: Enio
+transcribes what you said, answers, reads the answer aloud, and listens
+again. The pill shows whose turn it is — *listening* (pulsing dot),
+*thinking*, *speaking* — and one click does the obvious thing for each:
+**click while it thinks or speaks to interrupt** (the reply stops
+mid-sentence, kept as text); **click while it listens to exit**.
+
+It never listens while it speaks, on purpose. On speakers, an open
+microphone would hear Enio's own voice, transcribe it, and answer itself —
+so the microphone is off from the moment you stop talking until the reply
+has finished playing. That is also why interruption is a click rather than
+a voice command: the mic is closed precisely when you would want to barge
+in. Typing a message while the mode listens is fine — the mic pauses,
+the typed reply is spoken, and listening resumes.
+
+The mode needs both halves of the voice stack — speech recognition
+(`enio voice --install`) and a voice (`ENIO_TTS`) — and the button only
+exists when both do. The macOS microphone indicator stays lit for the
+whole session: that is the honest signal the mode is on.
+
 ## What the context meter means
 
 The bar in the status bar is how full the model's *usable* window is — not its

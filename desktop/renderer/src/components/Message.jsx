@@ -33,6 +33,9 @@ export function Message({
   onAskBigger,
   upgrade = null,
   onTryUpgrade,
+  // Voice conversation is using the speaker: read-aloud would talk over
+  // it and into what must not be an open mic.
+  speakDisabled = false,
 }) {
   const isUser = role === "user";
   const waiting = streaming && !isUser && !error && content.length === 0;
@@ -142,7 +145,7 @@ export function Message({
       {!waiting && !streaming && !error && content.trim() && (
         <MessageActions
           content={content}
-          canSpeak={!isUser}
+          canSpeak={!isUser && !speakDisabled}
           onAskBigger={!isUser ? onAskBigger : undefined}
           upgrade={upgrade}
           onTryUpgrade={!isUser ? onTryUpgrade : undefined}

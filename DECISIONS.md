@@ -1692,3 +1692,37 @@ identical, smoke-tested route by route; new features add a file instead
 of growing the god-file. The older routes (chat, plans, models,
 projects, conversations) stay put until touching them has a second
 reason -- moving code that works, purely for symmetry, is churn.
+
+**Voice conversation is half-duplex, and says so.** The hands-free loop
+-- talk, transcribe, answer aloud, listen again -- ships with the mic
+OFF while enio thinks or speaks, structurally. Kokoro through speakers
+into an open microphone hands whisper enio's own sentences and the
+agent answers itself; browser echoCancellation is built for same-graph
+loopback, not a separate Audio element through system output, and
+nothing short of reference-signal AEC actually solves it. So the honest
+design is mutual exclusion (the rule the dictation mic already followed
+one press at a time), and interruption is a CLICK on the mode pill --
+the mic is closed precisely when barging in matters. Endpointing is a
+deliberately dumb client-side VAD (RMS, onset debounce, silence
+hangover, a pre-roll ring so onset lag does not clip the first
+syllable) with a 30s flush cap protecting the uncapped transcription
+route and the serial FIFO. One accurate transcription per utterance --
+no interim passes, because the whisper FIFO is serial and uncancellable
+and the loop would contend with itself. Renderer-only: zero server
+changes, the state machine and VAD are dependency-injected and tested
+from node like the speech queue. Mode entry, exit and interrupt are
+user acts in the UI, unreachable by any tool -- the meetings rule.
+
+Found on the way and fixed first: stopSpeaking() PAUSES the audio
+element, a paused element never fires "ended", and the drain promise
+hung forever -- invisible while nothing awaited a stopped drain, fatal
+to a loop that does. The machine is ALSO epoch-fenced against exactly
+that class of leak, because a mode that holds the microphone must
+recover from dependencies that never settle, not trust them.
+
+Deliberately not built, each with its condition: voice barge-in
+(reference-signal echo cancellation); interim transcription passes in
+voice mode (a cancellable or parallel whisper queue); a wake word (an
+always-on detector that is not whisper -- keeping the mic hot through
+the big model's own transcriber is the wrong tool and the wrong
+battery bill).

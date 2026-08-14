@@ -45,6 +45,9 @@ import { MemoryDialog } from "@/components/MemoryDialog";
 import { NotesDialog } from "@/components/NotesDialog";
 import { RecipesDialog } from "@/components/RecipesDialog";
 import { speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
+import { transcribe as transcribeAudio } from "@/lib/dictation";
+import { startUtteranceRecorder } from "@/lib/utterance-recorder";
+import { createVoiceLoop } from "@/lib/voice-loop";
 
 /** "2h ago", for the divider under restored history. */
 function ago(ts) {
@@ -74,6 +77,31 @@ export function App() {
   // Off by default, deliberately. An assistant that starts talking without
   // being asked is startling in a way a silent one never is.
   const [speakReplies, setSpeakReplies] = useState(false);
+  // Voice conversation mode: the loop object lives in a ref (it is not
+  // render state), the pill shows voiceState, and sendRef/streamingRef let
+  // the loop call the CURRENT send — a useCallback over messages — without
+  // rebuilding the loop every turn.
+  const [voiceState, setVoiceState] = useState(null); // null = mode off
+  const voiceLoopRef = useRef(null);
+  const sendRef = useRef(null);
+  const streamingRef = useRef(false);
+  const speakPromiseRef = useRef(Promise.resolve());
+  const loopTurnRef = useRef(false);
+  const prevSpeakRepliesRef = useRef(false);
+
+  // Defined early and over refs only, so the conversation-switch callbacks
+  // below (stable useCallbacks) can capture their first-render instance and
+  // still tear down whatever loop exists at call time. A no-op when the
+  // mode is off — it must not clobber speakReplies then.
+  const teardownVoice = () => {
+    if (!voiceLoopRef.current) return;
+    voiceLoopRef.current.stop();
+    voiceLoopRef.current = null;
+    setVoiceState(null);
+    setSpeakReplies(prevSpeakRepliesRef.current);
+  };
+  const teardownVoiceRef = useRef(teardownVoice);
+  teardownVoiceRef.current = teardownVoice;
   // Which stored conversation this thread is. Minted before the first message
   // rather than at send: attachments are filed under it, and they happen while
   // the message is still being written. An id with no messages behind it costs
@@ -411,6 +439,7 @@ export function App() {
 
   const openConversation = useCallback(async (conv) => {
     stopSpeaking();
+    teardownVoiceRef.current();
     followRef.current = true;
     setShowJump(false);
     setCanvas(null);
@@ -427,6 +456,7 @@ export function App() {
     setProjectsOpen(false);
     if (active?.latestConversation) {
       stopSpeaking();
+    teardownVoiceRef.current();
       const msgs = await restoreThread(active.latestConversation).catch(() => []);
       setConversationId(active.latestConversation);
       setMessages(msgs);
@@ -450,6 +480,7 @@ export function App() {
     }
     setProjectsOpen(false);
     stopSpeaking();
+    teardownVoiceRef.current();
     followRef.current = true;
     setShowJump(false);
     setCanvas(null);
@@ -472,6 +503,7 @@ export function App() {
 
   const newChat = useCallback(async () => {
     stopSpeaking();
+    teardownVoiceRef.current();
     followRef.current = true;
     setShowJump(false);
     setCanvas(null);
@@ -597,7 +629,10 @@ export function App() {
               unspoken += event.text;
               const { ready, rest } = takeSentences(unspoken);
               unspoken = rest;
-              for (const sentence of ready) speak(sentence);
+              // Tracked in a ref: the voice loop's "speaking" state awaits
+              // the LAST of these — every speak() joins one drain, so the
+              // latest promise covers the whole queue.
+              for (const sentence of ready) speakPromiseRef.current = speak(sentence);
             }
           }
           setMessages([
@@ -619,7 +654,7 @@ export function App() {
 
         // Whatever is left over: a final clause with no full stop, or a reply
         // short enough that no sentence ever completed mid-stream.
-        if (speakReplies && unspoken.trim()) speak(unspoken);
+        if (speakReplies && unspoken.trim()) speakPromiseRef.current = speak(unspoken);
       } catch (err) {
         if (err?.name === "AbortError") {
           // Keep whatever streamed in as the final turn, so the conversation
@@ -678,6 +713,54 @@ export function App() {
           new CustomEvent("enio:browse-models", { detail: { highlight: upgrade.id } }),
         )
     : undefined;
+
+  // --- voice conversation mode -------------------------------------------
+  sendRef.current = send;
+  streamingRef.current = streaming;
+
+  // A turn the loop did NOT start (the user typed) must hold the mic: with
+  // speech forced on, the reply will be spoken, and half-duplex means the
+  // recorder cannot be listening while that happens.
+  useEffect(() => {
+    voiceLoopRef.current?.setHeld(streaming && !loopTurnRef.current);
+  }, [streaming]);
+
+  const enterVoiceMode = useCallback(async () => {
+    if (voiceLoopRef.current) return;
+    warmVoice(); // Kokoro's cold load is ~4.5s; pay it now, not mid-reply
+    prevSpeakRepliesRef.current = speakReplies;
+    setSpeakReplies(true);
+    const loop = createVoiceLoop({
+      startRecorder: startUtteranceRecorder,
+      transcribe: (wav) => transcribeAudio(wav), // accurate pass, never fast
+      sendTurn: async (text) => {
+        loopTurnRef.current = true;
+        try {
+          await sendRef.current(text);
+        } finally {
+          loopTurnRef.current = false;
+        }
+      },
+      speakDone: () => speakPromiseRef.current,
+      isBusy: () => streamingRef.current,
+      // The two independent primitives, fired together — an aborted spoken
+      // reply must also stop being spoken.
+      interruptTurn: () => {
+        abortRef.current?.abort();
+        stopSpeaking();
+      },
+      onState: setVoiceState,
+      onError: () => {},
+    });
+    voiceLoopRef.current = loop;
+    await loop.start();
+    if (loop.state === "idle") {
+      // getUserMedia refused — mode never opened.
+      voiceLoopRef.current = null;
+      setVoiceState(null);
+      setSpeakReplies(prevSpeakRepliesRef.current);
+    }
+  }, [speakReplies]);
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -836,6 +919,7 @@ export function App() {
                   onAskBigger={askBigger}
                   upgrade={upgrade}
                   onTryUpgrade={tryUpgrade}
+                  speakDisabled={!!voiceState}
                 />
                 {/* The line under history. Without it a resumed transcript is
                     pixel-identical to a live reply, and a tail that happens to
@@ -934,6 +1018,9 @@ export function App() {
           else warmVoice();
           setSpeakReplies((on) => !on);
         }}
+        voiceState={voiceState}
+        onToggleVoice={() => (voiceLoopRef.current ? teardownVoiceRef.current() : enterVoiceMode())}
+        onVoiceInterrupt={() => voiceLoopRef.current?.interrupt()}
       />
       </ResizablePanel>
       )}

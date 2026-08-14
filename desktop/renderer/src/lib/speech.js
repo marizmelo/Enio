@@ -136,6 +136,12 @@ async function drain(mine) {
     await new Promise((resolve) => {
       audio.addEventListener("ended", resolve, { once: true });
       audio.addEventListener("error", resolve, { once: true });
+      // stopSpeaking() PAUSES the element, and a paused element never fires
+      // "ended" — without this listener the drain promise hangs forever
+      // after a stop. Invisible while nothing awaited speak() past a stop;
+      // fatal to the voice loop, which does. Natural end fires "ended", not
+      // "pause", so this cannot double-resolve the normal path.
+      audio.addEventListener("pause", resolve, { once: true });
       audio.play().catch(resolve);
     });
 

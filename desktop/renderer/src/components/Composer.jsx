@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowUp, Loader2, Mic, Square, Volume2, VolumeX } from "lucide-react";
+import { ArrowUp, AudioLines, Loader2, Mic, Square, Volume2, VolumeX } from "lucide-react";
 import { TipButton } from "@/components/TipButton";
 import { Textarea } from "@/components/ui/textarea";
 import { AttachMenu } from "@/components/AttachMenu";
@@ -47,6 +47,9 @@ export const Composer = forwardRef(function Composer({
   onManageConnections = () => {},
   speakReplies = false,
   onToggleSpeak = () => {},
+  voiceState = null,
+  onToggleVoice = () => {},
+  onVoiceInterrupt = () => {},
 }, handle) {
   const ref = useRef(null);
 
@@ -395,14 +398,65 @@ export const Composer = forwardRef(function Composer({
       />
 
       <TipButton
-        tip={speakReplies ? "Stop reading replies aloud" : "Read replies aloud"}
+        tip={
+          voiceState
+            ? "Voice conversation is using the speaker"
+            : speakReplies
+              ? "Stop reading replies aloud"
+              : "Read replies aloud"
+        }
         onClick={onToggleSpeak}
+        disabled={!!voiceState}
         className={speakReplies ? "text-foreground" : "text-muted-foreground"}
       >
         {speakReplies ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
       </TipButton>
 
-      {capabilities.voice?.transcription && !streaming && (
+      {/* Voice conversation: one control, two meanings, disambiguated by the
+          state it displays. During speaking/thinking/transcribing a click
+          INTERRUPTS (cuts speech, aborts the turn, back to listening);
+          during listening/held it EXITS the mode. Visible while streaming —
+          barging in is precisely a mid-turn act. Needs both halves of the
+          voice stack: something to hear with and something to speak with. */}
+      {capabilities.voice?.transcription && capabilities.voice?.speech && (
+        voiceState ? (
+          <button
+            type="button"
+            onClick={
+              voiceState === "listening" || voiceState === "held"
+                ? onToggleVoice
+                : onVoiceInterrupt
+            }
+            title="Click to interrupt · click while listening to exit"
+            className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs ${
+              voiceState === "listening"
+                ? "border-primary/50 text-primary"
+                : "bg-muted text-foreground"
+            }`}
+          >
+            {voiceState === "listening" && (
+              <span className="relative flex size-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+                <span className="relative inline-flex size-2 rounded-full bg-primary" />
+              </span>
+            )}
+            {voiceState === "thinking" && <Loader2 className="size-3 animate-spin" />}
+            {voiceState === "speaking" && <AudioLines className="size-3 animate-pulse" />}
+            {voiceState === "transcribing" && <Loader2 className="size-3 animate-spin" />}
+            {voiceState === "held" ? "paused" : `${voiceState}…`}
+          </button>
+        ) : (
+          <TipButton
+            tip="Voice conversation — talk, and enio answers aloud"
+            onClick={onToggleVoice}
+            className="text-muted-foreground"
+          >
+            <AudioLines className="size-4" />
+          </TipButton>
+        )
+      )}
+
+      {capabilities.voice?.transcription && !streaming && !voiceState && (
         <TipButton
           tip={recording ? "Stop and transcribe" : "Dictate"}
           variant={recording ? "destructive" : "ghost"}
