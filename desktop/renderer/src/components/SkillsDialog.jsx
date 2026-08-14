@@ -16,7 +16,7 @@ import { SkillsPanel } from "@/components/SkillsPanel";
  * buttons: Automations (flows you built, and the scripts they can reach for)
  * and Skills (know-how, in words).
  */
-export function SkillsDialog({ open, onOpenChange }) {
+export function SkillsDialog({ open, onOpenChange, onEdit }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[80vh] w-[70vw] max-w-none flex-col gap-3 sm:max-w-none">
@@ -27,7 +27,7 @@ export function SkillsDialog({ open, onOpenChange }) {
             directly.
           </DialogDescription>
         </DialogHeader>
-        <SkillsPanel open={open} />
+        <SkillsPanel open={open} onEdit={onEdit} />
       </DialogContent>
     </Dialog>
   );

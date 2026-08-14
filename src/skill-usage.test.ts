@@ -240,3 +240,83 @@ describe("skills route", () => {
     assert.ok(Array.isArray(unresolved));
   });
 });
+
+describe("skill source editing", () => {
+  const put = async (name: string, content: string) => {
+    const { res, sent } = stubRes();
+    await skillsRoutes.handle(
+      stubReq("PUT", JSON.stringify({ content })),
+      res,
+      urlFor(`/skills/${name}/source`),
+    );
+    return sent();
+  };
+
+  test("reads a skill's SKILL.md by name", async () => {
+    installSkill("editable-skill", "does editable things");
+    const { res, sent } = stubRes();
+    await skillsRoutes.handle(stubReq("GET"), res, urlFor("/skills/editable-skill/source"));
+    assert.equal(sent().status, 200);
+    assert.match(sent().body.content, /name: editable-skill/);
+    assert.ok(sent().body.mtime > 0);
+  });
+
+  test("saves a valid edit", async () => {
+    installSkill("saveable-skill");
+    const body = `---\nname: saveable-skill\ndescription: a new description\n---\n\nNew body.\n`;
+    assert.equal((await put("saveable-skill", body)).status, 200);
+    const set = loadSkills();
+    const reloaded = set.skills.find((s) => s.name === "saveable-skill");
+    assert.equal(reloaded?.description, "a new description");
+  });
+
+  test("refuses a save that would break the frontmatter", async () => {
+    installSkill("fragile-skill", "still here");
+    // The hazard the gate exists for: an editor makes it trivial to mangle
+    // the block the skill's identity lives in, and the damage is invisible --
+    // the skill just stops being offered.
+    for (const bad of [
+      "no frontmatter at all",
+      `---\nname: fragile-skill\n---\n\nBody with no description.\n`,
+      `---\nname: Not A Valid Name!\ndescription: x\n---\n\nBody.\n`,
+    ]) {
+      const out = await put("fragile-skill", bad);
+      assert.equal(out.status, 422, bad.slice(0, 30));
+      assert.match(out.body.error.message, /^Not saved — /);
+    }
+    // Every refusal left the file as it was.
+    const set = loadSkills();
+    assert.equal(set.skills.find((s) => s.name === "fragile-skill")?.description, "still here");
+  });
+
+  test("a name that is a path is refused, not resolved", async () => {
+    for (const name of ["..", "../../etc/passwd", "a/b", ".", "%2e%2e"]) {
+      const { res, sent } = stubRes();
+      const owned = await skillsRoutes.handle(
+        stubReq("GET"),
+        res,
+        urlFor(`/skills/${encodeURIComponent(name)}/source`),
+      );
+      // Two safe outcomes, and both count: URL normalises a literal ".."
+      // segment away before the route can match at all, and anything that
+      // does reach the resolver is refused by name. What must never happen
+      // is a 200 — no request may address a file outside a skill root.
+      if (owned) assert.equal(sent().status, 404, name);
+    }
+  });
+
+  test("a broken skill can still be opened — that is what the editor is for", async () => {
+    const dir = join(skillsDir(), "unparseable-skill");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "SKILL.md"), "totally broken, no frontmatter");
+    const { res, sent } = stubRes();
+    await skillsRoutes.handle(stubReq("GET"), res, urlFor("/skills/unparseable-skill/source"));
+    assert.equal(sent().status, 200, "findSkill would miss this; the editor must not");
+    assert.match(sent().body.content, /totally broken/);
+
+    // And fixing it in place works.
+    const fixed = `---\nname: unparseable-skill\ndescription: fixed in the editor\n---\n\nBody.\n`;
+    assert.equal((await put("unparseable-skill", fixed)).status, 200);
+    assert.ok(loadSkills().skills.some((s) => s.name === "unparseable-skill"));
+  });
+});

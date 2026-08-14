@@ -72,9 +72,22 @@ catalogue. And when the model asks for a skill that doesn't exist, the name it
 asked for is listed — the model reaching for `meeting-notes` three times is a
 strong hint about what to write next.
 
-The panel is read-only on purpose: a skill is a folder of markdown you own.
-**Show in Finder** on any row takes you to it, and edits apply on the next
-message — nothing to reload.
+**Click a skill to edit it.** It opens in the [canvas](chatting.md#the-canvas)
+— the same editor the agent's documents use — with Preview, ⌘S, and the
+selection verbs (*Tighten*, *Expand*, *Rewrite…*, *Continue*) available on
+the text. Edits apply on the next message; nothing to reload. A broken skill
+opens the same way, which is the point: the row tells you what is wrong and
+the click takes you to where you fix it.
+
+**A save that would break the skill is refused, not stored.** A skill's
+identity lives in the `---` block at the top, and a mangled one silently
+drops out of the catalogue — so the save runs the same parse the loader does
+and rejects anything it would not accept, naming the reason. Same rule as
+saving a recipe, which runs the script first.
+
+The panel does not create or delete: a skill is a folder you own, so
+**Show in Finder** takes you to it (that is also where its `references/` and
+`scripts/` live), and any external editor works exactly as before.
 
 ## Finding what to write
 

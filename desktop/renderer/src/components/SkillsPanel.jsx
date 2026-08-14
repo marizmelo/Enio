@@ -3,10 +3,13 @@ import { AlertTriangle, BookOpen, FolderOpen } from "lucide-react";
 import { listSkills } from "@/lib/skills";
 
 /**
- * The Skills tab: the know-how Enio has, made visible. Read-only on
- * purpose — a skill is a folder of markdown the user owns, so the panel
- * shows what is installed, whether it gets used, and where it lives, and
- * editing stays in the user's editor via Reveal.
+ * The Skills panel: the know-how Enio has, made visible and editable.
+ *
+ * A row shows what is installed, whether it gets used, and where it lives;
+ * clicking one opens its SKILL.md in the canvas, which is already the app's
+ * editor for markdown. Creating and deleting stay out — a skill is a folder
+ * the user owns, and Finder is the honest door for that — but editing had no
+ * business being a trip to Finder when the editor was one panel away.
  */
 
 function ago(ts) {
@@ -19,7 +22,7 @@ function ago(ts) {
   return months < 12 ? `${months}mo ago` : `${Math.floor(months / 12)}y ago`;
 }
 
-export function SkillsPanel({ open }) {
+export function SkillsPanel({ open, onEdit }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
 
@@ -53,10 +56,14 @@ export function SkillsPanel({ open }) {
               className="flex items-start gap-2 border-b px-3 py-2 text-destructive last:border-b-0"
             >
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-              <div className="min-w-0 flex-1">
+              <button
+                className="min-w-0 flex-1 text-left"
+                title="Open it in the editor and fix it"
+                onClick={() => onEdit?.(s.name)}
+              >
                 <span className="text-sm">{s.name}</span>
                 <p className="text-xs opacity-80">{s.reason}</p>
-              </div>
+              </button>
               <button
                 className="shrink-0 text-muted-foreground hover:text-foreground"
                 title="Show in Finder"
@@ -66,9 +73,13 @@ export function SkillsPanel({ open }) {
               </button>
             </div>
           ) : (
-            <div key={s.dir} className="flex items-start gap-2 border-b px-3 py-2 last:border-b-0">
+            <div key={s.dir} className="flex items-start gap-2 border-b px-3 py-2 last:border-b-0 hover:bg-muted">
               <BookOpen className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1">
+              <button
+                className="min-w-0 flex-1 text-left"
+                title="Open it in the editor"
+                onClick={() => onEdit?.(s.name)}
+              >
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-sm">{s.name}</span>
                   {s.source === "project" && (
@@ -86,7 +97,7 @@ export function SkillsPanel({ open }) {
                   )}
                 </div>
                 <p className="truncate text-xs text-muted-foreground">{s.description}</p>
-              </div>
+              </button>
               <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
                 {s.usage?.uses
                   ? `${s.usage.uses} use${s.usage.uses === 1 ? "" : "s"} · ${ago(s.usage.lastUsedAt)}`
@@ -117,8 +128,8 @@ export function SkillsPanel({ open }) {
         </p>
       )}
       <p className="shrink-0 text-[11px] text-muted-foreground">
-        Skills are folders of markdown — edit them in any editor; changes apply on the next
-        message. New ones: <code>enio skills --new my-skill</code>.
+        Click one to edit it here; changes apply on the next message. Skills are plain
+        folders, so any editor works too. New ones: <code>enio skills --new my-skill</code>.
       </p>
     </div>
   );

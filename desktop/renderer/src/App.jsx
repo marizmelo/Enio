@@ -789,7 +789,17 @@ export function App() {
         onFiles={() => setFilesOpen(true)}
       />
 
-      <SkillsDialog open={skillsOpen} onOpenChange={setSkillsOpen} />
+      <SkillsDialog
+        open={skillsOpen}
+        onOpenChange={setSkillsOpen}
+        onEdit={(name) => {
+          // Same gesture as opening a note: the panel hands the document to
+          // the canvas and gets out of the way. ".skill/" is a handle, not a
+          // workspace path — the panel resolves it over the API.
+          setSkillsOpen(false);
+          setCanvas({ path: `.skill/${name}`, openedBy: "user", rev: Date.now(), full: true });
+        }}
+      />
 
       <PipelinesDialog
         open={pipelinesOpen}

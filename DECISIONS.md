@@ -1828,6 +1828,31 @@ Deliberately NOT done in the same change: renaming the user-facing word from
 rename buys a nicer label at the cost of a vocabulary that no longer matches
 what anything else calls it. Worth doing as one sweep, or not at all.
 
+**Skills are edited in the canvas, and a save that would break one is
+refused.** "Show in Finder" was the only way to change a skill, which made
+the panel a signpost rather than a surface — while the app already had a
+markdown editor with preview, ⌘S and the selection verbs sitting one panel
+away. Clicking a row now opens its SKILL.md there, broken ones included,
+since a row that says what is wrong should take you to where it is fixed.
+
+Two things had to be right for that to be safe. **The file is addressed by
+name, never by path**: skills live in enio's own data dir, outside the
+workspace the canvas can otherwise reach, so the panel holds a `.skill/<name>`
+handle and the server resolves it inside a skill root (the resolveNote rule).
+Widening the desktop's `resolveInWorkspace` instead was rejected — that would
+have grown every canvas write's reach to `~/.enio` to serve one panel.
+**And the save validates**: a skill's identity is its `---` block, a mangled
+one drops silently out of the catalogue, so the PUT runs the same `parseSkill`
+the loader runs and answers 422 with the reason rather than storing something
+that cannot load. The AI verbs can therefore be pointed at a skill freely: the
+worst they can do is produce a buffer that will not save.
+
+This is the one place the "no PUT — bodies save through the desktop's own
+handler" rule from the note store does not apply, and the difference is the
+validation: the check and the write have to be the same act, or a second
+process can slip between them. The server already writes SKILL.md anyway
+(`exportPipelineSkill`), so this is not a new kind of reach.
+
 **Known residual, recorded not fixed:** a scheduled *prompt* task runs
 through runTurn after repointing the process-global sessions
 (setMemorySession and friends). A task firing mid-interactive-turn can

@@ -187,6 +187,33 @@ export function findSkill(name: string, set: SkillSet = loadSkills()): Skill | n
   );
 }
 
+/**
+ * A skill's SKILL.md by NAME, for the editor — never by path.
+ *
+ * The resolveNote rule, applied here: the caller says which skill, the
+ * server decides which file. A folder name with a separator or a dot segment
+ * is refused outright rather than sanitised, and the resolved path is checked
+ * back against its root, so no request can address anything but a SKILL.md
+ * directly inside a skill root.
+ *
+ * Unlike findSkill this works on BROKEN skills too — the folder is scanned
+ * rather than the parsed set — because the editor exists precisely to fix a
+ * SKILL.md whose frontmatter no longer parses.
+ */
+export function resolveSkillFile(name: string): { file: string; dir: string } | null {
+  const wanted = name.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(wanted) || wanted.includes("..")) return null;
+  for (const root of skillRoots()) {
+    const dir = resolve(root, wanted);
+    // The regex already forbids separators, so this cannot fail -- it is the
+    // second lock, kept because the first is a pattern someone may loosen.
+    if (!dir.startsWith(root + sep)) continue;
+    const file = join(dir, "SKILL.md");
+    if (existsSync(file)) return { file, dir };
+  }
+  return null;
+}
+
 /** Reference files a skill can pull in on demand, relative to its folder. */
 export function skillFile(skill: Skill, relative: string): string {
   const target = resolve(skill.dir, relative);

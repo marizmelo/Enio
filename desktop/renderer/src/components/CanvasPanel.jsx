@@ -25,6 +25,7 @@ import {
 import { renderMarkdownish } from "@/lib/markdown";
 import { NoteComments } from "@/components/NoteComments";
 import { createThread, transformSelection } from "@/lib/notes";
+import { readSkillSource, saveSkillSource } from "@/lib/skills";
 
 /**
  * The canvas: a generated file, pinned beside the conversation.
@@ -89,6 +90,13 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
 
   const isNote = path.startsWith(".notes/");
   const noteName = isNote ? path.slice(".notes/".length) : null;
+  // A skill's SKILL.md, opened from the Skills panel. Not a workspace path:
+  // skills live in enio's own data dir, so this prefix is a handle the panel
+  // resolves over the API rather than through the workspace IPC — which is
+  // what keeps the canvas's write reach exactly where it was.
+  const isSkill = path.startsWith(".skill/");
+  const skillName = isSkill ? path.slice(".skill/".length) : null;
+  const [skillDir, setSkillDir] = useState("");
 
   /** Select and reveal a range in the editor — what a margin click means here. */
   const locateRange = (start, end) => {
@@ -179,6 +187,26 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
 
   const load = useCallback(async ({ clobber }) => {
     setError("");
+    if (isSkill) {
+      try {
+        const data = await readSkillSource(skillName);
+        setKind("text");
+        setReadOnly(false);
+        setSkillDir(data.dir ?? "");
+        if (clobber || !dirtyRef.current) {
+          setBuffer(data.content ?? "");
+          setDirty(false);
+          setBanner(false);
+        } else {
+          setBanner(true);
+        }
+        diskMtime.current = data.mtime ?? 0;
+      } catch (err) {
+        setKind("missing");
+        setBlockedNote(String(err?.message ?? err));
+      }
+      return;
+    }
     if (MEDIA.test(path)) {
       const url = await window.maple?.readMedia?.(path);
       if (url) {
@@ -230,7 +258,7 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
     }
     const stat = await window.maple?.statFile?.(path);
     if (stat) diskMtime.current = stat.mtime;
-  }, [path]);
+  }, [path, isSkill, skillName]);
 
   // Load on open and whenever the agent rewrites the pinned path (rev bump).
   useEffect(() => {
@@ -259,6 +287,9 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
   // up here within ~2s. Clean buffer reloads silently; dirty buffer gets the
   // same banner an agent rewrite does.
   useEffect(() => {
+    // Skills live outside the workspace, so statFile cannot see them and the
+    // external-edit loop does not apply: the panel is the editor for those.
+    if (isSkill) return undefined;
     const timer = setInterval(async () => {
       const stat = await window.maple?.statFile?.(path);
       if (!stat) return;
@@ -273,7 +304,7 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
       }
     }, 2000);
     return () => clearInterval(timer);
-  }, [path, load]);
+  }, [path, load, isSkill]);
 
   const flash = (text) => {
     setToast(text);
@@ -297,6 +328,20 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
   }, []);
 
   const save = async () => {
+    if (isSkill) {
+      try {
+        const out = await saveSkillSource(skillName, buffer);
+        setDirty(false);
+        setBanner(false);
+        diskMtime.current = out.mtime ?? 0;
+        return true;
+      } catch (err) {
+        // The refusal is the useful part: a save that would break the
+        // frontmatter is rejected server-side, with the reason.
+        setError(String(err?.message ?? err));
+        return false;
+      }
+    }
     const result = await window.maple?.saveFileContent?.(path, buffer);
     if (result?.ok) {
       setDirty(false);
@@ -333,7 +378,9 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
   };
 
   const name = path.split("/").pop();
-  const isMarkdown = MARKDOWN.test(path);
+  // A skill's handle carries no extension, but a SKILL.md is markdown — so
+  // Preview (and the verbs, which are on every text file already) applies.
+  const isMarkdown = MARKDOWN.test(path) || isSkill;
   const editable = kind === "text" && !readOnly;
   // A note is shown by its TITLE — the first heading, live from the buffer —
   // because the filename is a stable internal id, not a name. Renaming a
@@ -347,7 +394,7 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
       <header className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">
-            {isNote ? noteTitle : name}
+            {isNote ? noteTitle : isSkill ? skillName : name}
             {dirty && <span className="ml-1.5 text-muted-foreground">•</span>}
           </p>
           {/* The real home. "Generated inside Enio" is still a normal file in
@@ -360,6 +407,19 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
             <p className="block max-w-full truncate text-[10px] text-muted-foreground">
               Managed note — the first line is its name · export with Save a copy
             </p>
+          ) : isSkill ? (
+            /* The real folder, because a skill IS a folder — references and
+               scripts live beside the SKILL.md and Finder is how you add
+               them. The frontmatter warning is here rather than in a toast:
+               it is a property of the document, not of one save. */
+            <button
+              className="block max-w-full truncate text-[10px] text-muted-foreground hover:underline"
+              title="Show in Finder"
+              onClick={() => window.maple?.revealFoundFile?.(skillDir)}
+              disabled={!skillDir}
+            >
+              Skill — keep the --- block at the top · show the folder in Finder
+            </button>
           ) : (
             <button
               className="block max-w-full truncate text-[10px] text-muted-foreground hover:underline"
@@ -638,8 +698,11 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
             implying an integration Enio does not have would be a small lie,
             which is why the clipboard-to-docs.new version was removed.
             Hidden for managed notes: handing a note to an external editor is
-            exactly what the .notes/ convention exists to prevent. */}
-        {!isNote && (
+            exactly what the .notes/ convention exists to prevent. Hidden for
+            skills because every entry here takes a workspace path, and a
+            skill is not in the workspace -- the header's Finder link is the
+            one that resolves. */}
+        {!isNote && !isSkill && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs">
@@ -677,16 +740,21 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
             <Copy className="size-3.5" /> Copy
           </Button>
         )}
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 gap-1 px-2 text-xs"
-          onClick={saveCopy}
-        >
-          <FolderOpen className="size-3.5" /> Save a copy…
-        </Button>
+        {/* Both act through workspace-scoped IPC, which cannot see a skill --
+            and discarding a skill from an editor is the wrong door for it
+            anyway: deleting know-how should be a deliberate act in Finder. */}
+        {!isSkill && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={saveCopy}
+          >
+            <FolderOpen className="size-3.5" /> Save a copy…
+          </Button>
+        )}
         <span className="flex-1" />
-        {confirmDiscard ? (
+        {isSkill ? null : confirmDiscard ? (
           <Button
             size="sm"
             variant="destructive"

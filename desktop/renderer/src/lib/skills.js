@@ -25,3 +25,16 @@ async function call(path, init = {}) {
 
 /** {skills: [...healthy and broken rows], unresolved: [{name, count}]} */
 export const listSkills = () => call("/skills");
+
+/** One skill's SKILL.md, for the canvas. Addressed by name — the server
+ *  resolves the file, so the renderer never holds a path into the data dir. */
+export const readSkillSource = (name) => call(`/skills/${encodeURIComponent(name)}/source`);
+
+/** Saving validates the frontmatter server-side and REFUSES a save that
+ *  would drop the skill out of the catalogue; the reason comes back as the
+ *  error message. */
+export const saveSkillSource = (name, content) =>
+  call(`/skills/${encodeURIComponent(name)}/source`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
