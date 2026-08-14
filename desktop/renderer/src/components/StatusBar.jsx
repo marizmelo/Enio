@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookMarked, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, Workflow, X } from "lucide-react";
+import { BookOpen, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, Workflow, X } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -34,7 +34,7 @@ export function StatusBar({
   project,
   onNewChat,
   onHistory,
-  onRecipes,
+  onSkills,
   onFiles,
   onProjects,
   onPipelines,
@@ -103,6 +103,12 @@ export function StatusBar({
         <TipButton tip="Automations" className="size-7" onClick={onPipelines}>
           <Workflow className="size-4" />
         </TipButton>
+        {/* The other half of "things that repeat": automations RUN, skills
+            INFORM. Two buttons, because those are the two concepts -- saved
+            scripts moved inside Automations, where the things that act live. */}
+        <TipButton tip="Skills" className="size-7" onClick={onSkills}>
+          <BookOpen className="size-4" />
+        </TipButton>
         {/* What Enio remembers about you -- and the way to prune it. Beside
             the other standing surfaces because memory speaks in every turn,
             and a thing with that reach must be one click from any thread. */}
@@ -138,14 +144,6 @@ export function StatusBar({
         <TipButton tip="Files" className="size-7" onClick={onFiles}>
           <FolderOpen className="size-3.5" />
         </TipButton>
-        {/* Only on a Mac: recipes are AppleScript, so the list is empty and
-            unfillable anywhere else, and a button opening an empty drawer
-            teaches nobody anything. */}
-        {onRecipes && (
-          <TipButton tip="Recipes" className="size-7" onClick={onRecipes}>
-            <BookMarked className="size-3.5" />
-          </TipButton>
-        )}
         {/* Opens in the real browser, not in the app: the renderer has no
             navigation of its own, and a docs page loading inside the chat
             window would be a trap with no way back. */}

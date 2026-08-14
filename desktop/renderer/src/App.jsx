@@ -43,7 +43,7 @@ import { PermissionNotice } from "@/components/PermissionNotice";
 import { currentModel } from "@/lib/recipes";
 import { MemoryDialog } from "@/components/MemoryDialog";
 import { NotesDialog } from "@/components/NotesDialog";
-import { RecipesDialog } from "@/components/RecipesDialog";
+import { SkillsDialog } from "@/components/SkillsDialog";
 import { speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
 import { transcribe as transcribeAudio } from "@/lib/dictation";
 import { startUtteranceRecorder } from "@/lib/utterance-recorder";
@@ -131,7 +131,7 @@ export function App() {
   const [pipelinesOpen, setPipelinesOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
-  const [recipesOpen, setRecipesOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   // A file opened from the thread. The arrows walk that message's attachments,
   // because those are the ones the question was about.
@@ -139,9 +139,9 @@ export function App() {
   // How full the model's window is, reported by the server after folding.
   const [context, setContext] = useState(null);
 
-  // Recipes are AppleScript, so the drawer is unfillable off a Mac. Read from
-  // the user agent rather than an endpoint because it gates a button that
-  // should not flicker into existence a second after the window opens.
+  // Saved scripts are AppleScript, so that tab is unfillable off a Mac. Read
+  // from the user agent rather than an endpoint because it gates a surface
+  // that should not flicker into existence a second after the window opens.
   const isMac = navigator.userAgent.includes("Mac");
 
   const abortRef = useRef(null);
@@ -785,16 +785,17 @@ export function App() {
         onNotes={() => setNotesOpen(true)}
         meeting={meeting}
         onToggleMeeting={capabilities.voice?.transcription ? toggleMeeting : undefined}
-        onRecipes={isMac ? () => setRecipesOpen(true) : undefined}
+        onSkills={() => setSkillsOpen(true)}
         onFiles={() => setFilesOpen(true)}
       />
 
-      <RecipesDialog open={recipesOpen} onOpenChange={setRecipesOpen} />
+      <SkillsDialog open={skillsOpen} onOpenChange={setSkillsOpen} />
 
       <PipelinesDialog
         open={pipelinesOpen}
         onOpenChange={setPipelinesOpen}
         abilities={capabilities.abilities ?? []}
+        showRecipes={isMac}
       />
       <MemoryDialog open={memoryOpen} onOpenChange={setMemoryOpen} />
       <NotesDialog

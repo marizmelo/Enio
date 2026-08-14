@@ -33,9 +33,9 @@ environment-variable form of the same switch, and wins when set:
 cd desktop && ENIO_DESKTOP=1 npm start
 ```
 
-The second lives in the Recipes drawer, not in an environment variable, because
-it is a decision you revisit. Turning both on in one gesture would be bundled
-consent.
+The second lives on the **Recipes** tab of the Automations panel, not in an
+environment variable, because it is a decision you revisit. Turning both on in
+one gesture would be bundled consent.
 
 Why off by default at all: with desktop control on, the shell allowlist grows
 `osascript`, `open` and friends — direct execution paths with no approval
@@ -176,10 +176,16 @@ uses that recipe without asking. Saving records that a script *worked*; ticking
 safe records that you are willing to have it repeat unattended. Those are
 different judgements, and only you can make the second.
 
-Manage them all in the **Recipes** drawer in the status bar: built-ins are
-listed but not editable, yours can be edited, tested, vouched for or deleted.
-You can also write one from scratch there — saving runs it once and refuses to
-store it if it fails.
+Manage them all on the **Recipes** tab of the Automations panel (the workflow
+button in the status bar): built-ins are listed but not editable, yours can be
+edited, tested, vouched for or deleted. You can also write one from scratch
+there — saving runs it once and refuses to store it if it fails.
+
+They sit beside the automations rather than in a drawer of their own because
+they are the same kind of thing: something that *runs*, picked by name from a
+list you curate. [Skills](skills.md) — know-how in words, which informs but
+cannot act — get their own button instead. Two surfaces, one line between
+them: one acts, the other advises.
 
 ## When something is refused
 

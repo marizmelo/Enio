@@ -1802,6 +1802,32 @@ already say skills to users, and introducing a third register to avoid a word
 the product already uses would be the exact concept-multiplication this
 change exists to reverse.
 
+**Two top-level surfaces, and the line between them is "does it act".** The
+first cut of this left the information architecture backwards: Skills — seven
+of the user's own files — was a tab two clicks inside Automations, while
+Recipes, holding zero of their scripts and eight shipped read-only ones, had a
+button of its own in the status bar. The fix is the split the concepts already
+implied. **Automations** is the home of everything that RUNS: the flows, and
+the saved computer scripts a *Control my computer* step picks from (recipes,
+now a tab there). **Skills** is know-how in words, which informs and cannot
+act, and gets the second button. Recipes leave the status bar entirely.
+
+That the two merge targets differ is the whole point of the taxonomy: a recipe
+is not a skill wearing a different hat, it is an automation-shaped thing —
+something selected by name from a curated list, vouched by having worked once,
+that executes when chosen. Merging recipes into *Skills* instead (the other
+obvious reading) was rejected: it would have put a row that can act on the
+machine beside a row that cannot, under one word, with an auto-run switch
+above both. The switch therefore stays inside the recipes panel and names what
+it governs — nothing on the Automations tab and nothing in Skills is covered
+by it, and a freshly written plan still goes to the approval sheet regardless.
+
+Deliberately NOT done in the same change: renaming the user-facing word from
+"Recipes" to something plainer like "Computer scripts". The CLI, the
+`mac_recipe` tool and four docs pages say recipe consistently, and a UI-only
+rename buys a nicer label at the cost of a vocabulary that no longer matches
+what anything else calls it. Worth doing as one sweep, or not at all.
+
 **Known residual, recorded not fixed:** a scheduled *prompt* task runs
 through runTurn after repointing the process-global sessions
 (setMemorySession and friends). A task firing mid-interactive-turn can

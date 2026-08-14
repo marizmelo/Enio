@@ -138,6 +138,22 @@ declares an [MCP server](mcp.md) requirement — home automation and Home
 Assistant, today — inherits that server's tools inside its step, exactly the
 way `@server` grants them for one chat turn.
 
+## Recipes: saved computer scripts
+
+The panel's second tab is **Recipes** — the tested scripts Enio picks by name
+instead of writing AppleScript from scratch. They live here rather than in a
+drawer of their own because they are the same kind of thing as an automation:
+something that *runs*, chosen from a list you curate, vouched by having worked
+once. A *Control my computer* step reaches for exactly this list, so the tab
+is where you see and edit what such a step can do. (The tab appears on macOS
+only; the scripts are AppleScript.)
+
+The switch that lets a vouched recipe run without asking lives on that tab and
+governs only that tab. Nothing on the Automations tab, and nothing in
+[Skills](skills.md), is covered by it — and a plan Enio has just written still
+goes to the approval sheet, whatever the switch says. See
+[Controlling your computer](mac-control.md).
+
 ## Triggers
 
 A saved automation can fire three ways, and all three are properties of the

@@ -52,7 +52,7 @@ import {
 } from "@/lib/pipelines";
 import { clearSchedule, listTasks, setSchedule } from "@/lib/tasks";
 import { DAY_NAMES, composeSchedule, describeSchedule, parseSchedule } from "@/lib/schedule";
-import { SkillsPanel } from "@/components/SkillsPanel";
+import { RecipesPanel } from "@/components/RecipesPanel";
 
 const ICONS = {
   "pencil-line": PencilLine,
@@ -133,7 +133,7 @@ function layout(nodes, edges) {
   });
 }
 
-export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
+export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipes = false }) {
   const [saved, setSaved] = useState([]);
   const [view, setView] = useState("list"); // list | canvas
   const [current, setCurrent] = useState(null); // {id?, name, vouched?}
@@ -165,7 +165,9 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
   // still an answer and deserves its own line.
   const [drafts, setDrafts] = useState(null);
   const [suggesting, setSuggesting] = useState(false);
-  // The list view's second face: the skills the flows sit beside.
+  // The list view's second face: the saved scripts a flow's steps can reach
+  // for. Both tabs hold things that RUN — know-how moved out to its own
+  // surface, because a skill informs and cannot act.
   const [tab, setTab] = useState("automations");
   // pipelineId -> its auto-schedule task; user-named CLI tasks never land here.
   const [schedules, setSchedules] = useState({});
@@ -561,12 +563,12 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
       <DialogContent className="flex h-[80vh] w-[80vw] max-w-none flex-col gap-3 sm:max-w-none">
         <DialogHeader className="shrink-0">
           <div className="flex items-center gap-3">
-            <DialogTitle>{view === "list" && tab === "skills" ? "Skills" : "Automations"}</DialogTitle>
-            {view === "list" && (
+            <DialogTitle>{view === "list" && tab === "recipes" ? "Recipes" : "Automations"}</DialogTitle>
+            {view === "list" && showRecipes && (
               <nav className="flex gap-1 text-xs">
                 {[
                   ["automations", "Automations"],
-                  ["skills", "Skills"],
+                  ["recipes", "Recipes"],
                 ].map(([id, label]) => (
                   <button
                     key={id}
@@ -583,8 +585,8 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
             )}
           </div>
           <DialogDescription>
-            {view === "list" && tab === "skills"
-              ? "Know-how Enio can follow — markdown files you own. Type /name in chat to run one directly."
+            {view === "list" && tab === "recipes"
+              ? "Tested computer scripts a step can pick by name instead of writing from scratch — the same list the agent chooses from in chat."
               : "Chain abilities into one flow. Each step runs as its own narrow turn — the graph is yours, and nothing runs until you press run."}
           </DialogDescription>
         </DialogHeader>
@@ -600,8 +602,8 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [] }) {
           </div>
         )}
 
-        {view === "list" && tab === "skills" ? (
-          <SkillsPanel open={open && tab === "skills"} />
+        {view === "list" && tab === "recipes" && showRecipes ? (
+          <RecipesPanel open={open && tab === "recipes"} />
         ) : view === "list" ? (
           <div className="flex min-h-0 flex-1 flex-col gap-2">
             <form
