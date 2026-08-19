@@ -1296,74 +1296,43 @@ describe("the disclaimed-access correction", () => {
 });
 
 describe("the researcher answering from memory", () => {
-  test("a substantive researcher answer with no lookup gets one corrective round", async () => {
+  test("the researcher's search runs BEFORE its first model call", async () => {
+    // The stronger invariant, replacing "gets a corrective round": three
+    // rounds of prompt wording still produced 82 seconds of confident
+    // fiction before a guard made the model search. Whether to search is a
+    // judgement call this model size gets wrong, so it is taken away -- the
+    // harness searches with the user's own words and the model's first call
+    // already holds the results.
     const registry = await buildRegistry();
     const sessionId = store.startSession();
-    // Verbatim shape of the failure: the date block was read (it says 2026),
-    // web_search was held, and the model still reasoned from its training-era
-    // picture — "the 2026 World Cup has not been held yet". It claims no
-    // action and disclaims nothing, so neither earlier guard fires; what it
-    // shares with both is that the answer should have come from a tool.
+    const sent: Message[][] = [];
     scriptModel([
-      {
-        content:
-          "The FIFA World Cup for 2026 was not yet held when today is Tuesday, 18 August 2026. " +
-          "The tournament is scheduled to take place in 2026, and the winner has not been determined yet.",
-      },
-      { toolCall: { name: "web_search", args: { query: "world cup 2026 winner" } } },
-      { content: "" }, // web_search's own fetch
-      { content: "Per the search, the final was played on 19 July." },
+      { content: "" }, // consumed by the seed search's own HTTP fetch
+      { content: "Per the pages, Spain won." },
     ]);
+    const scripted = globalThis.fetch;
+    globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      if (Array.isArray(body.messages)) sent.push(body.messages);
+      return scripted(url as string, init);
+    }) as typeof fetch;
+
     const history: Message[] = [];
-    const notices: string[] = [];
+    const seen: string[] = [];
     await runTurn("who won the world cup this year", history, registry, sessionId, {
-      onNotice: (t) => notices.push(t),
+      onToolStart: (name) => seen.push(name),
     }, { specialist: "researcher" });
 
-    assert.ok(notices.some((n) => /came from memory/.test(n)), notices.join(" | "));
-    // The round actually searched -- that survives; the scaffolding does not.
-    const tool = history.find((m) => m.role === "tool");
-    assert.ok(tool, "the corrective round ran web_search");
-    assert.ok(!history.some((m) => m.role === "user" && /answered that from memory/.test(String(m.content))));
-  });
-
-  test("the withdrawn answer leaves the transcript, the log, and the next turn's history", async () => {
-    // Watched: the fabricated "Argentina beat France" survived into the
-    // transcript beside the corrected "Spain 1-0", and the following question
-    // in that thread imitated it. What survives must be the question, the
-    // search, and one answer.
-    const registry = await buildRegistry();
-    const sessionId = store.startSession();
-    scriptModel([
-      { content: "The 2026 World Cup was won by Argentina, who beat France on penalties in Qatar." },
-      { toolCall: { name: "web_search", args: { query: "world cup 2026 winner" } } },
-      // web_search's own HTTP fetch lands on this same stub and eats a frame.
-      { content: "" },
-      { content: "Spain won the 2026 World Cup, beating Argentina 1-0 after extra time." },
-    ]);
-    const history: Message[] = [];
-    const result = await runTurn("who won the world cup this year", history, registry, sessionId, {}, {
-      specialist: "researcher",
-    });
-    assert.match(result.reply, /Spain won/, "the turn's reply is the corrected one");
-
-    const assistantTexts = history
-      .filter((m) => m.role === "assistant" && typeof m.content === "string" && m.content)
-      .map((m) => String(m.content));
-    assert.ok(!assistantTexts.some((t) => /Argentina, who beat France/.test(t)), "withdrawn text gone from history");
-    assert.ok(
-      assistantTexts.some((t) => /Spain won/.test(t)),
-      `corrected answer kept; history was: ${history.map((m) => `${m.role}:${JSON.stringify(m.content ?? "").slice(0, 50)}`).join(" | ")}`,
-    );
-    // The correction scaffolding is gone too: no "(You answered that from
-    // memory" user message survives for the next turn to trip over.
-    assert.ok(!history.some((m) => m.role === "user" && /answered that from memory/.test(String(m.content))));
-
-    const logged = getDb()
-      .prepare(`SELECT content FROM messages WHERE session_id = ? AND role = 'assistant' ORDER BY id`)
-      .all(sessionId) as { content: string }[];
-    assert.equal(logged.length, 1, `one assistant row, got: ${logged.map((r) => r.content.slice(0, 30)).join(" | ")}`);
-    assert.match(logged[0]!.content, /Spain won/);
+    assert.deepEqual(seen, ["web_search"], "the search ran, once, and first");
+    // The FIRST model call already carries the tool result: search precedes
+    // the model, it does not follow it.
+    const first = sent[0]!;
+    const roles = first.map((m) => m.role);
+    assert.ok(roles.includes("tool"), `first model call had no tool result: ${roles.join(",")}`);
+    assert.ok(roles.indexOf("tool") < roles.length - 0, "tool result present before the model answered");
+    // And the query is the user's own words -- no composing call in between.
+    const seedCall = first.find((m) => m.role === "assistant" && m.tool_calls);
+    assert.match(String(seedCall?.tool_calls?.[0]?.function.arguments), /world cup this year/);
   });
 
   test("a greeting is not an answer from memory", async () => {

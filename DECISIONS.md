@@ -2004,6 +2004,38 @@ the shape it shares with both is that the answer should have come from a
 tool. Kept to the researcher (whose prompt already says "always start with
 web_search"), replies long enough to be an answer, and one round.
 
+**The researcher searches before its first model call.** The right shape
+for a factual question is: recognise you don't know, search, answer from the
+results. Three rounds of prompt wording ("always start with web_search", the
+training-cutoff caveat, "look it up rather than answering from memory") and
+the model still opened "who won the world cup this year" with 82 seconds of
+confident fiction — 2,300 characters — before a guard made it search. Then
+the guard's own correction hung for a minute more. The guard nets the fall;
+it does not remove the cliff, and a user watching fabrication stream for a
+minute and a half before the right answer appears has been failed even when
+the final text is correct.
+
+So the judgement is taken away — the CLAUDE.md move, applied once more.
+Whether to search is exactly the kind of call this model size gets wrong;
+for a factual question to the researcher the harness runs web_search with
+the user's own words and the model's first call already holds the results.
+"Answer from these pages" is the classification-shaped task it is good at.
+Measured: search(1.5s) → model(8s), 9–18s end to end, the answer is the
+first thing streamed, and the guard has not fired since. Same precedent as
+quickOpen (open X → the harness opens X) and the same reason the router
+exists at all.
+
+Kept narrow, deliberately: the researcher only (its whole job is the
+lookup); the first iteration only; a real question only (a greeting must not
+search for nothing — measured, "hi there" does not); never when a skill was
+invoked, since the skill may say what to do instead; and the user's words are
+the query, because composing a better one would be a model call, which is
+the latency this exists to remove. The seed transcript is a legal tool
+round-trip (assistant tool_calls, then the tool result), so the chat template
+sees exactly what a model-requested search would have produced. The guards
+stay: they still cover the other agents, and the researcher on a turn the
+seed does not fire.
+
 **Known residual, recorded not fixed:** a scheduled *prompt* task runs
 through runTurn after repointing the process-global sessions
 (setMemorySession and friends). A task firing mid-interactive-turn can

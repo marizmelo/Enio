@@ -818,6 +818,52 @@ export async function runTurn(
   const steps: StepRecord[] = [];
   let iterations = 0;
 
+  // The researcher's search happens BEFORE its first model call.
+  //
+  // Three rounds of prompt wording ("always start with web_search", the date
+  // caveat, "look it up rather than answering from memory") and the model
+  // still opened "who won the world cup this year" with 82 seconds of
+  // confident fiction — 2,300 characters — before a guard made it search.
+  // The guard nets the fall; this removes the cliff. Whether to search is a
+  // judgement call, and this model size gets judgement calls wrong, so it is
+  // taken away: for a factual question to the researcher the harness runs
+  // the search with the user's own words and hands the results over with
+  // the question. The model's first call is then "answer from these pages",
+  // which is the classification-shaped task it is good at. Same move as
+  // quickOpen above, and the same reason the router exists at all.
+  //
+  // Narrow on purpose. Only the researcher (its whole job is the lookup);
+  // only the first iteration; only a real question (a greeting or a bare
+  // "thanks" would search for nothing); and never when the turn already
+  // came in with a skill invoked, since that skill may say what to do
+  // instead. The user's words are the query -- composing a better one would
+  // be a model call, which is the latency this exists to remove.
+  const searchTool = activeTools.find((t) => t.name === "web_search");
+  const looksLikeQuestion =
+    userInput.trim().length >= 12 && !/^(hi|hello|hey|thanks|thank you|ok|okay)\b/i.test(userInput.trim());
+  if (
+    specialistName === "researcher" &&
+    searchTool &&
+    looksLikeQuestion &&
+    !(overrides.skills && overrides.skills.length > 0)
+  ) {
+    // Mentions are already stripped upstream (parseMentions runs before
+    // runTurn), so the input is the plain question.
+    const query = userInput.trim().slice(0, 200);
+    const call: ToolCall = {
+      id: "seed_search",
+      type: "function",
+      function: { name: "web_search", arguments: JSON.stringify({ query }) },
+    };
+    // The assistant turn that "made" the call, so the transcript stays a
+    // legal tool round-trip for the chat template -- Maple's template needs
+    // tool results paired with the assistant tool_calls that requested them.
+    history.push({ role: "assistant", content: null, tool_calls: [call] });
+    // executeCall fires onToolStart/onToolEnd itself, so the badge and the
+    // sources appear exactly as they would for a model-requested search.
+    await runToolCalls([call]);
+  }
+
   for (let iteration = 0; iteration < config.maxToolIterations; iteration++) {
     const isLast = iteration === config.maxToolIterations - 1;
     iterations = iteration + 1;
