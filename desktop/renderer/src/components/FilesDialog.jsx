@@ -144,7 +144,12 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
       />
     )}
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[80vh] gap-0 overflow-y-auto sm:max-w-2xl">
+      {/* Fixed height on purpose: the dialog used to size itself to content
+          and grow as the file list loaded, so every row and the New file
+          button moved under the pointer mid-click. A constant frame with the
+          list scrolling INSIDE it is what makes a click land where it was
+          aimed. */}
+      <DialogContent className="flex h-[80vh] flex-col gap-0 sm:max-w-2xl">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <DialogTitle>Files</DialogTitle>
@@ -178,7 +183,7 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
         </DialogHeader>
 
         {tab === "browse" && (
-          <div className="mt-3 flex min-h-[50vh] flex-col">
+          <div className="mt-3 flex min-h-0 flex-1 flex-col">
             <FileTree
               key={treeKey}
               project={tree.project}
@@ -193,7 +198,7 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
           </div>
         )}
 
-        {tab === "storage" && (<>
+        {tab === "storage" && (<div className="min-h-0 flex-1 overflow-y-auto">
         {error && (
           <p className="mt-3 rounded border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
             {error}
@@ -280,7 +285,7 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
             <ul className="mt-2 space-y-1">{workspace.map((f) => row(f, workspace))}</ul>
           </section>
         )}
-        </>)}
+        </div>)}
       </DialogContent>
     </Dialog>
     </>

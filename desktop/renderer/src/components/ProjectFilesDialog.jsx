@@ -232,7 +232,7 @@ export function ProjectFilesDialog({ open, onOpenChange, project, files = [], on
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[80vh] flex-col gap-3 sm:max-w-lg">
+      <DialogContent className="flex h-[70vh] flex-col gap-3 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Files in {project?.name ?? "this project"}</DialogTitle>
           <DialogDescription>
