@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, CornerLeftUp, File, Folder, Search } from "lucide-react";
+import { ChevronRight, CornerLeftUp, File, FilePlus, Folder, Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +35,9 @@ export function FileTree({ project, files = [], onPick, pickLabel = "attach", sc
   // holds the attachment aliases.
   const [path, setPath] = useState([]);
   const [query, setQuery] = useState("");
+  // The New file affordance (open mode only): null closed, "" typing.
+  const [newName, setNewName] = useState(null);
+  const [createError, setCreateError] = useState("");
 
   const aliases = useMemo(
     () => new Set((project?.attachments ?? []).map((a) => a.alias)),
@@ -173,6 +176,49 @@ export function FileTree({ project, files = [], onPick, pickLabel = "attach", sc
           <Folder className="size-3.5" /> Attach “{path[path.length - 1]}” as a folder
         </Button>
       )}
+
+      {/* New file, in open mode: created empty by an explicit user act (the
+          one sanctioned exception to "the canvas edits, it never mints"),
+          then opened in the canvas to write. A subpath like src/new.ts is
+          fine -- folders are made on the way, the same rule write_file
+          follows. Creation is rooted in the CURRENT folder, so what you see
+          in the breadcrumb is where the file lands. */}
+      {pickLabel === "open" && !results && (
+        newName === null ? (
+          <Button variant="outline" size="sm" className="self-start" onClick={() => { setNewName(""); setCreateError(""); }}>
+            <FilePlus className="size-3.5" /> New file{path.length > 0 ? ` in ${path[path.length - 1]}` : ""}
+          </Button>
+        ) : (
+          <form
+            className="flex items-center gap-2"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const name = newName.trim().replace(/^\/+/, "");
+              if (!name) return;
+              const full = [...path, name].join("/");
+              const result = await window.maple?.createFile?.(full);
+              if (result?.ok) {
+                setNewName(null);
+                onPick?.(full);
+              } else {
+                setCreateError(result?.reason ?? "Could not create the file.");
+              }
+            }}
+          >
+            <input
+              autoFocus
+              className="min-w-0 flex-1 rounded-md border bg-transparent px-2 py-1 font-mono text-xs"
+              placeholder={`name.ts — created in ${path.length > 0 ? currentPath : "the workspace"}`}
+              value={newName}
+              onChange={(e) => { setNewName(e.target.value); setCreateError(""); }}
+              onKeyDown={(e) => e.key === "Escape" && setNewName(null)}
+            />
+            <Button size="sm" type="submit" disabled={!newName.trim()}>Create</Button>
+            <Button size="sm" variant="ghost" type="button" onClick={() => setNewName(null)}>Cancel</Button>
+          </form>
+        )
+      )}
+      {createError && <p className="text-xs text-destructive">{createError}</p>}
     </div>
   );
 }

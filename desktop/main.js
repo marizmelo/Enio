@@ -671,6 +671,34 @@ ipcMain.handle("save-file-as", async (_event, relPath) => {
  * (src/notes.ts) -- while note BODIES still save through this handler,
  * behind the same click as everything else.
  */
+/**
+ * Create an empty text file — the Browse tab's "New file". This is the one
+ * deliberate exception to "the canvas edits, it never mints": the minting
+ * act here is the user's own click in the tree, not a model or a buffer
+ * save, which keeps the doctrine's point (the renderer cannot conjure files
+ * as a side effect) intact. Same guards as the save path: containment via
+ * resolveInWorkspace, text extensions only (a file the canvas cannot edit
+ * would be created and then unopenable), and never over an existing file.
+ */
+ipcMain.handle("create-file", (_event, relPath) => {
+  const rel = String(relPath ?? "").trim().replace(/^\/+/, "");
+  if (!rel) return { ok: false, reason: "Give the file a name." };
+  const full = resolveInWorkspace(rel);
+  if (!full) return { ok: false, reason: "That path is outside the reachable folders." };
+  const ext = path.extname(full).toLowerCase();
+  if (ext !== "" && !VIEW_TEXT.test(full)) {
+    return { ok: false, reason: "Only text files can be created here." };
+  }
+  if (fs.existsSync(full)) return { ok: false, reason: "That file already exists." };
+  try {
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, "", "utf8");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: String(err?.message ?? err) };
+  }
+});
+
 ipcMain.handle("save-file-content", (_event, relPath, text) => {
   const full = resolveInWorkspace(relPath);
   if (!full) return { ok: false, reason: "That file is outside the workspace." };

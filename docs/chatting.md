@@ -193,7 +193,9 @@ every file Enio can reach — the open project's folders, conversation
 attachments, and the workspace — with search across all of it; click a file
 and it opens in the canvas, where you can read it, edit it, and save (⌘S)
 straight back to disk. The list is re-read each time you open the tab, so a
-file the agent wrote a moment ago is there.
+file the agent wrote a moment ago is there. **New file** creates an empty
+text file in the folder you are standing in — a subpath like `src/new.ts`
+makes the folders on the way — and opens it in the canvas to write.
 
 **Storage** is where storage is managed. It shows
 what this conversation attached, what every other conversation attached —

@@ -46,6 +46,11 @@ contextBridge.exposeInMainWorld("maple", {
     return ipcRenderer.invoke("set-project-roots", roots);
   },
 
+  /** Create an empty text file (the Browse tab's New file). */
+  createFile(relPath) {
+    return ipcRenderer.invoke("create-file", relPath);
+  },
+
   /** Write the canvas editor's buffer back to a workspace file. */
   saveFileContent(relPath, text) {
     return ipcRenderer.invoke("save-file-content", relPath, text);
