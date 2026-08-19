@@ -95,6 +95,36 @@ function dateBlock(now = new Date()): string {
   );
 }
 
+/**
+ * The date, again, on the newest user message -- as the model sees it, not
+ * as the transcript keeps it.
+ *
+ * The system-prompt line was not enough. Reproduced exactly: a conversation
+ * already holding two "Today is Thursday, April 4, 2024" replies got the
+ * date block in its system message and answered April 2024 a third time,
+ * while a fresh conversation with the identical prompt answered correctly.
+ * A 4B model imitates the pattern in front of it over a rule at the top; the
+ * system message is far away and its own earlier answers are right there.
+ * So the fact rides on the message the model is answering, where recency
+ * wins -- the same "put it where the model looks" move as sigil-stripped
+ * quoting in the handoff prompt.
+ *
+ * Applied at the model boundary only. history[] and the log keep the user's
+ * words exactly, so the thread on screen, restore, and traces are unchanged;
+ * this is a view of the transcript, not an edit to it.
+ */
+function withDateOnLatest(messages: Message[]): Message[] {
+  const last = messages.length - 1;
+  if (last < 0 || messages[last]!.role !== "user") return messages;
+  const m = messages[last]!;
+  if (typeof m.content !== "string") return messages;
+  const day = new Intl.DateTimeFormat("en-GB", { dateStyle: "full" }).format(new Date());
+  return [
+    ...messages.slice(0, last),
+    { ...m, content: `${m.content}\n\n(Today is ${day}.)` },
+  ];
+}
+
 // Each line here was chosen by measurement, not by style, and they are not
 // uniform on purpose. The image sentence keeps its never-say clause because
 // removing it measurably dropped correct answers (3/3 with, 2/4 without). The
@@ -769,7 +799,7 @@ export async function runTurn(
     }
 
     const result = await completeWatched(
-      history,
+      withDateOnLatest(history),
       // On the final permitted iteration, withhold tools so the model is forced
       // to produce an answer instead of another call it has no budget to run.
       isLast ? [] : wireTools,
@@ -883,7 +913,7 @@ export async function runTurn(
         // Watched like the main call: the no-think retry is where the worst
         // observed loops actually streamed from.
         retry = await completeWatched(
-          history,
+          withDateOnLatest(history),
           retryTools,
           { onContent: handlers.onContent },
           { enableThinking: false },

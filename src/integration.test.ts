@@ -1174,6 +1174,46 @@ describe("the current date reaches the model", () => {
     assert.match(prompt, /never state a date from memory/i);
   });
 
+  test("it also rides on the newest user message — the transcript can be poisoned", async () => {
+    // Reproduced live: a conversation already holding two "April 4, 2024"
+    // replies got the date block in its system prompt and answered April
+    // 2024 a THIRD time, while a fresh conversation answered correctly. The
+    // model imitates the pattern in front of it over a rule at the top, so
+    // the date has to be where recency wins.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    let sent: Message[] = [];
+    const captureFetch = globalThis.fetch;
+    scriptModel([{ content: "Noted." }]);
+    const scripted = globalThis.fetch;
+    globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
+      sent = JSON.parse(String(init?.body ?? "{}")).messages ?? [];
+      return scripted(url as string, init);
+    }) as typeof fetch;
+    try {
+      const history: Message[] = [
+        { role: "user", content: "what day is today" },
+        { role: "assistant", content: "Today is Thursday, April 4, 2024." },
+        { role: "user", content: "what day is today" },
+        { role: "assistant", content: "Today is Thursday, April 4, 2024." },
+      ];
+      await runTurn("what day is today", history, registry, sessionId);
+      const today = new Intl.DateTimeFormat("en-GB", { dateStyle: "full" }).format(new Date());
+      const lastUser = [...sent].reverse().find((m) => m.role === "user");
+      assert.ok(lastUser, "a user message reached the model");
+      assert.ok(
+        String(lastUser!.content).includes(`(Today is ${today}.)`),
+        `the newest user message must carry the date; got: ${lastUser!.content}`,
+      );
+      // And the transcript the user sees is untouched: the stamp is a view at
+      // the model boundary, never an edit to what was said.
+      const kept = history.filter((m) => m.role === "user").at(-1);
+      assert.equal(kept?.content, "what day is today");
+    } finally {
+      globalThis.fetch = captureFetch;
+    }
+  });
+
   test("it is stated ahead of the role, so no specialist can miss it", async () => {
     // Routing is off in this suite, so this exercises the shared assembly
     // that every route flows through -- the position is the guarantee.

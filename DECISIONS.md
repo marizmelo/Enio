@@ -1922,8 +1922,22 @@ the stated one — measured live: three agents answered the real date, and
 training-era present. Rebuilt per turn, so it never goes stale mid-thread.
 `current_time` stays for the exact minute and the clock widget.
 
-Cost: about ninety tokens on every prompt against a 2000-token Maple budget.
-Accepted, because a wrong date is not a cosmetic error — it corrupts every
+**And once more on the newest user message, because the system prompt alone
+was not enough.** Reproduced exactly, one minute apart: a conversation
+already holding two "April 4, 2024" replies got the date block in its system
+message and answered April 2024 a third time, while a fresh conversation
+with the identical prompt answered correctly. A 4B model imitates the
+pattern in front of it over a rule at the top — the system message is far
+away, its own earlier answers are right there. So `withDateOnLatest()`
+stamps "(Today is …)" onto the newest user message at the model boundary
+only: `history[]`, the log, restore and traces keep the user's words exactly,
+because this is a view of the transcript, not an edit to it. The same
+poisoned transcript then answered the real date. The lesson generalises and
+is worth stating: a fact the model must not get wrong goes where recency
+wins, not only where the rules live.
+
+Cost: about a hundred tokens on every prompt against a 2000-token Maple
+budget. Accepted, because a wrong date is not a cosmetic error — it corrupts every
 "is this recent" judgement silently, and the compaction tests still pass with
 their headroom.
 
