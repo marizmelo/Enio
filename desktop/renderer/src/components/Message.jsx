@@ -24,6 +24,10 @@ export function Message({
   artifacts = [],
   files = [],
   notices = [],
+  // A guard withdrew the reply mid-stream and re-answered. Rendered ABOVE
+  // the bubble, unlike notices (footers about attachment quality), because
+  // it is a retraction: it has to be read before the answer, not after.
+  withdrawn = null,
   thinking = 0,
   startedAt = null,
   error = false,
@@ -117,6 +121,12 @@ export function Message({
         </div>
       )}
 
+      {withdrawn && !isUser && (
+        <div className="flex max-w-[85%] items-start gap-2 rounded-md border border-dashed border-amber-500/50 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+          <Info className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+          <span>{withdrawn}</span>
+        </div>
+      )}
       {waiting ? (
         <Thinking startedAt={startedAt} chars={thinking} />
       ) : (

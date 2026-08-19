@@ -32,6 +32,27 @@ export function logMessage(sessionId: string, role: string, content: string): vo
     .run(sessionId, role, content, now());
 }
 
+/**
+ * Removes the most recent assistant message of a session -- the one a
+ * guard just withdrew. The transcript is the source of truth for restore
+ * AND for what the model sees next turn, so a withdrawn reply left in it
+ * comes back twice: once on screen after a reload, and once as the pattern
+ * the model imitates on the next question. Only the last assistant row, and
+ * only when its content matches, so a race with a later message cannot
+ * delete the wrong thing.
+ */
+export function retractLastAssistantMessage(sessionId: string, content: string): boolean {
+  const row = getDb()
+    .prepare(
+      `SELECT id, content FROM messages WHERE session_id = ? AND role = 'assistant'
+       ORDER BY id DESC LIMIT 1`,
+    )
+    .get(sessionId) as { id: number; content: string } | undefined;
+  if (!row || row.content !== content) return false;
+  getDb().prepare(`DELETE FROM messages WHERE id = ?`).run(row.id);
+  return true;
+}
+
 export function endSession(sessionId: string): void {
   getDb().prepare(`UPDATE sessions SET ended_at = ? WHERE id = ?`).run(now(), sessionId);
 }

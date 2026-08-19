@@ -565,6 +565,7 @@ export function App() {
       // Text streamed but not yet handed to the voice.
       let unspoken = "";
       const notices = [];
+      let withdrawn = null;
       // Pages the tools read, in the order they were read. Deduped at render
       // time rather than here, so the search hit that carried a snippet is the
       // one kept when the same page is later fetched in full.
@@ -615,6 +616,17 @@ export function App() {
             setContext({ tokens: event.tokens, budget: event.budget });
           } else if (event.type === "notice") {
             if (!notices.includes(event.text)) notices.push(event.text);
+          } else if (event.type === "restart") {
+            // The server withdrew the reply so far — a guard caught it
+            // answering from memory, fabricating an action, or disclaiming a
+            // tool it holds. Two answers in one bubble is worse than either
+            // alone: the user read "not yet held" above five sources saying
+            // the opposite. So the bubble empties, and the reason goes FIRST
+            // in the notices, where the retraction is. Anything queued for
+            // speech is dropped too; the withdrawn words must not be read out.
+            assistant = "";
+            unspoken = "";
+            withdrawn = event.reason;
           } else {
             // The model opens with a blank line or two once its <think> block
             // is stripped. Trimmed at the front only, and on the accumulated
@@ -647,6 +659,7 @@ export function App() {
               sources: sources.map((s) => ({ ...s })),
               thinking,
               notices: [...notices],
+              withdrawn,
               startedAt,
             },
           ]);

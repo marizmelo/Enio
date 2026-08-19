@@ -1097,13 +1097,20 @@ describe("the fabrication correction", () => {
     ]);
 
     const history: Message[] = [];
+    // The correction message is spliced OUT of history once the round settles
+    // (so the next turn's transcript is clean), so it is captured off the wire.
+    const sentUser: string[] = [];
+    const scripted = globalThis.fetch;
+    globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
+      const msgs = JSON.parse(String(init?.body ?? "{}")).messages ?? [];
+      const last = msgs.at(-1);
+      if (last?.role === "user") sentUser.push(String(last.content));
+      return scripted(url as string, init);
+    }) as typeof fetch;
     await runTurn("create an automation", history, registry, sessionId);
 
-    const correction = history.find(
-      (m) => m.role === "user" && String(m.content).includes("Nothing you described"),
-    );
-    assert.ok(correction, "the correction was issued");
-    const text = String(correction!.content);
+    const text = sentUser.find((t) => t.includes("Nothing you described")) ?? "";
+    assert.ok(text, "the correction was issued");
 
     // The scar: this prompt used to hardcode open_app and propose_plan, so a
     // coder that fabricated was told to call tools it could not see, and it
@@ -1241,10 +1248,18 @@ describe("the disclaimed-access correction", () => {
     scriptModel([
       { content: "I don't have real-time news access, so I can't provide today's latest news." },
       { toolCall: { name: "web_search", args: { query: "news today" } } },
+      { content: "" }, // web_search's own fetch
       { content: "Here is what the pages say." },
     ]);
     const history: Message[] = [];
     const notices: string[] = [];
+    const sentUser: string[] = [];
+    const scripted = globalThis.fetch;
+    globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
+      const last = (JSON.parse(String(init?.body ?? "{}")).messages ?? []).at(-1);
+      if (last?.role === "user") sentUser.push(String(last.content));
+      return scripted(url as string, init);
+    }) as typeof fetch;
     await runTurn("what news today?", history, registry, sessionId, {
       onNotice: (t) => notices.push(t),
     });
@@ -1253,13 +1268,15 @@ describe("the disclaimed-access correction", () => {
       notices.some((n) => /holds the tools/.test(n)),
       `expected the disclaimer notice, got: ${notices.join(" | ")}`,
     );
-    const correction = history.find(
-      (m) => m.role === "user" && String(m.content).includes("That is not true here"),
-    );
-    assert.ok(correction, "the correction was issued");
-    // Only tools that make the disclaimer false, and only real ones held now.
-    assert.match(String(correction!.content), /web_search/);
-    assert.doesNotMatch(String(correction!.content), /open_app|propose_plan/);
+    // Spliced out of history after the round, so it is checked off the wire:
+    // it must name only the live tools actually held -- never open_app or
+    // propose_plan, which belong to the operator (the scar this test guards).
+    const sent = sentUser.find((t) => t.includes("That is not true here")) ?? "";
+    assert.ok(sent, "the correction was issued");
+    assert.match(sent, /web_search/);
+    assert.doesNotMatch(sent, /open_app|propose_plan/);
+    assert.ok(!history.some((m) => m.role === "user" && /That is not true here/.test(String(m.content))),
+      "the correction scaffolding does not survive into the next turn");
   });
 
   test("an honest not-found after a search is left alone", async () => {
@@ -1275,5 +1292,103 @@ describe("the disclaimed-access correction", () => {
     });
     // A tool ran and the reply is a finding: neither guard may fire.
     assert.equal(notices.filter((n) => /Correcting/.test(n)).length, 0, notices.join(" | "));
+  });
+});
+
+describe("the researcher answering from memory", () => {
+  test("a substantive researcher answer with no lookup gets one corrective round", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    // Verbatim shape of the failure: the date block was read (it says 2026),
+    // web_search was held, and the model still reasoned from its training-era
+    // picture — "the 2026 World Cup has not been held yet". It claims no
+    // action and disclaims nothing, so neither earlier guard fires; what it
+    // shares with both is that the answer should have come from a tool.
+    scriptModel([
+      {
+        content:
+          "The FIFA World Cup for 2026 was not yet held when today is Tuesday, 18 August 2026. " +
+          "The tournament is scheduled to take place in 2026, and the winner has not been determined yet.",
+      },
+      { toolCall: { name: "web_search", args: { query: "world cup 2026 winner" } } },
+      { content: "" }, // web_search's own fetch
+      { content: "Per the search, the final was played on 19 July." },
+    ]);
+    const history: Message[] = [];
+    const notices: string[] = [];
+    await runTurn("who won the world cup this year", history, registry, sessionId, {
+      onNotice: (t) => notices.push(t),
+    }, { specialist: "researcher" });
+
+    assert.ok(notices.some((n) => /came from memory/.test(n)), notices.join(" | "));
+    // The round actually searched -- that survives; the scaffolding does not.
+    const tool = history.find((m) => m.role === "tool");
+    assert.ok(tool, "the corrective round ran web_search");
+    assert.ok(!history.some((m) => m.role === "user" && /answered that from memory/.test(String(m.content))));
+  });
+
+  test("the withdrawn answer leaves the transcript, the log, and the next turn's history", async () => {
+    // Watched: the fabricated "Argentina beat France" survived into the
+    // transcript beside the corrected "Spain 1-0", and the following question
+    // in that thread imitated it. What survives must be the question, the
+    // search, and one answer.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { content: "The 2026 World Cup was won by Argentina, who beat France on penalties in Qatar." },
+      { toolCall: { name: "web_search", args: { query: "world cup 2026 winner" } } },
+      // web_search's own HTTP fetch lands on this same stub and eats a frame.
+      { content: "" },
+      { content: "Spain won the 2026 World Cup, beating Argentina 1-0 after extra time." },
+    ]);
+    const history: Message[] = [];
+    const result = await runTurn("who won the world cup this year", history, registry, sessionId, {}, {
+      specialist: "researcher",
+    });
+    assert.match(result.reply, /Spain won/, "the turn's reply is the corrected one");
+
+    const assistantTexts = history
+      .filter((m) => m.role === "assistant" && typeof m.content === "string" && m.content)
+      .map((m) => String(m.content));
+    assert.ok(!assistantTexts.some((t) => /Argentina, who beat France/.test(t)), "withdrawn text gone from history");
+    assert.ok(
+      assistantTexts.some((t) => /Spain won/.test(t)),
+      `corrected answer kept; history was: ${history.map((m) => `${m.role}:${JSON.stringify(m.content ?? "").slice(0, 50)}`).join(" | ")}`,
+    );
+    // The correction scaffolding is gone too: no "(You answered that from
+    // memory" user message survives for the next turn to trip over.
+    assert.ok(!history.some((m) => m.role === "user" && /answered that from memory/.test(String(m.content))));
+
+    const logged = getDb()
+      .prepare(`SELECT content FROM messages WHERE session_id = ? AND role = 'assistant' ORDER BY id`)
+      .all(sessionId) as { content: string }[];
+    assert.equal(logged.length, 1, `one assistant row, got: ${logged.map((r) => r.content.slice(0, 30)).join(" | ")}`);
+    assert.match(logged[0]!.content, /Spain won/);
+  });
+
+  test("a greeting is not an answer from memory", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "Hello! What would you like me to look into?" }]);
+    const notices: string[] = [];
+    await runTurn("hi", [], registry, sessionId, { onNotice: (t) => notices.push(t) }, {
+      specialist: "researcher",
+    });
+    assert.equal(notices.filter((n) => /Correcting|Looking it up/.test(n)).length, 0, notices.join(" | "));
+  });
+
+  test("other agents answering from what they know are left alone", async () => {
+    // The coder explaining a concept is not answering from stale news; only
+    // the researcher's whole job is the lookup.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { content: "A closure is a function that captures variables from the scope it was created in, so they stay reachable after that scope has returned." },
+    ]);
+    const notices: string[] = [];
+    await runTurn("what is a closure", [], registry, sessionId, { onNotice: (t) => notices.push(t) }, {
+      specialist: "coder",
+    });
+    assert.equal(notices.filter((n) => /Correcting|Looking it up/.test(n)).length, 0, notices.join(" | "));
   });
 });

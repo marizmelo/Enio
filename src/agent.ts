@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { complete } from "./model.js";
-import { buildMemoryBlock, logMessage, saveFoldSummary } from "./memory/store.js";
+import { buildMemoryBlock, logMessage, retractLastAssistantMessage, saveFoldSummary } from "./memory/store.js";
 import { lastSpecialist, recordTurn, type StepRecord } from "./memory/traces.js";
 import { exemplarBlock, preferenceBlock } from "./memory/learning.js";
 import { getSpecialist, route, toolsFor } from "./specialists.js";
@@ -91,7 +91,8 @@ function dateBlock(now = new Date()): string {
   return (
     `Today is ${day}, about ${time} (${zone}). ` +
     `Your training data ends earlier than this, so your own sense of the current date, and of what is recent or latest, is out of date. ` +
-    `Use the date above for anything that depends on today; never state a date from memory as if it were today's, and for anything that may have changed since your training, check with a tool rather than answering from memory.`
+    `Use the date above for anything that depends on today; never state a date from memory as if it were today's. ` +
+    `Events you remember as upcoming, scheduled or "not yet held" may already have happened — that is exactly what being out of date means — so for who won, what was released, what happened or what is latest, look it up rather than answering from memory.`
   );
 }
 
@@ -165,6 +166,11 @@ export interface TurnHandlers {
    *  do not implement this — the tool's text has already been delivered. */
   onWidget?(widget: Widget): void;
   onNotice?(text: string): void;
+  /** The reply so far is being withdrawn and re-streamed. A client that
+   *  renders live text should clear what it has shown; one that only reads
+   *  the final reply can ignore this, since `reply` is already the corrected
+   *  text. Carries the reason, so it can be shown where the retraction is. */
+  onRestart?(reason: string): void;
   /** Context carried after any folding, so a client can show how full it is. */
   onContext?(usage: { tokens: number; budget: number }): void;
   onRoute?(specialist: string): void;
@@ -994,14 +1000,51 @@ export async function runTurn(
   // after the fabricated text; the notice is what tells the user why.
   const toolRanThisTurn = steps.some((s) => s.kind === "tool");
   const heldLiveTools = activeTools.filter((t) => LIVE_TOOLS.has(t.name)).map((t) => t.name);
+  // The researcher exists to look things up; a substantive answer from it
+  // with no lookup is answering from training data, whatever the wording.
+  // Watched happen: "who won the world cup this year" → "the 2026 World Cup
+  // has not been held yet" — the date block was read (it said 2026), the
+  // tools were held, and the model still trusted its training-era picture
+  // of what has happened. Neither guard above fires on that: it claims no
+  // action and disclaims nothing, it just reasons from stale knowledge. The
+  // shape it shares with both is the one that matters -- a reply that
+  // should have come from a tool and came from memory. Kept to the
+  // researcher, whose prompt already says "always start with web_search",
+  // and to replies long enough to be an answer rather than a greeting.
+  const answeredFromMemory =
+    !toolRanThisTurn &&
+    specialistName === "researcher" &&
+    activeTools.some((t) => t.name === "web_search") &&
+    reply.trim().length > 60;
   const disclaimed =
     !toolRanThisTurn && heldLiveTools.length > 0 && reply.trim() && disclaimsLiveAccess(reply);
-  if (reply.trim() && !toolRanThisTurn && (claimsUnperformedAction(reply) || disclaimed)) {
-    handlers.onNotice?.(
-      disclaimed
-        ? "That reply said it could not look things up — but it holds the tools to. Correcting."
-        : "That reply described actions that never ran — nothing was called. Correcting.",
-    );
+  const stale = disclaimed || answeredFromMemory;
+  if (reply.trim() && !toolRanThisTurn && (claimsUnperformedAction(reply) || stale)) {
+    // Withdraw, don't append. The first version streamed the correction
+    // AFTER the bad text with the notice as a footer -- so the user read a
+    // confident "not yet held" sitting above five sources that said the
+    // opposite, and in the next try a fabricated "France beat Australia" with
+    // the true answer bolted on as a last line. Two answers in one bubble is
+    // worse than either alone. The client clears what it showed and the
+    // reason lands where the retraction is, at the top of the retry; a
+    // client without live rendering only ever sees the final reply anyway.
+    const reason = disclaimed
+      ? "That reply said it could not look things up — but it holds the tools to. Correcting."
+      : answeredFromMemory
+        ? "That answer came from memory, not from a search. Looking it up."
+        : "That reply described actions that never ran — nothing was called. Correcting.";
+    if (handlers.onRestart) handlers.onRestart(reason);
+    else handlers.onNotice?.(reason);
+    // The withdrawn reply is already in the log and in history[]. The log
+    // row goes now, so a reload never shows it. History keeps it for the
+    // corrective rounds -- the model has to see what it said to be told it
+    // was wrong -- and is spliced below once the correction settles, so the
+    // NEXT turn's transcript holds one answer, not the wrong one plus the
+    // right one. Watched: a fabricated "Argentina beat France" survived into
+    // the transcript and the following question imitated it.
+    const withdrawn = reply;
+    const withdrawnAt = history.length - 1;
+    retractLastAssistantMessage(sessionId, withdrawn);
     history.push({
       role: "user",
       content: disclaimed
@@ -1011,7 +1054,15 @@ export async function runTurn(
           "(That is not true here: you have live lookup tools this turn — " +
           `${heldLiveTools.join(", ")}. Use one now and answer from what it returns. ` +
           "Never say you lack real-time or internet access while you hold these.)"
-        :
+        : answeredFromMemory
+          ? // Concrete, not abstract. "Check with a tool for anything that may
+            // have changed" was already in the prompt and did not move it;
+            // what moves a small model is being told this specific answer is
+            // the stale one.
+            "(You answered that from memory. Your training data is older than today, " +
+            "so what you remember as upcoming or latest may already have happened. " +
+            "Call web_search now with the user's question and answer only from what it returns.)"
+          :
         // No retraction offered. The first wording ended with "or tell the
         // user plainly you did not do it", and the model took that exit every
         // time -- retracting is one sentence, acting is a tool call. The easy
@@ -1031,7 +1082,9 @@ export async function runTurn(
         "Never describe an action as done.)",
     });
     try {
-      handlers.onContent?.("\n\n");
+      // A client that could not restart still needs the seam between the
+      // withdrawn text and the retry; one that did restart starts clean.
+      if (!handlers.onRestart) handlers.onContent?.("\n\n");
       for (let round = 0; round < 2; round++) {
         const startedAt = Date.now();
         const fix = await complete(history, round === 0 ? wireTools : [], {
@@ -1067,6 +1120,18 @@ export async function runTurn(
       // turn.
     }
 
+    // Splice out the withdrawn answer and the correction scaffolding, so what
+    // survives into the next turn is: the user's question, then whatever the
+    // corrective round produced (tool calls, results, the final reply). The
+    // rounds needed the scaffolding; the transcript does not.
+    if (
+      history[withdrawnAt]?.role === "assistant" &&
+      history[withdrawnAt]?.content === withdrawn
+    ) {
+      // [withdrawn assistant, correction user, ...rounds]
+      history.splice(withdrawnAt, 2);
+    }
+
     // The correction is not trusted either -- measured twice. Asked again, the
     // model re-fabricated "The Calculator app is now cleared", still calling
     // nothing; a guard that ships its own retry's lie is not a guard. And the
@@ -1081,8 +1146,8 @@ export async function runTurn(
       // as nonsense ("what news today?" → "say propose a plan to…"). For a
       // disclaimer the honest floor names the tool that would have answered
       // and asks for the question again, so a retry is one message away.
-      reply = disclaimed
-        ? `I should have looked that up with ${heldLiveTools[0]} and did not. ` +
+      reply = stale
+        ? `I should have looked that up with ${heldLiveTools[0] ?? "web_search"} and did not. ` +
           "Ask again and I will search rather than answer from memory."
         : "I described doing that, but I did not actually run anything — nothing " +
           'has changed on your computer. Say "propose a plan to …" and I will write ' +

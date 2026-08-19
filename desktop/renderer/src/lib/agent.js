@@ -22,6 +22,7 @@ export function parseSseEvent(block) {
   let widget = null;
   let think = null;
   let notice = null;
+  let restart = null;
   let context = null;
   let sources = null;
   let route = null;
@@ -35,6 +36,10 @@ export function parseSseEvent(block) {
       if (toolMatch) tool = toolMatch[1];
       const noticeMatch = /^notice\s+(.+)$/.exec(comment);
       if (noticeMatch) notice = noticeMatch[1];
+      // The reply so far is withdrawn: clear the bubble, show the reason at
+      // the top of what streams next.
+      const restartMatch = /^restart\s+(.+)$/.exec(comment);
+      if (restartMatch) restart = restartMatch[1];
       const thinkMatch = /^think\s+(\d+)$/.exec(comment);
       if (thinkMatch) think = Number(thinkMatch[1]);
       const contextMatch = /^context\s+(\d+)\s+(\d+)$/.exec(comment);
@@ -75,7 +80,7 @@ export function parseSseEvent(block) {
       }
     }
   }
-  return { data, tool, widget, think, notice, context, sources, route, artifact };
+  return { data, tool, widget, think, notice, restart, context, sources, route, artifact };
 }
 
 /**
@@ -142,7 +147,7 @@ export async function* streamTurn(messages, signal, conversationId = null, canva
       const block = buffer.slice(0, split);
       buffer = buffer.slice(split + 2);
 
-      const { data, tool, widget, think, notice, context, sources, route, artifact } = parseSseEvent(block);
+      const { data, tool, widget, think, notice, restart, context, sources, route, artifact } = parseSseEvent(block);
       if (tool) yield { type: "tool", name: tool };
       if (sources) yield { type: "sources", ...sources };
       if (route) yield { type: "route", route };
@@ -150,6 +155,7 @@ export async function* streamTurn(messages, signal, conversationId = null, canva
       if (widget) yield { type: "widget", widget };
       if (think !== null) yield { type: "think", chars: think };
       if (notice) yield { type: "notice", text: notice };
+      if (restart) yield { type: "restart", reason: restart };
       if (context) yield { type: "context", ...context };
       if (!data) continue;
       if (data === "[DONE]") return;

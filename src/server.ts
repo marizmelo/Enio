@@ -1518,6 +1518,10 @@ async function handle(
           // comment ends at one.
           onNotice: (text) =>
             res.write(`: notice ${text.replace(/\r?\n/g, " ")}\n\n`),
+          // The reply so far is withdrawn: the client clears its bubble and
+          // shows the reason at the top of what streams next.
+          onRestart: (reason) =>
+            res.write(`: restart ${reason.replace(/\r?\n/g, " ")}\n\n`),
           // How full the window is after any folding. On the comment channel
           // like the rest, so a client that does not render it is unaffected
           // and the CLI needs no fallback.

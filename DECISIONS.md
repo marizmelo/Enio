@@ -1975,6 +1975,35 @@ have caught this, but the fix that actually made three-for-three live runs
 search and answer with real headlines was cleaning the memory. A small model
 does not refuse to use a tool at random; look for what it was handed instead.
 
+**A withdrawn reply is withdrawn everywhere, not appended to.** Every guard
+above (fabricated action, disclaimed ability, researcher answering from
+memory) used to stream its correction AFTER the bad text with the notice as
+a footer. Two screenshots showed what that reads as: a confident "the 2026
+World Cup has not been held" sitting above five sources that said the
+opposite, and on the next try a fabricated "France beat Australia 3–1 in
+Qatar" with the true answer bolted on as a last line. Two answers in one
+bubble is worse than either alone. Three changes, one principle:
+
+- *On the wire*, a `restart` frame (`onRestart`) tells a live client to
+  clear the bubble and put the reason at the TOP of what streams next; the
+  reason renders as an amber retraction above the answer, not a grey footer
+  below it. A client without live rendering only ever sees the final reply.
+- *In the log*, `retractLastAssistantMessage` removes the withdrawn row, so
+  a reload never shows it.
+- *In the transcript*, the withdrawn reply and the correction scaffolding
+  are spliced out once the round settles — the model had to see them DURING
+  the round, but the next turn must not: watched, a fabricated "Argentina
+  beat France" survived beside the corrected "Spain 1–0", and the following
+  question in that thread imitated it. This is the same poisoned-transcript
+  mechanism as the date bug, being seeded by the guard itself.
+
+Also new: the researcher answering substantively with no lookup is treated
+as stale on its own — "who won the world cup this year" → "not yet held"
+claims no action and disclaims nothing, so neither earlier guard fired, but
+the shape it shares with both is that the answer should have come from a
+tool. Kept to the researcher (whose prompt already says "always start with
+web_search"), replies long enough to be an answer, and one round.
+
 **Known residual, recorded not fixed:** a scheduled *prompt* task runs
 through runTurn after repointing the process-global sessions
 (setMemorySession and friends). A task firing mid-interactive-turn can
