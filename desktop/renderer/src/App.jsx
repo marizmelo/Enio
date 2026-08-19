@@ -867,6 +867,10 @@ export function App() {
         open={filesOpen}
         onOpenChange={setFilesOpen}
         conversationId={conversationId}
+        // Browse tab: a picked file opens in the canvas to read and edit.
+        // Fullscreen, because choosing a file from a tree is choosing to
+        // work on it; the header toggle brings the conversation back.
+        onOpenInCanvas={(path) => setCanvas({ path, openedBy: "user", rev: Date.now(), full: true })}
         onReuse={(paths) => {
           setSessionFiles((prev) => [...new Set([...prev, ...paths])]);
           setInput((value) => paths.reduce(appendMention, value));

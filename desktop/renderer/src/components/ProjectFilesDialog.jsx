@@ -22,28 +22,31 @@ import { isImageName } from "@/lib/capabilities";
  * sends -- no new endpoint, and no risk of showing a path the agent cannot
  * address, because these *are* the paths it addresses.
  */
-export function ProjectFilesDialog({ open, onOpenChange, project, files = [], onPick }) {
+/**
+ * The tree itself, as a panel. Two homes: the composer's attach flow (pick
+ * → attach to the message) and the Files dialog's Browse tab (pick → open
+ * in the canvas to read and edit). Same derivation, same search, same
+ * breadcrumbs; only what a pick MEANS differs, and the caller says which.
+ * `scope` widens it past the project: "all" shows workspace files too,
+ * which is what browsing (as opposed to attaching project context) wants.
+ */
+export function FileTree({ project, files = [], onPick, pickLabel = "attach", scope = "project", autoFocus = true }) {
   // Current location as path segments, starting at the virtual root that
   // holds the attachment aliases.
   const [path, setPath] = useState([]);
   const [query, setQuery] = useState("");
-
-  useEffect(() => {
-    if (open) {
-      setPath([]);
-      setQuery("");
-    }
-  }, [open]);
 
   const aliases = useMemo(
     () => new Set((project?.attachments ?? []).map((a) => a.alias)),
     [project],
   );
 
-  // Only the project's own files; the workspace has its own menu entry.
-  const projectFiles = useMemo(
-    () => files.filter((f) => aliases.has(f.split("/")[0])),
-    [files, aliases],
+  // Project scope: only the project's own files (the composer's attach menu
+  // has a separate workspace entry). All: everything the server lists --
+  // project mounts, conversation mounts, workspace -- the whole reachable set.
+  const shown = useMemo(
+    () => (scope === "all" ? files : files.filter((f) => aliases.has(f.split("/")[0]))),
+    [files, aliases, scope],
   );
 
   // Searching is global on purpose: "where is my resume" should not depend on
@@ -51,15 +54,15 @@ export function ProjectFilesDialog({ open, onOpenChange, project, files = [], on
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return null;
-    return projectFiles.filter((f) => f.toLowerCase().includes(q)).slice(0, 200);
-  }, [query, projectFiles]);
+    return shown.filter((f) => f.toLowerCase().includes(q)).slice(0, 200);
+  }, [query, shown]);
 
   // Immediate children of the current path, folders before files.
   const { folders, here } = useMemo(() => {
     const prefix = path.length > 0 ? path.join("/") + "/" : "";
     const folderNames = new Set();
     const fileNames = [];
-    for (const f of projectFiles) {
+    for (const f of shown) {
       if (!f.startsWith(prefix)) continue;
       const rest = f.slice(prefix.length);
       const slash = rest.indexOf("/");
@@ -67,20 +70,123 @@ export function ProjectFilesDialog({ open, onOpenChange, project, files = [], on
       else folderNames.add(rest.slice(0, slash));
     }
     return { folders: [...folderNames].sort(), here: fileNames.sort() };
-  }, [projectFiles, path]);
+  }, [shown, path]);
 
   const currentPath = path.join("/");
   const noteFor = (alias) =>
     (project?.attachments ?? []).find((a) => a.alias === alias)?.note ?? "";
+  const rootLabel = scope === "all" ? "Everything" : (project?.name ?? "Project");
 
-  const pick = (fullPath) => {
-    onPick?.(fullPath);
-    onOpenChange(false);
-  };
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex items-center gap-2 rounded-md border px-2">
+        <Search className="size-3.5 shrink-0 text-muted-foreground" />
+        <input
+          autoFocus={autoFocus}
+          className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none"
+          placeholder={scope === "all" ? "Search all files…" : "Search all project files…"}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+
+      {/* Breadcrumbs double as the way back up: a modal with no visible
+          location is one you get lost in. */}
+      {!results && (
+        <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+          <button
+            className={path.length === 0 ? "text-foreground" : "hover:text-foreground"}
+            onClick={() => setPath([])}
+          >
+            {rootLabel}
+          </button>
+          {path.map((seg, i) => (
+            <span key={i} className="flex items-center gap-1">
+              <ChevronRight className="size-3" />
+              <button
+                className={i === path.length - 1 ? "text-foreground" : "hover:text-foreground"}
+                onClick={() => setPath(path.slice(0, i + 1))}
+              >
+                {seg}
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="min-h-40 flex-1 overflow-y-auto rounded-md border">
+        {results ? (
+          results.length === 0 ? (
+            <p className="p-3 text-xs text-muted-foreground">Nothing matches “{query}”.</p>
+          ) : (
+            results.map((f) => (
+              <Row key={f} icon={<FileIcon name={f} />} label={f} onClick={() => onPick?.(f)} />
+            ))
+          )
+        ) : (
+          <>
+            {path.length > 0 && (
+              <Row
+                icon={<CornerLeftUp className="size-4 text-muted-foreground" />}
+                label="Back"
+                onClick={() => setPath(path.slice(0, -1))}
+              />
+            )}
+            {folders.map((d) => {
+              const full = [...path, d].join("/");
+              return (
+                <Row
+                  key={full}
+                  icon={<Folder className="size-4 text-muted-foreground" />}
+                  label={d}
+                  // At the root these are the attachments, so their notes --
+                  // the user's own "what this is for" -- belong here.
+                  hint={path.length === 0 ? noteFor(d) : ""}
+                  trailing={<ChevronRight className="size-3.5 text-muted-foreground" />}
+                  onClick={() => setPath([...path, d])}
+                />
+              );
+            })}
+            {here.map((f) => {
+              const full = [...path, f].join("/");
+              return (
+                <Row
+                  key={full}
+                  icon={<FileIcon name={f} />}
+                  label={f}
+                  onClick={() => onPick?.(full)}
+                />
+              );
+            })}
+            {folders.length === 0 && here.length === 0 && (
+              <p className="p-3 text-xs text-muted-foreground">This folder is empty.</p>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Attaching the folder itself is often the better answer: Enio can
+          list and search inside it rather than being handed one file. Only
+          in attach mode -- a folder cannot be opened in the canvas. */}
+      {pickLabel === "attach" && !results && path.length > 0 && (
+        <Button variant="outline" size="sm" className="self-start" onClick={() => onPick?.(currentPath)}>
+          <Folder className="size-3.5" /> Attach “{path[path.length - 1]}” as a folder
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export function ProjectFilesDialog({ open, onOpenChange, project, files = [], onPick }) {
+  // Keyed on open so the tree resets to the root each time it is shown.
+  const [openCount, setOpenCount] = useState(0);
+  useEffect(() => {
+    if (open) setOpenCount((n) => n + 1);
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[80vh] gap-3 sm:max-w-lg">
+      <DialogContent className="flex max-h-[80vh] flex-col gap-3 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Files in {project?.name ?? "this project"}</DialogTitle>
           <DialogDescription>
@@ -88,100 +194,16 @@ export function ProjectFilesDialog({ open, onOpenChange, project, files = [], on
             search inside it.
           </DialogDescription>
         </DialogHeader>
-
-        <div className="flex items-center gap-2 rounded-md border px-2">
-          <Search className="size-3.5 shrink-0 text-muted-foreground" />
-          <input
-            autoFocus
-            className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none"
-            placeholder="Search all project files…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-
-        {/* Breadcrumbs double as the way back up: a modal with no visible
-            location is one you get lost in. */}
-        {!results && (
-          <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-            <button
-              className={path.length === 0 ? "text-foreground" : "hover:text-foreground"}
-              onClick={() => setPath([])}
-            >
-              {project?.name ?? "Project"}
-            </button>
-            {path.map((seg, i) => (
-              <span key={i} className="flex items-center gap-1">
-                <ChevronRight className="size-3" />
-                <button
-                  className={i === path.length - 1 ? "text-foreground" : "hover:text-foreground"}
-                  onClick={() => setPath(path.slice(0, i + 1))}
-                >
-                  {seg}
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="min-h-40 flex-1 overflow-y-auto rounded-md border">
-          {results ? (
-            results.length === 0 ? (
-              <p className="p-3 text-xs text-muted-foreground">Nothing matches “{query}”.</p>
-            ) : (
-              results.map((f) => (
-                <Row key={f} icon={<FileIcon name={f} />} label={f} onClick={() => pick(f)} />
-              ))
-            )
-          ) : (
-            <>
-              {path.length > 0 && (
-                <Row
-                  icon={<CornerLeftUp className="size-4 text-muted-foreground" />}
-                  label="Back"
-                  onClick={() => setPath(path.slice(0, -1))}
-                />
-              )}
-              {folders.map((d) => {
-                const full = [...path, d].join("/");
-                return (
-                  <Row
-                    key={full}
-                    icon={<Folder className="size-4 text-muted-foreground" />}
-                    label={d}
-                    // At the root these are the attachments, so their notes --
-                    // the user's own "what this is for" -- belong here.
-                    hint={path.length === 0 ? noteFor(d) : ""}
-                    trailing={<ChevronRight className="size-3.5 text-muted-foreground" />}
-                    onClick={() => setPath([...path, d])}
-                  />
-                );
-              })}
-              {here.map((f) => {
-                const full = [...path, f].join("/");
-                return (
-                  <Row
-                    key={full}
-                    icon={<FileIcon name={f} />}
-                    label={f}
-                    onClick={() => pick(full)}
-                  />
-                );
-              })}
-              {folders.length === 0 && here.length === 0 && (
-                <p className="p-3 text-xs text-muted-foreground">This folder is empty.</p>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Attaching the folder itself is often the better answer: Enio can
-            list and search inside it rather than being handed one file. */}
-        {!results && path.length > 0 && (
-          <Button variant="outline" size="sm" className="self-start" onClick={() => pick(currentPath)}>
-            <Folder className="size-3.5" /> Attach “{path[path.length - 1]}” as a folder
-          </Button>
-        )}
+        <FileTree
+          key={openCount}
+          project={project}
+          files={files}
+          pickLabel="attach"
+          onPick={(p) => {
+            onPick?.(p);
+            onOpenChange(false);
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

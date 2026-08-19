@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { useThumbnail } from "@/components/AttachmentChips";
 import { FileViewer } from "@/components/FileViewer";
 import { listFiles, removeConversationFiles, removeFile } from "@/lib/recipes";
+import { fetchCapabilities } from "@/lib/capabilities";
+import { FileTree } from "@/components/ProjectFilesDialog";
 import { cn } from "@/lib/utils";
 
 const size = (bytes) =>
@@ -40,8 +42,19 @@ const size = (bytes) =>
  * the user's actual work, the server refuses to delete them, and their row
  * offers Finder instead.
  */
-export function FilesDialog({ open, onOpenChange, conversationId, onReuse }) {
+export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpenInCanvas }) {
   const [data, setData] = useState(null);
+  // Two faces of one button. Browse is the tree: every file Enio can reach
+  // (project folders, conversation attachments, the workspace), click to
+  // open in the canvas to read and edit. Storage is what was here before:
+  // what the workspace holds, grouped by conversation, and how to free it.
+  // Browse first, because "open a file" is the more common want.
+  const [tab, setTab] = useState("browse");
+  // The reachable file list, fetched fresh each time the dialog opens: the
+  // startup snapshot in capabilities would not show files the agent wrote
+  // a minute ago, which is exactly when you want to open them.
+  const [tree, setTree] = useState({ files: [], project: null });
+  const [treeKey, setTreeKey] = useState(0);
   const [expanded, setExpanded] = useState({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -55,6 +68,13 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse }) {
       setData(await listFiles());
     } catch (err) {
       setError(String(err?.message ?? err));
+    }
+    try {
+      const caps = await fetchCapabilities();
+      setTree({ files: caps.files ?? [], project: caps.project ?? null });
+      setTreeKey((k) => k + 1);
+    } catch {
+      /* the storage tab still works; the tree just shows what it last had */
     }
   }, []);
 
@@ -126,14 +146,54 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[80vh] gap-0 overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Files</DialogTitle>
+          <div className="flex items-center gap-3">
+            <DialogTitle>Files</DialogTitle>
+            <nav className="flex gap-1 text-xs">
+              {[
+                ["browse", "Browse"],
+                ["storage", "Storage"],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setTab(id)}
+                  className={`rounded px-2.5 py-1 ${
+                    tab === id ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
+          </div>
           <DialogDescription>
-            {data
-              ? `${size(data.totalBytes)} in your workspace. Attachments are kept with the conversation they belong to.`
-              : "Reading the workspace…"}
+            {tab === "browse"
+              ? tree.project
+                ? `Every file Enio can reach — ${tree.project.name}'s folders and your workspace. Click one to open it.`
+                : "Every file Enio can reach in your workspace. Click one to open it."
+              : data
+                ? `${size(data.totalBytes)} in your workspace. Attachments are kept with the conversation they belong to.`
+                : "Reading the workspace…"}
           </DialogDescription>
         </DialogHeader>
 
+        {tab === "browse" && (
+          <div className="mt-3 flex min-h-[50vh] flex-col">
+            <FileTree
+              key={treeKey}
+              project={tree.project}
+              files={tree.files}
+              scope="all"
+              pickLabel="open"
+              onPick={(path) => {
+                onOpenInCanvas?.(path);
+                onOpenChange(false);
+              }}
+            />
+          </div>
+        )}
+
+        {tab === "storage" && (<>
         {error && (
           <p className="mt-3 rounded border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
             {error}
@@ -220,6 +280,7 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse }) {
             <ul className="mt-2 space-y-1">{workspace.map((f) => row(f, workspace))}</ul>
           </section>
         )}
+        </>)}
       </DialogContent>
     </Dialog>
     </>

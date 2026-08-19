@@ -188,7 +188,14 @@ The set the arrows walk is the set you opened from. Open a screenshot from a
 conversation and you step through that conversation; open one from the
 workspace list and you step through the workspace.
 
-The **Files** button in the status bar is where storage is managed. It shows
+The **Files** button in the status bar has two tabs. **Browse** is a tree of
+every file Enio can reach — the open project's folders, conversation
+attachments, and the workspace — with search across all of it; click a file
+and it opens in the canvas, where you can read it, edit it, and save (⌘S)
+straight back to disk. The list is re-read each time you open the tab, so a
+file the agent wrote a moment ago is there.
+
+**Storage** is where storage is managed. It shows
 what this conversation attached, what every other conversation attached —
 grouped under the question it was asked with, which is the only grouping that
 answers "do I still need this" — and the workspace files that belong to no
