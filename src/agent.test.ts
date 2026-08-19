@@ -552,3 +552,34 @@ describe("disclaimed live access", () => {
     }
   });
 });
+
+describe("knowledge covers the question", () => {
+  test("every distinctive term of the question in one known item", async () => {
+    const { knowledgeCovers } = await import("./agent.js");
+    const known = [
+      "Angie Nixon defeated Alex Vindman in the Florida Democratic Senate primary.",
+      "user knows DreamHost",
+    ];
+    // Watched: this exact question re-searched the web with the first fact
+    // sitting in the memory block.
+    assert.equal(knowledgeCovers("what happened to angie nixon", known), true);
+    assert.equal(knowledgeCovers("who did Nixon defeat?", known), true);
+    // A near-miss that shares one name but not the other must NOT count:
+    // "angie" alone is not this fact.
+    assert.equal(knowledgeCovers("what happened to angie merkel", known), false);
+    // Two terms split across two facts do not add up to coverage.
+    assert.equal(
+      knowledgeCovers("did nixon join dreamhost", known),
+      false,
+      "terms must land in ONE item, not one each",
+    );
+  });
+
+  test("a question with no distinctive terms is never covered", async () => {
+    const { knowledgeCovers } = await import("./agent.js");
+    // Nothing to match on: stopwords only. Better to search than to declare
+    // "what happened today" answered by whatever fact is nearest.
+    assert.equal(knowledgeCovers("what happened today", ["Anything at all about today."]), false);
+    assert.equal(knowledgeCovers("what news", ["Some news fact."]), false);
+  });
+});

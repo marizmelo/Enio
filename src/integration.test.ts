@@ -1335,6 +1335,54 @@ describe("the researcher answering from memory", () => {
     assert.match(String(seedCall?.tool_calls?.[0]?.function.arguments), /world cup this year/);
   });
 
+  test("memory before the web: a covered question does not search", async () => {
+    // The fact the user saved from an earlier answer must be USED, not
+    // re-researched. With it in memory, the seed stays quiet and the model
+    // answers from the block; and answering with no tool call is then the
+    // right behaviour, so the stale-answer guard stays quiet too.
+    const { rememberFact } = await import("./memory/store.js");
+    await rememberFact("Angie Nixon defeated Alex Vindman in the Florida Democratic Senate primary.", {
+      source: "user",
+    });
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { content: "From what I already know: Angie Nixon defeated Alex Vindman in the Florida Democratic Senate primary." },
+    ]);
+    const seen: string[] = [];
+    const notices: string[] = [];
+    const result = await runTurn("what happened to angie nixon", [], registry, sessionId, {
+      onToolStart: (n) => seen.push(n),
+      onNotice: (n) => notices.push(n),
+    }, { specialist: "researcher" });
+    assert.deepEqual(seen, [], "no search: memory covered it");
+    assert.match(result.reply, /Nixon defeated/);
+    assert.equal(notices.filter((n) => /Correcting|Looking it up/.test(n)).length, 0, notices.join(" | "));
+  });
+
+  test("this conversation before the web: an earlier reply covers it", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "As I said above, Byron Donalds and David Jolly advanced to the governor's race." }]);
+    const seen: string[] = [];
+    const history: Message[] = [
+      { role: "user", content: "what news today?" },
+      { role: "assistant", content: "Byron Donalds and David Jolly advanced to the Florida governor's race after winning their primaries." },
+    ];
+    await runTurn("what did byron donalds do", history, registry, sessionId, {
+      onToolStart: (n) => seen.push(n),
+    }, { specialist: "researcher" });
+    assert.deepEqual(seen, [], "no search: the thread already had it");
+    // And a genuinely NEW angle on the same person is not covered -- the
+    // reply says nothing about an opponent, so the web is the right source.
+    scriptModel([{ content: "" }, { content: "Per the search…" }]);
+    const seen2: string[] = [];
+    await runTurn("who is byron donalds running against", [...history], registry, sessionId, {
+      onToolStart: (n) => seen2.push(n),
+    }, { specialist: "researcher" });
+    assert.deepEqual(seen2, ["web_search"], "an unanswered angle still searches");
+  });
+
   test("a greeting is not an answer from memory", async () => {
     const registry = await buildRegistry();
     const sessionId = store.startSession();

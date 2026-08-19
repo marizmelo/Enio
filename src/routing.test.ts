@@ -147,7 +147,7 @@ describe("routing inside a turn", () => {
     // The system prompt should carry the researcher's instructions, not the
     // generic ones — this is what actually changes behaviour.
     const system = String(history[0]?.content ?? "");
-    assert.match(system, /research things on the web/i);
+    assert.match(system, /You research things and report what you find/i);
 
     // Matched against the coder's own opening line rather than the word
     // "workspace". The bare noun was a proxy for the coder's framing, and it

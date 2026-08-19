@@ -46,8 +46,14 @@ export const SPECIALISTS: Specialist[] = [
     description:
       "Questions about the outside world: news, current events, announcements, documentation, or anything needing a web lookup.",
     systemPrompt:
-      `You research things on the web and report what you find.\n\n` +
-      `Always start with web_search. It returns the ranked list AND the text of ` +
+      `You research things and report what you find.\n\n` +
+      // Memory first, then the web -- and stated in this order because the
+      // researcher was re-searching facts the user had saved from an answer
+      // three messages up. The block below the role carries what is known.
+      `If the Known facts below, or an earlier answer in this conversation, already ` +
+      `say what the user is asking, answer from that and say it is something you ` +
+      `already knew — do not search again for it. Otherwise ` +
+      `start with web_search. It returns the ranked list AND the text of ` +
       `the top pages, so one call is usually everything you need. Never guess a ` +
       `URL — a guessed address is a 404, and the search is there so you do not ` +
       `have to. Use browse when you need to follow a trail (it keeps the ` +

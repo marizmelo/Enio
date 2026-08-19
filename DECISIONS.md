@@ -2057,6 +2057,36 @@ and search finds it either way. Saved with `source: user` and the
 conversation's session id, so the facts show under that conversation in the
 history dialog and its keep/forget choice covers them.
 
+**Memory before the web, and this thread before both.** The researcher's
+search seed fired on every factual question, so a fact the user had just
+saved from an answer three messages up was ignored and the web was searched
+again — no internal lookup, then an external one, inside the very
+conversation that produced the fact. Memory is retrieved before the seed
+runs (it is already in the block); what was missing was deciding whether
+that retrieval was an ANSWER or merely a neighbour.
+
+`knowledgeCovers` decides, and deliberately not by the retrieval score:
+cosine and keyword scores admit "user knows DreamHost" for almost anything,
+and their threshold was tuned for "worth mentioning", not "settles the
+question". Coverage means every distinctive term of the question — four-plus
+letters, not a stopword — appears in ONE remembered fact or ONE earlier
+assistant reply of this thread. "angie nixon" both in the Nixon fact, yes;
+"angie" alone in a fact about someone else, no; two terms split across two
+facts, no. Proper nouns are what make a fact about THIS thing rather than a
+thing like it, and asking a small model "did memory answer this?" would be
+back to the judgement call the whole design removes. When it covers, the
+seed stays quiet, the stale-answer guard stays quiet (answering from what is
+known is the right behaviour then), and the prompt says to name it as
+something already known. Measured: "what happened to angie nixon" answered
+from memory in 10s with zero searches and said so; "who won the world cup"
+still searched.
+
+Recorded honestly: the fact was ALSO simply gone. After verifying the
+remember flow live I deleted the three facts as test data — they were the
+user's, saved on purpose, and the question that followed was about them.
+Restored, and the lesson is the one already in the safety rules: look at
+what a row is before deleting it, and a user's own action is not test data.
+
 **Known residual, recorded not fixed:** a scheduled *prompt* task runs
 through runTurn after repointing the process-global sessions
 (setMemorySession and friends). A task firing mid-interactive-turn can

@@ -126,6 +126,53 @@ function withDateOnLatest(messages: Message[]): Message[] {
   ];
 }
 
+/**
+ * Whether what is already known covers the question -- memory first, then
+ * the web.
+ *
+ * The researcher's search seed fired on every factual question, so a fact
+ * the user had just saved from an answer three messages up was ignored and
+ * the web was searched again: no internal lookup, then an external one,
+ * inside the very conversation that produced the fact. Memory is retrieved
+ * before the seed runs (it is in the block already); this decides whether
+ * that retrieval is an ANSWER or merely a neighbour.
+ *
+ * The test is deliberately not the retrieval score. Cosine and keyword
+ * scores admit "user knows DreamHost" for almost anything, and a threshold
+ * on them was already tuned for "worth mentioning", not "settles the
+ * question". Coverage instead means the question's distinctive terms --
+ * words of four or more letters that are not stopwords -- all appear in one
+ * remembered fact or in an earlier assistant reply of this thread. Every
+ * such term, in one place: "angie nixon" both in the Nixon fact, yes; "angie"
+ * alone in a fact about someone else, no. Proper nouns are exactly what makes
+ * a fact about THIS thing rather than a thing like it, and a small model
+ * asked "did memory answer this?" would be back to the judgement call this
+ * whole design removes.
+ */
+const STOPWORDS = new Set(
+  "what when where which who whom whose why how does did do is are was were will would could should the this that these those about with from into over under after before then than there here have has had been being tell give show find happened happen happens latest news today year".split(
+    " ",
+  ),
+);
+function distinctiveTerms(text: string): string[] {
+  return [
+    ...new Set(
+      text
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((w) => w.length >= 4 && !STOPWORDS.has(w)),
+    ),
+  ];
+}
+export function knowledgeCovers(question: string, known: string[]): boolean {
+  const terms = distinctiveTerms(question);
+  if (terms.length === 0) return false;
+  return known.some((k) => {
+    const hay = k.toLowerCase();
+    return terms.every((t) => hay.includes(t));
+  });
+}
+
 // Each line here was chosen by measurement, not by style, and they are not
 // uniform on purpose. The image sentence keeps its never-say clause because
 // removing it measurably dropped correct answers (3/3 with, 2/4 without). The
@@ -841,10 +888,26 @@ export async function runTurn(
   const searchTool = activeTools.find((t) => t.name === "web_search");
   const looksLikeQuestion =
     userInput.trim().length >= 12 && !/^(hi|hello|hey|thanks|thank you|ok|okay)\b/i.test(userInput.trim());
+  // Memory and this thread come before the web. The known set is every
+  // fact line in the memory block plus every earlier assistant reply here:
+  // if one of them already names everything the question is about, the
+  // model answers from that and no search runs. Watched: a fact the user
+  // saved from an answer three messages up was ignored and re-searched.
+  const knownHere = [
+    ...memoryBlock
+      .split("\n")
+      .filter((l) => l.startsWith("- "))
+      .map((l) => l.slice(2)),
+    ...history
+      .filter((m) => m.role === "assistant" && typeof m.content === "string")
+      .map((m) => String(m.content)),
+  ];
+  const alreadyKnown = knowledgeCovers(userInput, knownHere);
   if (
     specialistName === "researcher" &&
     searchTool &&
     looksLikeQuestion &&
+    !alreadyKnown &&
     !(overrides.skills && overrides.skills.length > 0)
   ) {
     // Mentions are already stripped upstream (parseMentions runs before
@@ -1057,8 +1120,12 @@ export async function runTurn(
   // should have come from a tool and came from memory. Kept to the
   // researcher, whose prompt already says "always start with web_search",
   // and to replies long enough to be an answer rather than a greeting.
+  // Not when memory or this thread already covered the question: answering
+  // from what is known IS the right behaviour then, and forcing a search
+  // would undo the memory-first rule the seed just applied.
   const answeredFromMemory =
     !toolRanThisTurn &&
+    !alreadyKnown &&
     specialistName === "researcher" &&
     activeTools.some((t) => t.name === "web_search") &&
     reply.trim().length > 60;
