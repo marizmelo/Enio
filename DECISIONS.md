@@ -2036,6 +2036,27 @@ sees exactly what a model-requested search would have produced. The guards
 stay: they still cover the other agents, and the researcher on a turn the
 seed does not fire.
 
+**"Remember this" under a reply: distil, preview, then save.** Memory had
+two ways in — the model calling `remember` about something the user said, and
+end-of-conversation extraction, which is the model deciding what mattered and
+once decided `sky PREFERS being blue`. There was no way for the USER to say
+"this answer, keep it", and a person pressing that is a far better signal
+than either. But a 2,000-character reply is not a fact: dropped in whole it
+would give every future memory block a paragraph to wade through. So the
+harness distils — one bounded model call, temperature zero, "state the
+durable facts as short standalone sentences", capped at five, deduped
+before the cap so a padded model cannot spend a slot on a repeat — and the
+candidates are shown under the reply for ticking and editing BEFORE anything
+is written. What lands is what the user read and approved; a bad distillation
+costs a glance. The notes-transform pattern, applied to memory.
+
+Facts, not graph triples, on purpose: the closed relation vocabulary is for
+the user's world (who works on what, with what), and an answer worth keeping
+is usually knowledge ABOUT something — free text is its honest container,
+and search finds it either way. Saved with `source: user` and the
+conversation's session id, so the facts show under that conversation in the
+history dialog and its keep/forget choice covers them.
+
 **Known residual, recorded not fixed:** a scheduled *prompt* task runs
 through runTurn after repointing the process-global sessions
 (setMemorySession and friends). A task firing mid-interactive-turn can

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowUpRight, Check, Copy, Cpu, Globe, Square, Volume2 } from "lucide-react";
+import { ArrowUpRight, Brain, Check, Copy, Cpu, Globe, Square, Volume2 } from "lucide-react";
 import { TipButton } from "@/components/TipButton";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +16,7 @@ import { speakAll, stopSpeaking } from "@/lib/speech";
  * Under the message rather than beside it: these act on a finished reply, and
  * putting them inline would put them in the way of reading it.
  */
-export function MessageActions({ content, canSpeak = true, onAskBigger, upgrade, onTryUpgrade }) {
+export function MessageActions({ content, canSpeak = true, onAskBigger, upgrade, onTryUpgrade, onRemember, remembering = false }) {
   const [copied, setCopied] = useState(false);
   const [playing, setPlaying] = useState(false);
 
@@ -65,6 +65,19 @@ export function MessageActions({ content, canSpeak = true, onAskBigger, upgrade,
       >
         {playing ? <Square className="size-3.5" /> : <Volume2 className="size-3.5" />}
       </TipButton>
+      )}
+      {/* The opposite of the escape hatch: an answer worth keeping. Memory
+          otherwise fills only with what the model decided mattered, and it
+          decided `sky PREFERS being blue` once; a person pressing this is
+          the better signal. Distilled and previewed before anything lands. */}
+      {onRemember && (
+        <TipButton
+          tip={remembering ? "Choosing what to keep…" : "Remember this — add to memory"}
+          className={`size-7 ${remembering ? "text-emerald-600" : ""}`}
+          onClick={onRemember}
+        >
+          <Brain className="size-3.5" />
+        </TipButton>
       )}
       {/* The escape hatch for a disappointing answer. On every reply, not
           just failures, because "not what I wanted" is the user's judgement

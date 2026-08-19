@@ -931,6 +931,15 @@ export function App() {
               <Fragment key={i}>
                 <Message
                   {...m}
+                  // For "remember this": the user message just before this
+                  // reply is the question it answered, and the open
+                  // conversation is where the facts get filed.
+                  question={
+                    m.role === "assistant"
+                      ? [...messages.slice(0, i)].reverse().find((x) => x.role === "user")?.content ?? null
+                      : null
+                  }
+                  sessionId={conversationId}
                   streaming={streaming && i === messages.length - 1 && m.role === "assistant"}
                   onOpenFile={(names, index) =>
                     setViewing({ files: names.map((path) => ({ path })), index })

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Thinking } from "@/components/Thinking";
 import { Widget } from "@/components/Widget";
@@ -8,6 +9,7 @@ import { MessageActions } from "@/components/MessageActions";
 import { FileText, Info, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { escapeHtml, renderMarkdownish } from "@/lib/markdown";
+import { RememberPopover } from "@/components/RememberPopover";
 
 /**
  * One turn. User text is rendered through the same escaping path as model
@@ -40,7 +42,13 @@ export function Message({
   // Voice conversation is using the speaker: read-aloud would talk over
   // it and into what must not be an open mic.
   speakDisabled = false,
+  // For "remember this": the question this answered (context for the
+  // distillation) and the conversation it belongs to (so the facts are
+  // filed under it). Absent on user messages, which are not rememberable.
+  question = null,
+  sessionId = null,
 }) {
+  const [remembering, setRemembering] = useState(false);
   const isUser = role === "user";
   const waiting = streaming && !isUser && !error && content.length === 0;
 
@@ -159,6 +167,16 @@ export function Message({
           onAskBigger={!isUser ? onAskBigger : undefined}
           upgrade={upgrade}
           onTryUpgrade={!isUser ? onTryUpgrade : undefined}
+          onRemember={!isUser && !error ? () => setRemembering((v) => !v) : undefined}
+          remembering={remembering}
+        />
+      )}
+      {remembering && (
+        <RememberPopover
+          question={question ?? ""}
+          answer={content}
+          sessionId={sessionId}
+          onClose={() => setRemembering(false)}
         />
       )}
 
