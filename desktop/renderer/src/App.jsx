@@ -238,10 +238,10 @@ export function App() {
   useEffect(() => {
     // Project roots first: the main process resolves previews first-match,
     // and the server gives the project the same precedence.
-    window.maple?.setProjectRoots?.([
-      ...(project?.attachments ?? []),
-      ...convAttachments,
-    ]);
+    window.maple?.setProjectRoots?.(
+      [...(project?.attachments ?? []), ...convAttachments],
+      project?.outDir ?? null,
+    );
     if (backendReady) fetchCapabilities().then(setCapabilities);
   }, [project, convAttachments, backendReady]);
 

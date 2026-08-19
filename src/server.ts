@@ -111,7 +111,7 @@ import {
 import { buildIndexInBackground } from "./project-index.js";
 import { latestSessionForProject } from "./memory/store.js";
 import { embeddingsDegraded } from "./memory/embed.js";
-import { mentionContext, parseMentions } from "./mentions.js";
+import { generatedFiles, mentionContext, parseMentions } from "./mentions.js";
 import { SPECIALISTS } from "./specialists.js";
 import { extractSources } from "./sources.js";
 import { loadSkills } from "./skills.js";
@@ -217,6 +217,10 @@ function projectSummary(project: Project | null) {
       note: a.note,
       path: a.path,
     })),
+    // Where plain-path generated files live, so the desktop's canvas can
+    // open and save them -- they are addressed unprefixed, same as
+    // workspace files, and the resolver needs to know which root wins.
+    outDir: project.outDir,
     // What "open this project" should resume, so the client needs no second
     // round-trip to decide.
     latestConversation: latestSessionForProject(project.id),
@@ -329,6 +333,10 @@ async function handle(
       // after a restart -- but a menu that grows by one row every time anyone
       // attaches a screenshot stops being a way to find a file.
       files: ctx.files.filter((f) => !f.startsWith(`${ATTACH_DIR}/`)),
+      // Which unprefixed entries are the project's own generated files --
+      // they share the plain-path namespace with workspace files, and the
+      // Browse tree needs to know whose they are to group project-first.
+      generated: generatedFiles(),
       attachments: ctx.files.filter((f) => f.startsWith(`${ATTACH_DIR}/`)),
       // So a client can decide whether to offer a microphone at all, rather
       // than offering one that returns 503 when pressed.

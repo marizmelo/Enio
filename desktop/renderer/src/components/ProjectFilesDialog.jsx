@@ -30,7 +30,7 @@ import { isImageName } from "@/lib/capabilities";
  * `scope` widens it past the project: "all" shows workspace files too,
  * which is what browsing (as opposed to attaching project context) wants.
  */
-export function FileTree({ project, files = [], onPick, pickLabel = "attach", scope = "project", autoFocus = true }) {
+export function FileTree({ project, files = [], generated = [], onPick, pickLabel = "attach", scope = "project", autoFocus = true }) {
   // Current location as path segments, starting at the virtual root that
   // holds the attachment aliases.
   const [path, setPath] = useState([]);
@@ -79,6 +79,33 @@ export function FileTree({ project, files = [], onPick, pickLabel = "attach", sc
   const noteFor = (alias) =>
     (project?.attachments ?? []).find((a) => a.alias === alias)?.note ?? "";
   const rootLabel = scope === "all" ? "Everything" : (project?.name ?? "Project");
+
+  // Project-first at the root: with a project open, its attached folders and
+  // its generated files come first under their own heading, and the
+  // workspace follows under another -- one tree, so search still spans
+  // everything, but the project is what you see when you arrive. An entry is
+  // the project's when it is an attachment alias, a generated file, or a
+  // folder whose files are all generated (a folder holding both generated
+  // and workspace files stays with the workspace: the collision is the
+  // workspace's namespace, and mislabelling it "project" would hide that).
+  const generatedSet = useMemo(() => new Set(generated), [generated]);
+  const grouped = useMemo(() => {
+    if (!project || scope !== "all" || path.length > 0) return null;
+    const genRoots = new Set(generated.map((g) => g.split("/")[0]));
+    const wsRoots = new Set(
+      files
+        .filter((f) => !aliases.has(f.split("/")[0]) && !generatedSet.has(f))
+        .map((f) => f.split("/")[0]),
+    );
+    const isProjectEntry = (name, isFolder) =>
+      aliases.has(name) || (isFolder ? genRoots.has(name) && !wsRoots.has(name) : generatedSet.has(name));
+    return {
+      projectFolders: folders.filter((d) => isProjectEntry(d, true)),
+      projectHere: here.filter((f) => isProjectEntry(f, false)),
+      wsFolders: folders.filter((d) => !isProjectEntry(d, true)),
+      wsHere: here.filter((f) => !isProjectEntry(f, false)),
+    };
+  }, [project, scope, path, folders, here, aliases, generated, generatedSet, files]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -135,32 +162,49 @@ export function FileTree({ project, files = [], onPick, pickLabel = "attach", sc
                 onClick={() => setPath(path.slice(0, -1))}
               />
             )}
-            {folders.map((d) => {
-              const full = [...path, d].join("/");
-              return (
-                <Row
-                  key={full}
-                  icon={<Folder className="size-4 text-muted-foreground" />}
-                  label={d}
-                  // At the root these are the attachments, so their notes --
-                  // the user's own "what this is for" -- belong here.
-                  hint={path.length === 0 ? noteFor(d) : ""}
-                  trailing={<ChevronRight className="size-3.5 text-muted-foreground" />}
-                  onClick={() => setPath([...path, d])}
-                />
-              );
-            })}
-            {here.map((f) => {
-              const full = [...path, f].join("/");
-              return (
-                <Row
-                  key={full}
-                  icon={<FileIcon name={f} />}
-                  label={f}
-                  onClick={() => onPick?.(full)}
-                />
-              );
-            })}
+            {(grouped
+              ? [
+                  { heading: project?.name ?? "Project", folders: grouped.projectFolders, files: grouped.projectHere },
+                  { heading: "Workspace", folders: grouped.wsFolders, files: grouped.wsHere },
+                ]
+              : [{ heading: null, folders, files: here }]
+            ).map(({ heading, folders: fs, files: hs }) =>
+              heading !== null && fs.length === 0 && hs.length === 0 ? null : (
+                <div key={heading ?? "flat"}>
+                  {heading !== null && (
+                    <p className="border-b bg-muted/40 px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {heading}
+                    </p>
+                  )}
+                  {fs.map((d) => {
+                    const full = [...path, d].join("/");
+                    return (
+                      <Row
+                        key={full}
+                        icon={<Folder className="size-4 text-muted-foreground" />}
+                        label={d}
+                        // At the root these are the attachments, so their notes --
+                        // the user's own "what this is for" -- belong here.
+                        hint={path.length === 0 ? noteFor(d) : ""}
+                        trailing={<ChevronRight className="size-3.5 text-muted-foreground" />}
+                        onClick={() => setPath([...path, d])}
+                      />
+                    );
+                  })}
+                  {hs.map((f) => {
+                    const full = [...path, f].join("/");
+                    return (
+                      <Row
+                        key={full}
+                        icon={<FileIcon name={f} />}
+                        label={f}
+                        onClick={() => onPick?.(full)}
+                      />
+                    );
+                  })}
+                </div>
+              ),
+            )}
             {folders.length === 0 && here.length === 0 && (
               <p className="p-3 text-xs text-muted-foreground">This folder is empty.</p>
             )}

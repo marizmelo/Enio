@@ -53,7 +53,7 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
   // The reachable file list, fetched fresh each time the dialog opens: the
   // startup snapshot in capabilities would not show files the agent wrote
   // a minute ago, which is exactly when you want to open them.
-  const [tree, setTree] = useState({ files: [], project: null });
+  const [tree, setTree] = useState({ files: [], generated: [], project: null });
   const [treeKey, setTreeKey] = useState(0);
   const [expanded, setExpanded] = useState({});
   const [error, setError] = useState("");
@@ -71,7 +71,7 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
     }
     try {
       const caps = await fetchCapabilities();
-      setTree({ files: caps.files ?? [], project: caps.project ?? null });
+      setTree({ files: caps.files ?? [], generated: caps.generated ?? [], project: caps.project ?? null });
       setTreeKey((k) => k + 1);
     } catch {
       /* the storage tab still works; the tree just shows what it last had */
@@ -188,6 +188,7 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
               key={treeKey}
               project={tree.project}
               files={tree.files}
+              generated={tree.generated}
               scope="all"
               pickLabel="open"
               onPick={(path) => {

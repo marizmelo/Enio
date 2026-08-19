@@ -879,8 +879,14 @@ const PREVIEW_LIMIT = 20 * 1024 * 1024;
  * because these handlers are synchronous and must not grow an HTTP round trip.
  */
 let projectRoots = [];
-ipcMain.handle("set-project-roots", (_event, roots) => {
+let projectOutDir = null;
+ipcMain.handle("set-project-roots", (_event, roots, outDir) => {
   projectRoots = Array.isArray(roots) ? roots : [];
+  // The project's own storage: where plain-path generated files live. An
+  // unprefixed path resolves here first when the file exists, mirroring the
+  // server's safePath -- without this, clicking a generated document in the
+  // tree opened the WORKSPACE file of the same name, or nothing.
+  projectOutDir = typeof outDir === "string" && outDir ? outDir : null;
   return true;
 });
 
@@ -900,6 +906,15 @@ function resolveInWorkspace(relPath) {
     const full = path.resolve(mount.path, rel.slice(head.length + 1));
     if (full !== mount.path && !full.startsWith(mount.path + path.sep)) return null;
     return full;
+  }
+  // Unprefixed: the project's storage wins when the file exists there --
+  // safePath's own collision rule, mirrored so the canvas opens the same
+  // bytes the agent's tools would.
+  if (projectOutDir) {
+    const inOut = path.resolve(projectOutDir, rel);
+    if ((inOut === projectOutDir || inOut.startsWith(projectOutDir + path.sep)) && fs.existsSync(inOut)) {
+      return inOut;
+    }
   }
   const full = path.resolve(WORKSPACE, rel);
   if (full !== WORKSPACE && !full.startsWith(WORKSPACE + path.sep)) return null;

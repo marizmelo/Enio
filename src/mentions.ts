@@ -92,15 +92,53 @@ export function workspaceFiles(max = 400): string[] {
     }
   };
   const project = activeProject();
-  // Project mounts, then conversation mounts, then the workspace — the same
-  // precedence safePath resolves with.
+  // Project mounts, then conversation mounts, then the project's own
+  // storage, then the workspace — the same precedence safePath resolves
+  // with. out/ was missing entirely: documents the agent generated with
+  // plain paths landed there and appeared in no listing anywhere, which
+  // read as "files not being created". They are addressed unprefixed, so a
+  // name held by both out/ and the workspace is listed once and resolves to
+  // out/ — safePath's own collision rule.
   const mounts = [...(project?.attachments ?? []), ...conversationMounts()];
   for (const a of mounts) {
     if (out.length >= max) break;
     if (a.kind === "file") out.push(a.alias);
     else walk(a.path, 0, a.path, a.alias + "/");
   }
+  if (project) walk(project.outDir, 0, project.outDir, "");
   walk(config.workspace, 0, config.workspace, "");
+  return [...new Set(out)].sort();
+}
+
+/** Just the project's own storage — what workspaceFiles merged in
+ *  unprefixed. Listed separately too, so the Browse tree can label these
+ *  "project" rather than letting generated documents masquerade as
+ *  workspace files. */
+export function generatedFiles(max = 200): string[] {
+  const project = activeProject();
+  if (!project) return [];
+  const out: string[] = [];
+  const walk = (dir: string, depth: number, base: string) => {
+    if (out.length >= max || depth > 3) return;
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.startsWith(".")) continue;
+      const full = join(dir, entry);
+      try {
+        if (statSync(full).isDirectory()) walk(full, depth + 1, base);
+        else out.push(relative(base, full));
+      } catch {
+        /* vanished between readdir and stat */
+      }
+      if (out.length >= max) return;
+    }
+  };
+  walk(project.outDir, 0, project.outDir);
   return out.sort();
 }
 

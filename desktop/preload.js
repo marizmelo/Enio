@@ -42,8 +42,8 @@ contextBridge.exposeInMainWorld("maple", {
 
   /** Tell the main process which project roots are open, so previews,
    *  Save as… and Reveal work for project files too. */
-  setProjectRoots(roots) {
-    return ipcRenderer.invoke("set-project-roots", roots);
+  setProjectRoots(roots, outDir) {
+    return ipcRenderer.invoke("set-project-roots", roots, outDir);
   },
 
   /** Create an empty text file (the Browse tab's New file). */
