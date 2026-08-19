@@ -567,7 +567,11 @@ ipcMain.handle("pick-project-paths", async (_event, title) => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: String(title || "Attach files or folders to this project"),
     buttonLabel: "Attach",
-    properties: ["openFile", "openDirectory", "multiSelections"],
+    // createDirectory puts a "New Folder" button in the sheet (macOS), so
+    // starting a project does not require leaving the app to make the folder
+    // it will live in. The folder is created by the system dialog, under the
+    // user's own hand, which is exactly the consent attaching is meant to be.
+    properties: ["openFile", "openDirectory", "multiSelections", "createDirectory"],
   });
   return result.canceled ? [] : result.filePaths;
 });

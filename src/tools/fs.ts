@@ -48,6 +48,20 @@ function resolveInMount(mount: { alias: string; path: string; kind: string }, re
   return target;
 }
 
+/** The attached folder that IS the project, when there is exactly one and
+ *  the project is a code project. Null otherwise -- several folders, none,
+ *  or a general/planning project, where out/ stays the home for new files. */
+function soleCodeFolder(active: NonNullable<ReturnType<typeof activeProject>>) {
+  if (active.type !== "code") return null;
+  const folders = active.attachments.filter((a) => a.kind === "folder");
+  return folders.length === 1 ? folders[0]! : null;
+}
+
+const DOCUMENT_PATH = /\.(md|markdown|txt)$/i;
+function isDocumentPath(raw: string): boolean {
+  return DOCUMENT_PATH.test(raw);
+}
+
 export function safePath(userPath: string, opts: { forWrite?: boolean } = {}): string {
   const raw = String(userPath);
   const active = activeProject();
@@ -62,6 +76,23 @@ export function safePath(userPath: string, opts: { forWrite?: boolean } = {}): s
         ? (findMount(segments[0]!) ?? findConversationMount(segments[0]!))
         : null;
     if (mount) return resolveInMount(mount, segments.slice(1));
+
+    // A code project with exactly one attached folder: that folder IS the
+    // project, and an unprefixed path roots there. Watched: asked to create
+    // an app in the folder the user had just attached for that purpose, the
+    // model wrote index.html, css/style.css, js/app.js -- three correct
+    // write_file calls -- into the hidden out/ dir under ~/.enio, and the
+    // user saw an empty folder and "files not being created". The out/ rule
+    // was designed for documents, so drafts stay out of a repo; for a code
+    // project with one folder it is backwards, because attaching that
+    // folder was the instruction. Documents (.md/.txt) still go to out/,
+    // and so does everything when there are several folders or none --
+    // then "plain path" is genuinely ambiguous and out/ is the honest home.
+    const sole = soleCodeFolder(active);
+    if (sole && !isDocumentPath(raw)) {
+      const t = resolve(sole.path, raw);
+      if (t === sole.path || t.startsWith(sole.path + sep)) return t;
+    }
 
     const outRoot = resolve(active.outDir);
     const target = resolve(outRoot, raw);

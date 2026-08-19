@@ -548,6 +548,26 @@ export function fileTokens(text: string): string[] {
   return out;
 }
 
+/**
+ * A coder reply that IS the code, instead of writing it.
+ *
+ * Watched, three turns running: asked to create an app, the model emitted
+ * 7,000 characters of HTML/CSS/JS into the reply -- zero tool calls -- after
+ * a refused `mkdir` taught it the filesystem was off limits. It claims no
+ * action, so the fabrication guard is silent; it names no existing file, so
+ * the seed is silent; it writes nothing, so verify is silent. But a code
+ * block of that size in the answer, from the agent whose job is files, is
+ * the same failure as "I've opened Notes": the work narrated, not done. The
+ * threshold is deliberately high -- a twelve-line snippet explaining a
+ * concept is an answer, a two-hundred-line file is a file.
+ */
+export function narratesCodeInsteadOfWriting(text: string): boolean {
+  const fences = [...text.matchAll(/```[^\n]*\n([\s\S]*?)```/g)];
+  if (fences.length === 0) return false;
+  const lines = fences.reduce((n, m) => n + m[1]!.split("\n").length, 0);
+  return lines >= 40 || fences.length >= 3;
+}
+
 /** The tools whose presence makes a live-access disclaimer false. */
 const LIVE_TOOLS = new Set(["web_search", "web_fetch", "browse", "weather", "current_time"]);
 /** For the basis label: what counts as "went to the web" and "read files".
@@ -674,8 +694,15 @@ function projectBlock(): string {
       .map((a) => `${a.alias}${a.kind === "folder" ? "/" : ""}${a.note ? ` — ${a.note}` : ""}`);
     const more = project.attachments.length - listed.length;
     lines.push(`Attached: ${listed.join("; ")}${more > 0 ? `; and ${more} more` : ""}`);
+    const folders = project.attachments.filter((a) => a.kind === "folder");
+    const sole = project.type === "code" && folders.length === 1 ? folders[0]! : null;
     lines.push(
-      `Use these names as the first path segment. Files you create with plain relative paths are stored with the project.`,
+      sole
+        ? // One folder, code project: that folder is the project. Saying so
+          // is what sends new files there rather than to the hidden out/
+          // dir -- the model writes what the path grammar tells it to.
+          `Use these names as the first path segment. "${sole.alias}/" is the project's code folder: new code files go there (a plain path like src/app.js means ${sole.alias}/src/app.js). Documents (.md, .txt) with plain paths are stored with the project.`
+        : `Use these names as the first path segment. Files you create with plain relative paths are stored with the project.`,
     );
   }
   return lines.join("\n");
@@ -1260,8 +1287,19 @@ export async function runTurn(
     reply.trim().length > 60;
   const disclaimed =
     !toolRanThisTurn && heldLiveTools.length > 0 && reply.trim() && disclaimsLiveAccess(reply);
-  const stale = disclaimed || answeredFromMemory;
-  if (reply.trim() && !toolRanThisTurn && (claimsUnperformedAction(reply) || stale)) {
+  // The coder writing the code into the reply instead of into files: the
+  // work narrated, not done. Only when nothing was WRITTEN this turn -- a
+  // reply that shows a snippet of a file it just saved is fine.
+  const wroteThisTurn = steps.some(
+    (s) => s.kind === "tool" && (s.name === "write_file" || s.name === "edit_file") && !s.error,
+  );
+  const codeInReply =
+    specialistName === "coder" &&
+    !wroteThisTurn &&
+    activeTools.some((t) => t.name === "write_file") &&
+    narratesCodeInsteadOfWriting(reply);
+  const stale = disclaimed || answeredFromMemory || codeInReply;
+  if (reply.trim() && (!toolRanThisTurn || codeInReply) && (claimsUnperformedAction(reply) || stale)) {
     // Withdraw, don't append. The first version streamed the correction
     // AFTER the bad text with the notice as a footer -- so the user read a
     // confident "not yet held" sitting above five sources that said the
@@ -1274,7 +1312,9 @@ export async function runTurn(
       ? "That reply said it could not look things up — but it holds the tools to. Correcting."
       : answeredFromMemory
         ? "That answer came from memory, not from a search. Looking it up."
-        : "That reply described actions that never ran — nothing was called. Correcting.";
+        : codeInReply
+          ? "That reply contained the code instead of writing it to files. Writing the files."
+          : "That reply described actions that never ran — nothing was called. Correcting.";
     if (handlers.onRestart) handlers.onRestart(reason);
     else handlers.onNotice?.(reason);
     // The withdrawn reply is already in the log and in history[]. The log
@@ -1304,7 +1344,15 @@ export async function runTurn(
             "(You answered that from memory. Your training data is older than today, " +
             "so what you remember as upcoming or latest may already have happened. " +
             "Call web_search now with the user's question and answer only from what it returns.)"
-          :
+          : codeInReply
+            ? // The one fact the model was missing, stated first: write_file
+              // makes the folders. Then the instruction, then the shape of a
+              // good reply -- paths, not contents.
+              "(You wrote the code into your reply instead of into files, so nothing was created. " +
+              "Use write_file now, once per file, with the full path and contents — it creates any " +
+              "missing folders itself, you never need mkdir. Then reply with the list of paths you " +
+              "wrote, not the code.)"
+            :
         // No retraction offered. The first wording ended with "or tell the
         // user plainly you did not do it", and the model took that exit every
         // time -- retracting is one sentence, acting is a tool call. The easy
@@ -1383,16 +1431,25 @@ export async function runTurn(
     // fabrication above it stand. The condition is therefore only "did
     // anything actually run" -- this branch already established the turn
     // opened with an action claim, and the user can still see it.
-    if (!steps.some((st) => st.kind === "tool")) {
+    // "Did anything actually run" -- or, for the code-in-reply case, "did
+    // anything actually get WRITTEN": a correction that ran a read and then
+    // narrated the code again has still created nothing.
+    const wroteAfterCorrection = steps.some(
+      (st) => st.kind === "tool" && (st.name === "write_file" || st.name === "edit_file") && !st.error,
+    );
+    if (codeInReply ? !wroteAfterCorrection : !steps.some((st) => st.kind === "tool")) {
       // Two failures, two honest floors. The "propose a plan" line is the
       // operator's — offered to a researcher that refused to search, it read
       // as nonsense ("what news today?" → "say propose a plan to…"). For a
       // disclaimer the honest floor names the tool that would have answered
       // and asks for the question again, so a retry is one message away.
-      reply = stale
-        ? `I should have looked that up with ${heldLiveTools[0] ?? "web_search"} and did not. ` +
-          "Ask again and I will search rather than answer from memory."
-        : "I described doing that, but I did not actually run anything — nothing " +
+      reply = codeInReply
+        ? "I wrote that code into the reply instead of into files, so nothing was created. " +
+          "Ask again and I will write the files with write_file."
+        : stale
+          ? `I should have looked that up with ${heldLiveTools[0] ?? "web_search"} and did not. ` +
+            "Ask again and I will search rather than answer from memory."
+          : "I described doing that, but I did not actually run anything — nothing " +
           'has changed on your computer. Say "propose a plan to …" and I will write ' +
           "out the exact steps for you to approve.";
       handlers.onContent?.("\n\n" + reply);

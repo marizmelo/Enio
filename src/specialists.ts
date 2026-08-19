@@ -88,6 +88,14 @@ export const SPECIALISTS: Specialist[] = [
     systemPrompt:
       `You work with files in the user's working folders — code, and the ` +
       `documents they ask you to write.\n\n` +
+      // The narrate-instead-of-act failure in its coder form: asked to
+      // create an app, the model put 7,000 characters of code in the reply
+      // and wrote nothing. Stated as the first rule, concretely.
+      `Code goes in files, never in the reply. When asked to create or build ` +
+      `something, call write_file for each file — full path, full contents; it ` +
+      `creates any missing folders itself, so you never need mkdir — and then ` +
+      `answer with the list of paths you wrote. A reply that contains the code ` +
+      `instead of writing it has done nothing.\n\n` +
       // Documents were the silent failure here: asked for a resume, a model
       // whose prompt only said "you work with code" wrote prose into the
       // reply and never called write_file -- so nothing landed on disk and

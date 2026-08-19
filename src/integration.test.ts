@@ -1721,3 +1721,56 @@ describe("harness verification after a write", () => {
     }
   });
 });
+
+
+describe("the coder writing code into the reply instead of files", () => {
+  test("gets a corrective round that writes, and the reply is withdrawn", async () => {
+    // Watched, three turns running: 7,000 characters of app in the reply,
+    // zero tool calls, after a refused mkdir taught the model the filesystem
+    // was off limits. write_file creates parent folders itself; the
+    // correction says so and the round writes.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const big = "```html\n" + Array.from({ length: 50 }, (_, i) => `<p>line ${i}</p>`).join("\n") + "\n```";
+    scriptModel([
+      { content: "Here is the complete app:\n" + big },
+      { toolCall: { name: "write_file", args: { path: "app/index.html", content: "<p>hi</p>" } } },
+      { content: "Wrote app/index.html." },
+    ]);
+    const notices: string[] = [];
+    const seen: string[] = [];
+    const result = await runTurn("create the app", [], registry, sessionId, {
+      onNotice: (n) => notices.push(n),
+      onToolStart: (n) => seen.push(n),
+    }, { specialist: "coder" });
+    assert.ok(notices.some((n) => /contained the code instead of writing it/.test(n)), notices.join(" | "));
+    assert.deepEqual(seen, ["write_file"], "the correction wrote");
+    assert.match(result.reply, /Wrote app\/index\.html/, "and the withdrawn narration is gone");
+    assert.ok(!/<p>line 1<\/p>/.test(result.reply));
+  });
+
+  test("a reply that shows a snippet of a file it just wrote is left alone", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const big = "```js\n" + Array.from({ length: 50 }, (_, i) => `let v${i};`).join("\n") + "\n```";
+    scriptModel([
+      { toolCall: { name: "write_file", args: { path: "app/main.js", content: "let v0;" } } },
+      { content: "Wrote app/main.js:\n" + big },
+    ]);
+    const notices: string[] = [];
+    await runTurn("create main.js", [], registry, sessionId, {
+      onNotice: (n) => notices.push(n),
+    }, { specialist: "coder" });
+    assert.equal(notices.filter((n) => /instead of writing/.test(n)).length, 0, notices.join(" | "));
+  });
+
+  test("a refused mkdir points at write_file", async () => {
+    const { shellTools } = await import("./tools/shell.js");
+    const run = shellTools.find((t) => t.name === "run_command")!;
+    const out = String(await run.run({ command: "mkdir -p a/b" }));
+    assert.match(out, /Refused: 'mkdir'/);
+    assert.match(out, /Use write_file instead: it creates the file AND any missing parent folders/);
+    const rm = String(await run.run({ command: "rm -rf a" }));
+    assert.match(rm, /no delete or move tool/);
+  });
+});

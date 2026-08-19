@@ -132,3 +132,50 @@ test("with a project open, an unprefixed name that exists only in the workspace 
     project.closeProject();
   }
 });
+
+test("a code project with one attached folder: plain code paths root there; documents still go to out/", async () => {
+  // The user attached a folder to build an app in, the model wrote three
+  // correct files with plain paths, and they landed in the hidden out/ dir
+  // under ~/.enio -- "files not being created". Attaching the one folder
+  // WAS the instruction.
+  const { safePath } = await import("./tools/fs.js");
+  const repoDir = join(scratch, "onlyrepo");
+  mkdirSync(repoDir, { recursive: true });
+  const p = project.createProject({ name: "oneapp", type: "code" });
+  project.attachPath(p.id, repoDir, "the app");
+  project.openProject(p.id);
+  try {
+    const real = (await import("node:fs")).realpathSync(repoDir);
+    assert.equal(safePath("js/app.js", { forWrite: true }), join(real, "js", "app.js"));
+    assert.equal(safePath("index.html"), join(real, "index.html"));
+    // Documents keep the out/ home: a draft must not litter the repo.
+    assert.equal(safePath("notes.md", { forWrite: true }), join(project.activeProject()!.outDir, "notes.md"));
+    // And the alias form still works, identically.
+    assert.equal(safePath("onlyrepo/js/app.js"), join(real, "js", "app.js"));
+  } finally {
+    project.closeProject();
+  }
+
+  // Two folders: ambiguous, so plain paths go to out/ as before.
+  const a = join(scratch, "repoA"); const b = join(scratch, "repoB");
+  mkdirSync(a, { recursive: true }); mkdirSync(b, { recursive: true });
+  const q = project.createProject({ name: "twoapp", type: "code" });
+  project.attachPath(q.id, a, "a"); project.attachPath(q.id, b, "b");
+  project.openProject(q.id);
+  try {
+    assert.equal(safePath("js/app.js", { forWrite: true }), join(project.activeProject()!.outDir, "js", "app.js"));
+  } finally {
+    project.closeProject();
+  }
+
+  // A general project with one folder: it is context, not the build target.
+  const g = join(scratch, "refs"); mkdirSync(g, { recursive: true });
+  const r = project.createProject({ name: "general1", type: "general" });
+  project.attachPath(r.id, g, "refs");
+  project.openProject(r.id);
+  try {
+    assert.equal(safePath("draft.js", { forWrite: true }), join(project.activeProject()!.outDir, "draft.js"));
+  } finally {
+    project.closeProject();
+  }
+});

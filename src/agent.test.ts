@@ -609,3 +609,18 @@ describe("file tokens in a message", () => {
     assert.deepEqual(fileTokens("the file at example.com/x.ts"), ["example.com/x.ts"]);
   });
 });
+
+describe("code narrated instead of written", () => {
+  test("a big code block in the reply is the failure; a snippet is an answer", async () => {
+    const { narratesCodeInsteadOfWriting } = await import("./agent.js");
+    const file = "```js\n" + Array.from({ length: 60 }, (_, i) => `const v${i} = ${i};`).join("\n") + "\n```";
+    assert.equal(narratesCodeInsteadOfWriting("Here is the app:\n" + file), true);
+    // Three files' worth of fences, each short: that is an app in a reply.
+    const three = ["```html\n<div></div>\n```", "```css\n.a{}\n```", "```js\nlet x;\n```"].join("\n");
+    assert.equal(narratesCodeInsteadOfWriting(three), true);
+    // Explaining a closure with twelve lines is an answer, not a file.
+    const snippet = "```js\n" + Array.from({ length: 12 }, () => "function f() { return 1; }").join("\n") + "\n```";
+    assert.equal(narratesCodeInsteadOfWriting("A closure:\n" + snippet), false);
+    assert.equal(narratesCodeInsteadOfWriting("no code here"), false);
+  });
+});

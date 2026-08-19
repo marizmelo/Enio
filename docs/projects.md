@@ -60,7 +60,15 @@ shown in the project editor. The alias is the first path segment everywhere:
 whose alias is `platformer`. Plain relative paths (`notes.md`) are the
 project's own storage: files the agent creates land inside the project's
 folder under `~/.enio/projects/`, not in the global workspace — delete the
-project and its generated files go with it. Conversation attachments stay in
+project and its generated files go with it.
+
+**One exception, for the common case.** A *code* project with exactly one
+attached folder treats that folder as the project: a plain code path
+(`src/app.js`) means `<alias>/src/app.js`, so "build me an app" lands in the
+folder you attached for it rather than in hidden storage. Documents (`.md`,
+`.txt`) still go to the project's own storage, and with several folders
+attached — or none — plain paths do too, because then "plain path" is
+genuinely ambiguous. Conversation attachments stay in
 the global workspace and remain readable either way; an attachment can never
 fail a turn.
 

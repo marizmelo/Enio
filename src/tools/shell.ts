@@ -90,7 +90,22 @@ export const shellTools: ToolDef[] = [
       if (!command) return "Error: no command given.";
 
       const check = checkCommand(command);
-      if (!check.ok) return `Refused: ${check.reason}`;
+      if (!check.ok) {
+        // A refused mkdir/touch/rm is the model reaching for the shell to do
+        // what the file tools already do -- and the bare refusal taught it
+        // the filesystem was off-limits: it then wrote 7,000 characters of
+        // code INTO THE REPLY rather than into files, for three turns. So
+        // the refusal says what to use instead. write_file creates parent
+        // directories itself; that fact is the one that was missing.
+        const exe = invokedExecutables(command)[0] ?? "";
+        const redirect =
+          exe === "mkdir" || exe === "touch"
+            ? " Use write_file instead: it creates the file AND any missing parent folders in one call."
+            : exe === "rm" || exe === "mv" || exe === "cp"
+              ? " Files are managed with write_file and edit_file; there is no delete or move tool."
+              : "";
+        return `Refused: ${check.reason}${redirect}`;
+      }
 
       const where = commandCwd(String(args.in ?? "").trim());
       if ("error" in where) return `Refused: ${where.error}`;

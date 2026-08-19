@@ -1368,6 +1368,26 @@ fix is the researcher's, applied three times: take the judgement away.
   `list_dir` is now registered dead last, so it is the designated casualty,
   and a test pins that `web_search` survives.
 
+- **Code in the reply instead of in files — and where the files go.**
+  Asked to create an app in a freshly attached folder, the model first tried
+  `mkdir` (refused, correctly — not allowlisted), concluded the filesystem
+  was off limits, and for three turns wrote 7,000 characters of HTML/CSS/JS
+  into the reply with zero tool calls. No guard fired: it claimed no action,
+  named no existing file, wrote nothing. Three fixes. The refusal now says
+  what to use instead (`write_file` creates parent folders itself; that
+  fact was the one missing). A guard treats a large code block in a coder
+  reply with nothing written this turn as the narrate-instead-of-act failure
+  it is, with a corrective round that writes and withdraws the narration. And
+  the coder's first rule is now "code goes in files, never in the reply".
+  Then the second bug surfaced: with the prompt fixed the model wrote three
+  correct files with plain paths — into the hidden `out/` dir under
+  `~/.enio`, because "unprefixed → out/" was the rule and the overlay said
+  so. That rule was designed for documents. For a **code project with one
+  attached folder, that folder is the project**: plain code paths root
+  there, documents and multi-folder/general projects keep `out/`. The user
+  attaching the one folder was the instruction; sending the code anywhere
+  else read as "files not being created".
+
 Multi-file work still routes to `delegate-coding`; the conclusion that a 4B
 model should not be made into a good coder stands — it should be made a
 *safe* one, and that is what these three moves buy.
