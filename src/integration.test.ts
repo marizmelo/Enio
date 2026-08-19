@@ -1409,3 +1409,94 @@ describe("the researcher answering from memory", () => {
     assert.equal(notices.filter((n) => /Correcting|Looking it up/.test(n)).length, 0, notices.join(" | "));
   });
 });
+
+describe("the basis label", () => {
+  const basisOf = (steps: Array<{ kind: string; name: string | null; args: string | null }>) =>
+    (steps.find((s) => s.kind === "harness" && s.name === "basis")?.args ?? "{}");
+
+  test("web when a web tool ran; the trace carries it for restore", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "" }, { content: "Spain won." }]); // seed search + answer
+    const seen: string[] = [];
+    await runTurn("who won the world cup this year", [], registry, sessionId, {
+      onBasis: (b) => seen.push(b),
+    }, { specialist: "researcher" });
+    assert.deepEqual(seen, ["web"]);
+    const steps = getDb()
+      .prepare(`SELECT kind, name, args FROM turn_steps WHERE turn_id = (SELECT MAX(id) FROM turns)`)
+      .all() as Array<{ kind: string; name: string | null; args: string | null }>;
+    assert.match(basisOf(steps), /"web"/);
+  });
+
+  test("memory when nothing ran and what is known covered the question", async () => {
+    const { rememberFact } = await import("./memory/store.js");
+    await rememberFact("Alex Vindman lost the Florida Democratic Senate primary to Angie Nixon.", { source: "user" });
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "From memory: Vindman lost to Nixon." }]);
+    const seen: string[] = [];
+    await runTurn("what happened to alex vindman", [], registry, sessionId, {
+      onBasis: (b) => seen.push(b),
+    }, { specialist: "researcher" });
+    assert.deepEqual(seen, ["memory"]);
+  });
+
+  test("conversation when an earlier reply in this thread covered it, distinct from memory", async () => {
+    // A saved fact and something said three messages up are both "known"
+    // but not the same trust; the label says which one the answer leaned on.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "As above: Donalds and Jolly advanced." }]);
+    const seen: string[] = [];
+    await runTurn(
+      "what did byron donalds do",
+      [
+        { role: "user", content: "what news today?" },
+        { role: "assistant", content: "Byron Donalds and David Jolly advanced to the Florida governor's race." },
+      ],
+      registry,
+      sessionId,
+      { onBasis: (b) => seen.push(b) },
+      { specialist: "researcher" },
+    );
+    assert.deepEqual(seen, ["conversation"]);
+  });
+
+  test("model when nothing ran and nothing covered it — the weights alone", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "A closure captures the variables of the scope it was created in." }]);
+    const seen: string[] = [];
+    await runTurn("what is a closure", [], registry, sessionId, {
+      onBasis: (b) => seen.push(b),
+    }, { specialist: "coder" });
+    assert.deepEqual(seen, ["model"], "the one label the model itself would never volunteer");
+  });
+
+  test("files when a file tool ran and no web tool did", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { toolCall: { name: "write_file", args: { path: "notes.txt", content: "meeting at 3" } } },
+      { toolCall: { name: "read_file", args: { path: "notes.txt" } } },
+      { content: "The note says meeting at 3." },
+    ]);
+    const seen: string[] = [];
+    await runTurn("what does notes.txt say", [], registry, sessionId, {
+      onBasis: (b) => seen.push(b),
+    }, { specialist: "coder" });
+    assert.deepEqual(seen, ["files"]);
+  });
+
+  test("a restored conversation carries the basis", async () => {
+    const { conversationMessages } = await import("./memory/store.js");
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "A closure captures the variables of the scope it was created in." }]);
+    await runTurn("what is a closure", [], registry, sessionId, {}, { specialist: "coder" });
+    const restored = conversationMessages(sessionId);
+    const reply = restored.find((m) => m.role === "assistant");
+    assert.equal(reply?.basis, "model");
+  });
+});

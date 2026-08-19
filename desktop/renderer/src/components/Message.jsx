@@ -47,6 +47,9 @@ export function Message({
   // filed under it). Absent on user messages, which are not rememberable.
   question = null,
   sessionId = null,
+  // Where the answer's substance came from: web | files | memory | model.
+  // Stated by the harness from what ran, never by the reply.
+  basis = null,
 }) {
   const [remembering, setRemembering] = useState(false);
   const isUser = role === "user";
@@ -88,6 +91,40 @@ export function Message({
           {agent && (
             <Badge variant="outline" className="text-[11px]">
               @{agent}
+            </Badge>
+          )}
+          {/* Provenance, in one word. Four closed cases the harness derives
+              from what actually ran -- the model will call anything its own,
+              this cannot. "from the model" is the one that matters most: it
+              is the honest name for "the weights alone", and the reader
+              should be able to see it at a glance. */}
+          {!isUser && basis && (
+            <Badge
+              variant="outline"
+              className={`text-[11px] ${
+                basis === "model" ? "border-amber-500/50 text-amber-700 dark:text-amber-400" : "text-muted-foreground"
+              }`}
+              title={
+                basis === "web"
+                  ? "Answered from pages read on the web this turn"
+                  : basis === "files"
+                    ? "Answered from files read this turn"
+                    : basis === "memory"
+                      ? "Answered from a fact in Enio's memory — something you or it chose to keep"
+                      : basis === "conversation"
+                        ? "Answered from something said earlier in this conversation"
+                        : "Answered by the model alone — nothing was looked up. Treat specifics with care."
+              }
+            >
+              {basis === "web"
+                ? "from the web"
+                : basis === "files"
+                  ? "from files"
+                  : basis === "memory"
+                    ? "from memory"
+                    : basis === "conversation"
+                      ? "from this conversation"
+                      : "from the model"}
             </Badge>
           )}
           {countCalls(tools).map(({ name, calls }) => {

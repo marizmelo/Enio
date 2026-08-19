@@ -218,6 +218,13 @@ export interface TurnHandlers {
    *  the final reply can ignore this, since `reply` is already the corrected
    *  text. Carries the reason, so it can be shown where the retraction is. */
   onRestart?(reason: string): void;
+  /** Where the answer's substance came from, stated by the harness from what
+   *  the turn actually did -- never by the model, which will call anything
+   *  its own. `web`: a web tool ran. `files`: files were read, no web.
+   *  `memory`: no tool ran and a remembered fact covered the question.
+   *  `conversation`: no tool ran and an earlier reply in this thread did.
+   *  `model`: no tool ran and nothing covered it -- the weights alone. */
+  onBasis?(basis: "web" | "files" | "memory" | "conversation" | "model"): void;
   /** Context carried after any folding, so a client can show how full it is. */
   onContext?(usage: { tokens: number; budget: number }): void;
   onRoute?(specialist: string): void;
@@ -515,6 +522,10 @@ export function disclaimsLiveAccess(text: string): boolean {
 
 /** The tools whose presence makes a live-access disclaimer false. */
 const LIVE_TOOLS = new Set(["web_search", "web_fetch", "browse", "weather", "current_time"]);
+/** For the basis label: what counts as "went to the web" and "read files".
+ *  Closed lists, like everything the harness states about itself. */
+const WEB_TOOLS = new Set(["web_search", "web_fetch", "browse"]);
+const FILE_TOOLS = new Set(["read_file", "search_code", "list_dir", "search_library", "find_file", "read_image", "read_email", "search_email"]);
 
 export function looksDegenerate(text: string): boolean {
   const sentences = text
@@ -893,16 +904,20 @@ export async function runTurn(
   // if one of them already names everything the question is about, the
   // model answers from that and no search runs. Watched: a fact the user
   // saved from an answer three messages up was ignored and re-searched.
-  const knownHere = [
-    ...memoryBlock
-      .split("\n")
-      .filter((l) => l.startsWith("- "))
-      .map((l) => l.slice(2)),
-    ...history
-      .filter((m) => m.role === "assistant" && typeof m.content === "string")
-      .map((m) => String(m.content)),
-  ];
-  const alreadyKnown = knowledgeCovers(userInput, knownHere);
+  // Kept as two lists, because the label distinguishes them: a fact the
+  // user chose to keep and something said earlier in this thread are both
+  // "known", but they are not the same level of trust, and the reader
+  // should see which one the answer leaned on.
+  const knownFromMemory = memoryBlock
+    .split("\n")
+    .filter((l) => l.startsWith("- "))
+    .map((l) => l.slice(2));
+  const knownFromThread = history
+    .filter((m) => m.role === "assistant" && typeof m.content === "string")
+    .map((m) => String(m.content));
+  const coveredByMemory = knowledgeCovers(userInput, knownFromMemory);
+  const coveredByThread = !coveredByMemory && knowledgeCovers(userInput, knownFromThread);
+  const alreadyKnown = coveredByMemory || coveredByThread;
   if (
     specialistName === "researcher" &&
     searchTool &&
@@ -1398,6 +1413,36 @@ export async function runTurn(
       // cost the answer.
     }
   }
+
+  // Where the answer came from, from what actually ran. Four cases, closed:
+  // a web tool ran; a file tool ran (and no web); nothing ran but memory or
+  // this thread covered the question; nothing ran and nothing covered it.
+  // The last is the one worth a label most of all -- "this is the model
+  // talking from its weights" is exactly the case a user should be able to
+  // see at a glance, and exactly the one the model itself will never say.
+  // Recorded as a harness step too, so a restored conversation carries it.
+  const toolNames = steps.filter((st) => st.kind === "tool").map((st) => st.name ?? "");
+  const usedWeb = toolNames.some((n) => WEB_TOOLS.has(n));
+  const usedFiles = toolNames.some((n) => FILE_TOOLS.has(n));
+  const basis: "web" | "files" | "memory" | "conversation" | "model" = usedWeb
+    ? "web"
+    : usedFiles
+      ? "files"
+      : coveredByMemory
+        ? "memory"
+        : coveredByThread
+          ? "conversation"
+          : "model";
+  handlers.onBasis?.(basis);
+  steps.push({
+    seq: steps.length,
+    kind: "harness",
+    name: "basis",
+    args: JSON.stringify({ basis }),
+    output: "",
+    error: null,
+    durationMs: 0,
+  });
 
   // Invoked skills leave a trace. /skill (and an ability node's pinned
   // skill) injects the body whole, so no read_skill step ever records the

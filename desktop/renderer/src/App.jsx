@@ -566,6 +566,7 @@ export function App() {
       let unspoken = "";
       const notices = [];
       let withdrawn = null;
+      let basis = null;
       // Pages the tools read, in the order they were read. Deduped at render
       // time rather than here, so the search hit that carried a snippet is the
       // one kept when the same page is later fetched in full.
@@ -616,6 +617,8 @@ export function App() {
             setContext({ tokens: event.tokens, budget: event.budget });
           } else if (event.type === "notice") {
             if (!notices.includes(event.text)) notices.push(event.text);
+          } else if (event.type === "basis") {
+            basis = event.basis;
           } else if (event.type === "restart") {
             // The server withdrew the reply so far — a guard caught it
             // answering from memory, fabricating an action, or disclaiming a
@@ -660,6 +663,7 @@ export function App() {
               thinking,
               notices: [...notices],
               withdrawn,
+              basis,
               startedAt,
             },
           ]);

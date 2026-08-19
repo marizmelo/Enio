@@ -757,6 +757,8 @@ export interface StoredMessage {
   sources?: Array<{ tool: string; items: Source[] }>;
   /** Which agent answered — restored from the trace, "single" rows skipped. */
   agent?: string;
+  /** Where the answer's substance came from, as the harness recorded it. */
+  basis?: "web" | "files" | "memory" | "conversation" | "model";
   /** Files this reply created, recovered from its tools' own output — the
    *  same extraction that opens the canvas live. */
   artifacts?: Array<{ type: string; path: string }>;
@@ -829,6 +831,18 @@ export function conversationMessages(sessionId: string): StoredMessage[] {
     // A harness step is not a tool the model ran: no badge, no sources —
     // a restored reply must not grow a chip its live rendering never had.
     // Its artifact still rides below, which is the whole reason it is here.
+    // The basis chip is the one harness step that DOES draw something: it
+    // is provenance the live rendering had, so restore must carry it too.
+    if (step.kind === "harness" && step.name === "basis") {
+      try {
+        const b = (JSON.parse(step.args || "{}") as { basis?: string }).basis;
+        if (b === "web" || b === "files" || b === "memory" || b === "conversation" || b === "model") {
+          target.basis = b;
+        }
+      } catch {
+        /* an unreadable basis leaves the reply unlabelled, never mislabelled */
+      }
+    }
     if (step.kind !== "harness") {
       (target.tools ??= []).push(step.name);
 

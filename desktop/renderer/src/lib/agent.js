@@ -23,6 +23,7 @@ export function parseSseEvent(block) {
   let think = null;
   let notice = null;
   let restart = null;
+  let basis = null;
   let context = null;
   let sources = null;
   let route = null;
@@ -40,6 +41,8 @@ export function parseSseEvent(block) {
       // the top of what streams next.
       const restartMatch = /^restart\s+(.+)$/.exec(comment);
       if (restartMatch) restart = restartMatch[1];
+      const basisMatch = /^basis\s+(web|files|memory|conversation|model)$/.exec(comment);
+      if (basisMatch) basis = basisMatch[1];
       const thinkMatch = /^think\s+(\d+)$/.exec(comment);
       if (thinkMatch) think = Number(thinkMatch[1]);
       const contextMatch = /^context\s+(\d+)\s+(\d+)$/.exec(comment);
@@ -80,7 +83,7 @@ export function parseSseEvent(block) {
       }
     }
   }
-  return { data, tool, widget, think, notice, restart, context, sources, route, artifact };
+  return { data, tool, widget, think, notice, restart, basis, context, sources, route, artifact };
 }
 
 /**
@@ -147,7 +150,7 @@ export async function* streamTurn(messages, signal, conversationId = null, canva
       const block = buffer.slice(0, split);
       buffer = buffer.slice(split + 2);
 
-      const { data, tool, widget, think, notice, restart, context, sources, route, artifact } = parseSseEvent(block);
+      const { data, tool, widget, think, notice, restart, basis, context, sources, route, artifact } = parseSseEvent(block);
       if (tool) yield { type: "tool", name: tool };
       if (sources) yield { type: "sources", ...sources };
       if (route) yield { type: "route", route };
@@ -156,6 +159,7 @@ export async function* streamTurn(messages, signal, conversationId = null, canva
       if (think !== null) yield { type: "think", chars: think };
       if (notice) yield { type: "notice", text: notice };
       if (restart) yield { type: "restart", reason: restart };
+      if (basis) yield { type: "basis", basis };
       if (context) yield { type: "context", ...context };
       if (!data) continue;
       if (data === "[DONE]") return;

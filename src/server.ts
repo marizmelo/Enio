@@ -1522,6 +1522,9 @@ async function handle(
           // shows the reason at the top of what streams next.
           onRestart: (reason) =>
             res.write(`: restart ${reason.replace(/\r?\n/g, " ")}\n\n`),
+          // Where the answer came from, stated by the harness. Same channel
+          // as route: provenance the model cannot misattribute.
+          onBasis: (basis) => res.write(`: basis ${basis}\n\n`),
           // How full the window is after any folding. On the comment channel
           // like the rest, so a client that does not render it is unaffected
           // and the CLI needs no fallback.

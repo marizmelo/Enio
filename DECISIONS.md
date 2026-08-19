@@ -2087,6 +2087,22 @@ user's, saved on purpose, and the question that followed was about them.
 Restored, and the lesson is the one already in the safety rules: look at
 what a row is before deleting it, and a user's own action is not test data.
 
+**Every reply says where its substance came from — stated by the harness,
+never the model.** Five closed cases, derived from what the turn actually
+did: `web` (a web tool ran), `files` (a file tool ran, no web), `memory` (no
+tool ran and a remembered fact covered the question), `conversation` (no
+tool ran and an earlier reply in this thread did), `model` (no tool ran and
+nothing covered it — the weights alone). The chip sits beside the agent
+chip, same rule as the MCP badge: provenance the model would misattribute if
+asked, since it will call anything its own. `from the model` is amber and is
+the one that matters most — it is the honest name for "nobody looked
+anything up", the case the reply itself will never announce, and the reader
+should see it at a glance. Memory and conversation are kept distinct on
+purpose: a fact the user chose to keep and something said three messages
+up are both "known" but not the same trust, and memory outranks the thread
+when both cover — a deliberate keep beats an incidental mention. Recorded as
+a harness step, so restore carries it.
+
 **Known residual, recorded not fixed:** a scheduled *prompt* task runs
 through runTurn after repointing the process-global sessions
 (setMemorySession and friends). A task firing mid-interactive-turn can
