@@ -322,9 +322,9 @@ export function HistoryDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border bg-muted/40 p-3 text-sm">
+          <ul className="min-w-0 max-h-48 space-y-1 overflow-y-auto rounded-md border bg-muted/40 p-3 text-sm">
             {chosen.map((c) => (
-              <li key={c.id} className="flex items-center gap-2">
+              <li key={c.id} className="flex min-w-0 items-center gap-2">
                 <span className="min-w-0 flex-1 truncate">{c.title}</span>
                 {c.knowledge > 0 && (
                   <span className="flex shrink-0 items-center gap-1 text-xs text-emerald-600">
@@ -386,13 +386,18 @@ export function HistoryDialog({
           </DialogHeader>
 
           {facts.length > 0 ? (
-            <div className="space-y-2">
+            // min-w-0 on the block: DialogContent is a grid, and a grid child's
+            // default min-width is auto, so a long fact stretched the column
+            // past the dialog and pushed the footer buttons off-screen. The
+            // facts wrap rather than truncate -- they are the thing being
+            // decided about, and a decision needs the whole sentence.
+            <div className="min-w-0 space-y-2">
               <p className="text-sm font-medium">
                 Enio learned {facts.length === 1 ? "this" : `${facts.length} things`} from it:
               </p>
-              <ul className="max-h-40 space-y-1 overflow-y-auto rounded-md border bg-muted/40 p-3 text-sm">
+              <ul className="max-h-48 space-y-1.5 overflow-y-auto rounded-md border bg-muted/40 p-3 text-sm">
                 {facts.map((f) => (
-                  <li key={f.id} className="truncate">
+                  <li key={f.id} className="break-words leading-snug">
                     · {f.text}
                   </li>
                 ))}
