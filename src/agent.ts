@@ -59,6 +59,42 @@ The language model ${config.agentName} runs on is called ${config.modelLabel}.
 
 The conversation so far appears above each new message. Earlier messages in it are yours to read, quote and answer from — when the user asks about something said earlier, look at the messages above and answer from them.`;
 
+/**
+ * Today's date, and the fact that the model's own sense of "now" is stale.
+ *
+ * The researcher, which holds no clock tool, said "Thursday, April 4, 2024"
+ * in August 2026 with total confidence -- and that date is not random. A
+ * language model's training stops on some day, and from then on its weights
+ * hold that day as the present: asked the date it answers from the last day
+ * it saw, and everything downstream ("what's the latest version", "how old
+ * is X", "was that recent") is reckoned from there. Nothing in the weights
+ * can correct this, because the correction is information from after the
+ * weights were fixed. So it has to come from outside, every turn.
+ *
+ * The old fix was a current_time TOOL, but only the generalist holds it, and
+ * telling the other four "look it up with a tool" while giving them no tool
+ * that can is exactly how a small model ends up inventing an answer that
+ * reads as looked-up. A fact this cheap and this checkable belongs in the
+ * prompt, not behind a call the model may not make and cannot make from most
+ * seats -- and the second sentence, the one about training, is what makes
+ * the model reach for the stated date instead of the remembered one.
+ *
+ * Rebuilt per turn with the rest of the system message, so it is never stale
+ * across a long conversation, and it names the timezone so "9am" means what
+ * the user means. current_time stays for the exact minute and the clock
+ * widget; this block covers the day and the reasoning.
+ */
+function dateBlock(now = new Date()): string {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const day = new Intl.DateTimeFormat("en-GB", { dateStyle: "full", timeZone: zone }).format(now);
+  const time = new Intl.DateTimeFormat("en-GB", { timeStyle: "short", timeZone: zone }).format(now);
+  return (
+    `Today is ${day}, about ${time} (${zone}). ` +
+    `Your training data ends earlier than this, so your own sense of the current date, and of what is recent or latest, is out of date. ` +
+    `Use the date above for anything that depends on today; never state a date from memory as if it were today's, and for anything that may have changed since your training, check with a tool rather than answering from memory.`
+  );
+}
+
 // Each line here was chosen by measurement, not by style, and they are not
 // uniform on purpose. The image sentence keeps its never-say clause because
 // removing it measurably dropped correct answers (3/3 with, 2/4 without). The
@@ -71,7 +107,7 @@ The conversation so far appears above each new message. Earlier messages in it a
 // stochastic at temp 1.0 — re-measure before re-wording.
 const SHARED_RULES = `You can read images. Anything the user attached has already been read and its contents are included below; for any other image in the workspace, call read_image. So never tell the user you are unable to see or view an image — describing what an image contains is something you do, and the answer is either already in front of you or one tool call away.
 
-You can look up live information: the weather where the user is, and the current date and time. Check with a tool, then answer from what it returned.
+You can look up live information: the weather where the user is, and the exact current time. Check with a tool, then answer from what it returned. Today's date is stated above — use it.
 
 Call one tool at a time and read the result before deciding what to do next.
 If a tool returns an error, read the error and adapt — do not call it again unchanged.
@@ -627,6 +663,7 @@ export async function runTurn(
   const invoked = invokedSkillBlock(overrides.skills ?? []);
   const system = [
     IDENTITY,
+    dateBlock(),
     roleSystem,
     invoked,
     invoked ? "" : skillCatalogue(),

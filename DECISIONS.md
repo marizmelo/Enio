@@ -1899,6 +1899,34 @@ redirect the bundled dir by name, since every test now inherits it from the
 checkout. If per-skill enable/disable is ever wanted, that measurement is the
 reason it would be.
 
+**Today's date is stated in every prompt, with the reason the model's own
+answer is wrong.** The researcher said "Thursday, April 4, 2024" in August
+2026 — and that is not a random error, it is the training cutoff worn as the
+present. A model's weights hold the last day they saw as "now", and everything
+downstream (what is recent, what is latest, how long ago) is reckoned from
+there. Nothing in the weights can correct that; the correction is information
+from after they were fixed, so it has to arrive from outside, every turn.
+
+The old answer was a `current_time` TOOL. It was the wrong shape twice over:
+only the generalist holds it, so telling the other four "look it up with a
+tool" while giving them no tool that can is how a small model ends up
+inventing an answer that reads as looked-up — and a fact this cheap and this
+checkable should not cost a call the model may not make. So `dateBlock()`
+sits directly after IDENTITY in the assembled system message: the day, the
+approximate time and zone, and the sentence "your training data ends earlier
+than this, so your own sense of the current date, and of what is recent or
+latest, is out of date." That second sentence is load-bearing. Without it the
+stated date competes with the remembered one; with it the model reaches for
+the stated one — measured live: three agents answered the real date, and
+"how many years ago was 2024" was reckoned from 2026, not from the model's
+training-era present. Rebuilt per turn, so it never goes stale mid-thread.
+`current_time` stays for the exact minute and the clock widget.
+
+Cost: about ninety tokens on every prompt against a 2000-token Maple budget.
+Accepted, because a wrong date is not a cosmetic error — it corrupts every
+"is this recent" judgement silently, and the compaction tests still pass with
+their headroom.
+
 **Known residual, recorded not fixed:** a scheduled *prompt* task runs
 through runTurn after repointing the process-global sessions
 (setMemorySession and friends). A task firing mid-interactive-turn can

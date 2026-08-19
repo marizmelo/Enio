@@ -1151,3 +1151,42 @@ describe("skill invocation trace", () => {
     assert.deepEqual(JSON.parse(row!.args).names, ["style-guide"]);
   });
 });
+
+describe("the current date reaches the model", () => {
+  test("every turn's system prompt states today, with the training-cutoff caveat", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "Noted." }]);
+    await runTurn("what day is it", [], registry, sessionId);
+
+    const row = getDb()
+      .prepare(`SELECT system_prompt FROM turns ORDER BY id DESC LIMIT 1`)
+      .get() as { system_prompt: string };
+    const prompt = row.system_prompt;
+
+    // The researcher answered "April 4, 2024" in August 2026 -- its training
+    // cutoff, worn as the present. The prompt has to carry the real day AND
+    // say why the model's own answer is wrong, or the stated date competes
+    // with the remembered one instead of replacing it.
+    const today = new Intl.DateTimeFormat("en-GB", { dateStyle: "full" }).format(new Date());
+    assert.ok(prompt.includes(`Today is ${today}`), `missing today's date: ${today}`);
+    assert.match(prompt, /training data ends earlier/i);
+    assert.match(prompt, /never state a date from memory/i);
+  });
+
+  test("it is stated ahead of the role, so no specialist can miss it", async () => {
+    // Routing is off in this suite, so this exercises the shared assembly
+    // that every route flows through -- the position is the guarantee.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "Noted." }]);
+    await runTurn("hello", [], registry, sessionId);
+    const { system_prompt } = getDb()
+      .prepare(`SELECT system_prompt FROM turns ORDER BY id DESC LIMIT 1`)
+      .get() as { system_prompt: string };
+    const dateAt = system_prompt.indexOf("Today is ");
+    const rulesAt = system_prompt.indexOf("Call one tool at a time");
+    assert.ok(dateAt > -1 && rulesAt > -1);
+    assert.ok(dateAt < rulesAt, "the date precedes the role and rules");
+  });
+});
