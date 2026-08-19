@@ -428,6 +428,41 @@ export function claimsUnperformedAction(text: string): boolean {
   return false;
 }
 
+/**
+ * The mirror image of a fabricated action: a disclaimed ability.
+ *
+ * Watched happen: asked "what news today?", the researcher — holding
+ * web_search, web_fetch and browse — called nothing and replied "I don't have
+ * real-time news access". That sentence is a training-set reflex; the base
+ * model was taught to say it, and the system prompt saying "start with
+ * web_search" did not outrank the reflex. The fabrication guard already
+ * corrects the opposite error (claiming to have done what was never called);
+ * this corrects claiming to be unable to do what a held tool does.
+ *
+ * Deliberately narrow: only the stock "no real-time / live / internet
+ * access" phrasings, and only checked when a live-lookup tool was actually
+ * held this turn and nothing ran. "I could not find X" after a search is a
+ * finding, not a disclaimer, and must never trip this.
+ */
+export function disclaimsLiveAccess(text: string): boolean {
+  // Curly apostrophes first. The model emits don’t (U+2019), and the first
+  // version of this guard matched only don't — one character, and it was
+  // inert on every real reply while passing every test. Normalise, then match.
+  const plain = text.replace(/[\u2018\u2019\u02BC]/g, "'");
+  // Negated ability, then optionally one connective verb ("have", "access",
+  // "browse", "reach"), then the tell-tale noun. The verb slot is what
+  // catches "can't browse the internet"; the noun list is what keeps
+  // "couldn't find a price" out — "find" is a finding, not a disclaimer.
+  const negated =
+    /\b(?:I|we)(?:'m| am)?\s+(?:do not|don't|dont|cannot|can't|cant|am unable to|unable to|have no)\s+(?:(?:have|get|access|browse|reach|use|search)\s+)?(?:access\s+to\s+)?(?:the\s+)?(?:real[- ]time|live|current|up[- ]to[- ]date|internet|web|browsing|online)\b/i;
+  const bare =
+    /\bno\s+(?:real[- ]time|live|internet|web|browsing|online)\s+(?:access|data|information|news|feed|capabilit)/i;
+  return negated.test(plain) || bare.test(plain);
+}
+
+/** The tools whose presence makes a live-access disclaimer false. */
+const LIVE_TOOLS = new Set(["web_search", "web_fetch", "browse", "weather", "current_time"]);
+
 export function looksDegenerate(text: string): boolean {
   const sentences = text
     .split(/(?<=[.!?])\s+/)
@@ -958,13 +993,25 @@ export async function runTurn(
   // the thing (open_app, propose_plan) or retract. The correction streams
   // after the fabricated text; the notice is what tells the user why.
   const toolRanThisTurn = steps.some((s) => s.kind === "tool");
-  if (reply.trim() && !toolRanThisTurn && claimsUnperformedAction(reply)) {
+  const heldLiveTools = activeTools.filter((t) => LIVE_TOOLS.has(t.name)).map((t) => t.name);
+  const disclaimed =
+    !toolRanThisTurn && heldLiveTools.length > 0 && reply.trim() && disclaimsLiveAccess(reply);
+  if (reply.trim() && !toolRanThisTurn && (claimsUnperformedAction(reply) || disclaimed)) {
     handlers.onNotice?.(
-      "That reply described actions that never ran — nothing was called. Correcting.",
+      disclaimed
+        ? "That reply said it could not look things up — but it holds the tools to. Correcting."
+        : "That reply described actions that never ran — nothing was called. Correcting.",
     );
     history.push({
       role: "user",
-      content:
+      content: disclaimed
+        ? // The disclaimer is a reflex, so the correction names the exact
+          // tools that make it false, and only those: the same closed-list
+          // move as everything else here.
+          "(That is not true here: you have live lookup tools this turn — " +
+          `${heldLiveTools.join(", ")}. Use one now and answer from what it returns. ` +
+          "Never say you lack real-time or internet access while you hold these.)"
+        :
         // No retraction offered. The first wording ended with "or tell the
         // user plainly you did not do it", and the model took that exit every
         // time -- retracting is one sentence, acting is a tool call. The easy
@@ -1029,10 +1076,17 @@ export async function runTurn(
     // anything actually run" -- this branch already established the turn
     // opened with an action claim, and the user can still see it.
     if (!steps.some((st) => st.kind === "tool")) {
-      reply =
-        "I described doing that, but I did not actually run anything — nothing " +
-        'has changed on your computer. Say "propose a plan to …" and I will write ' +
-        "out the exact steps for you to approve.";
+      // Two failures, two honest floors. The "propose a plan" line is the
+      // operator's — offered to a researcher that refused to search, it read
+      // as nonsense ("what news today?" → "say propose a plan to…"). For a
+      // disclaimer the honest floor names the tool that would have answered
+      // and asks for the question again, so a retry is one message away.
+      reply = disclaimed
+        ? `I should have looked that up with ${heldLiveTools[0]} and did not. ` +
+          "Ask again and I will search rather than answer from memory."
+        : "I described doing that, but I did not actually run anything — nothing " +
+          'has changed on your computer. Say "propose a plan to …" and I will write ' +
+          "out the exact steps for you to approve.";
       handlers.onContent?.("\n\n" + reply);
       history.push({ role: "assistant", content: reply });
       logMessage(sessionId, "assistant", reply);

@@ -1230,3 +1230,50 @@ describe("the current date reaches the model", () => {
     assert.ok(dateAt < rulesAt, "the date precedes the role and rules");
   });
 });
+
+describe("the disclaimed-access correction", () => {
+  test("a refusal to look things up, with lookup tools held, gets one corrective round", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    // Verbatim from the failure: the stock reflex, zero tool calls, while
+    // web_search was in the tool list. The correction must name the live
+    // tools this turn actually holds and push for a call.
+    scriptModel([
+      { content: "I don't have real-time news access, so I can't provide today's latest news." },
+      { toolCall: { name: "web_search", args: { query: "news today" } } },
+      { content: "Here is what the pages say." },
+    ]);
+    const history: Message[] = [];
+    const notices: string[] = [];
+    await runTurn("what news today?", history, registry, sessionId, {
+      onNotice: (t) => notices.push(t),
+    });
+
+    assert.ok(
+      notices.some((n) => /holds the tools/.test(n)),
+      `expected the disclaimer notice, got: ${notices.join(" | ")}`,
+    );
+    const correction = history.find(
+      (m) => m.role === "user" && String(m.content).includes("That is not true here"),
+    );
+    assert.ok(correction, "the correction was issued");
+    // Only tools that make the disclaimer false, and only real ones held now.
+    assert.match(String(correction!.content), /web_search/);
+    assert.doesNotMatch(String(correction!.content), /open_app|propose_plan/);
+  });
+
+  test("an honest not-found after a search is left alone", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { toolCall: { name: "web_search", args: { query: "zorbliflax price" } } },
+      { content: "I couldn't find a price for that on the pages I read." },
+    ]);
+    const notices: string[] = [];
+    await runTurn("how much is a zorbliflax", [], registry, sessionId, {
+      onNotice: (t) => notices.push(t),
+    });
+    // A tool ran and the reply is a finding: neither guard may fire.
+    assert.equal(notices.filter((n) => /Correcting/.test(n)).length, 0, notices.join(" | "));
+  });
+});

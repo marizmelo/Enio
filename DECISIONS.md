@@ -1941,6 +1941,40 @@ budget. Accepted, because a wrong date is not a cosmetic error — it corrupts e
 "is this recent" judgement silently, and the compaction tests still pass with
 their headroom.
 
+**"What news today?" was three bugs stacked, and the visible one was the
+shallowest.** The researcher — holding web_search — called nothing and said
+"I don't have real-time news access". Peeling it back:
+
+1. *A disclaimed ability.* The mirror image of the fabrication guard, which
+   corrects claiming to have done what was never called; nothing corrected
+   claiming to be UNABLE to do what a held tool does. `disclaimsLiveAccess`
+   now triggers one corrective round naming the live tools actually held
+   this turn — and only when one was held and nothing ran, so an honest
+   "couldn't find it" after a search never trips it. First cut matched only
+   the straight apostrophe; the model emits don’t (U+2019), and the guard was
+   inert on every real reply while passing every test. Normalise first.
+2. *The wrong floor.* When the corrective round also failed, the fallback was
+   the operator's "say propose a plan to…" — nonsense from a researcher. The
+   floor now says which tool should have run and asks for the question again.
+3. *The actual cause: poisoned memory.* Before disclaiming, the model
+   invented a weather report — "sky mostly blue, no green in sight" — and
+   called it "confirmed by live data", with zero calls. The memory block held
+   `sky PREFERS being blue` and `sky AVOIDS being green`: an MCP echo test
+   five days earlier ("say the sky is green") had been extracted into the
+   graph, surfaced on an unrelated query through lexical overlap, and the
+   model composed an answer around it instead of searching. Two rows removed
+   by hand; structurally, PREFERS/AVOIDS/KNOWS/LEARNING now require a
+   `person` subject in the extraction post-filter — a concept cannot prefer —
+   checked on the parsed enum so it does not depend on the model reading the
+   prompt. USES and WORKS_ON are deliberately NOT anchored: the real graph
+   holds six correct `project USES technology` edges, and the first cut of
+   the filter would have thrown those away.
+
+The order matters for what it teaches: the guard is worth having and would
+have caught this, but the fix that actually made three-for-three live runs
+search and answer with real headlines was cleaning the memory. A small model
+does not refuse to use a tool at random; look for what it was handed instead.
+
 **Known residual, recorded not fixed:** a scheduled *prompt* task runs
 through runTurn after repointing the process-global sessions
 (setMemorySession and friends). A task firing mid-interactive-turn can

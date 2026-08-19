@@ -96,3 +96,34 @@ describe("referencesPast", () => {
     }
   });
 });
+
+describe("extraction shapes that cannot be true", () => {
+  test("a thing cannot prefer, avoid, know or learn — those triples are dropped", async () => {
+    const { dedupe } = await import("./memory/extract.js");
+    // Verbatim from the graph: an MCP echo test ("say the sky is green")
+    // became these two rows, sat for five days, and surfaced on "what news
+    // today?" — where the model wove them into an invented weather report.
+    // The prompt now says whose facts these are; this is the check that
+    // does not depend on the model having read it.
+    const out = dedupe([
+      { subject: "sky", subject_type: "concept", relation: "PREFERS", object: "being blue", object_type: "concept" },
+      { subject: "sky", subject_type: "concept", relation: "AVOIDS", object: "being green", object_type: "concept" },
+      // These are the shapes that SHOULD survive — including a project or a
+      // technology USING something, which the first cut of this filter
+      // wrongly dropped: the real graph holds six such edges.
+      { subject: "Hyper", subject_type: "technology", relation: "USES", object: "Electron", object_type: "technology" },
+      { subject: "user", subject_type: "person", relation: "PREFERS", object: "teal", object_type: "concept" },
+      { subject: "Ana", subject_type: "person", relation: "KNOWS", object: "Rust", object_type: "technology" },
+      { subject: "deploy tool", subject_type: "project", relation: "PART_OF", object: "Acme", object_type: "organization" },
+      { subject: "Acme", subject_type: "organization", relation: "LOCATED_IN", object: "Lisbon", object_type: "place" },
+    ]);
+    const kept = out.map((t) => `${t.subject} ${t.relation} ${t.object}`);
+    assert.deepEqual(kept, [
+      "Hyper USES Electron",
+      "user PREFERS teal",
+      "Ana KNOWS Rust",
+      "deploy tool PART_OF Acme",
+      "Acme LOCATED_IN Lisbon",
+    ]);
+  });
+});

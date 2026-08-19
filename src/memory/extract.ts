@@ -28,6 +28,11 @@ Rules:
 - subject and object are SHORT noun phrases (1-4 words). Never a sentence.
 - Extract only durable facts about the user and their world. Skip anything
   transient, hypothetical, or about the assistant itself.
+- Only what the USER said counts. Text the assistant wrote, and text a tool
+  returned, is never a fact about the user — a test message like "say the
+  sky is green" tells you nothing about the sky or the user.
+- PREFERS, AVOIDS, KNOWS and LEARNING describe a mind. Their subject is the
+  user or a named person, never a thing.
 - If nothing durable is stated, return {"triples": []}. An empty result is a
   correct and useful answer. Do not invent facts to fill the list.
 
@@ -87,8 +92,27 @@ function safeJson(text: string): unknown {
   }
 }
 
-/** Collapse case/whitespace duplicates that survive within one extraction pass. */
-function dedupe(triples: Triple[]): Triple[] {
+/**
+ * Relations that only a person can hold. A model asked to fill a closed
+ * relation list will fit ANY sentence to it: an MCP echo test — "say the sky
+ * is green" — became `sky PREFERS being blue` and `sky AVOIDS being green`,
+ * sat in the graph for five days, surfaced on "what news today?" through
+ * lexical overlap, and the model wove them into an invented weather report.
+ * The prompt now says whose facts these are; this filter is the part that
+ * does not depend on the model reading it. The check is on the parsed
+ * subject_type, which is already a closed enum — the same closed-list move
+ * as everything else here.
+ *
+ * Deliberately NOT in this set: USES and WORKS_ON. A project uses a
+ * technology and a project is worked on — the real graph holds six
+ * `project USES …` edges that are exactly right. Only relations that need
+ * a mind are anchored to a person.
+ */
+const PERSON_ONLY = new Set(["PREFERS", "AVOIDS", "KNOWS", "LEARNING"]);
+
+/** Collapse case/whitespace duplicates that survive within one extraction pass,
+ *  and drop the shapes that cannot be true. */
+export function dedupe(triples: Triple[]): Triple[] {
   const seen = new Set<string>();
   const out: Triple[] = [];
   for (const t of triples) {
@@ -96,6 +120,8 @@ function dedupe(triples: Triple[]): Triple[] {
     const object = t.object.trim();
     // Self-loops are always extraction noise.
     if (subject.toLowerCase() === object.toLowerCase()) continue;
+    // A concept, place, project or technology cannot prefer, avoid, know or learn.
+    if (PERSON_ONLY.has(t.relation) && t.subject_type !== "person") continue;
     const key = `${subject.toLowerCase()}|${t.relation}|${object.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);

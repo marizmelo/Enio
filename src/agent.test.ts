@@ -510,3 +510,45 @@ describe("fabricated action claims", () => {
     }
   });
 });
+
+describe("disclaimed live access", () => {
+  test("the stock refusal is flagged", async () => {
+    const { disclaimsLiveAccess } = await import("./agent.js");
+    // Verbatim from the failure that prompted this: the researcher, holding
+    // web_search, called nothing and said this. The phrasings are the ones a
+    // model is trained to emit; the guard is for the reflex, not for prose.
+    for (const line of [
+      "I don't have real-time news access, so I can't provide today's latest news.",
+      "I do not have access to real-time information.",
+      "I can't browse the internet.",
+      "I have no live data on that.",
+      "As an AI, I cannot access the web.",
+      "Unfortunately there is no internet access available to me.",
+      "I'm unable to access up-to-date information.",
+      // The curly apostrophe the model actually emits. The first version of
+      // this guard knew only the straight one and was inert on every real
+      // reply while passing every test.
+      "I don\u2019t have live news feeds, so I can\u2019t provide today\u2019s news.",
+    ]) {
+      assert.ok(disclaimsLiveAccess(line), `should flag: ${line}`);
+    }
+  });
+
+  test("a finding after a search is not a disclaimer", async () => {
+    const { disclaimsLiveAccess } = await import("./agent.js");
+    // These are honest outcomes of a lookup that ran, and the researcher's
+    // own prompt asks for exactly this wording. Firing here would turn an
+    // honest "not found" into a forced second search — the correction guard
+    // producing the very fabrication it exists to prevent.
+    for (const line of [
+      "I couldn't find anything about that on the pages I read.",
+      "The search returned nothing recent for that name.",
+      "None of the sources mention a release date.",
+      "I could not find a price on the official page.",
+      "The weather in Lisbon is 24°C and clear.",
+      "Today is Tuesday, 18 August 2026.",
+    ]) {
+      assert.equal(disclaimsLiveAccess(line), false, `should NOT flag: ${line}`);
+    }
+  });
+});
