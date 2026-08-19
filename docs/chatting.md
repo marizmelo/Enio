@@ -258,3 +258,13 @@ what should happen to the facts learned from it: **Keep** pins them so they
 survive without their transcript, **Forget** deletes them with it. There is no
 silent default, because a fact whose transcript is gone cannot be rebuilt by a
 reindex.
+
+**Clearing out several at once.** Hovering a row turns its icon into a
+checkbox; tick as many as you like and a bar appears with *Select all*,
+*Clear* and *Delete*. The bar says how many of them taught Enio something, and
+confirming lists **every** conversation by name — selection survives searching
+and filtering, so the list in the confirmation is the only place you can be
+certain what is about to go. Rows that hold knowledge are marked there with
+their fact count, and the same Keep-or-Forget bargain applies to the whole
+batch. If one delete fails the others still go, and the dialog says which did
+not and why rather than leaving the list disagreeing with what is on disk.

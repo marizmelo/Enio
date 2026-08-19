@@ -57,6 +57,29 @@ export const discardConversation = (id, { keepFacts }) =>
     method: "DELETE",
   });
 
+/**
+ * Discard several, one request each.
+ *
+ * Sequential and per-id rather than a bulk route: each delete is already
+ * atomic server-side and independently decides what happens to its facts, so
+ * looping reuses the tested path exactly. It never rejects — a partial result
+ * is the honest outcome of "three worked, one did not", and the caller shows
+ * which failed instead of leaving the user guessing what landed.
+ */
+export async function discardConversations(ids, { keepFacts }) {
+  const done = [];
+  const failed = [];
+  for (const id of ids) {
+    try {
+      await discardConversation(id, { keepFacts });
+      done.push(id);
+    } catch (err) {
+      failed.push({ id, reason: String(err?.message ?? err) });
+    }
+  }
+  return { done, failed };
+}
+
 /** Plans still waiting on a decision — the approval cards to re-draw after a
  *  restart, since the widget only ever travelled over the live stream. */
 export const pendingPlans = () => call("/plans/pending").then((d) => d.plans);
