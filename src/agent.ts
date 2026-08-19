@@ -1317,10 +1317,21 @@ export async function runTurn(
   // assistant replies -- an invention repeated is still an invention, and
   // counting it as a source would let one turn's fabrication launder the
   // next's. Warn-only: a notice under the reply, never a block or rewrite.
-  if (steps.some((s) => s.kind === "tool")) {
+  // Also run when NO tool ran: a from-memory or from-model reply that cites
+  // a URL has invented it, because no page was read this turn. Watched: an
+  // answer correctly labelled "from memory" carried a plausible CNN path
+  // that 404s -- the researcher's prompt says to link each claim to its
+  // page, and with no page in front of it the model minted one. On such a
+  // turn the sources are what memory and the thread hold; a URL that is in
+  // neither cannot be true.
+  const noToolRan = !steps.some((s) => s.kind === "tool");
+  if (!noToolRan || /https?:\/\//i.test(reply)) {
     try {
       const project = activeProject();
       const sources = [
+        // On a no-tool turn the memory block is a legitimate source: a fact
+        // that carries a URL may be cited. Anything else is not.
+        ...(noToolRan ? [memoryBlock] : []),
         userInput,
         ...history.filter((m) => m.role === "user" || m.role === "tool")
           .map((m) => String(m.content ?? "")),

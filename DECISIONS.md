@@ -2103,6 +2103,23 @@ up are both "known" but not the same trust, and memory outranks the thread
 when both cover — a deliberate keep beats an incidental mention. Recorded as
 a harness step, so restore carries it.
 
+**The answer carries no links; the Sources footer does.** An answer correctly
+labelled "from memory" ended with a plausible CNN path that 404s. The fact
+had no URL, no page was read, and the researcher's prompt said "each claim
+links to the page it came from" — so with no page in front of it the model
+minted one. The user's suggestion was the right cut: since the footer
+exists, remove inline links. The footer is built by the harness from what
+the tools actually returned — evidence the model saw, which it cannot
+invent. Inline links were the model's own account of the same thing. Two
+accounts of provenance, one of which can lie, is worse than one that
+cannot; the model now names things and the footer links them. Beneath the
+prompt, a structural net: the grounding check used to run only on tool-
+backed turns, so a from-memory reply was never checked — it now also runs
+on a no-tool turn that contains a URL, with the memory block as the only
+legitimate source, so a URL that is in neither memory nor the thread is
+flagged as invented. Measured: from-memory and from-web answers, zero
+inline links, footer intact.
+
 **Known residual, recorded not fixed:** a scheduled *prompt* task runs
 through runTurn after repointing the process-global sessions
 (setMemorySession and friends). A task firing mid-interactive-turn can

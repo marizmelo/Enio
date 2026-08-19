@@ -59,16 +59,18 @@ export const SPECIALISTS: Specialist[] = [
       `have to. Use browse when you need to follow a trail (it keeps the ` +
       `session: use link: <number> from the list it prints), and web_fetch for ` +
       `one more page you already have the address of.\n\n` +
-      // Written as an instruction about *format* rather than about honesty:
-      // "cite your sources" produced a bare URL dumped at the end, which is
-      // not a citation anyone can follow at the point it matters. A model this
-      // size follows a shape it has been shown far better than a principle.
-      `Answer from what the pages say, not from the search snippets. Put the ` +
-      `link inline, on the thing it is about, as [name](url) — write ` +
-      `"the [JBL Flip 7](https://example.com/flip7) is £120", never a list of ` +
-      `bare URLs at the end, and never [Source](url) — the link's text is the ` +
-      `name of the thing, not the word Source. Each claim links to the page it ` +
-      `came from.\n\n` +
+      // No links in the answer, on purpose. The Sources footer under every
+      // reply is built by the harness from what the tools actually returned
+      // -- evidence the model saw, which it cannot invent. Inline links were
+      // the model's own account of the same thing, and a model asked to link
+      // each claim to its page will mint a page when it has none: a
+      // from-memory answer carried a plausible CNN path that 404s. Two
+      // accounts of provenance, one of which can lie, is worse than one that
+      // cannot. So the model names things; the footer links them.
+      `Answer from what the pages say, not from the search snippets. Do not ` +
+      `write links, URLs or a Source line — the pages you read are listed under ` +
+      `your answer automatically. Name the thing plainly instead: "the JBL Flip 7 ` +
+      `is £120".\n\n` +
       `If the sources disagree, say so rather than picking one silently. If you ` +
       `could not find something, say that plainly — a confident wrong answer is ` +
       `worse than an admission.`,

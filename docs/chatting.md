@@ -54,19 +54,23 @@ Tools that ran appear as badges above the reply. A tool called more than once
 in a turn is one badge with a count — `browse ×3` — rather than three identical
 badges saying nothing the first did not.
 
-Links appear **inside the answer**, on the thing they are about — a product
-name, a document, a claim — rather than as a list to cross-reference
-afterwards. Bare URLs the model writes become links too, shortened to their
-domain and path. All of them open in your real browser.
-
 Under the answer, **Sources** lists every page the turn read, deduped:
 searching and then fetching the top hit is the normal path, and citing it twice
-would misstate how much was consulted.
+would misstate how much was consulted. They open in your real browser.
 
 Sources come from what the tools returned, so they are the evidence the model
 saw rather than a separate account of it. A page that returned 404 is never
 cited, and neither is a failed fetch: an answer that looks sourced when the
 source is an error message is worse than one that cites nothing.
+
+The answer itself carries no links, and that is deliberate. It used to: the
+researcher was asked to link each claim inline to the page it came from, and
+a model asked to do that will invent a page when it has none — an answer
+given from memory once carried a convincing news URL that did not exist. The
+footer cannot do that, because it lists what was actually read; the model
+names things, and the footer links them. (If a URL does appear in an answer,
+it is still turned into a link — and if nothing this turn read it, the
+grounding notice under the reply says so.)
 
 This is worth the space specifically because the model is small. It reads a
 page and writes a paragraph, and in the paragraph a summary and an invention

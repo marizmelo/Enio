@@ -1500,3 +1500,39 @@ describe("the basis label", () => {
     assert.equal(reply?.basis, "model");
   });
 });
+
+describe("a URL on a turn that read no page", () => {
+  test("is flagged as unsupported — nothing this turn could have produced it", async () => {
+    // Watched: an answer correctly labelled "from memory" carried a plausible
+    // CNN path that 404s. No tool ran, so no page was read, so any URL in the
+    // reply was minted. The grounding notice used to run only on tool-backed
+    // turns and let this through.
+    const { rememberFact } = await import("./memory/store.js");
+    await rememberFact("Kai Osei won the Lisbon marathon in 2026.", { source: "user" });
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { content: "Kai Osei won the Lisbon marathon in 2026. [Source](https://www.cnn.com/2026/lisbon-marathon-osei)" },
+    ]);
+    const notices: string[] = [];
+    await runTurn("who won the lisbon marathon", [], registry, sessionId, {
+      onNotice: (n) => notices.push(n),
+    }, { specialist: "researcher" });
+    const grounding = notices.find((n) => /Not found in this turn's sources/.test(n));
+    assert.ok(grounding, `expected the grounding notice, got: ${notices.join(" | ")}`);
+    assert.match(grounding!, /cnn\.com/);
+  });
+
+  test("a URL that IS in the remembered fact is fine", async () => {
+    const { rememberFact } = await import("./memory/store.js");
+    await rememberFact("The enio docs live at https://marizmelo.github.io/enio/.", { source: "user" });
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "The enio docs are at https://marizmelo.github.io/enio/." }]);
+    const notices: string[] = [];
+    await runTurn("where are the enio docs", [], registry, sessionId, {
+      onNotice: (n) => notices.push(n),
+    }, { specialist: "researcher" });
+    assert.equal(notices.filter((n) => /Not found in this turn's sources/.test(n)).length, 0, notices.join(" | "));
+  });
+});
