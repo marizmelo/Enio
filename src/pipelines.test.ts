@@ -81,6 +81,12 @@ test("artifact extraction is pinned to the tools' exact wording", () => {
   assert.deepEqual(extractArtifacts("write_file", "Wrote 512 bytes to notes/report.md"), [
     { type: "document", path: "notes/report.md" },
   ]);
+  // edit_file speaks the same first line, so the canvas reloads on an edit
+  // exactly as it does on a write.
+  assert.deepEqual(
+    extractArtifacts("edit_file", "Wrote 12 bytes to a/b.ts\nReplaced 1 passage at line 3."),
+    [{ type: "document", path: "a/b.ts" }],
+  );
   assert.deepEqual(
     extractArtifacts(
       "take_screenshot",
@@ -641,4 +647,19 @@ test("deleting a pipeline takes its schedules and their history with it", async 
     .prepare(`SELECT COUNT(*) AS n FROM task_runs WHERE task_id = ?`)
     .get(t.id) as { n: number };
   assert.equal(orphaned.n, 0, "task_runs follow via FK cascade");
+});
+
+test("single-agent mode keeps web_search inside the 16-tool ceiling", async () => {
+  // This suite runs unrouted (ENIO_ROUTING=0), so buildRegistry caps at 16
+  // and truncates the END of the builtin list. Twice now a new builtin has
+  // pushed web_search past that edge silently -- the composer then reports
+  // "web-search ability does not exist" and nothing else complains. The
+  // priority order in tools/index.ts is the fix; this is the alarm.
+  const { buildRegistry } = await import("./tools/index.js");
+  const registry = await buildRegistry();
+  assert.ok(registry.byName.has("web_search"), "web_search must survive the unrouted ceiling");
+  assert.ok(registry.byName.has("write_file"));
+  assert.ok(registry.byName.has("edit_file"));
+  // list_dir is the designated casualty: registered last on purpose.
+  assert.ok(registry.all.length <= 16);
 });

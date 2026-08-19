@@ -234,6 +234,14 @@ test("safePath: alias mounts, out/ rooting, and the workspace read-fallback", as
       safePath("attachments/conv-1/shot.png"),
       join(scratch, "workspace", "attachments", "conv-1", "shot.png"),
     );
+    // A WRITE to that same name never takes the fallback: it resolves in the
+    // project. Before forWrite existed, write_file("attachments/conv-1/
+    // shot.png") with a project open would have overwritten the
+    // conversation's attachment in the workspace.
+    assert.equal(
+      safePath("attachments/conv-1/shot.png", { forWrite: true }),
+      join(opened.outDir, "attachments", "conv-1", "shot.png"),
+    );
     // Escapes stay escapes.
     assert.throws(() => safePath("../secrets"), /escapes the project/);
     assert.throws(() => safePath("/etc/passwd"), /escapes the project/);
@@ -410,11 +418,15 @@ test("the router hears the project type as a prior, not an override", async () =
   }
 });
 
-test("the coder swapped read_image for search_code and stayed at six", async () => {
+test("the coder holds edit_file and search_code and stayed at six", async () => {
   const { SPECIALISTS } = await import("./specialists.js");
   const coder = SPECIALISTS.find((s) => s.name === "coder")!;
   assert.ok(coder.tools.includes("search_code"));
+  assert.ok(coder.tools.includes("edit_file"), "exact-match edits, not whole-file rewrites");
   assert.ok(!coder.tools.includes("read_image"), "the swap, not an addition");
+  // list_dir gave way to edit_file: search_code indexes paths, and
+  // `run_command ls` lists a folder, so nothing the coder needs is lost.
+  assert.ok(!coder.tools.includes("list_dir"), "swapped out for edit_file");
   assert.equal(coder.tools.length, 6);
   // The product keeps image reading through specialists that still hold it.
   for (const name of ["generalist", "operator"]) {

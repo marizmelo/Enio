@@ -30,7 +30,7 @@ async function call(path, init = {}) {
 /** Mirror of the server-side caps (project.ts CAPS), for live counters. The
  *  server refuses overflow either way — these just make the refusal visible
  *  before the round-trip. */
-export const CAPS = { name: 60, description: 200, instructions: 600, note: 120 };
+export const CAPS = { name: 60, description: 200, instructions: 600, note: 120, verifyCommand: 200 };
 
 export const listProjects = () => call("/projects").then((d) => d.projects);
 

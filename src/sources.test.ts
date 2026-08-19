@@ -104,6 +104,8 @@ test("a file that was read becomes a source; a failed read does not", () => {
   }
   // Listing tools name files without reading them; they stay silent.
   assert.deepEqual(extractSources("list_dir", { path: "." }, "notes.md\nreport.pdf"), []);
+  // edit_file hands over no content, so it cites nothing.
+  assert.deepEqual(extractSources("edit_file", { path: "a.ts" }, "Wrote 9 bytes to a.ts\nReplaced 1 passage at line 1."), []);
 });
 
 test("the same page searched then fetched is cited once, keeping the snippet", () => {

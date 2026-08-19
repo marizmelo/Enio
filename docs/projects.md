@@ -67,6 +67,39 @@ fail a turn.
 `run_command` runs in the sole attached folder when there is exactly one, and
 takes an `in` parameter naming an alias when there are several.
 
+## Editing and verification
+
+Three things the harness does for the coder, because at this model size
+asking for them in the prompt measurably did not produce them:
+
+**Look before you guess.** When your message names a file — `src/greet.ts`,
+`README.md` — the harness runs `search_code` for that name *before* the
+model's first call, so the path it then uses is one it was shown rather than
+one it remembered. Every path error in the coder's traces had been a guessed
+name. Project-only: without a project open, search is content-only, and "no
+matches" for a file that exists would mislead.
+
+**Edits are exact, not rewrites.** The coder changes an existing file with
+`edit_file` — an `old_string` that must appear exactly once, and the
+`new_string` to put in its place. Zero matches or more than one is an error
+naming the file, and nothing is written. `write_file` stays for new files
+and whole documents. Whole-file rewrites were the only write before, and a
+small model asked to fix one line of a long file regenerates the rest and
+drifts. (If the model copies the passage out of `read_file`'s numbered
+output, gutter included, the gutter is stripped — only on a miss, and only
+when every line carries it.)
+
+**The tests run after the edit.** The first time a turn writes a code file,
+the harness runs the project's **verify command** and the model sees the
+result before it answers — once per turn, not after every write. The command
+is the one set in the project editor, or, left blank, detected from the
+attached repo: `npm test` when `package.json` has a real test script, else
+`npx tsc --noEmit` when there is a `tsconfig.json`; `cargo check`;
+`go build ./...`; `python3 -m pytest -q`. Documents (`.md`, `.txt`) trigger
+nothing. A saved verify command is checked against the command allowlist
+when you save it — a command the shell would refuse is refused in the
+dialog, not at 3am.
+
 Conversations can hold standing attachments of their own (**Add to
 conversation…** in the composer's + menu) with the same alias grammar, the
 same refusals (no attaching `/`, your home folder, or enio's own data), and
@@ -77,7 +110,8 @@ deliberately opened, so a conversation attachment can never shadow it.
 ## Search
 
 The coder has a `search_code` tool: query in, ranked `path:line` locations
-out. It is deterministic — SQLite full-text search over the attached folders
+out. It also matches file *names* (the index covers paths), which is what
+the look-before-guess seed above relies on. It is deterministic — SQLite full-text search over the attached folders
 plus live ripgrep, no embeddings — and its index lives inside the project
 folder, refreshed incrementally. In a git repository it indexes what
 `git ls-files` reports, so `.gitignore`d build output and `.env` secrets stay

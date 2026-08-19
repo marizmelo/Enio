@@ -231,6 +231,7 @@ function projectDetail(project: Project) {
     type: project.type,
     description: project.description,
     instructions: project.instructions,
+    verifyCommand: project.verifyCommand,
     attachments: project.attachments,
     createdAt: project.createdAt,
     lastOpenedAt: project.lastOpenedAt,

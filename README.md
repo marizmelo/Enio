@@ -34,12 +34,12 @@ npm run desktop         # or the desktop app
 ```
 
 ```
-› what files are in my workspace
+› fix the typo in notes.md — it says "recieve"
   → coder
-  ⚒ list_dir {"path":"."}
-    ↳ notes.md (1204 bytes)
+  ⚒ read_file {"path":"notes.md"}
+  ⚒ edit_file {"path":"notes.md","old_string":"recieve","new_string":"receive"}
 
-You have one file, notes.md.
+Fixed "recieve" → "receive" in notes.md.
 ```
 
 `→ coder` is the router choosing an agent. `⚒` lines are tools running.

@@ -187,6 +187,25 @@ export function ProjectsDialog({ open, onOpenChange, activeId, onOpened, onClose
         />
       </label>
 
+      {/* What the harness runs after the agent edits code here. Blank means
+          auto-detect from the attached repo. Refused at save if it names a
+          command the shell would not run -- the error lands below like any
+          other, so a typo is a message rather than a silent never-runs. */}
+      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <span className="flex items-center justify-between">
+          Verify command — run after the agent edits code
+          <Counter value={detail.verifyCommand ?? ""} cap={CAPS.verifyCommand} />
+        </span>
+        <input
+          className="rounded-md border bg-transparent px-2 py-1.5 font-mono text-sm"
+          value={detail.verifyCommand ?? ""}
+          placeholder="Leave blank to auto-detect (npm test, tsc, cargo check, go build, pytest)"
+          maxLength={CAPS.verifyCommand}
+          onChange={(e) => setDetail({ ...detail, verifyCommand: e.target.value })}
+          onBlur={() => saveDetail({ verifyCommand: detail.verifyCommand ?? "" })}
+        />
+      </label>
+
       <div className="flex flex-col gap-1.5">
         <span className="flex items-center justify-between text-xs text-muted-foreground">
           Attached files and folders

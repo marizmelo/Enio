@@ -262,6 +262,7 @@ describe("untrusted page content cannot become an action", () => {
   const READS_UNTRUSTED = ["browse", "web_fetch", "web_fetch_rendered", "web_search"];
   const MUTATES = [
     "write_file",
+  "edit_file",
     "run_command",
     "send_email",
     "propose_plan",

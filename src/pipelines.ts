@@ -899,6 +899,7 @@ const TOOL_TO_ABILITY: Record<string, { ability: string; prompt: string }> = {
   read_file: { ability: "file-search", prompt: "find the relevant files" },
   list_dir: { ability: "file-search", prompt: "find the relevant files" },
   write_file: { ability: "create-document", prompt: "write it up as a document" },
+  edit_file: { ability: "develop-app", prompt: "make the change" },
   run_command: { ability: "develop-app", prompt: "run the build or script" },
   search_email: { ability: "read-email", prompt: "find the relevant email" },
   read_email: { ability: "read-email", prompt: "find the relevant email" },

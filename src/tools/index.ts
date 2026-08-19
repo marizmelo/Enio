@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import type { ToolDef } from "../types.js";
-import { fsTools } from "./fs.js";
+import { fsTools, listDirTool } from "./fs.js";
 import { searchTools } from "./search.js";
 import { shellTools } from "./shell.js";
 import { buildWebTools } from "./web.js";
@@ -104,6 +104,9 @@ export async function buildRegistry(
     // Spotlight is macOS; elsewhere the tool is withheld rather than shipped
     // broken -- a tool that can only fail burns the model's attention.
     ...(process.platform === "darwin" ? [findFileTool()] : []),
+    // Dead last: no routed specialist holds it now, and in single-agent mode
+    // it is the one to lose to the ceiling (see fs.ts).
+    listDirTool,
   ];
   const mcp = await loadMcpTools(onLog);
 

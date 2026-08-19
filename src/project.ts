@@ -12,6 +12,7 @@ import {
 import { homedir } from "node:os";
 import { basename, join, resolve, sep } from "node:path";
 import { config } from "./config.js";
+import { baseAllowedCommands, checkCommandAgainst } from "./tools/allowlist.js";
 
 /**
  * Projects: a contextual overlay, not a mode.
@@ -53,6 +54,7 @@ export const CAPS = {
   description: 200,
   instructions: 600,
   note: 120,
+  verifyCommand: 200,
 } as const;
 
 export interface Attachment {
@@ -73,6 +75,11 @@ export interface Project {
   type: ProjectType;
   description: string;
   instructions: string;
+  /** The command the harness runs after the coder edits a code file in this
+   *  project -- empty means auto-detect (npm test, tsc, cargo check, go
+   *  build, pytest). Validated against the command allowlist at SAVE time,
+   *  so a saved command can never be one the shell would refuse to run. */
+  verifyCommand: string;
   attachments: Attachment[];
   createdAt: number;
   lastOpenedAt: number;
@@ -164,6 +171,8 @@ interface StoredProject {
   type: ProjectType;
   description: string;
   instructions: string;
+  /** Absent in project.json written before the field existed. */
+  verifyCommand?: string;
   attachments: Attachment[];
   createdAt: number;
   lastOpenedAt: number;
@@ -175,7 +184,7 @@ function projectDir(id: string): string {
 
 function hydrate(stored: StoredProject): Project {
   const dir = projectDir(stored.id);
-  return { ...stored, dir, outDir: join(dir, "out") };
+  return { ...stored, verifyCommand: stored.verifyCommand ?? "", dir, outDir: join(dir, "out") };
 }
 
 function persist(project: Project): void {
@@ -240,6 +249,7 @@ export function createProject(input: {
     type,
     description,
     instructions: "",
+    verifyCommand: "",
     attachments: [],
     createdAt: Date.now(),
     lastOpenedAt: 0,
@@ -250,7 +260,13 @@ export function createProject(input: {
 
 export function updateProject(
   id: string,
-  patch: { name?: string; type?: string; description?: string; instructions?: string },
+  patch: {
+    name?: string;
+    type?: string;
+    description?: string;
+    instructions?: string;
+    verifyCommand?: string;
+  },
 ): Project {
   const project = load(id);
   if (patch.name !== undefined) {
@@ -274,6 +290,20 @@ export function updateProject(
     const instructions = patch.instructions.trim();
     checkCap("instructions", instructions);
     project.instructions = instructions;
+  }
+  if (patch.verifyCommand !== undefined) {
+    const cmd = patch.verifyCommand.trim();
+    if (/[\r\n]/.test(cmd)) throw new Error("The verify command must be a single line.");
+    checkCap("verifyCommand", cmd);
+    // Refused at save, not at run: a command the shell would refuse is not
+    // worth storing, and the person setting it is the one who can fix it.
+    // Checked against the base allowlist -- never the desktop set, which is
+    // gated on a run-time flag this project may later run without.
+    if (cmd) {
+      const check = checkCommandAgainst(cmd, baseAllowedCommands());
+      if (!check.ok) throw new Error(`Refused: ${check.reason}`);
+    }
+    project.verifyCommand = cmd;
   }
   persist(project);
   if (active?.id === id) active = project;

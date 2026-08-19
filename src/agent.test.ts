@@ -583,3 +583,29 @@ describe("knowledge covers the question", () => {
     assert.equal(knowledgeCovers("what news", ["Some news fact."]), false);
   });
 });
+
+describe("file tokens in a message", () => {
+  test("finds the files the user named, path form included, capped at two", async () => {
+    const { fileTokens } = await import("./agent.js");
+    assert.deepEqual(fileTokens("fix the typo in src/greet.ts"), ["src/greet.ts"]);
+    assert.deepEqual(fileTokens("update README.md and package.json please"), ["README.md", "package.json"]);
+    assert.deepEqual(
+      fileTokens("touch a.ts b.ts c.ts"),
+      ["a.ts", "b.ts"],
+      "more than two is a refactor, not a pointer",
+    );
+    assert.deepEqual(fileTokens("compare utils.ts with utils.ts again"), ["utils.ts"], "deduped");
+  });
+
+  test("ignores URLs, versions, absolute paths and prose dots", async () => {
+    const { fileTokens } = await import("./agent.js");
+    assert.deepEqual(fileTokens("see https://example.com/docs/page.html for details"), []);
+    assert.deepEqual(fileTokens("we are on node 20.3 and react 18.2.0"), []);
+    assert.deepEqual(fileTokens("look in /etc/hosts.txt"), [], "an absolute path is not a workspace name");
+    assert.deepEqual(fileTokens("hello there. how are you"), []);
+    // A bare host with no scheme is indistinguishable from a directory
+    // ("foo.bar/x.ts" is a legitimate relative path), so it fires -- and
+    // costs one harmless search. Only scheme-bearing URLs are stripped.
+    assert.deepEqual(fileTokens("the file at example.com/x.ts"), ["example.com/x.ts"]);
+  });
+});

@@ -1305,6 +1305,73 @@ documented rather than locked); tasks/heartbeat run in the separate daemon
 process and never see a project — if the scheduler ever moves into `serve`,
 task turns must run with the project suspended.
 
+### Acting, not just reading: edit_file, look-before-guess, verify (August 2026)
+
+The section above solved *reading* a codebase. Twelve coder turns in the
+traces then said the same thing the researcher's had before the search seed:
+the model narrates instead of acting (half made no tool call), guesses
+instead of looking (every tool error was an invented path), and never
+verifies (`run_command` had run zero times, though the prompt said "run the
+tests after a change" and the allowlist already held npm/tsc/cargo/go). And
+`write_file` was the only write — whole-file overwrite, where a 4B model
+asked to fix one line of a 300-line file regenerates all 300 and drifts. The
+fix is the researcher's, applied three times: take the judgement away.
+
+- **`edit_file`**: exact `old_string` → `new_string`, must match exactly
+  once; zero or several matches is an error naming the file, and nothing is
+  written. It replaced **`list_dir`** on the coder (the six-tool ceiling is
+  pinned by test; search_code indexes paths and `run_command ls` lists a
+  folder, so nothing the coder needs was lost). First output line is
+  write_file's `Wrote N bytes to X` — one grammar for every writer, so the
+  artifact regex and the canvas reload key off it unchanged. **The gutter
+  rule**: `read_file` prints `NNNN | line`, so a passage copied from it
+  carries the gutter; the literal is tried first and the strip happens only
+  on a miss and only when *every* line wears it, and `new_string` is
+  stripped only if `old_string` was — a passage that merely looks like a
+  gutter line is content. **Rejected**: fuzzy/whitespace-tolerant matching
+  (the actionable error is the structural fix), a diff/patch tool (the
+  model cannot author unified diffs at this size).
+- **`safePath(..., {forWrite})`**: the header comment claimed "writes never
+  take the workspace fallback: a write target does not exist yet" — false
+  for an existing workspace file, so `write_file("attachments/c/shot.png")`
+  with a project open would have overwritten the conversation's attachment.
+  Both writers now pass `forWrite`; the fallback is read-only by option,
+  not by accident.
+- **The file seed**: when the user names a file, the harness runs
+  `search_code` for the token before the model's first call — copy over
+  compose, the projects lesson. Project-only on purpose: without a project
+  the search is content-only and "No matches for utils.ts" for a file that
+  exists teaches the model the file is missing, worse than no seed. Tokens
+  already in view (attached files, prior tool results) are skipped; a bare
+  host like `example.com/x.ts` is indistinguishable from a directory and
+  fires — one harmless search, cheaper than a heuristic that rejects
+  `foo.bar/x.ts`.
+- **Verification as a harness act**: the first time a turn writes a code
+  file, the harness runs the project's verify command as a `run_command`
+  step and the model sees the result before its next call. Once per turn,
+  immediately, no extra iteration cap — `maxToolIterations` already bounds
+  the turn, and a forced stop after one reaction would strand a half-fixed
+  edit. The command is the project's `verifyCommand` or a closed detection
+  list where a `package.json` settles the ecosystem (no fall-through to
+  Cargo). Two traps from the first cut, kept as tests: `npm init -y`'s
+  `"test": "echo … && exit 1"` must read as *no test script* or every fresh
+  package fails by construction, and bare `pytest` is not allowlisted — the
+  command is `python3 -m pytest -q`. `verifyCommand` is validated against
+  the allowlist at *save* (a command the shell would refuse is refused in
+  the dialog), which forced the allowlist out to a leaf module —
+  `project.ts` importing `shell.ts` would have dragged desktop/plans/vision
+  into the project graph.
+- **The single-agent ceiling bit again, on the first test run.** Adding one
+  builtin pushed `web_search` past the 16-tool truncation in unrouted mode
+  and the composer test reported "web-search ability does not exist" — the
+  exact failure the comment in `tools/index.ts` recorded from last time.
+  `list_dir` is now registered dead last, so it is the designated casualty,
+  and a test pins that `web_search` survives.
+
+Multi-file work still routes to `delegate-coding`; the conclusion that a 4B
+model should not be made into a good coder stands — it should be made a
+*safe* one, and that is what these three moves buy.
+
 ### Monaco, and rich code output
 
 Monaco is the editor from VS Code and would give real syntax highlighting, a

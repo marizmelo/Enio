@@ -1536,3 +1536,188 @@ describe("a URL on a turn that read no page", () => {
     assert.equal(notices.filter((n) => /Not found in this turn's sources/.test(n)).length, 0, notices.join(" | "));
   });
 });
+
+
+const { mkdirSync, writeFileSync } = await import("node:fs");
+const projectApi = await import("./project.js");
+
+describe("the coder's look-before-guess seed", () => {
+  const project = projectApi;
+
+  test("a named file is searched before the model's first call, project open", async () => {
+    // Every coder tool error in the traces was a guessed path. With a project
+    // open the FTS index matches filenames, so the harness runs search_code
+    // for the token the user typed and the model's first call already holds
+    // the real path.
+    const root = join(scratch, "seedrepo");
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "greet.ts"), 'export const greet = () => "helo";\n');
+    const p = project.createProject({ name: "seedproj", type: "code" });
+    project.attachPath(p.id, root, "the repo");
+    project.openProject(p.id);
+    try {
+      const registry = await buildRegistry();
+      const sessionId = store.startSession();
+      const sent: Message[][] = [];
+      scriptModel([{ content: "Found it." }]);
+      const scripted = globalThis.fetch;
+      globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        if (Array.isArray(body.messages)) sent.push(body.messages);
+        return scripted(url as string, init);
+      }) as typeof fetch;
+      const seen: string[] = [];
+      await runTurn("fix the typo in src/greet.ts", [], registry, sessionId, {
+        onToolStart: (n) => seen.push(n),
+      }, { specialist: "coder" });
+      assert.deepEqual(seen, ["search_code"], "the seed ran, once, before the model");
+      const first = sent[0]!;
+      const seedCall = first.find((m) => m.role === "assistant" && m.tool_calls);
+      assert.ok(seedCall, "the first model call carries the seed round-trip");
+      assert.match(String(seedCall!.tool_calls![0]!.function.arguments), /src\/greet\.ts/);
+      assert.ok(first.some((m) => m.role === "tool"), "and its result");
+    } finally {
+      project.closeProject();
+    }
+  });
+
+  test("does not fire with no project, on a greeting, or when the file is already in view", async () => {
+    const registry = await buildRegistry();
+    // No project: search_code is content-only there and "No matches" for a
+    // real file would mislead.
+    let seen: string[] = [];
+    scriptModel([{ content: "ok" }]);
+    await runTurn("fix the typo in src/greet.ts", [], registry, store.startSession(), {
+      onToolStart: (n) => seen.push(n),
+    }, { specialist: "coder" });
+    assert.deepEqual(seen, [], "no project, no seed");
+
+    const root = join(scratch, "seedrepo2");
+    mkdirSync(root, { recursive: true });
+    writeFileSync(join(root, "a.ts"), "x");
+    const p = project.createProject({ name: "seedproj2", type: "code" });
+    project.attachPath(p.id, root, "r");
+    project.openProject(p.id);
+    try {
+      seen = [];
+      scriptModel([{ content: "hi" }]);
+      await runTurn("hello there", [], registry, store.startSession(), {
+        onToolStart: (n) => seen.push(n),
+      }, { specialist: "coder" });
+      assert.deepEqual(seen, [], "a greeting names no file");
+
+      // Already in view: the file is attached to the turn, so the prompt
+      // already carries it -- searching for its name would be noise.
+      seen = [];
+      scriptModel([{ content: "ok" }]);
+      await runTurn("tidy up a.ts", [], registry, store.startSession(), {
+        onToolStart: (n) => seen.push(n),
+      }, { specialist: "coder", files: ["r/a.ts"] });
+      assert.deepEqual(seen, [], "an attached file is not re-searched");
+    } finally {
+      project.closeProject();
+    }
+  });
+});
+
+describe("harness verification after a write", () => {
+  const project = projectApi;
+
+  function repo(name: string): string {
+    const root = join(scratch, name);
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "greet.ts"), 'export const greet = (n: string) => "helo " + n;\n');
+    // A real test script the allowlist accepts (node is allowlisted):
+    // exits 0 when the typo is gone, 1 while it is there.
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({
+        name,
+        scripts: { test: `node -e "process.exit(require('fs').readFileSync('src/greet.ts','utf8').includes('helo')?1:0)"` },
+      }),
+    );
+    return root;
+  }
+
+  test("after an edit_file, the project's test command runs once and the model sees it", async () => {
+    const root = repo("vrepo");
+    const p = project.createProject({ name: "vproj", type: "code" });
+    project.attachPath(p.id, root, "the repo");
+    project.openProject(p.id);
+    try {
+      const registry = await buildRegistry();
+      const sessionId = store.startSession();
+      scriptModel([
+        { content: "" }, // the file seed's search_code
+        { toolCall: { name: "edit_file", args: { path: "vrepo/src/greet.ts", old_string: '"helo "', new_string: '"hello "' } } },
+        { content: "Fixed the typo; the tests pass." },
+      ]);
+      const seen: string[] = [];
+      const notices: string[] = [];
+      const history: Message[] = [];
+      await runTurn("fix the typo in src/greet.ts", history, registry, sessionId, {
+        onToolStart: (n) => seen.push(n),
+        onNotice: (n) => notices.push(n),
+      }, { specialist: "coder" });
+
+      assert.deepEqual(seen, ["search_code", "edit_file", "run_command"], "seed, edit, then the harness verifies");
+      const verify = history.find((m) => m.role === "assistant" && m.tool_calls?.[0]?.id === "seed_verify");
+      assert.ok(verify, "the verification was a harness call");
+      assert.match(String(verify!.tool_calls![0]!.function.arguments), /"command":"npm test"/);
+      const result = history.find((m) => m.role === "tool" && m.tool_call_id === "seed_verify");
+      assert.ok(result, "and its result is in the model's history");
+      assert.ok(!/^exit \d/.test(String(result!.content)), `the fixed file passes: ${result!.content}`);
+      assert.ok(notices.some((n) => /Ran `npm test` after the edit — passed/.test(n)), notices.join(" | "));
+    } finally {
+      project.closeProject();
+    }
+  });
+
+  test("two writes verify once; a failed edit, a document write, and another agent verify never", async () => {
+    const root = repo("vrepo2");
+    const p = project.createProject({ name: "vproj2", type: "code" });
+    project.attachPath(p.id, root, "r");
+    project.openProject(p.id);
+    try {
+      const registry = await buildRegistry();
+      // Two successful writes in one turn: one verification.
+      let seen: string[] = [];
+      scriptModel([
+        { content: "" },
+        { toolCall: { name: "edit_file", args: { path: "vrepo2/src/greet.ts", old_string: '"helo "', new_string: '"hello "' } } },
+        { toolCall: { name: "write_file", args: { path: "vrepo2/src/other.ts", content: "export {};\n" } } },
+        { content: "done" },
+      ]);
+      await runTurn("fix src/greet.ts and add other.ts", [], registry, store.startSession(), {
+        onToolStart: (n) => seen.push(n),
+      }, { specialist: "coder" });
+      assert.equal(seen.filter((n) => n === "run_command").length, 1, seen.join(","));
+
+      // A failed edit (no match) is not a write: nothing to verify.
+      seen = [];
+      scriptModel([
+        { content: "" },
+        { toolCall: { name: "edit_file", args: { path: "vrepo2/src/greet.ts", old_string: "NOT THERE", new_string: "x" } } },
+        { content: "could not" },
+      ]);
+      await runTurn("change src/greet.ts", [], registry, store.startSession(), {
+        onToolStart: (n) => seen.push(n),
+      }, { specialist: "coder" });
+      assert.ok(!seen.includes("run_command"), seen.join(","));
+
+      // A document write runs no build.
+      seen = [];
+      scriptModel([
+        { content: "" },
+        { toolCall: { name: "write_file", args: { path: "vrepo2/NOTES.md", content: "# notes\n" } } },
+        { content: "written" },
+      ]);
+      await runTurn("add NOTES.md", [], registry, store.startSession(), {
+        onToolStart: (n) => seen.push(n),
+      }, { specialist: "coder" });
+      assert.ok(!seen.includes("run_command"), seen.join(","));
+    } finally {
+      project.closeProject();
+    }
+  });
+});

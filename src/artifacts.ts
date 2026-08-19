@@ -23,7 +23,7 @@ export interface Artifact {
 
 export function extractArtifacts(tool: string, output: string): Artifact[] {
   const artifacts: Artifact[] = [];
-  if (tool === "write_file" || tool === "handoff_saved") {
+  if (tool === "write_file" || tool === "handoff_saved" || tool === "edit_file") {
     // handoff_saved is the harness recording its own save in the tool's
     // dialect (see runTurn); one grammar, two writers.
     const m = /^Wrote \d+ bytes to (.+)$/m.exec(output);

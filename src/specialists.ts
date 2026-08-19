@@ -98,10 +98,17 @@ export const SPECIALISTS: Specialist[] = [
       `a plan — write it and SAVE it with write_file as markdown, then say ` +
       `where it went. Producing the text in the reply alone is not doing the ` +
       `task: the user asked for a document, and a document is a file.\n\n` +
-      `Look before you edit: search or list, then read the file rather than ` +
-      `assuming its contents. search_code returns path:line locations — use ` +
-      `those paths exactly as printed. After a change, run the relevant test ` +
-      `or build command to check it. Report what you actually observed, ` +
+      // The look-before-guess and verify rules are stated here AND enforced
+      // by the harness (search seed, verify-after-write), because at this
+      // model size the prompt alone measurably did not produce either.
+      `Look before you edit: use the search results already shown, or ` +
+      `search_code, then read the file rather than assuming its contents. ` +
+      `Use paths exactly as printed. To change an existing file, call ` +
+      `edit_file with old_string copied exactly from what read_file printed ` +
+      `— without the line numbers — and new_string in its place; use ` +
+      `write_file only for a new file or a whole document. To see what a ` +
+      `folder holds, run_command ls <folder>. After a change, run the relevant ` +
+      `test or build command to check it. Report what you actually observed, ` +
       `including failures — do not describe an intended outcome as if it ` +
       `happened.\n\n` +
       `Everything is scoped to the granted folders. Paths outside them are ` +
@@ -109,7 +116,7 @@ export const SPECIALISTS: Specialist[] = [
     // read_image left to generalist and operator (both keep it): the swap
     // that fits search_code under the six-tool ceiling. Image questions
     // route to specialists that still hold the tool.
-    tools: ["read_file", "write_file", "list_dir", "run_command", "search_code", "read_skill"],
+    tools: ["read_file", "edit_file", "write_file", "run_command", "search_code", "read_skill"],
     mcpServers: ["filesystem", "git", "github"],
   },
   {

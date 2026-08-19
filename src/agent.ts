@@ -9,6 +9,7 @@ import { invokedSkillBlock } from "./mentions.js";
 import type { Skill } from "./skills.js";
 import { safePath } from "./tools/fs.js";
 import { extractArtifacts } from "./artifacts.js";
+import { verificationFor, verifyFailed } from "./verify.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { isImage, readImage } from "./vision.js";
@@ -520,12 +521,39 @@ export function disclaimsLiveAccess(text: string): boolean {
   return negated.test(plain) || bare.test(plain);
 }
 
+/**
+ * File names the user typed, for the coder's look-before-guess seed.
+ *
+ * Closed extension list, URLs stripped first, and a lookbehind that rejects
+ * anything preceded by "/" or "." -- which kills absolute paths, URL tails
+ * and "example.com/x.ts" while keeping "src/utils.ts" (the path form is
+ * the token). Version numbers fail because "3" is no extension. Capped at
+ * two: a message naming more files than that is a refactor, and the seed
+ * is for the common case of one file being pointed at.
+ */
+const FILE_EXTS =
+  "ts|tsx|js|jsx|mjs|cjs|json|md|py|rs|go|java|kt|swift|c|h|cpp|hpp|cs|rb|php|sh|yml|yaml|toml|css|scss|html|sql|txt|gd";
+const FILE_TOKEN = new RegExp(
+  `(?<![\\w./@-])((?:[\\w.-]+/)*[\\w-]+\\.(?:${FILE_EXTS}))(?![\\w./-])`,
+  "g",
+);
+export function fileTokens(text: string): string[] {
+  const noUrls = text.replace(/\bhttps?:\/\/\S+/gi, " ");
+  const out: string[] = [];
+  for (const m of noUrls.matchAll(FILE_TOKEN)) {
+    const tok = m[1]!;
+    if (!out.includes(tok)) out.push(tok);
+    if (out.length === 2) break;
+  }
+  return out;
+}
+
 /** The tools whose presence makes a live-access disclaimer false. */
 const LIVE_TOOLS = new Set(["web_search", "web_fetch", "browse", "weather", "current_time"]);
 /** For the basis label: what counts as "went to the web" and "read files".
  *  Closed lists, like everything the harness states about itself. */
 const WEB_TOOLS = new Set(["web_search", "web_fetch", "browse"]);
-const FILE_TOOLS = new Set(["read_file", "search_code", "list_dir", "search_library", "find_file", "read_image", "read_email", "search_email"]);
+const FILE_TOOLS = new Set(["read_file", "edit_file", "search_code", "list_dir", "search_library", "find_file", "read_image", "read_email", "search_email"]);
 
 export function looksDegenerate(text: string): boolean {
   const sentences = text
@@ -862,6 +890,57 @@ export async function runTurn(
       });
     }
   }
+  // Verify after a write: the harness runs the project's test or build once
+  // per turn, the first time a coder turn writes code, and the model sees
+  // the result before its next call. "Run the tests after a change" has
+  // been in the coder's prompt from the start and run_command had fired
+  // zero times in twelve traced turns -- the model does not take that step
+  // on its own at this size, so the harness takes it. Once, not after every
+  // write: a mid-refactor red tsc is honest and the model still holds
+  // run_command for a re-check; re-running on every write would be the
+  // loop the iteration cap exists to bound.
+  let verifiedThisTurn = false;
+  async function verifyAfterWrites(calls: ToolCall[]): Promise<void> {
+    if (verifiedThisTurn || specialistName !== "coder") return;
+    if (!allowedToolNames.has("run_command")) return;
+    const written: string[] = [];
+    for (const call of calls) {
+      const name = call.function.name;
+      if (name !== "write_file" && name !== "edit_file") continue;
+      const step = [...steps].reverse().find((st) => st.kind === "tool" && st.name === name);
+      if (!step || step.error) continue;
+      const m = /^Wrote \d+ bytes to (.+)$/m.exec(step.output ?? "");
+      if (!m) continue;
+      try {
+        written.push(safePath(m[1]!.trim()));
+      } catch {
+        /* a path that no longer resolves is not one to verify */
+      }
+    }
+    if (written.length === 0) return;
+    const v = verificationFor(written);
+    if (!v) return;
+    verifiedThisTurn = true;
+    if ("refused" in v) {
+      handlers.onNotice?.(`Skipped verification: ${v.refused}`);
+      return;
+    }
+    const args = v.in ? { command: v.command, in: v.in } : { command: v.command };
+    const call: ToolCall = {
+      id: "seed_verify",
+      type: "function",
+      function: { name: "run_command", arguments: JSON.stringify(args) },
+    };
+    history.push({ role: "assistant", content: null, tool_calls: [call] });
+    await runToolCalls([call]);
+    const out = String(history.at(-1)?.content ?? "");
+    handlers.onNotice?.(
+      verifyFailed(out)
+        ? `Ran \`${v.command}\` after the edit — it failed; the agent can see the output.`
+        : `Ran \`${v.command}\` after the edit — passed.`,
+    );
+  }
+
   const toolsUsed: string[] = [];
   let reply = "";
   // True when the turn ended with no content and no tool call -- the model
@@ -942,6 +1021,39 @@ export async function runTurn(
     await runToolCalls([call]);
   }
 
+  // The coder's look-before-guess. Every one of its tool errors in the
+  // traces was a guessed path -- README.md, library/meeting-….md -- read
+  // from memory rather than from a listing, exactly the judgement call the
+  // researcher's seed removed for search. When the user names a file, the
+  // harness runs search_code for that name before the model's first call,
+  // so the path it then uses is one it was shown (copy over compose, the
+  // projects lesson). Project-only: without a project, search_code is
+  // content-only, and "No matches for utils.ts" for a file that exists would
+  // teach the model the file is missing -- worse than no seed. A token
+  // already in view (an attached file, or a prior tool result) is skipped.
+  if (
+    specialistName === "coder" &&
+    activeTools.some((t) => t.name === "search_code") &&
+    activeProject()
+  ) {
+    const inView = [
+      ...(overrides.files ?? []),
+      ...history.filter((m) => m.role === "tool").map((m) => String(m.content ?? "")),
+    ]
+      .join("\n")
+      .toLowerCase();
+    const tokens = fileTokens(userInput).filter((t) => !inView.includes(t.toLowerCase()));
+    if (tokens.length > 0) {
+      const calls: ToolCall[] = tokens.map((token, i) => ({
+        id: `seed_file_${i + 1}`,
+        type: "function",
+        function: { name: "search_code", arguments: JSON.stringify({ query: token }) },
+      }));
+      history.push({ role: "assistant", content: null, tool_calls: calls });
+      await runToolCalls(calls);
+    }
+  }
+
   for (let iteration = 0; iteration < config.maxToolIterations; iteration++) {
     const isLast = iteration === config.maxToolIterations - 1;
     iterations = iteration + 1;
@@ -1012,6 +1124,7 @@ export async function runTurn(
     });
 
     await runToolCalls(result.toolCalls);
+    await verifyAfterWrites(result.toolCalls);
 
     if (isLast) {
       handlers.onNotice?.(
@@ -1102,6 +1215,7 @@ export async function runTurn(
           tool_calls: retry.toolCalls,
         });
         await runToolCalls(retry.toolCalls);
+        await verifyAfterWrites(retry.toolCalls);
       }
 
       if (looksDegenerate(retry.content)) looped = true;
@@ -1242,6 +1356,7 @@ export async function runTurn(
           tool_calls: fix.toolCalls,
         });
         await runToolCalls(fix.toolCalls);
+        await verifyAfterWrites(fix.toolCalls);
       }
     } catch {
       // The floor below still applies; a failed correction must not lose the

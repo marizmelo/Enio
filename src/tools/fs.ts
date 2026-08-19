@@ -18,8 +18,11 @@ import type { ToolDef } from "../types.js";
  * workspace. Unprefixed reads fall back to the global workspace when the
  * file exists there and not in the project -- conversation attachments land
  * in the workspace whatever is open, and an attachment must never be able
- * to fail a turn. Writes never take the fallback: a write target does not
- * exist yet, so it resolves in the project and stays there.
+ * to fail a turn. Writes never take the fallback -- by option, not by
+ * accident: the old claim was "a write target does not exist yet", which
+ * is false for an existing workspace file, and write_file("shot.png") with
+ * a project open would have overwritten the conversation's attachment. A
+ * write resolves in the project and stays there.
  *
  * The containment check resolves the path first and then verifies it's
  * inside the root, which is what makes it robust to `../` traversal.
@@ -45,7 +48,7 @@ function resolveInMount(mount: { alias: string; path: string; kind: string }, re
   return target;
 }
 
-export function safePath(userPath: string): string {
+export function safePath(userPath: string, opts: { forWrite?: boolean } = {}): string {
   const raw = String(userPath);
   const active = activeProject();
   const segments = raw.split(/[\\/]+/).filter((s) => s.length > 0 && s !== ".");
@@ -63,7 +66,7 @@ export function safePath(userPath: string): string {
     const outRoot = resolve(active.outDir);
     const target = resolve(outRoot, raw);
     if (target === outRoot || target.startsWith(outRoot + sep)) {
-      if (!existsSync(target)) {
+      if (!opts.forWrite && !existsSync(target)) {
         const wsRoot = resolve(config.workspace);
         const fallback = resolve(wsRoot, raw);
         if ((fallback === wsRoot || fallback.startsWith(wsRoot + sep)) && existsSync(fallback)) {
@@ -118,6 +121,27 @@ const rel = (abs: string): string => {
   }
   return relative(config.workspace, abs) || ".";
 };
+
+function occurrences(haystack: string, needle: string): number {
+  let n = 0;
+  let at = haystack.indexOf(needle);
+  while (at !== -1) {
+    n++;
+    at = haystack.indexOf(needle, at + needle.length);
+  }
+  return n;
+}
+
+/** read_file prints `NNNN | line`. If every line of a passage carries that
+ *  prefix, return the passage without it; otherwise return it unchanged. */
+const GUTTER = /^\s*\d+ \| /;
+function stripGutter(s: string): string {
+  const lines = s.split("\n");
+  const body = lines.length > 1 && lines[lines.length - 1] === "" ? lines.slice(0, -1) : lines;
+  if (body.length === 0 || !body.every((l) => GUTTER.test(l))) return s;
+  const stripped = body.map((l) => l.replace(GUTTER, ""));
+  return stripped.join("\n") + (body.length < lines.length ? "\n" : "");
+}
 
 export const fsTools: ToolDef[] = [
   {
@@ -179,7 +203,7 @@ export const fsTools: ToolDef[] = [
   {
     name: "write_file",
     description:
-      "Write text to a file in the working folder, creating parent directories as needed. Overwrites existing content.",
+      "Create a file, or replace a whole file's contents, in the working folder. Creates parent directories. For a change inside an existing file use edit_file instead.",
     origin: "builtin",
     parameters: {
       type: "object",
@@ -190,7 +214,7 @@ export const fsTools: ToolDef[] = [
       required: ["path", "content"],
     },
     async run(args) {
-      const target = safePath(String(args.path ?? ""));
+      const target = safePath(String(args.path ?? ""), { forWrite: true });
       const content = String(args.content ?? "");
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, content, "utf8");
@@ -198,6 +222,89 @@ export const fsTools: ToolDef[] = [
     },
   },
   {
+    name: "edit_file",
+    description:
+      "Replace one exact passage in an existing file. old_string must appear exactly once — copy it verbatim from read_file output, WITHOUT the line-number gutter. To create a file or rewrite it whole, use write_file.",
+    origin: "builtin",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Path relative to the working folder." },
+        old_string: {
+          type: "string",
+          description: "The exact text to replace. Include enough surrounding lines that it occurs once.",
+        },
+        new_string: { type: "string", description: "The text to put in its place." },
+      },
+      required: ["path", "old_string", "new_string"],
+    },
+    async run(args) {
+      const target = safePath(String(args.path ?? ""), { forWrite: true });
+      const shown = rel(target);
+      if (!existsSync(target)) {
+        throw new Error(`No file at ${shown}. Use write_file to create a new file.`);
+      }
+      const buf = await readFile(target);
+      if (buf.subarray(0, 8000).includes(0) || looksLikePdf(buf)) {
+        throw new Error(`${shown} is binary; edit_file only edits text.`);
+      }
+      const text = buf.toString("utf8");
+      const oldRaw = String(args.old_string ?? "");
+      const newRaw = String(args.new_string ?? "");
+      if (oldRaw.length === 0) throw new Error("old_string is empty — say what to replace.");
+
+      // Literal first. The gutter strip is a fallback for the one mistake
+      // the tool description cannot prevent at this model size: copying
+      // old_string out of read_file's numbered output, gutter included. It
+      // is applied only on a miss and only when EVERY line carries the
+      // gutter, so real content that happens to look like "  12 | x" on
+      // one line is never mangled.
+      let oldStr = oldRaw;
+      let count = occurrences(text, oldStr);
+      let stripped = false;
+      if (count === 0 && stripGutter(oldRaw) !== oldRaw) {
+        oldStr = stripGutter(oldRaw);
+        count = occurrences(text, oldStr);
+        stripped = count > 0;
+      }
+      // new_string is stripped only when old_string was: the model copies
+      // both in the same dialect, and a literal old_string that matched as
+      // written says the dialect was plain -- so a new_string that merely
+      // LOOKS like a gutter line is content, and stays.
+      const newStr = stripped ? stripGutter(newRaw) : newRaw;
+
+      if (count === 0) {
+        throw new Error(
+          `old_string was not found in ${shown}. Read the file and copy the passage exactly, without line numbers.`,
+        );
+      }
+      if (count > 1) {
+        throw new Error(
+          `old_string matches ${count} times in ${shown}; include more surrounding lines so it matches once.`,
+        );
+      }
+      const at = text.indexOf(oldStr);
+      const next = text.slice(0, at) + newStr + text.slice(at + oldStr.length);
+      await writeFile(target, next, "utf8");
+      const line = text.slice(0, at).split("\n").length;
+      // First line in write_file's dialect: the artifact regex and the
+      // canvas reload key off it, and one grammar for every writer is the
+      // rule (handoff_saved speaks it too).
+      return `Wrote ${Buffer.byteLength(next)} bytes to ${shown}\nReplaced 1 passage at line ${line}.`;
+    },
+  }
+];
+
+/**
+ * list_dir lives outside fsTools on purpose: nothing assigns it to a routed
+ * specialist any more (the coder traded it for edit_file -- search_code
+ * indexes paths and `run_command ls` lists a folder), and in single-agent
+ * mode it is the tool worth losing to the 16-tool ceiling. Registered last
+ * so that when the ceiling truncates the end of the list, THIS falls off
+ * rather than web_search -- the silent capability loss the pipelines suite
+ * caught as "web-search ability does not exist".
+ */
+export const listDirTool: ToolDef = {
     name: "list_dir",
     description:
       "List files and directories at a path in the working folder. Use this before reading to discover what exists.",
@@ -242,5 +349,5 @@ export const fsTools: ToolDef[] = [
       );
       return `${rel(target)}:\n` + [...mounts, ...described].join("\n");
     },
-  },
-];
+  };
+
