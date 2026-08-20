@@ -1347,6 +1347,44 @@ being process memory). It is the real fix for the scheduler residual above
 too, but it touches every reader of `activeProject()` — worth doing when
 task turns move into `serve`, not as a side effect of a UX fix.
 
+### Testing a page it wrote: background commands, not a server tool (August 2026)
+
+Asked for "knowledge about web servers for testing", which is two questions.
+The know-how is a skill (`local-preview`). The capability was the blocker:
+`run_command` spawns, captures, and SIGKILLs at 60s, so a web server spent the
+whole timeout and then died — "serve this and check it" could not be expressed
+at all, which is why the coder could write a page and never run it.
+
+**A `background` flag on run_command, not a new tool.** The coder is at its
+six-tool ceiling and nothing there is droppable, so a `serve_dir` tool would
+have cost an invariant. A parameter costs nothing and follows the capability:
+anything that does not exit (a watch build, a dev server) gets the same
+treatment.
+
+What bounds it is structural rather than model-managed — the model cannot
+list, inspect or stop these, because a small model handed process control will
+use it. Instead: the same allowlist, a cap of three with the oldest evicted,
+and every child killed when enio exits (they stay in this process group so
+that works). It waits ~900ms before reporting success, because a server that
+dies at once — port taken, missing module — would otherwise be reported as
+started and the next call would curl nothing and blame the page.
+
+**`python3 -m http.server` bound wide is refused, naming the flag.** Its
+default is 0.0.0.0, which puts the served folder on the local network. The
+refusal says to add `--bind 127.0.0.1` rather than adding it silently: the
+trace has to show what actually ran. Only that one command is special-cased —
+it is the one the skill recommends and the only common server defaulting to a
+public bind.
+
+**Known-imperfect, shipped anyway:** on the first live run the 4B rewrote the
+file instead of serving it — the skill did not win against the coder's write
+reflex. Mitigated by dropping `write_file` from the skill's allowed-tools and
+opening it with "this is a testing task, not a writing one"; `/local-preview`
+forces it. If traces keep showing a rewrite, the next move is a harness seed
+(start the server before the model's first call when the request names a file
+and a verb like serve/preview/test), which is the pattern that worked for the
+researcher and the coder's look-before-guess — not more prompt.
+
 ### The output budget was the reason the coder could not write (August 2026)
 
 Reported as "the model keeps writing code in the thread instead of the file,

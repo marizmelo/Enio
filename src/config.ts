@@ -543,6 +543,17 @@ export const config = {
   memoryBlockChars: 4000,
   shellTimeoutMs: 60_000,
 
+  /**
+   * How long a backgrounded command is watched before it is reported started.
+   *
+   * The window exists so the answer can be honest. A server that dies at once
+   * — port in use, missing module, a typo in the path — would otherwise be
+   * reported as running, and the next call would curl nothing and conclude
+   * the page was broken. Long enough for a bind failure to surface, short
+   * enough that it is not felt inside a turn that already takes seconds.
+   */
+  backgroundSettleMs: Number(env("BACKGROUND_SETTLE_MS") ?? 900),
+
   /** MCP servers to connect to. Same shape as Claude Desktop's config. */
   mcpConfigPath: env("MCP_CONFIG") ?? join(dataDir, "mcp.json"),
 

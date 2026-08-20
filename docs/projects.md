@@ -78,6 +78,14 @@ fail a turn.
 `run_command` runs in the sole attached folder when there is exactly one, and
 takes an `in` parameter naming an alias when there are several.
 
+A command that never exits — a web server, a watch build — is started in the
+background instead of being waited on, so the turn can carry on and check it.
+Those keep running until you quit Enio, at most three at a time, and the
+oldest is replaced rather than piling up. The bundled `local-preview` skill is
+what teaches the agent to use it: serve the folder on localhost, curl it to
+confirm it answers, and hand you the URL to open. It will not tell you how the
+page *looks* — it has no eyes on it, and saying so is part of the skill.
+
 ## Editing and verification
 
 Three things the harness does for the coder, because at this model size

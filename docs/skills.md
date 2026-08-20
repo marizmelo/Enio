@@ -43,7 +43,7 @@ so write it as the situation it covers, not as a title.
 ## Bundled skills, and your own
 
 Enio ships with a handful of skills (commit messages, weekly review, research
-briefs and so on). They are **read from the installation itself**, not copied
+briefs, previewing a page locally, and so on). They are **read from the installation itself**, not copied
 into your folder — so `git pull` brings improvements to them with it. The
 panel marks them **built-in**.
 
