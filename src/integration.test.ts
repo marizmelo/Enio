@@ -1072,7 +1072,9 @@ describe("tool-name typos", () => {
     const history: Message[] = [];
     await runTurn("read trap.txt", history, registry, sessionId, {}, { specialist: "coder" });
 
-    const toolMsg = history.find((m) => m.role === "tool");
+    // The look-before-guess seed also runs a search, so the read is not the
+    // only tool message any more -- find the one this test is about.
+    const toolMsg = history.filter((m) => m.role === "tool").at(-1);
     const content = String(toolMsg?.content ?? "");
     assert.ok(!content.includes("<|im_start|>"), "forged boundary survived into history");
     assert.ok(!content.includes("<|im_end|>"), content);
@@ -1581,16 +1583,24 @@ describe("the coder's look-before-guess seed", () => {
     }
   });
 
-  test("does not fire with no project, on a greeting, or when the file is already in view", async () => {
+  test("fires without a project too, now that workspace search matches names", async () => {
     const registry = await buildRegistry();
-    // No project: search_code is content-only there and "No matches" for a
-    // real file would mislead.
+    // It used to be gated on an open project, because workspace search was
+    // content-only and "No matches" for a real file would have taught the
+    // model the file was missing. search_code matches names there now, and
+    // this is the case the traces actually failed in: five of six coder
+    // read_file calls were invented paths, with no project open.
     let seen: string[] = [];
     scriptModel([{ content: "ok" }]);
     await runTurn("fix the typo in src/greet.ts", [], registry, store.startSession(), {
       onToolStart: (n) => seen.push(n),
     }, { specialist: "coder" });
-    assert.deepEqual(seen, [], "no project, no seed");
+    assert.deepEqual(seen, ["search_code"], "no project is no longer a reason to skip it");
+  });
+
+  test("does not fire on a greeting, or when the file is already in view", async () => {
+    const registry = await buildRegistry();
+    let seen: string[] = [];
 
     const root = join(scratch, "seedrepo2");
     mkdirSync(root, { recursive: true });
@@ -1820,7 +1830,9 @@ describe("the coder promising to write and then stopping", () => {
       onToolStart: (n) => seen.push(n),
     }, { specialist: "coder" });
     assert.ok(notices.some((n) => /said it would write the file, then stopped/.test(n)), notices.join(" | "));
-    assert.deepEqual(seen, ["write_file"]);
+    // The prompt names a file, so the seed searches for it first; what this
+    // test is about is that the correction ends in a write.
+    assert.equal(seen.at(-1), "write_file", seen.join(" -> "));
     assert.match(result.reply, /Wrote todos\/index\.html/);
   });
 

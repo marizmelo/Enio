@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { config } from "../config.js";
 import { activeProject } from "../project.js";
 import { MAX_RESULTS, searchProject, type SearchHit } from "../project-index.js";
+import { workspaceFiles } from "../mentions.js";
 import type { ToolDef } from "../types.js";
 
 const execFileAsync = promisify(execFile);
@@ -20,6 +21,43 @@ const execFileAsync = promisify(execFile);
  * read_file accepts, because the model copies paths far more reliably than
  * it composes them.
  */
+
+/**
+ * Files whose NAME matches, which content search cannot find.
+ *
+ * With a project open the index covers paths, so "greet.ts" locates the file.
+ * The workspace path was ripgrep over contents only, so the same query
+ * answered "No matches" for a file sitting right there -- and that is the
+ * measured failure this whole seam exists for: five of six coder `read_file`
+ * calls in the traces were invented paths, because nothing cheap told it
+ * where a named file lived.
+ *
+ * Name hits come FIRST and are labelled, because a line number would be a
+ * lie: nothing was matched inside the file.
+ */
+function nameMatches(query: string): SearchHit[] {
+  const needle = query.toLowerCase().trim();
+  if (!needle) return [];
+  let files: string[];
+  try {
+    files = workspaceFiles(400);
+  } catch {
+    return [];
+  }
+  return files
+    .filter((f) => {
+      const base = f.split("/").pop()!.toLowerCase();
+      return base === needle || base.includes(needle) || f.toLowerCase() === needle;
+    })
+    // An exact basename first: "app.js" should not be buried under
+    // "app.js.map" and "old-app.js".
+    .sort((a, b) => {
+      const exact = (f: string) => (f.split("/").pop()!.toLowerCase() === needle ? 0 : 1);
+      return exact(a) - exact(b) || a.length - b.length;
+    })
+    .slice(0, 5)
+    .map((path) => ({ path, line: 0, snippet: "" }));
+}
 
 async function searchWorkspace(query: string): Promise<SearchHit[]> {
   try {
@@ -105,14 +143,30 @@ export const searchTools: ToolDef[] = [
       if (!query) return "Error: no query given.";
 
       const project = activeProject();
-      const hits = project ? await searchProject(project, query) : await searchWorkspace(query);
-      const where = project
-        ? `project "${project.name}"`
-        : "the workspace";
-      if (hits.length === 0) return `No matches for "${query}" in ${where}.`;
+      // Without a project, names are matched here rather than by the grep,
+      // which only sees contents. With one, the index already covers paths.
+      const named = project ? [] : nameMatches(query);
+      const found = project ? await searchProject(project, query) : await searchWorkspace(query);
+      // A file already named by a name-hit does not need a content line too.
+      const content = found.filter((h) => !named.some((n) => n.path === h.path));
+      const where = project ? `project "${project.name}"` : "the workspace";
+      if (named.length === 0 && content.length === 0) {
+        return `No matches for "${query}" in ${where}.`;
+      }
 
-      const lines = hits.map((h) => `${h.path}:${h.line}: ${h.snippet}`);
-      return `Matches in ${where} (path:line):\n` + lines.join("\n");
+      const parts: string[] = [];
+      if (named.length > 0) {
+        parts.push(
+          `Files named like "${query}" in ${where}:\n` + named.map((h) => h.path).join("\n"),
+        );
+      }
+      if (content.length > 0) {
+        parts.push(
+          `Matches in ${where} (path:line):\n` +
+            content.map((h) => `${h.path}:${h.line}: ${h.snippet}`).join("\n"),
+        );
+      }
+      return parts.join("\n\n");
     },
   },
 ];

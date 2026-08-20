@@ -1107,15 +1107,16 @@ export async function runTurn(
   // researcher's seed removed for search. When the user names a file, the
   // harness runs search_code for that name before the model's first call,
   // so the path it then uses is one it was shown (copy over compose, the
-  // projects lesson). Project-only: without a project, search_code is
-  // content-only, and "No matches for utils.ts" for a file that exists would
-  // teach the model the file is missing -- worse than no seed. A token
-  // already in view (an attached file, or a prior tool result) is skipped.
-  if (
-    specialistName === "coder" &&
-    activeTools.some((t) => t.name === "search_code") &&
-    activeProject()
-  ) {
+  // projects lesson).
+  //
+  // It used to require an open project, because workspace search was
+  // content-only and "No matches for utils.ts" for a file that exists would
+  // teach the model the file is missing -- worse than no seed. search_code
+  // now matches names in the workspace too, so the gate is gone and the seed
+  // covers the case the traces actually failed in: a coder turn with no
+  // project open. A token already in view (an attached file, or a prior tool
+  // result) is still skipped.
+  if (specialistName === "coder" && activeTools.some((t) => t.name === "search_code")) {
     const inView = [
       ...(overrides.files ?? []),
       ...history.filter((m) => m.role === "tool").map((m) => String(m.content ?? "")),
