@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { isImageName } from "@/lib/capabilities";
+import { childrenAt, groupRoots } from "@/lib/filetree";
 
 /**
  * Browsing the open project's files.
@@ -60,20 +61,13 @@ export function FileTree({ project, files = [], generated = [], onPick, pickLabe
     return shown.filter((f) => f.toLowerCase().includes(q)).slice(0, 200);
   }, [query, shown]);
 
-  // Immediate children of the current path, folders before files.
-  const { folders, here } = useMemo(() => {
-    const prefix = path.length > 0 ? path.join("/") + "/" : "";
-    const folderNames = new Set();
-    const fileNames = [];
-    for (const f of shown) {
-      if (!f.startsWith(prefix)) continue;
-      const rest = f.slice(prefix.length);
-      const slash = rest.indexOf("/");
-      if (slash === -1) fileNames.push(rest);
-      else folderNames.add(rest.slice(0, slash));
-    }
-    return { folders: [...folderNames].sort(), here: fileNames.sort() };
-  }, [shown, path]);
+  // Immediate children of the current path, folders before files. Derived in
+  // lib/filetree.js, which the Node suite tests: an attached folder going
+  // missing is exactly the kind of failure nothing throws on.
+  const { folders, here } = useMemo(
+    () => childrenAt(shown, project?.attachments ?? [], path),
+    [shown, path, project],
+  );
 
   const currentPath = path.join("/");
   const noteFor = (alias) =>
@@ -83,29 +77,17 @@ export function FileTree({ project, files = [], generated = [], onPick, pickLabe
   // Project-first at the root: with a project open, its attached folders and
   // its generated files come first under their own heading, and the
   // workspace follows under another -- one tree, so search still spans
-  // everything, but the project is what you see when you arrive. An entry is
-  // the project's when it is an attachment alias, a generated file, or a
-  // folder whose files are all generated (a folder holding both generated
-  // and workspace files stays with the workspace: the collision is the
-  // workspace's namespace, and mislabelling it "project" would hide that).
-  const generatedSet = useMemo(() => new Set(generated), [generated]);
+  // everything, but the project is what you see when you arrive.
   const grouped = useMemo(() => {
     if (!project || scope !== "all" || path.length > 0) return null;
-    const genRoots = new Set(generated.map((g) => g.split("/")[0]));
-    const wsRoots = new Set(
-      files
-        .filter((f) => !aliases.has(f.split("/")[0]) && !generatedSet.has(f))
-        .map((f) => f.split("/")[0]),
-    );
-    const isProjectEntry = (name, isFolder) =>
-      aliases.has(name) || (isFolder ? genRoots.has(name) && !wsRoots.has(name) : generatedSet.has(name));
-    return {
-      projectFolders: folders.filter((d) => isProjectEntry(d, true)),
-      projectHere: here.filter((f) => isProjectEntry(f, false)),
-      wsFolders: folders.filter((d) => !isProjectEntry(d, true)),
-      wsHere: here.filter((f) => !isProjectEntry(f, false)),
-    };
-  }, [project, scope, path, folders, here, aliases, generated, generatedSet, files]);
+    return groupRoots({
+      folders,
+      here,
+      files,
+      attachments: project?.attachments ?? [],
+      generated,
+    });
+  }, [project, scope, path, folders, here, generated, files]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
