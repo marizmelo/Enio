@@ -1452,6 +1452,23 @@ holds the model resident with no unload.
 Worth re-checking when mlx-lm gains image input; the models are already
 there.
 
+**But one MODEL is achievable today, which is the thing actually wanted.**
+mlx-lm serves `Qwen3-VL-4B-Instruct-4bit` as a text model, and the vision
+sidecar loads the same checkpoint when images are needed: one download, one
+set of weights, two processes only while an image is being read. Measured on
+the current runtime with the existing flags: tool calls correctly shaped,
+routing unchanged, and the prompt cache behaving exactly as it does now --
+6.28s then 0.32s, 0.32s with a shared prefix, which is the property mlx-vlm
+lacked.
+
+The cost is on multi-step edits. It reads the file, names the fix, and ends
+on "I'll fix it now" rather than calling the tool -- 0/3 landed until the
+promise guard caught it, then 3/3 at 13.9s average against 9.9s for
+Qwen3-4B-Instruct-2507, because every one of those turns spends a corrective
+round. It also reaches for `write_file` where the current model uses
+`edit_file`. So it is a real option with a real price, offered rather than
+taken.
+
 ### Qwen3-VL-4B measured against the chat model (August 2026)
 
 Asked whether a multimodal model of the same class could replace the chat

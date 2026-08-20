@@ -684,6 +684,14 @@ describe("code narrated instead of written", () => {
     assert.equal(promisesToWriteWithoutWriting("Let me write the config file."), true);
     assert.equal(promisesToWriteWithoutWriting("I'm going to update src/app.js."), true);
     assert.equal(promisesToWriteWithoutWriting("I will now generate the stylesheet."), true);
+    // Watched in the wild: read the file, name the typo, "I'll fix it now",
+    // stop. The most natural phrasing was the one the first cut missed.
+    assert.equal(
+      promisesToWriteWithoutWriting('Found the typo in `greet.ts`. The word "helo" should be "hello". I\'ll fix it now.'),
+      true,
+    );
+    assert.equal(promisesToWriteWithoutWriting("Let me correct that line."), true);
+    assert.equal(promisesToWriteWithoutWriting("I'll rename it for you."), true);
     // Promises the reply itself keeps are not this failure.
     assert.equal(promisesToWriteWithoutWriting("I'll explain how the loop works."), false);
     assert.equal(promisesToWriteWithoutWriting("Let me show you the difference."), false);

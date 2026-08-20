@@ -605,7 +605,7 @@ export function narratesCodeInsteadOfWriting(text: string): boolean {
  * keeps.
  */
 export function promisesToWriteWithoutWriting(text: string): boolean {
-  return /\b(?:I(?:'ll| will)(?: now)?|[Ll]et me|I'm going to|I am going to)\s+(?:go ahead and\s+)?(?:create|write|build|add|update|edit|modify|implement|generate|save|put together|fill in|set up)\b/i.test(
+  return /\b(?:I(?:'ll| will)(?: now)?|[Ll]et me|I'm going to|I am going to)\s+(?:go ahead and\s+)?(?:create|write|build|add|update|edit|modify|implement|generate|save|put together|fill in|set up|fix|correct|replace|rename|apply|change|make (?:that|the|this) change)\b/i.test(
     text,
   );
 }
