@@ -201,16 +201,21 @@ export const ABILITIES: Ability[] = [
   },
   {
     id: "develop-app",
-    title: "Develop an app",
-    description: "Read, write and run code in your project folders.",
+    // "Code" is the word people arrive with; "Develop an app" described one
+    // errand this tile does and undersold the rest of it -- reading a repo,
+    // fixing a file, running the tests, serving a page to look at. The id
+    // stays: saved pipelines reference abilities by id, and renaming one
+    // would break every graph that used it.
+    title: "Code",
+    description: "Read, write, run and test code in your project folders.",
     icon: "code",
     specialist: "coder",
     skill: "delegate-coding",
     promptTemplate: "@coder ___",
     suggestions: [
-      "Set up a script that renames my screenshots by date",
-      "Run my project's tests and explain any failure",
       "Read my project and describe how it is structured",
+      "Run my project's tests and explain any failure",
+      "Serve this page locally so I can look at it",
     ],
     inputs: ["text", "file"],
     outputs: ["file", "text"],

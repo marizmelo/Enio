@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 // The same file the app icon and the menu bar icon are built from, so the
 // three cannot disagree about what the mark looks like.
 import logo from "../../../assets/enio-logo.svg";
+import { launcherOrder } from "@/lib/launcher";
 
 /** Static name→component map: the server names icons as strings and the
  *  bundle stays tree-shaken — a dynamic lucide import would drag in the
@@ -75,6 +76,15 @@ export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, onRecor
   const [enabling, setEnabling] = useState(false);
   const [lockedId, setLockedId] = useState(null);
   const locked = lockedId ? abilities.find((a) => a.id === lockedId) : null;
+
+  // Split rather than sorted-then-mapped, because the client-only tiles
+  // (automations, meetings, notes) sit between the two bands: they are live
+  // surfaces, so they belong with what works, not after "soon".
+  const shown = launcherOrder(abilities);
+  const ordered = {
+    available: shown.filter((a) => a.availability === "available"),
+    rest: shown.filter((a) => a.availability !== "available"),
+  };
   const LockedIcon = locked ? (ICONS[locked.icon] ?? Sparkles) : null;
 
   return (
@@ -98,7 +108,7 @@ export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, onRecor
 
       {!locked ? (
         <div className="grid w-full max-w-2xl grid-cols-3 gap-2 sm:grid-cols-4">
-          {abilities.filter((a) => !a.launcherHidden).map((a) => {
+          {ordered.available.map((a) => {
             const Icon = ICONS[a.icon] ?? Sparkles;
             const available = a.availability === "available";
             return (
@@ -174,6 +184,29 @@ export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, onRecor
               <span className="leading-tight">Notes</span>
             </button>
           )}
+
+          {/* Everything that cannot be used yet, after everything that can --
+              including these client-only surfaces, which are as live as any
+              available tile and were stranded below "soon" when the grid was
+              one flat list. */}
+          {ordered.rest.map((a) => {
+            const Icon = ICONS[a.icon] ?? Sparkles;
+            return (
+              <button
+                key={a.id}
+                disabled={disabled}
+                title={a.description}
+                onClick={() => setLockedId(a.id)}
+                className="flex flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-xs opacity-50 transition-colors hover:bg-muted"
+              >
+                <Icon className="size-5" />
+                <span className="leading-tight">{a.title}</span>
+                <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
+                  {a.availability === "future" ? "soon" : "set up"}
+                </span>
+              </button>
+            );
+          })}
         </div>
       ) : (
         <div className="flex w-full max-w-md flex-col gap-3">
@@ -264,3 +297,4 @@ export function EmptyState({ abilities = [], onPrefill, onOpenPipelines, onRecor
     </div>
   );
 }
+
