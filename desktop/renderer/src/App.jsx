@@ -7,6 +7,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { streamTurn } from "@/lib/agent";
 import { appendMention, attachedFiles, enableDesktopControl, fetchCapabilities } from "@/lib/capabilities";
 import { FilesDialog } from "@/components/FilesDialog";
+import { CommandsDialog } from "@/components/CommandsDialog";
+import { listCommands } from "@/lib/commands";
 import { FileViewer } from "@/components/FileViewer";
 import {
   attachToConversation,
@@ -133,6 +135,11 @@ export function App() {
   const [notesOpen, setNotesOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [commandsOpen, setCommandsOpen] = useState(false);
+  // How many processes an agent has left running. Polled, because they start
+  // and die outside any stream -- a turn can leave a web server behind and
+  // the window would otherwise never learn of it.
+  const [running, setRunning] = useState(0);
   // A file opened from the thread. The arrows walk that message's attachments,
   // because those are the ones the question was about.
   const [viewing, setViewing] = useState(null);
@@ -200,6 +207,26 @@ export function App() {
   }, []);
 
   const backendReady = status.phase === "ready";
+
+  // Polled, not pushed: a background command starts and dies outside the turn
+  // stream, and the count is what puts it in front of the user at all. Cheap
+  // (an in-memory list) and slow enough not to matter; the dialog polls faster
+  // while it is open.
+  useEffect(() => {
+    if (!backendReady) return;
+    let alive = true;
+    const tick = () =>
+      listCommands()
+        .then((list) => alive && setRunning(list.length))
+        .catch(() => {});
+    tick();
+    const timer = setInterval(tick, 5000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [backendReady]);
+
 
   // Fetched once the agent endpoint is up rather than on mount: before that the
   // token file may not exist yet, and a 401 here would leave the menus empty
@@ -360,6 +387,7 @@ export function App() {
       // Rebuilt server-side from the trace, so a resumed reply keeps the
       // badges and the pages it read rather than arriving as bare text.
       tools: m.tools ?? [],
+      calls: m.calls ?? [],
       agent: m.agent ?? null,
       sources: m.sources ?? [],
       artifacts: m.artifacts ?? [],
@@ -580,6 +608,8 @@ export function App() {
       // time rather than here, so the search hit that carried a snippet is the
       // one kept when the same page is later fetched in full.
       const sources = [];
+      // What each finished call was, so the badges can be opened and read.
+      const calls = [];
       const startedAt = Date.now();
 
       try {
@@ -618,6 +648,8 @@ export function App() {
             }
           } else if (event.type === "sources") {
             sources.push({ tool: event.tool, items: event.items });
+          } else if (event.type === "call") {
+            calls.push({ name: event.name, detail: event.detail, status: event.status });
           } else if (event.type === "widget") {
             widgets.push(event.widget);
           } else if (event.type === "think") {
@@ -665,6 +697,7 @@ export function App() {
               role: "assistant",
               content: assistant,
               tools: [...tools],
+              calls: calls.map((c) => ({ ...c })),
               widgets: [...widgets],
               artifacts: [...artifacts],
               agent,
@@ -817,6 +850,14 @@ export function App() {
         onToggleMeeting={capabilities.voice?.transcription ? toggleMeeting : undefined}
         onSkills={() => setSkillsOpen(true)}
         onFiles={() => setFilesOpen(true)}
+        running={running}
+        onCommands={() => setCommandsOpen(true)}
+      />
+
+      <CommandsDialog
+        open={commandsOpen}
+        onOpenChange={setCommandsOpen}
+        onChanged={setRunning}
       />
 
       {/* Editing happens inside the dialog, not on the conversation canvas:

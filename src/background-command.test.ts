@@ -17,7 +17,9 @@ process.env.ENIO_BACKGROUND_SETTLE_MS = "700";
 const { mkdirSync } = await import("node:fs");
 mkdirSync(process.env.ENIO_WORKSPACE!, { recursive: true });
 
-const { shellTools, backgroundCommands, stopAllBackground } = await import("./tools/shell.js");
+const { shellTools, backgroundCommands, stopAllBackground, stopBackgroundCommand } = await import(
+  "./tools/shell.js"
+);
 const run = shellTools.find((t) => t.name === "run_command")!;
 
 after(() => {
@@ -93,5 +95,51 @@ describe("run_command in the background", () => {
     const out = String(await run.run({ command: "node quick.js" }));
     assert.match(out, /done/);
     assert.equal(backgroundCommands().length, 0);
+  });
+});
+
+/**
+ * The list and the stop button are what make this the user's capability
+ * rather than the model's. The model has no route to either: it cannot see
+ * what is running and cannot kill anything, because process control is
+ * exactly what a small model should not hold.
+ */
+describe("what the user can see and stop", () => {
+  test("a running command is listed with what it is and where it runs", async () => {
+    await run.run({ command: "node -e \"console.log('up on 8123');setInterval(()=>{},1000)\"", background: true });
+    const [only] = backgroundCommands();
+    assert.ok(only, "nothing listed");
+    assert.match(only.command, /console\.log/);
+    assert.equal(typeof only.pid, "number");
+    assert.ok(only.startedAt <= Date.now());
+    assert.ok(only.cwd.length > 0, "where it runs is part of the answer");
+    // The first line a server prints is usually "is it up, and on what port".
+    assert.match(only.output, /up on 8123/);
+    stopAllBackground();
+  });
+
+  test("stopping one takes it off the list; stopping something else is refused", async () => {
+    await run.run({ command: 'node -e "setInterval(()=>{},1000)"', background: true });
+    const [only] = backgroundCommands();
+    assert.ok(only, "nothing to stop");
+    assert.equal(stopBackgroundCommand(only.pid), true);
+    assert.equal(backgroundCommands().length, 0);
+    // Not a general-purpose kill: a pid enio did not start is not enio's to
+    // signal, whatever asks.
+    assert.equal(stopBackgroundCommand(process.pid), false);
+    assert.equal(stopBackgroundCommand(only.pid), false, "and stopping twice is not a second kill");
+  });
+
+  test("no tool can list or stop them", async () => {
+    // The capability is deliberately one-way: an agent may start something,
+    // and only a person may see the inventory or end it.
+    const { buildRegistry } = await import("./tools/index.js");
+    const registry = await buildRegistry();
+    const names = registry.all.map((t) => t.name);
+    for (const name of names) {
+      assert.ok(!/(^|_)(kill|ps|processes)(_|$)/.test(name), `${name} looks like process control`);
+    }
+    assert.ok(!names.includes("list_commands"));
+    assert.ok(!names.includes("stop_command"));
   });
 });

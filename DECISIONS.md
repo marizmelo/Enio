@@ -1385,6 +1385,49 @@ forces it. If traces keep showing a rewrite, the next move is a harness seed
 and a verb like serve/preview/test), which is the pattern that worked for the
 researcher and the coder's look-before-guess — not more prompt.
 
+### A process an agent started has to be visible, and stoppable (August 2026)
+
+Reported the moment background commands shipped: "server is running, but I
+can't see the process anywhere, so I can't kill it". Correct, and the gap was
+the capability arriving without the inventory. Something started on the user's
+machine that they cannot see is something they cannot stop.
+
+`GET /commands`, `DELETE /commands/:pid`, `DELETE /commands` — with a status
+bar chip that appears only while something runs (the count is the label; an
+always-present icon for the empty case is a permanent reminder of nothing) and
+a dialog listing the command as it ran, where it ran, and its first output,
+which is where a server says whether it is actually up and on what port.
+
+**The model has no route to any of it.** It can start something; only a person
+can list or end one. Process control is exactly what a small model should not
+hold, and a test asserts no tool name looks like it. `stopBackgroundCommand`
+also refuses a pid enio did not start — it is not a general-purpose kill.
+
+Polled rather than pushed: these start and die outside the turn stream, and a
+list that quietly went stale would be worse than no list.
+
+### The tool badge says which command, and whether it worked (August 2026)
+
+The thread showed a tool's NAME and nothing else, which cannot answer the only
+question a `run_command` badge raises. Badges are now clickable, opening what
+each call actually was and how it went.
+
+`tool-detail.ts` is shared by the live stream and by restore, so a conversation
+reopened tomorrow says what it said while it ran — both sides hold the same
+material (args as JSON, the tool's own output), so computing it twice is the
+only way they could disagree. The headline argument is a closed list per tool:
+a generic "first string field" would print a whole file for `write_file`.
+Status is read from the tool's own output prefixes, because tools refuse by
+returning text rather than throwing, and "started in the background" is its own
+status — a running server is neither finished nor failed.
+
+Immediately worth it: the first live run showed `python3 -m http.server 8000`
+**refused**, then `--bind 127.0.0.1` **left running in the background** — the
+whole story of the model being corrected by the bind guard, in the badge.
+
+A badge with nothing behind it (a turn restored from before this) stays a
+label rather than becoming a button that opens an empty panel.
+
 ### The output budget was the reason the coder could not write (August 2026)
 
 Reported as "the model keeps writing code in the thread instead of the file,

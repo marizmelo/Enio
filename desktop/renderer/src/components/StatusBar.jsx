@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, Workflow, X } from "lucide-react";
+import { BookOpen, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, TerminalSquare, Workflow, X } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -43,6 +43,8 @@ export function StatusBar({
   meeting,
   onToggleMeeting,
   onCloseProject,
+  running = 0,
+  onCommands,
 }) {
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
@@ -144,6 +146,22 @@ export function StatusBar({
         <TipButton tip="Files" className="size-7" onClick={onFiles}>
           <FolderOpen className="size-3.5" />
         </TipButton>
+        {/* Only when something is actually running. A process an agent started
+            outlives its turn, so the one thing this bar must never do is let
+            it run unseen -- but an always-present icon for the empty case
+            would be a permanent reminder of nothing. The count is the label:
+            "is anything running" is the question, and it is answered without
+            opening anything. */}
+        {running > 0 && (
+          <button
+            onClick={onCommands}
+            className="flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-400"
+            title={`${running} process${running === 1 ? "" : "es"} started by an agent — click to see or stop`}
+          >
+            <TerminalSquare className="size-3" />
+            {running}
+          </button>
+        )}
         {/* Opens in the real browser, not in the app: the renderer has no
             navigation of its own, and a docs page loading inside the chat
             window would be a trap with no way back. */}

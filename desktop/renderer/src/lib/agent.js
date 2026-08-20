@@ -28,6 +28,7 @@ export function parseSseEvent(block) {
   let sources = null;
   let route = null;
   let artifact = null;
+  let call = null;
   for (const line of block.split("\n")) {
     if (line.startsWith("data:")) {
       data = (data ?? "") + line.slice(5).trimStart();
@@ -59,6 +60,17 @@ export function parseSseEvent(block) {
           sources = null;
         }
       }
+      // What a finished tool call actually was: which command, and how it
+      // went. The bare `tool` frame above still starts the badge; this fills
+      // it in once the call returns.
+      const callMatch = /^call\s+(.+)$/.exec(comment);
+      if (callMatch) {
+        try {
+          call = JSON.parse(callMatch[1]);
+        } catch {
+          call = null;
+        }
+      }
       const routeMatch = /^route\s+(\S+)$/.exec(comment);
       if (routeMatch) route = routeMatch[1];
       const artifactMatch = /^artifact\s+(.+)$/.exec(comment);
@@ -83,7 +95,7 @@ export function parseSseEvent(block) {
       }
     }
   }
-  return { data, tool, widget, think, notice, restart, basis, context, sources, route, artifact };
+  return { data, tool, widget, think, notice, restart, basis, context, sources, route, artifact, call };
 }
 
 /**
@@ -150,9 +162,10 @@ export async function* streamTurn(messages, signal, conversationId = null, canva
       const block = buffer.slice(0, split);
       buffer = buffer.slice(split + 2);
 
-      const { data, tool, widget, think, notice, restart, basis, context, sources, route, artifact } = parseSseEvent(block);
+      const { data, tool, widget, think, notice, restart, basis, context, sources, route, artifact, call } = parseSseEvent(block);
       if (tool) yield { type: "tool", name: tool };
       if (sources) yield { type: "sources", ...sources };
+      if (call) yield { type: "call", ...call };
       if (route) yield { type: "route", route };
       if (artifact) yield { type: "artifact", ...artifact };
       if (widget) yield { type: "widget", widget };

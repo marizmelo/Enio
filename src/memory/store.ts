@@ -7,6 +7,7 @@ import { chunkTranscript, extractTriples, summarize } from "./extract.js";
 import type { Triple } from "./schema.js";
 import { extractSources, type Source } from "../sources.js";
 import { extractArtifacts } from "../artifacts.js";
+import { callDetail, callStatus } from "../tool-detail.js";
 
 const now = () => Date.now();
 
@@ -753,6 +754,8 @@ export interface StoredMessage {
   ts: number;
   /** Tools this reply ran, in order, repeats included. */
   tools?: string[];
+  /** The same calls, with what each one was and how it went. */
+  calls?: Array<{ name: string; detail: string; status: string }>;
   /** Pages those tools read, grouped by the tool that read them. */
   sources?: Array<{ tool: string; items: Source[] }>;
   /** Which agent answered — restored from the trace, "single" rows skipped. */
@@ -852,6 +855,13 @@ export function conversationMessages(sessionId: string): StoredMessage[] {
       } catch {
         /* an unparseable argument record still leaves the tool name usable */
       }
+      // What the call actually was, so a reopened conversation can answer
+      // "which command, and did it work" exactly as the live one did.
+      (target.calls ??= []).push({
+        name: step.name,
+        detail: callDetail(step.name, args),
+        status: callStatus(step.output ?? ""),
+      });
       const items = extractSources(step.name, args, step.output ?? "");
       if (items.length > 0) (target.sources ??= []).push({ tool: step.name, items });
     }

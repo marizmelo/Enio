@@ -81,7 +81,10 @@ takes an `in` parameter naming an alias when there are several.
 A command that never exits — a web server, a watch build — is started in the
 background instead of being waited on, so the turn can carry on and check it.
 Those keep running until you quit Enio, at most three at a time, and the
-oldest is replaced rather than piling up. The bundled `local-preview` skill is
+oldest is replaced rather than piling up. While anything is running the status
+bar shows a count — click it for the list, with the command as it ran, where
+it ran, what it printed, and a Stop button. No agent can reach that list or
+stop anything: starting is a tool call, seeing and stopping are yours. The bundled `local-preview` skill is
 what teaches the agent to use it: serve the folder on localhost, curl it to
 confirm it answers, and hand you the URL to open. It will not tell you how the
 page *looks* — it has no eyes on it, and saying so is part of the skill.

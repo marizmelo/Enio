@@ -88,6 +88,11 @@ import { scanLibrary } from "./library.js";
 import { startScheduler } from "./tasks.js";
 import { mcpStatus } from "./tools/mcp.js";
 import {
+  backgroundCommands,
+  stopAllBackground,
+  stopBackgroundCommand,
+} from "./tools/shell.js";
+import {
   attachToConversation,
   detachFromConversation,
   listConversationAttachments,
@@ -114,6 +119,7 @@ import { embeddingsDegraded } from "./memory/embed.js";
 import { generatedFiles, mentionContext, parseMentions } from "./mentions.js";
 import { SPECIALISTS } from "./specialists.js";
 import { extractSources } from "./sources.js";
+import { callDetail, callStatus } from "./tool-detail.js";
 import { loadSkills } from "./skills.js";
 import { synthesize, transcribeWav, warmVoice, whisperInstalled } from "./voice.js";
 import type { Message } from "./types.js";
@@ -1280,6 +1286,41 @@ async function handle(
     }
   }
 
+  /**
+   * Processes an agent started and left running.
+   *
+   * A background command outlives the turn that started it, which is the
+   * point — and the reason it cannot be invisible. Something started on the
+   * user's machine that they cannot see is something they cannot stop; the
+   * list and the stop button are what make the capability theirs rather than
+   * the model's. The model has no route in here: it cannot list or kill,
+   * because process control is exactly what a small model should not hold.
+   */
+  if (req.method === "GET" && url.pathname === "/commands") {
+    sendJson(res, 200, { commands: backgroundCommands() });
+    return;
+  }
+
+  const stopMatch = url.pathname.match(/^\/commands\/(\d+)$/);
+  if (req.method === "DELETE" && stopMatch) {
+    const stopped = stopBackgroundCommand(Number(stopMatch[1]));
+    // 404 rather than a silent success: "it was already gone" and "I stopped
+    // it" are different answers to "is it still running".
+    if (!stopped) {
+      sendJson(res, 404, { error: { message: `No background command with pid ${stopMatch[1]}.` } });
+      return;
+    }
+    sendJson(res, 200, { stopped: Number(stopMatch[1]) });
+    return;
+  }
+
+  if (req.method === "DELETE" && url.pathname === "/commands") {
+    const count = backgroundCommands().length;
+    stopAllBackground();
+    sendJson(res, 200, { stopped: count });
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/settings/desktop") {
     const body = JSON.parse((await readBody(req)) || "{}");
     setDesktopControl(body?.enabled === true);
@@ -1503,6 +1544,16 @@ async function handle(
           // see sources.ts. Tool calls run one at a time, which is what makes
           // pairing the end with the args from the start safe.
           onToolEnd: (name, result) => {
+            // What the call WAS, alongside what it found. The badge showed a
+            // bare tool name, which cannot answer "which command, and did it
+            // work" -- the only question a run_command badge raises.
+            res.write(
+              `: call ${JSON.stringify({
+                name,
+                detail: callDetail(name, (lastArgs ?? {}) as Record<string, unknown>),
+                status: callStatus(String(result ?? "")),
+              })}\n\n`,
+            );
             const found = extractSources(name, lastArgs, result);
             if (found.length > 0) {
               res.write(`: sources ${JSON.stringify({ tool: name, items: found })}\n\n`);

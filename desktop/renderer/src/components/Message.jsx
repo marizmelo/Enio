@@ -21,6 +21,10 @@ export function Message({
   content,
   agent = null,
   tools = [],
+  /** The same calls with what each one was and how it went, so a badge can
+   *  be opened. Absent on a turn that predates this, which is why the badge
+   *  only becomes a button when there is something behind it. */
+  calls = [],
   widgets = [],
   sources = [],
   artifacts = [],
@@ -52,6 +56,9 @@ export function Message({
   basis = null,
 }) {
   const [remembering, setRemembering] = useState(false);
+  // Which tool badge is open, if any. One at a time: the panel sits under the
+  // whole row, so two open at once would read as one list.
+  const [openTool, setOpenTool] = useState(null);
   const isUser = role === "user";
   const waiting = streaming && !isUser && !error && content.length === 0;
 
@@ -127,7 +134,7 @@ export function Message({
                       : "from the model"}
             </Badge>
           )}
-          {countCalls(tools).map(({ name, calls }) => {
+          {countCalls(tools).map(({ name, calls: count }) => {
             // `server__tool` is the wire format every MCP tool is named by
             // (wireName in tools/mcp.ts); no built-in contains the separator,
             // and a test pins that. Naming the server here is the honest
@@ -135,19 +142,71 @@ export function Message({
             // will claim third-party content as its own, this is not.
             const at = name.indexOf("__");
             const server = at > 0 ? name.slice(0, at) : null;
+            const mine = calls.filter((c) => c.name === name);
+            const failed = mine.some((c) => c.status === "failed" || c.status === "refused");
             return (
               <Badge
                 key={name}
                 variant="secondary"
-                className="font-mono text-[11px]"
-                title={server ? `from the "${server}" MCP connection` : undefined}
+                // A badge is a button only when there is something behind it:
+                // a turn restored from before call details existed has the
+                // name and nothing else, and a control that opens an empty
+                // panel is worse than a label.
+                onClick={mine.length > 0 ? () => setOpenTool(openTool === name ? null : name) : undefined}
+                className={`font-mono text-[11px] ${mine.length > 0 ? "cursor-pointer hover:bg-secondary/70" : ""} ${
+                  failed ? "text-destructive" : ""
+                }`}
+                title={
+                  server
+                    ? `from the "${server}" MCP connection`
+                    : mine.length > 0
+                      ? "Click to see what it ran"
+                      : undefined
+                }
               >
                 {server && <Plug className="mr-1 inline size-3 opacity-60" />}
                 {server ? `${server} · ${name.slice(at + 2)}` : name}
-                {calls > 1 && <span className="ml-1 opacity-60">×{calls}</span>}
+                {count > 1 && <span className="ml-1 opacity-60">×{count}</span>}
               </Badge>
             );
           })}
+        </div>
+      )}
+
+      {/* What the opened badge actually ran. Below the badges rather than in a
+          tooltip, because a command is often long and always worth reading in
+          full -- and because "did it work" is half the question. */}
+      {openTool && calls.some((c) => c.name === openTool) && (
+        <div className="flex w-full max-w-[85%] flex-col gap-1 rounded-md border bg-muted/30 p-2">
+          {calls
+            .filter((c) => c.name === openTool)
+            .map((c, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span
+                  className={`mt-1 size-1.5 shrink-0 rounded-full ${
+                    c.status === "failed" || c.status === "refused"
+                      ? "bg-destructive"
+                      : c.status === "background"
+                        ? "bg-emerald-500"
+                        : "bg-muted-foreground/50"
+                  }`}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="break-all font-mono text-[11px] leading-relaxed">
+                    {c.detail || "(no arguments)"}
+                  </p>
+                  {c.status !== "ok" && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {c.status === "background"
+                        ? "left running in the background"
+                        : c.status === "refused"
+                          ? "refused"
+                          : "failed"}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
         </div>
       )}
 

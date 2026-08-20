@@ -82,7 +82,10 @@ function commandCwd(inAlias: string): { cwd: string } | { error: string } {
  * with the oldest evicted, and every child killed when enio exits (they stay
  * in this process group precisely so that works).
  */
-const running = new Map<number, { command: string; output: string; startedAt: number }>();
+const running = new Map<
+  number,
+  { command: string; output: string; startedAt: number; cwd: string }
+>();
 const MAX_BACKGROUND = 3;
 
 function stopBackground(pid: number): void {
@@ -94,13 +97,36 @@ function stopBackground(pid: number): void {
   running.delete(pid);
 }
 
-/** What is still running, for the CLI and for tests. */
-export function backgroundCommands(): Array<{ pid: number; command: string; startedAt: number }> {
+/**
+ * What is still running: for the desktop's process list, the CLI, and tests.
+ *
+ * The output tail rides along because "is it actually serving" is the
+ * question anyone opening the list is asking, and the answer is usually in
+ * the first line the server printed.
+ */
+export function backgroundCommands(): Array<{
+  pid: number;
+  command: string;
+  startedAt: number;
+  cwd: string;
+  output: string;
+}> {
   return [...running.entries()].map(([pid, r]) => ({
     pid,
     command: r.command,
     startedAt: r.startedAt,
+    cwd: r.cwd,
+    output: r.output.slice(-2000),
   }));
+}
+
+/** Stop one, by pid. False when nothing by that pid was ours -- which is what
+ *  keeps this from being a general-purpose kill for any process on the
+ *  machine. */
+export function stopBackgroundCommand(pid: number): boolean {
+  if (!running.has(pid)) return false;
+  stopBackground(pid);
+  return true;
 }
 
 export function stopAllBackground(): void {
@@ -250,7 +276,7 @@ async function startBackground(command: string, cwd: string): Promise<string> {
     env: { ...process.env, GIT_PAGER: "cat", PAGER: "cat" },
   });
 
-  const record = { command, output: "", startedAt: Date.now() };
+  const record = { command, output: "", startedAt: Date.now(), cwd };
   const capture = (chunk: Buffer) => {
     // A server that logs every request would otherwise grow without bound for
     // as long as it runs.
