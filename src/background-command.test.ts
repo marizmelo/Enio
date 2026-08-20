@@ -17,9 +17,13 @@ process.env.ENIO_BACKGROUND_SETTLE_MS = "700";
 const { mkdirSync } = await import("node:fs");
 mkdirSync(process.env.ENIO_WORKSPACE!, { recursive: true });
 
-const { shellTools, backgroundCommands, stopAllBackground, stopBackgroundCommand } = await import(
-  "./tools/shell.js"
-);
+const {
+  shellTools,
+  backgroundCommands,
+  setShellSession,
+  stopAllBackground,
+  stopBackgroundCommand,
+} = await import("./tools/shell.js");
 const run = shellTools.find((t) => t.name === "run_command")!;
 
 after(() => {
@@ -141,5 +145,38 @@ describe("what the user can see and stop", () => {
     }
     assert.ok(!names.includes("list_commands"));
     assert.ok(!names.includes("stop_command"));
+  });
+});
+
+/**
+ * Where a process came from.
+ *
+ * Three anonymous servers and three pids is not an answer to "what is this
+ * and why is it here". The conversation is the thing a person remembers, so
+ * it is recorded at start time -- the id, not the title, because a
+ * conversation is titled by its first message (which may not exist yet) and
+ * can be renamed afterwards.
+ */
+describe("attribution", () => {
+  test("a command remembers the conversation that started it", async () => {
+    setShellSession("conv-alpha");
+    await run.run({ command: 'node -e "setInterval(()=>{},1000)"', background: true });
+    setShellSession("conv-beta");
+    await run.run({ command: 'node -e "setInterval(()=>{},2000)"', background: true });
+
+    const byPid = backgroundCommands();
+    assert.equal(byPid.length, 2);
+    const sessions = byPid.map((c) => c.sessionId).sort();
+    assert.deepEqual(sessions, ["conv-alpha", "conv-beta"]);
+    stopAllBackground();
+  });
+
+  test("started outside any conversation, it is unattributed rather than misattributed", async () => {
+    // A scheduled task or a plain OpenAI client has no conversation pinned.
+    // Blank is honest; inheriting whichever conversation ran last is not.
+    setShellSession("");
+    await run.run({ command: 'node -e "setInterval(()=>{},1000)"', background: true });
+    assert.equal(backgroundCommands()[0]?.sessionId, "");
+    stopAllBackground();
   });
 });

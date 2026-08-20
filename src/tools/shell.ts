@@ -84,9 +84,20 @@ function commandCwd(inAlias: string): { cwd: string } | { error: string } {
  */
 const running = new Map<
   number,
-  { command: string; output: string; startedAt: number; cwd: string }
+  { command: string; output: string; startedAt: number; cwd: string; sessionId: string }
 >();
 const MAX_BACKGROUND = 3;
+
+/**
+ * Which conversation a command is started from, set per turn like every other
+ * session-scoped tool. Recorded so the list can answer the question anyone
+ * looking at three servers actually has -- "which of these did I ask for, and
+ * in what" -- rather than three commands and three pids.
+ */
+let shellSession = "";
+export function setShellSession(id: string): void {
+  shellSession = id;
+}
 
 function stopBackground(pid: number): void {
   try {
@@ -110,6 +121,7 @@ export function backgroundCommands(): Array<{
   startedAt: number;
   cwd: string;
   output: string;
+  sessionId: string;
 }> {
   return [...running.entries()].map(([pid, r]) => ({
     pid,
@@ -117,6 +129,7 @@ export function backgroundCommands(): Array<{
     startedAt: r.startedAt,
     cwd: r.cwd,
     output: r.output.slice(-2000),
+    sessionId: r.sessionId,
   }));
 }
 
@@ -276,7 +289,7 @@ async function startBackground(command: string, cwd: string): Promise<string> {
     env: { ...process.env, GIT_PAGER: "cat", PAGER: "cat" },
   });
 
-  const record = { command, output: "", startedAt: Date.now(), cwd };
+  const record = { command, output: "", startedAt: Date.now(), cwd, sessionId: shellSession };
   const capture = (chunk: Buffer) => {
     // A server that logs every request would otherwise grow without bound for
     // as long as it runs.

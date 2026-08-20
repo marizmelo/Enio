@@ -70,6 +70,28 @@ Raising `ENIO_MAX_TOKENS` helps the first case. The second usually means the
 question needs a tool that is not available to the agent it was routed to — try
 `@agent` to force a different one.
 
+## A Python process is using many gigabytes
+
+That is `mlx_lm.server`, the local model. It holds the weights (a few GB) plus
+a KV cache, and the cache is what grows: mlx-lm keeps ten conversation slots,
+and MLX's own buffer pool does not hand memory back to the system quickly once
+a long generation has claimed it. Long answers and large written files are what
+make it climb, because both extend the cache the same way.
+
+Two levers, both env vars:
+
+- `ENIO_MAX_TOKENS_WRITE` (default 8192) caps a turn that writes files. It is
+  high because a whole file travels inside one tool call and a truncated call
+  is dropped entirely — but every token of it is cache. Lower it if memory
+  matters more than writing large files in one go, and ask for files in
+  sections instead.
+- `ENIO_PROMPT_CACHE_GB` (default: a twelfth of installed RAM, 1–4) bounds the
+  prompt cache directly. Lowering it costs speed on follow-up turns, which
+  re-prefill instead of resuming.
+
+Quitting Enio releases all of it: the model server is stopped by whoever
+started it, and nothing survives the app.
+
 ## A file was asked for and nothing was written
 
 When the agent writes a file, the whole file travels inside a single tool call,

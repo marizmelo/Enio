@@ -89,6 +89,7 @@ import { startScheduler } from "./tasks.js";
 import { mcpStatus } from "./tools/mcp.js";
 import {
   backgroundCommands,
+  setShellSession,
   stopAllBackground,
   stopBackgroundCommand,
 } from "./tools/shell.js";
@@ -1297,7 +1298,17 @@ async function handle(
    * because process control is exactly what a small model should not hold.
    */
   if (req.method === "GET" && url.pathname === "/commands") {
-    sendJson(res, 200, { commands: backgroundCommands() });
+    // Joined to conversation titles here rather than recorded at start time:
+    // a conversation is titled by its first message, which may not exist yet
+    // when a command starts, and can be renamed afterwards. The id is the
+    // durable fact; the title is a lookup.
+    const titles = new Map(listConversations(200).map((c) => [c.id, c.title]));
+    sendJson(res, 200, {
+      commands: backgroundCommands().map((c) => ({
+        ...c,
+        conversation: c.sessionId ? (titles.get(c.sessionId) ?? null) : null,
+      })),
+    });
     return;
   }
 
@@ -1480,6 +1491,9 @@ async function handle(
   setPlanSession(conversationId);
   setBrowseSession(conversationId);
   setConversationSession(conversationId);
+  // So a process this turn leaves running can say which conversation asked
+  // for it -- three anonymous servers is the state this list exists to avoid.
+  setShellSession(conversationId);
 
   const id = `chatcmpl-${randomUUID()}`;
   const created = Math.floor(Date.now() / 1000);
