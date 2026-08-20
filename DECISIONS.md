@@ -1428,6 +1428,46 @@ whole story of the model being corrected by the bind guard, in the badge.
 A badge with nothing behind it (a turn restored from before this) stays a
 label rather than becoming a button that opens an empty panel.
 
+### Qwen3-VL-4B measured against the chat model (August 2026)
+
+Asked whether a multimodal model of the same class could replace the chat
+model, so one model does chat, tools and vision. Trialled properly:
+`mlx-community/Qwen3-VL-4B-Instruct-4bit` (2.90GB, against 2.12GB for
+Qwen3-4B-Instruct-2507-4bit) served by `mlx_vlm.server` 0.6.10 on a spare
+port, driven through enio's own `runTurn` with an isolated data dir.
+
+**It works, and the harness needs no changes.** mlx-vlm serves
+`/v1/chat/completions` with `tools` and `stream`, plus `/unload` and cache
+endpoints. Routing was identical (coder / generalist on the same prompts),
+tool calls came back correctly shaped with `finish_reason: tool_calls`, and
+across every run the JSON repair and scavenging counters stayed at **zero** --
+the failure `scripts/patch-runtime.mjs` exists to fix on mlx-lm did not appear
+here at all. Vision on a real 3440x1440 screenshot named the app, the pending
+changes and the terminal correctly, where OCR had produced menu-bar noise.
+
+**On edits it is the better citizen.** Asked to fix a typo, it quoted
+`old_string` WITHOUT the line-number gutter every time and used `edit_file`
+3/3; the current model used `write_file` (whole-file rewrite) on 2 of 3 and,
+in one earlier run, looped read/edit three times and landed nothing. The
+gutter-stripping fallback in fs.ts exists for a mistake this model does not
+make.
+
+**Speed, measured rather than assumed, and the first number was wrong.** A
+3-run average said 26.0s vs 9.9s per turn, which looked disqualifying.
+Component measurements contradicted it: generation 32.5 vs 28.1 tok/s (VL
+faster), prefill 270 vs 314 tok/s (14% slower), fixed request overhead 0.43s
+vs 0.42s, and generated volume per turn 428 vs 1118 chars (VL less). Re-timed
+warm in one process: **28.1s then 10.9s**, against 13.0s / 12.7s. So the cost
+is a large first-turn penalty per fresh conversation, not a slower model --
+`APC_ENABLED=1` (mlx-vlm's prompt caching, off by default) did not move it.
+
+**Not switched.** The first-turn penalty lands on exactly the interaction a
+local agent is judged by, and the trial covered a handful of prompts, not the
+router's whole surface, memory extraction, or compaction. What it does settle:
+this is a real option rather than a guess, the runtime is compatible today,
+and the one thing that would decide it is where the cold-start cost comes
+from. Kept as the vision backend, which is what it was already configured as.
+
 ### Ten KV cache slots ate a 24GB machine (August 2026)
 
 Reported as "server was killing my computer", then "24gb python process".
