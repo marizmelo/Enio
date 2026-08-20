@@ -241,6 +241,10 @@ export interface TurnOverrides {
   skills?: Skill[];
   files?: string[];
   servers?: string[];
+  /** The file open in the client's editor beside the thread. It arrives in
+   *  `files` like any attachment; this says which one it is, so the prompt can
+   *  frame it as the thing being worked ON rather than read from. */
+  canvasPath?: string | null;
 }
 
 export interface TurnResult {
@@ -563,9 +567,47 @@ export function fileTokens(text: string): string[] {
  */
 export function narratesCodeInsteadOfWriting(text: string): boolean {
   const fences = [...text.matchAll(/```[^\n]*\n([\s\S]*?)```/g)];
-  if (fences.length === 0) return false;
-  const lines = fences.reduce((n, m) => n + m[1]!.split("\n").length, 0);
-  return lines >= 40 || fences.length >= 3;
+  let count = fences.length;
+  let lines = fences.reduce((n, m) => n + m[1]!.split("\n").length, 0);
+
+  // An UNTERMINATED fence counts too, and it is the commonest shape of this:
+  // a model pouring a whole file into the reply frequently runs out before
+  // closing it. Matching balanced pairs only let 251 lines of an entire HTML
+  // app through untouched -- one opening fence, never closed, so the guard
+  // saw no code at all and nothing was written to the file the user had open.
+  const last = fences[fences.length - 1];
+  const tail = text.slice(last ? last.index! + last[0].length : 0);
+  const open = tail.match(/```[^\n]*\n([\s\S]*)$/);
+  if (open) {
+    count += 1;
+    lines += open[1]!.split("\n").length;
+  }
+
+  if (count === 0) return false;
+  return lines >= 40 || count >= 3;
+}
+
+/**
+ * A coder reply that promises to write the file and then stops.
+ *
+ * The third shape of the same failure, watched live once the other two were
+ * closed: asked to fill the file open in the canvas, the model wrote "I'll
+ * create a simple todo app… First, I'll create a complete todo app with the
+ * necessary HTML structure" and ended the turn — no code, no tool call, an
+ * empty file, and a reply that reads like work in progress. The fabrication
+ * guard misses it because nothing is claimed as done, and the code guard
+ * misses it because there is no code.
+ *
+ * A promise to author a file is only ever true if a write follows in the
+ * same turn, so the caller checks this ONLY when nothing was written. The
+ * verb list is closed and deliberately narrow — authoring verbs, not
+ * "I'll explain" or "I'll show you", which are promises the reply itself
+ * keeps.
+ */
+export function promisesToWriteWithoutWriting(text: string): boolean {
+  return /\b(?:I(?:'ll| will)(?: now)?|[Ll]et me|I'm going to|I am going to)\s+(?:go ahead and\s+)?(?:create|write|build|add|update|edit|modify|implement|generate|save|put together|fill in|set up)\b/i.test(
+    text,
+  );
 }
 
 /** The tools whose presence makes a live-access disclaimer false. */
@@ -655,6 +697,7 @@ async function completeWatched(
       rawContent: streamed,
       reasoning: "",
       toolCalls: [],
+      truncated: false,
       repaired: false,
       scavenged: false,
     };
@@ -813,7 +856,7 @@ export async function runTurn(
         : userInput,
     ),
     exemplarBlock(userInput),
-    readAttachments(overrides.files ?? [], attachmentNotes),
+    readAttachments(overrides.files ?? [], attachmentNotes, overrides.canvasPath ?? null),
   ]);
   const specialistName = routed;
 
@@ -890,6 +933,16 @@ export async function runTurn(
   const wireTools = activeTools.map(toWireTool);
   // What this route may execute, as opposed to what exists.
   const allowedToolNames = new Set(activeTools.map((t) => t.name));
+
+  // A turn that can write files needs room for a file. The whole contents
+  // travel inside one JSON string in the tool call, so the chat-sized ceiling
+  // truncates it mid-string; mlx-lm then fails to parse the call and drops it,
+  // and the turn surfaces as an empty reply with the file untouched. Keyed on
+  // the tools this route actually holds rather than on the specialist's name,
+  // so it follows the capability wherever it goes.
+  const outputBudget = allowedToolNames.has("write_file")
+    ? config.maxTokensWrite
+    : config.maxTokens;
 
   /** Run a batch of tool calls, recording each and appending its result to
    *  history — shared by the main loop and the no-think recovery below, so a
@@ -1111,7 +1164,7 @@ export async function runTurn(
         onReasoning: handlers.onReasoning,
         onContent: handlers.onContent,
       },
-      undefined,
+      { maxTokens: outputBudget },
       handlers.shouldStop,
     );
 
@@ -1132,6 +1185,16 @@ export async function runTurn(
     });
 
     if (result.toolCalls.length === 0) {
+      // A write that ran out of room leaves no trace above the model server:
+      // the call is cut mid-JSON, the server drops it, and what arrives is an
+      // empty turn. Say so, because "it wrote nothing and explained nothing"
+      // is the one failure a user cannot act on.
+      if (result.truncated && !result.content.trim() && allowedToolNames.has("write_file")) {
+        handlers.onNotice?.(
+          "That file was too long to write in one call and was cut off. Ask for it in " +
+            "smaller pieces — one file, or one section at a time — or raise ENIO_MAX_TOKENS_WRITE.",
+        );
+      }
       reply = result.content;
       thoughtToDeath = !result.content.trim();
       history.push({
@@ -1212,7 +1275,7 @@ export async function runTurn(
       // so the retry gets none and is forced to answer from what it has.
       const retryTools = thoughtToDeath ? wireTools : [];
       const retryRounds = thoughtToDeath ? config.maxToolIterations : 1;
-      let retry = { content: "", rawContent: "", reasoning: "", repaired: false, scavenged: false, toolCalls: [] as ToolCall[] };
+      let retry = { content: "", rawContent: "", reasoning: "", repaired: false, scavenged: false, truncated: false, toolCalls: [] as ToolCall[] };
       for (let r = 0; r < retryRounds; r++) {
         const retryStartedAt = Date.now();
         // Watched like the main call: the no-think retry is where the worst
@@ -1221,7 +1284,7 @@ export async function runTurn(
           withDateOnLatest(history),
           retryTools,
           { onContent: handlers.onContent },
-          { enableThinking: false },
+          { enableThinking: false, maxTokens: outputBudget },
         );
         steps.push({
           seq: steps.length,
@@ -1293,13 +1356,18 @@ export async function runTurn(
   const wroteThisTurn = steps.some(
     (s) => s.kind === "tool" && (s.name === "write_file" || s.name === "edit_file") && !s.error,
   );
-  const codeInReply =
-    specialistName === "coder" &&
-    !wroteThisTurn &&
-    activeTools.some((t) => t.name === "write_file") &&
-    narratesCodeInsteadOfWriting(reply);
-  const stale = disclaimed || answeredFromMemory || codeInReply;
-  if (reply.trim() && (!toolRanThisTurn || codeInReply) && (claimsUnperformedAction(reply) || stale)) {
+  const canWrite =
+    specialistName === "coder" && !wroteThisTurn && activeTools.some((t) => t.name === "write_file");
+  const codeInReply = canWrite && narratesCodeInsteadOfWriting(reply);
+  // The promise counts even when a tool DID run: reading the file and then
+  // announcing the write leaves the file exactly as empty as saying nothing.
+  const promisedWrite = canWrite && !codeInReply && promisesToWriteWithoutWriting(reply);
+  const stale = disclaimed || answeredFromMemory || codeInReply || promisedWrite;
+  if (
+    reply.trim() &&
+    (!toolRanThisTurn || codeInReply || promisedWrite) &&
+    (claimsUnperformedAction(reply) || stale)
+  ) {
     // Withdraw, don't append. The first version streamed the correction
     // AFTER the bad text with the notice as a footer -- so the user read a
     // confident "not yet held" sitting above five sources that said the
@@ -1314,7 +1382,9 @@ export async function runTurn(
         ? "That answer came from memory, not from a search. Looking it up."
         : codeInReply
           ? "That reply contained the code instead of writing it to files. Writing the files."
-          : "That reply described actions that never ran — nothing was called. Correcting.";
+          : promisedWrite
+            ? "That reply said it would write the file, then stopped without writing it. Writing it."
+            : "That reply described actions that never ran — nothing was called. Correcting.";
     if (handlers.onRestart) handlers.onRestart(reason);
     else handlers.onNotice?.(reason);
     // The withdrawn reply is already in the log and in history[]. The log
@@ -1352,7 +1422,16 @@ export async function runTurn(
               "Use write_file now, once per file, with the full path and contents — it creates any " +
               "missing folders itself, you never need mkdir. Then reply with the list of paths you " +
               "wrote, not the code.)"
-            :
+            : promisedWrite
+              ? // Planning IS the failure here, so the correction forbids one
+                // more round of it: the next thing out of the model has to be
+                // the call. Naming the file is what stops it re-deciding
+                // where the work goes.
+                "(You said you would write it, but called nothing — the file is still as it was. " +
+                "Call write_file now with the full path and the complete contents; it creates any " +
+                "missing folders itself. Do not describe the plan again, and do not put the code in " +
+                "your reply — make the call, then say which path you wrote.)"
+              :
         // No retraction offered. The first wording ended with "or tell the
         // user plainly you did not do it", and the model took that exit every
         // time -- retracting is one sentence, acting is a tool call. The easy
@@ -1377,10 +1456,13 @@ export async function runTurn(
       if (!handlers.onRestart) handlers.onContent?.("\n\n");
       for (let round = 0; round < 2; round++) {
         const startedAt = Date.now();
-        const fix = await complete(history, round === 0 ? wireTools : [], {
-          onReasoning: handlers.onReasoning,
-          onContent: handlers.onContent,
-        });
+        const fix = await complete(
+          history,
+          round === 0 ? wireTools : [],
+          { onReasoning: handlers.onReasoning, onContent: handlers.onContent },
+          undefined,
+          { maxTokens: outputBudget },
+        );
         steps.push({
           seq: steps.length,
           kind: "model",
@@ -1437,7 +1519,11 @@ export async function runTurn(
     const wroteAfterCorrection = steps.some(
       (st) => st.kind === "tool" && (st.name === "write_file" || st.name === "edit_file") && !st.error,
     );
-    if (codeInReply ? !wroteAfterCorrection : !steps.some((st) => st.kind === "tool")) {
+    // Both write failures are judged on whether a write happened, not on
+    // whether anything ran: a correction that read the file and narrated
+    // again has still created nothing.
+    const owedAWrite = codeInReply || promisedWrite;
+    if (owedAWrite ? !wroteAfterCorrection : !steps.some((st) => st.kind === "tool")) {
       // Two failures, two honest floors. The "propose a plan" line is the
       // operator's — offered to a researcher that refused to search, it read
       // as nonsense ("what news today?" → "say propose a plan to…"). For a
@@ -1446,10 +1532,17 @@ export async function runTurn(
       reply = codeInReply
         ? "I wrote that code into the reply instead of into files, so nothing was created. " +
           "Ask again and I will write the files with write_file."
-        : stale
-          ? `I should have looked that up with ${heldLiveTools[0] ?? "web_search"} and did not. ` +
-            "Ask again and I will search rather than answer from memory."
-          : "I described doing that, but I did not actually run anything — nothing " +
+        : promisedWrite
+          ? // Its own floor. Falling through to the one below said "I should
+            // have looked that up with web_search" to a coder that had been
+            // asked to fill a file — an apology for the wrong failure, naming
+            // a tool the turn never held.
+            "I said I would write that and then did not — the file is unchanged. " +
+            "Ask again, and if it is a large file ask for one part at a time."
+          : stale
+            ? `I should have looked that up with ${heldLiveTools[0] ?? "web_search"} and did not. ` +
+              "Ask again and I will search rather than answer from memory."
+            : "I described doing that, but I did not actually run anything — nothing " +
           'has changed on your computer. Say "propose a plan to …" and I will write ' +
           "out the exact steps for you to approve.";
       handlers.onContent?.("\n\n" + reply);
@@ -1680,6 +1773,7 @@ export async function runTurn(
 async function readAttachments(
   files: string[],
   notes: string[] = [],
+  canvasPath: string | null = null,
 ): Promise<string> {
   if (files.length === 0) return "";
   const blocks: string[] = [];
@@ -1755,6 +1849,25 @@ async function readAttachments(
       const text = neutralizeControlTokens(await readFile(absolute, "utf8"));
       const clipped =
         text.length > 12_000 ? text.slice(0, 12_000) + "\n[...truncated]" : text;
+      // The file the user has open is the one being worked ON, and saying so
+      // is the whole difference between an edit and a wall of code in the
+      // reply. The block below otherwise frames every attachment as material
+      // to ANSWER FROM -- correct for a document being discussed, exactly
+      // wrong for the file in the editor, which the model then dutifully
+      // "answered about" by printing a new version of it. An empty one is
+      // called out because empty reads as nothing to edit, and the model
+      // reached for prose rather than write_file.
+      if (canvasPath && rel === canvasPath) {
+        blocks.push(
+          `<file path="${rel}">\n${clipped}\n</file>\n` +
+            `"${rel}" is open in the user's editor beside this conversation. It is the ` +
+            `file to change: put every change INTO it with edit_file, or with write_file ` +
+            `when it is empty or being replaced whole. Code written in your reply does ` +
+            `not reach the file — only a tool call does.` +
+            (clipped.trim() ? "" : ` It is currently empty, so write_file is the call.`),
+        );
+        continue;
+      }
       blocks.push(`<file path="${rel}">\n${clipped}\n</file>`);
     } catch (err) {
       blocks.push(`<file path="${rel}">could not read: ${(err as Error).message}</file>`);

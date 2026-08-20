@@ -495,6 +495,28 @@ export const config = {
   maxTokens: Number(env("MAX_TOKENS") ?? 2048),
 
   /**
+   * The same ceiling for a turn that can write files, where the output IS the
+   * work rather than a sentence about it.
+   *
+   * This is not a bigger number for its own sake — it is the difference
+   * between the coder working and not. A `write_file` call carries the whole
+   * file inside one JSON string, so a 200-line page is already past 2048
+   * tokens; the generation is cut mid-string, mlx-lm cannot parse the call and
+   * DROPS it, and the turn arrives as an empty reply. Measured on this
+   * failure: "add a todo app to this file" logged three
+   * `Failed to parse tool call (Unterminated string…)` warnings in the model
+   * server while the app showed a model that appeared to say nothing and a
+   * file that stayed empty. Nothing above the server can repair that — the
+   * text never reaches enio.
+   *
+   * The latency argument that sizes the chat ceiling does not apply here: this
+   * budget is only reached when a file is genuinely being written, and a user
+   * who asked for a file will wait for the file. Turns that write nothing stop
+   * early and are unaffected, because the ceiling is a cap, not a target.
+   */
+  maxTokensWrite: Number(env("MAX_TOKENS_WRITE") ?? 8192),
+
+  /**
    * Ceiling on the model server's KV cache, in gigabytes.
    *
    * mlx-lm bounds that cache by slot count (ten) and not by size unless told

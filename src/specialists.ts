@@ -114,7 +114,9 @@ export const SPECIALISTS: Specialist[] = [
       `Use paths exactly as printed. To change an existing file, call ` +
       `edit_file with old_string copied exactly from what read_file printed ` +
       `— without the line numbers — and new_string in its place; use ` +
-      `write_file only for a new file or a whole document. To see what a ` +
+      `write_file for a new file, a whole document, or a file that read_file ` +
+      `showed as empty. Code you type in the reply reaches no file: a file ` +
+      `changes only when write_file or edit_file is called. To see what a ` +
       `folder holds, run_command ls <folder>. After a change, run the relevant ` +
       `test or build command to check it. Report what you actually observed, ` +
       `including failures — do not describe an intended outcome as if it ` +

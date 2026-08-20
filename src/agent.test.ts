@@ -129,6 +129,34 @@ describe("streaming and <think> handling", () => {
     );
   });
 
+  test("a generation cut short by the ceiling is reported as truncated", async () => {
+    // It has to be visible: a write_file call carrying a whole file is cut
+    // mid-JSON, mlx-lm drops the unparseable call, and the turn arrives empty
+    // with the only evidence in the model server's log.
+    const originalFetchLocal = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            const enc = new TextEncoder();
+            controller.enqueue(
+              enc.encode(
+                'data: {"choices":[{"delta":{"content":"<html>"}}]}\n\n' +
+                  'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n' +
+                  "data: [DONE]\n\n",
+              ),
+            );
+            controller.close();
+          },
+        }),
+        { status: 200 },
+      )) as unknown as typeof fetch;
+
+    const cut = await complete([{ role: "user", content: "write it" }], []);
+    globalThis.fetch = originalFetchLocal;
+    assert.equal(cut.truncated, true);
+  });
+
   test("separates reasoning from visible content", async () => {
     stubStream(["<think>", "let me consider", "</think>", "The answer is 4."]);
     const result = await complete([{ role: "user", content: "2+2" }], []);
@@ -622,5 +650,43 @@ describe("code narrated instead of written", () => {
     const snippet = "```js\n" + Array.from({ length: 12 }, () => "function f() { return 1; }").join("\n") + "\n```";
     assert.equal(narratesCodeInsteadOfWriting("A closure:\n" + snippet), false);
     assert.equal(narratesCodeInsteadOfWriting("no code here"), false);
+  });
+
+  test("an unterminated fence is the same failure", async () => {
+    const { narratesCodeInsteadOfWriting } = await import("./agent.js");
+    // The shape seen in the wild: asked to fill the file open in the canvas,
+    // the model poured a whole HTML app into the reply and never closed the
+    // fence. Matching balanced pairs only, the guard saw no code at all --
+    // 251 lines reached the thread and the file stayed empty.
+    const spill =
+      "The file is empty. Here's the implementation:\n\n```html\n" +
+      Array.from({ length: 200 }, (_, i) => `  <div class="row-${i}"></div>`).join("\n");
+    assert.equal(narratesCodeInsteadOfWriting(spill), true);
+    // A closed block followed by an unterminated one still counts both.
+    const mixed = "```js\nlet a;\n```\nand then\n```css\n" + Array.from({ length: 50 }, () => ".a{}").join("\n");
+    assert.equal(narratesCodeInsteadOfWriting(mixed), true);
+    // A short trailing fence is still just an answer.
+    assert.equal(narratesCodeInsteadOfWriting("try:\n```sh\nnpm test\n"), false);
+    // Prose containing a stray triple-backtick opens nothing.
+    assert.equal(narratesCodeInsteadOfWriting("use ``` to fence code"), false);
+  });
+
+  test("a promise to write, with no write, is the same failure", async () => {
+    const { promisesToWriteWithoutWriting } = await import("./agent.js");
+    // Verbatim from the live turn that left the canvas file empty.
+    assert.equal(
+      promisesToWriteWithoutWriting(
+        "I'll create a simple todo app using jQuery for the provided index.html file. " +
+          "First, I'll create a complete todo app with the necessary HTML structure.",
+      ),
+      true,
+    );
+    assert.equal(promisesToWriteWithoutWriting("Let me write the config file."), true);
+    assert.equal(promisesToWriteWithoutWriting("I'm going to update src/app.js."), true);
+    assert.equal(promisesToWriteWithoutWriting("I will now generate the stylesheet."), true);
+    // Promises the reply itself keeps are not this failure.
+    assert.equal(promisesToWriteWithoutWriting("I'll explain how the loop works."), false);
+    assert.equal(promisesToWriteWithoutWriting("Let me show you the difference."), false);
+    assert.equal(promisesToWriteWithoutWriting("Wrote src/app.js — 412 bytes."), false);
   });
 });

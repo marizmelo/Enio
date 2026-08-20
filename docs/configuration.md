@@ -35,6 +35,7 @@ and old variables still work.
 | `ENIO_TEMP` | `1.0` — classifiers override this to 0 themselves |
 | `ENIO_TOP_P` | backend default |
 | `ENIO_MAX_TOKENS` | reply cap |
+| `ENIO_MAX_TOKENS_WRITE` | reply cap for turns that can write files — a whole file travels inside one tool call |
 | `ENIO_CONTEXT_BUDGET` | per model — see [Models](models.md) |
 | `ENIO_HISTORY_WINDOW` | `40` messages before folding |
 | `ENIO_PROMPT_CACHE_GB` | 1/12th of RAM, clamped 1–4 |

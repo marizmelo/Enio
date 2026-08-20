@@ -1773,4 +1773,173 @@ describe("the coder writing code into the reply instead of files", () => {
     const rm = String(await run.run({ command: "rm -rf a" }));
     assert.match(rm, /no delete or move tool/);
   });
+
+  test("an unterminated fence is caught too — the whole file, never closed", async () => {
+    // The live failure: "add a todo app in jquery for this file
+    // todos/index.html" produced 251 lines of HTML behind one opening fence
+    // that was never closed, so the balanced-pair match saw no code and the
+    // file the user was looking at stayed empty.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const spill =
+      "The file is empty. Here's the implementation:\n\n```html\n" +
+      Array.from({ length: 60 }, (_, i) => `<li>item ${i}</li>`).join("\n");
+    scriptModel([
+      { content: spill },
+      { toolCall: { name: "write_file", args: { path: "todos/index.html", content: "<ul></ul>" } } },
+      { content: "Wrote todos/index.html." },
+    ]);
+    const notices: string[] = [];
+    const result = await runTurn("add a todo app for todos/index.html", [], registry, sessionId, {
+      onNotice: (n) => notices.push(n),
+    }, { specialist: "coder" });
+    assert.ok(notices.some((n) => /contained the code instead of writing it/.test(n)), notices.join(" | "));
+    assert.match(result.reply, /Wrote todos\/index\.html/);
+  });
+});
+
+describe("the coder promising to write and then stopping", () => {
+  test("a plan with no call is withdrawn and the corrective round writes", async () => {
+    // The third shape of narrate-instead-of-act, live: "I'll create a simple
+    // todo app… First, I'll create a complete todo app with the necessary
+    // HTML structure" — no code, no call, empty file. Nothing is claimed as
+    // done, so the fabrication guard is silent; there is no code, so the code
+    // guard is silent. A promise to author a file is only true if a write
+    // follows it in the same turn.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { content: "I'll create a simple todo app using jQuery. First, I'll build the HTML structure." },
+      { toolCall: { name: "write_file", args: { path: "todos/index.html", content: "<ul id=todo></ul>" } } },
+      { content: "Wrote todos/index.html." },
+    ]);
+    const notices: string[] = [];
+    const seen: string[] = [];
+    const result = await runTurn("add a todo app to todos/index.html", [], registry, sessionId, {
+      onNotice: (n) => notices.push(n),
+      onToolStart: (n) => seen.push(n),
+    }, { specialist: "coder" });
+    assert.ok(notices.some((n) => /said it would write the file, then stopped/.test(n)), notices.join(" | "));
+    assert.deepEqual(seen, ["write_file"]);
+    assert.match(result.reply, /Wrote todos\/index\.html/);
+  });
+
+  test("it also fires after a read — reading then promising leaves the file just as empty", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const workspace = process.env.ENIO_WORKSPACE!;
+    writeFileSync(join(workspace, "blank.html"), "");
+    scriptModel([
+      { toolCall: { name: "read_file", args: { path: "blank.html" } } },
+      { content: "The file is empty. Let me create the full page for it." },
+      { toolCall: { name: "write_file", args: { path: "blank.html", content: "<html></html>" } } },
+      { content: "Wrote blank.html." },
+    ]);
+    const notices: string[] = [];
+    await runTurn("fill in blank.html", [], registry, sessionId, {
+      onNotice: (n) => notices.push(n),
+    }, { specialist: "coder" });
+    assert.ok(notices.some((n) => /then stopped without writing it/.test(n)), notices.join(" | "));
+  });
+
+  test("a turn that actually wrote is left alone, however it words the reply", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { toolCall: { name: "write_file", args: { path: "done/x.js", content: "let x;" } } },
+      { content: "Wrote done/x.js. Next I'll add the tests when you want them." },
+    ]);
+    const notices: string[] = [];
+    await runTurn("write x.js", [], registry, sessionId, {
+      onNotice: (n) => notices.push(n),
+    }, { specialist: "coder" });
+    assert.equal(notices.filter((n) => /stopped without writing/.test(n)).length, 0, notices.join(" | "));
+  });
+});
+
+describe("room to write a file", () => {
+  test("a turn holding write_file asks for the bigger output budget", async () => {
+    // The measured failure: at the chat ceiling the write_file call carrying
+    // a 200-line page was cut mid-string, mlx-lm dropped the unparseable
+    // call, and the app showed an empty reply over an empty file. The budget
+    // follows the TOOL, not the specialist's name.
+    const registry = await buildRegistry();
+    const { config } = await import("./config.js");
+    const budgets: number[] = [];
+    const record = (init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      if (typeof body.max_tokens === "number") budgets.push(body.max_tokens);
+    };
+
+    scriptModel([{ content: "ok" }]);
+    let scripted = globalThis.fetch;
+    globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
+      record(init);
+      return scripted(url as string, init);
+    }) as typeof fetch;
+    await runTurn("hello", [], registry, store.startSession(), {}, { specialist: "coder" });
+    assert.deepEqual(budgets, [config.maxTokensWrite]);
+
+    budgets.length = 0;
+    scriptModel([{ content: "ok" }]);
+    scripted = globalThis.fetch;
+    globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
+      record(init);
+      return scripted(url as string, init);
+    }) as typeof fetch;
+    await runTurn("hello", [], registry, store.startSession(), {}, { specialist: "researcher" });
+    assert.deepEqual(budgets, [config.maxTokens], "a turn that writes nothing keeps the chat rail");
+  });
+});
+
+describe("the file open in the canvas", () => {
+  test("is framed as the file to change, not as material to answer from", async () => {
+    // @canvas put the file in the turn's attachments, but the attachment
+    // block said "answer about them directly" -- so the model answered about
+    // it, by printing a new version into the reply. The file being empty
+    // made it worse: nothing to edit, so it reached for prose.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const workspace = process.env.ENIO_WORKSPACE!;
+    mkdirSync(workspace, { recursive: true });
+    writeFileSync(join(workspace, "draft.html"), "");
+
+    scriptModel([{ content: "Noted." }]);
+    await runTurn("fill this in", [], registry, sessionId, {}, {
+      specialist: "coder",
+      files: ["draft.html"],
+      canvasPath: "draft.html",
+    });
+
+    const prompt = (
+      getDb().prepare(`SELECT system_prompt FROM turns ORDER BY id DESC LIMIT 1`).get() as {
+        system_prompt: string;
+      }
+    ).system_prompt;
+    assert.match(prompt, /"draft\.html" is open in the user's editor/);
+    assert.match(prompt, /put every change INTO it with edit_file/);
+    // Empty is called out, because empty is what sent it to prose.
+    assert.match(prompt, /currently empty, so write_file is the call/);
+  });
+
+  test("an ordinary attachment keeps the read-it-and-answer framing", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const workspace = process.env.ENIO_WORKSPACE!;
+    writeFileSync(join(workspace, "lease.txt"), "The deposit is $2,400.");
+
+    scriptModel([{ content: "Noted." }]);
+    await runTurn("what is the deposit", [], registry, sessionId, {}, {
+      specialist: "coder",
+      files: ["lease.txt"],
+    });
+
+    const prompt = (
+      getDb().prepare(`SELECT system_prompt FROM turns ORDER BY id DESC LIMIT 1`).get() as {
+        system_prompt: string;
+      }
+    ).system_prompt;
+    assert.ok(!/open in the user's editor/.test(prompt), "a plain attachment is not an edit target");
+    assert.match(prompt, /The user attached the following/);
+  });
 });

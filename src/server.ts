@@ -1422,6 +1422,9 @@ async function handle(
     skills: mentions.skills,
     files: mentions.files,
     servers: mentions.servers,
+    // Only when it actually resolved into this turn's files: a pinned canvas
+    // the message never referred to is not what the turn is about.
+    canvasPath: ctx.canvasPath && mentions.files.includes(ctx.canvasPath) ? ctx.canvasPath : null,
   };
 
   // A client may pin the turn to a stored conversation. Without it, the boot

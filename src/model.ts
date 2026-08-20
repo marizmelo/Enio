@@ -23,6 +23,11 @@ export interface CompletionResult {
   repaired: boolean;
   /** A tool call was recovered from plain text because the server didn't parse it. */
   scavenged: boolean;
+  /** The generation hit the token ceiling rather than finishing. Worth
+   *  surfacing because of how it fails: a write_file call carrying a whole
+   *  file gets cut mid-string, mlx-lm cannot parse it, and the call is
+   *  DROPPED — so the turn arrives as an empty reply with no sign of why. */
+  truncated: boolean;
 }
 
 interface StreamHandlers {
@@ -118,6 +123,7 @@ async function consumeStream(
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   const partials = new Map<number, { id: string; name: string; args: string }>();
+  let truncated = false;
 
   let raw = "";
   let buffer = "";
@@ -146,6 +152,8 @@ async function consumeStream(
       } catch {
         continue; // a truncated frame; the next read will carry the rest
       }
+
+      if (event?.choices?.[0]?.finish_reason === "length") truncated = true;
 
       const delta = event?.choices?.[0]?.delta;
       if (!delta) continue;
@@ -223,6 +231,7 @@ async function consumeStream(
     rawContent: raw,
     repaired,
     scavenged,
+    truncated,
   };
 }
 

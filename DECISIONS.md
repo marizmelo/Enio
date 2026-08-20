@@ -1347,6 +1347,63 @@ being process memory). It is the real fix for the scheduler residual above
 too, but it touches every reader of `activeProject()` — worth doing when
 task turns move into `serve`, not as a side effect of a UX fix.
 
+### The output budget was the reason the coder could not write (August 2026)
+
+Reported as "the model keeps writing code in the thread instead of the file,
+even with @canvas". Three separate causes, and the third was the one that
+mattered:
+
+1. **The narrate-guard only matched CLOSED fences.** A model pouring a whole
+   file into the reply usually runs out before closing it — the live trace was
+   251 lines of HTML behind one unterminated ` ``` `, so the guard saw no code
+   at all. Unterminated fences now count.
+2. **The canvas file was framed as material to answer FROM.** `@canvas` put it
+   in the turn's attachments, and the attachment block says "their contents are
+   given in full below, and you can answer about them directly" — correct for a
+   document being discussed, exactly wrong for the file in the editor, which
+   the model then "answered about" by printing a new version of it. The canvas
+   file now carries its own line: this is the file to change, changes go in
+   with edit_file (write_file when empty), code in the reply reaches nothing.
+   An empty file is called out explicitly, because empty read as "nothing to
+   edit" and sent it to prose.
+3. **`max_tokens` was 2048 for every turn, and a `write_file` call carries the
+   whole file inside one JSON string.** The generation was cut mid-string,
+   mlx-lm could not parse the call and DROPPED it, and the turn arrived as an
+   empty reply over an untouched file. The only evidence was three
+   `Failed to parse tool call (Unterminated string…)` warnings in
+   `~/.enio/model-server.log` — nothing above the server can repair this,
+   because the text never reaches enio. A turn holding `write_file` now gets
+   `maxTokensWrite` (8192, `ENIO_MAX_TOKENS_WRITE`), keyed on the TOOL rather
+   than the specialist's name so it follows the capability. The latency
+   argument that sizes the chat rail does not apply: the budget is only reached
+   when a file is actually being written, and someone who asked for a file will
+   wait for the file. Truncation is also surfaced now — an empty write turn
+   says it was cut off and suggests asking in smaller pieces.
+
+Verified against the 4B end to end after the change: the same request that had
+produced 251 lines of chat wrote 17,985 bytes to the file, the guard withdrew
+the narration, the corrective round made the call, and the canvas reloaded.
+
+Also fixed here, found by the live run: a coder that promised and stopped fell
+through to the *researcher's* floor and apologised for not calling web_search —
+a tool that turn never held. Each write failure now has its own floor.
+
+**A fourth shape, promising and stopping.** With the code path closed the model
+switched to "I'll create a simple todo app… First, I'll create a complete todo
+app with the necessary HTML structure" and ended the turn: no code, no call,
+empty file. The fabrication guard misses it (nothing claimed as done), the code
+guard misses it (no code). `promisesToWriteWithoutWriting` closes it on a
+narrow verb list — authoring verbs only, never "I'll explain" or "I'll show
+you", which are promises the reply itself keeps — checked only when the turn
+wrote nothing, and firing even if a tool DID run: reading the file and then
+announcing the write leaves it exactly as empty.
+
+**Rejected: a smaller write tool** (append/patch instead of whole contents), so
+the file never has to fit in one generation. It trades a budget problem for a
+sequencing problem, and sequencing is what this model size is worst at — it
+would have to plan the chunks, keep them ordered, and know when it was done.
+Raising the ceiling costs one number; the alternative costs a state machine.
+
 ### Acting, not just reading: edit_file, look-before-guess, verify (August 2026)
 
 The section above solved *reading* a codebase. Twelve coder turns in the

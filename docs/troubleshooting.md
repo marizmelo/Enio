@@ -70,6 +70,19 @@ Raising `ENIO_MAX_TOKENS` helps the first case. The second usually means the
 question needs a tool that is not available to the agent it was routed to — try
 `@agent` to force a different one.
 
+## A file was asked for and nothing was written
+
+When the agent writes a file, the whole file travels inside a single tool call,
+so a very large one can run past the generation cap and be cut off mid-way —
+the server cannot parse a half-finished call, and the turn arrives empty. Enio
+says so when it happens. Ask for the file in smaller pieces (one file, or one
+section at a time), or raise `ENIO_MAX_TOKENS_WRITE`, which is the cap for
+turns that can write and is already well above the ordinary reply cap.
+
+If instead the code came back *in the chat*, that is caught: the reply is
+withdrawn and the agent is made to write the files, which is what the amber
+"writing the files" note above a retry means.
+
 ## Where to look
 
 ```sh
