@@ -132,6 +132,56 @@ export const ABILITIES: Ability[] = [
     },
   },
   {
+    id: "develop-app",
+    // "Code" is the word people arrive with; "Develop an app" described one
+    // errand this tile does and undersold the rest of it -- reading a repo,
+    // fixing a file, running the tests, serving a page to look at. The id
+    // stays: saved pipelines reference abilities by id, and renaming one
+    // would break every graph that used it.
+    title: "Code",
+    description: "Read, write, run and test code in your project folders.",
+    icon: "code",
+    specialist: "coder",
+    skill: "delegate-coding",
+    promptTemplate: "@coder ___",
+    suggestions: [
+      "Read my project and describe how it is structured",
+      "Run my project's tests and explain any failure",
+      "Serve this page locally so I can look at it",
+    ],
+    inputs: ["text", "file"],
+    outputs: ["file", "text"],
+    requiredTools: ["run_command"],
+  },
+  {
+    // The id stays "control-mac" -- saved pipelines and composer examples
+    // store ability ids, so renaming it would orphan them. The title is what
+    // people read, and the capability is about the computer, not the brand.
+    id: "control-mac",
+    title: "Control my computer",
+    description: "Propose app automations you approve before anything runs.",
+    icon: "app-window",
+    specialist: "operator",
+    promptTemplate: "@operator ___",
+    suggestions: [
+      "Create a note with my grocery list",
+      "Add lunch with Ana to my calendar, Friday noon",
+      "What is on my calendar this week?",
+    ],
+    inputs: ["text"],
+    outputs: ["plan", "text"],
+    requiredTools: ["propose_plan"],
+    requiredFlag: "desktopEnabled",
+    setup: {
+      summary: "Desktop control is off until you opt in.",
+      steps: [
+        "Click Enable desktop control below (or set ENIO_DESKTOP=1).",
+        "macOS will still ask for Automation access per app.",
+      ],
+      docs: "docs/mac-control.md",
+    },
+  },
+  {
     id: "file-search",
     // Three tiles say "find" and the old titles did not say what separates
     // them, which is the only thing a person needs at the moment of choosing:
@@ -213,28 +263,6 @@ export const ABILITIES: Ability[] = [
     requiredTools: ["write_file"],
   },
   {
-    id: "develop-app",
-    // "Code" is the word people arrive with; "Develop an app" described one
-    // errand this tile does and undersold the rest of it -- reading a repo,
-    // fixing a file, running the tests, serving a page to look at. The id
-    // stays: saved pipelines reference abilities by id, and renaming one
-    // would break every graph that used it.
-    title: "Code",
-    description: "Read, write, run and test code in your project folders.",
-    icon: "code",
-    specialist: "coder",
-    skill: "delegate-coding",
-    promptTemplate: "@coder ___",
-    suggestions: [
-      "Read my project and describe how it is structured",
-      "Run my project's tests and explain any failure",
-      "Serve this page locally so I can look at it",
-    ],
-    inputs: ["text", "file"],
-    outputs: ["file", "text"],
-    requiredTools: ["run_command"],
-  },
-  {
     // The id and skill keep the old name -- saved pipelines store ids, and
     // the skill folder is on users' disks. The title says "cloud" because
     // once a LOCAL upgrade is also on offer (the escalation menu under
@@ -308,34 +336,6 @@ export const ABILITIES: Ability[] = [
         "Drafts stay dry-run until ENIO_EMAIL_SEND=1.",
       ],
       docs: "docs/configuration.md",
-    },
-  },
-  {
-    // The id stays "control-mac" -- saved pipelines and composer examples
-    // store ability ids, so renaming it would orphan them. The title is what
-    // people read, and the capability is about the computer, not the brand.
-    id: "control-mac",
-    title: "Control my computer",
-    description: "Propose app automations you approve before anything runs.",
-    icon: "app-window",
-    specialist: "operator",
-    promptTemplate: "@operator ___",
-    suggestions: [
-      "Create a note with my grocery list",
-      "Add lunch with Ana to my calendar, Friday noon",
-      "What is on my calendar this week?",
-    ],
-    inputs: ["text"],
-    outputs: ["plan", "text"],
-    requiredTools: ["propose_plan"],
-    requiredFlag: "desktopEnabled",
-    setup: {
-      summary: "Desktop control is off until you opt in.",
-      steps: [
-        "Click Enable desktop control below (or set ENIO_DESKTOP=1).",
-        "macOS will still ask for Automation access per app.",
-      ],
-      docs: "docs/mac-control.md",
     },
   },
   {
