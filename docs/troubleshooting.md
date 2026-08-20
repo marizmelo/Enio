@@ -85,9 +85,14 @@ Two levers, both env vars:
   is dropped entirely — but every token of it is cache. Lower it if memory
   matters more than writing large files in one go, and ask for files in
   sections instead.
-- `ENIO_PROMPT_CACHE_GB` (default: a twelfth of installed RAM, 1–4) bounds the
-  prompt cache directly. Lowering it costs speed on follow-up turns, which
-  re-prefill instead of resuming.
+- `ENIO_PROMPT_CACHE_SLOTS` (default: an eighth of installed RAM in GB,
+  clamped 2–10) is how many conversations keep a cache at once, and it is the
+  one that actually bounds memory. Qwen3 4B costs 144KB of KV per token, so a
+  slot holding a long thread is well over a gigabyte and the count multiplies
+  it. mlx-lm's own default is ten, which is how a 24GB machine ran out.
+- `ENIO_PROMPT_CACHE_GB` (default: a twelfth of installed RAM, 1–4) is the byte
+  ceiling. Lowering either costs speed on follow-up turns, which re-prefill
+  instead of resuming.
 
 Quitting Enio releases all of it: the model server is stopped by whoever
 started it, and nothing survives the app.

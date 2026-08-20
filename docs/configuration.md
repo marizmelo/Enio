@@ -39,6 +39,7 @@ and old variables still work.
 | `ENIO_CONTEXT_BUDGET` | per model — see [Models](models.md) |
 | `ENIO_HISTORY_WINDOW` | `40` messages before folding |
 | `ENIO_PROMPT_CACHE_GB` | 1/12th of RAM, clamped 1–4 |
+| `ENIO_PROMPT_CACHE_SLOTS` | RAM in GB / 8, clamped 2–10 — how many conversations keep a KV cache; the count is what bounds memory |
 
 ## Agents and tools
 

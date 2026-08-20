@@ -535,6 +535,26 @@ export const config = {
       Math.min(4, Math.max(1, Math.round(totalmem() / 1024 ** 3 / 12))),
   ),
 
+  /**
+   * How many distinct KV caches the model server keeps (mlx-lm's
+   * --prompt-cache-size). Ten by default, and ten is what ate a 24GB machine.
+   *
+   * The arithmetic is not subtle. Qwen3 4B holds 144KB of KV per token, so a
+   * slot carrying a 4k prompt and an 8k generation is 1.7GB, and ten of those
+   * is 17GB before the weights. Measured on exactly that: the server grew to
+   * 24GB on a 24GB machine, 1.4M pageouts, and the whole desktop crawled --
+   * with --prompt-cache-bytes already set, which evidently does not hold the
+   * line the way the flag name suggests. The slot count does.
+   *
+   * Derived from installed RAM for the same reason promptCacheGb is: the same
+   * build has to behave on 16GB and on 64GB. Two slots is the floor because
+   * one would re-prefill the moment a second conversation touches the model.
+   */
+  promptCacheSlots: Number(
+    env("PROMPT_CACHE_SLOTS") ??
+      Math.min(10, Math.max(2, Math.floor(totalmem() / 1024 ** 3 / 8))),
+  ),
+
   /** Safety rails on the agent loop. A small model can loop forever given the chance. */
   maxToolIterations: Number(env("MAX_ITERS") ?? 8),
   maxToolOutputChars: 8000,

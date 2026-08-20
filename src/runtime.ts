@@ -138,6 +138,9 @@ export function modelServerArgs(modelPath: string): string[] {
     "--trust-remote-code",
     "--flash-head",
     "--prompt-cache-bytes", `${config.promptCacheGb}G`,
+    // The one that actually bounds memory: --prompt-cache-bytes did not stop
+    // ten slots of long-generation KV from reaching 24GB on a 24GB machine.
+    "--prompt-cache-size", `${config.promptCacheSlots}`,
     "--port", modelServerPort(),
   ];
 }

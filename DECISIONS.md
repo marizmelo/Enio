@@ -1428,6 +1428,39 @@ whole story of the model being corrected by the bind guard, in the badge.
 A badge with nothing behind it (a turn restored from before this) stays a
 label rather than becoming a button that opens an empty panel.
 
+### Ten KV cache slots ate a 24GB machine (August 2026)
+
+Reported as "server was killing my computer", then "24gb python process".
+That process was `mlx_lm.server`: 24GB resident on a 24GB machine, 1.4M
+pageouts, the desktop crawling, and finally the server killed outright -- the
+log ends on healthy polls with no error, which is what a SIGKILL looks like.
+
+The arithmetic explains it exactly. Qwen3 4B holds **144KB of KV per token**
+(36 layers x 8 KV heads x 128 head dim x 2 for K and V x 2 bytes). mlx-lm
+keeps ten distinct caches by default, so a slot carrying a 4k prompt and an
+8k generation is 1.7GB and ten of them is 17GB before the weights. Raising
+the write budget to 8192 (the fix for dropped `write_file` calls, one entry
+below) is what pushed each slot into that range -- the truncation fix and
+this are the same change seen from two sides.
+
+`--prompt-cache-bytes` was already being passed and did **not** hold the line;
+the flag that does is `--prompt-cache-size`, the number of caches. It is now
+derived from installed RAM the same way the byte ceiling is -- `RAM/8`,
+clamped 2..10, so 24GB gets 3 and 64GB gets 8. Two is the floor because one
+slot re-prefills the moment a second conversation touches the model.
+Verified: the server came back at 1.8GB with `--prompt-cache-size 3`.
+
+**Not lowered: the write budget.** It was measured to fix a real, reproduced
+failure (a 20KB file written where nothing had been written before), and the
+memory problem was never the per-generation size on its own -- it was ten of
+them retained at once. Fixing the retention keeps both properties. If a
+machine still struggles, `ENIO_MAX_TOKENS_WRITE` and `ENIO_PROMPT_CACHE_SLOTS`
+are the two levers, documented in troubleshooting.
+
+**The lesson worth keeping:** a limit expressed in bytes was assumed to bound
+memory and did not. The count of things retained was the real bound. Where a
+cap must hold, cap the thing that multiplies.
+
 ### The output budget was the reason the coder could not write (August 2026)
 
 Reported as "the model keeps writing code in the thread instead of the file,
