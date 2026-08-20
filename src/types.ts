@@ -80,7 +80,24 @@ export type Widget =
  * model reads and what any client without a renderer displays, so it must
  * stand alone. The widget is additive — never the only copy of the answer.
  */
-export type ToolOutput = string | { text: string; widget?: Widget };
+export type ToolOutput =
+  | string
+  | {
+      text: string;
+      widget?: Widget;
+      /**
+       * Something the USER should know, which the model must not be told.
+       *
+       * The distinction is the same one attachments already make: telling the
+       * model its eyesight is limited makes it announce the limitation instead
+       * of answering, while the person reading the window is the only one who
+       * can act on it. A screenshot read by OCR is the case this exists for --
+       * without it the reply says "no error is visible" and nothing says that
+       * nothing ever looked at the pixels, which reads as the agent being
+       * unable to see rather than as a model not being installed.
+       */
+      notice?: string;
+    };
 
 /** The text of a tool result, whichever form it came back in. */
 export const toolText = (out: ToolOutput): string =>

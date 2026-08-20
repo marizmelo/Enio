@@ -1995,6 +1995,13 @@ async function executeCall(
     if (typeof result !== "string" && result.widget) {
       handlers.onWidget?.(result.widget);
     }
+    // To the user, never into the transcript: a tool telling the MODEL what it
+    // could not do makes it announce the limitation instead of answering,
+    // which is the lesson attachments already learned. The person reading the
+    // window is the only one who can act on "no vision model is running".
+    if (typeof result !== "string" && result.notice) {
+      handlers.onNotice?.(result.notice);
+    }
 
     const body =
       raw.length > config.maxToolOutputChars

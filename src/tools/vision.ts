@@ -47,7 +47,11 @@ export const visionTools: ToolDef[] = [
           result.method === "ocr"
             ? "\n\n(text extracted by OCR; nothing was visually described)"
             : "";
-        return `${result.text}${provenance}`;
+        // The provenance line above is for the MODEL (how much to trust what
+        // it holds); the note is for the USER (why nothing described the
+        // picture, and the one command that changes it). Different audiences,
+        // different sentences -- see the notice channel in types.ts.
+        return { text: `${result.text}${provenance}`, ...(result.note ? { notice: result.note } : {}) };
       } catch (err) {
         return `Could not read the image: ${(err as Error).message}`;
       }

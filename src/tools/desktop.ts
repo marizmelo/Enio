@@ -255,6 +255,11 @@ const screenshotTool: ToolDef = {
     const reading = await readImage(file, args.question ? String(args.question) : undefined);
     return {
       text: `Screenshot saved to ${file}${note}\n\n${reading.text}`,
+      // How the screen was actually read, said to the user only. Without it a
+      // reply like "no error message is visible" reads as the agent being
+      // unable to see, when what happened is that OCR read the text and
+      // nothing looked at the pixels.
+      ...(reading.note ? { notice: reading.note } : {}),
       // The text above is a vision-model READING of the screen; the widget
       // shows the actual pixels so the user can check it. basename() is
       // correct because the file was just written into the workspace root,

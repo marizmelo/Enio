@@ -70,6 +70,26 @@ Raising `ENIO_MAX_TOKENS` helps the first case. The second usually means the
 question needs a tool that is not available to the agent it was routed to — try
 `@agent` to force a different one.
 
+## It read my screenshot but could not say what it showed
+
+Two different things read an image, and only one of them looks at pixels.
+**OCR** pulls out the text and needs no model, no network and no memory —
+plenty for a screenshot of an error message or a page of writing. A **vision
+model** describes what is actually there: layout, which window is in front,
+what a chart shows.
+
+With no vision model running, images fall back to OCR and Enio says so under
+the reply. To describe images instead:
+
+```sh
+enio vision --install   # once
+enio vision --serve     # holds the model while it runs
+```
+
+It runs in the foreground on purpose: unlike the chat model it has no
+per-request unload, so the memory comes back when you stop it with ctrl-C.
+`enio vision` on its own reports which parts are ready.
+
 ## A Python process is using many gigabytes
 
 That is `mlx_lm.server`, the local model. It holds the weights (a few GB) plus
