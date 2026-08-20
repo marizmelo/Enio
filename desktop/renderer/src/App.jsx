@@ -422,10 +422,17 @@ export function App() {
           setConversationId(await createConversation().catch(() => null));
           return;
         }
-        // Nothing open: the newest conversation still comes back, but as a
-        // transcript only. If it belongs to a project, the history dialog's
-        // named badge is the click that re-scopes — consent stays a user act.
+        // Nothing open, so the newest conversation comes back — unless it
+        // belongs to a project. lastOpenedId being null while the newest
+        // conversation is owned means the user *left* that project, and a
+        // conversation opens only with its scope, so the faithful restore is
+        // a fresh chat outside it. Its project's conversations are one
+        // history click away, and that click reopens the scope too.
         const latest = all[0];
+        if (latest.projectId) {
+          setConversationId(await createConversation().catch(() => null));
+          return;
+        }
         const msgs = await restoreThread(latest.id);
         setConversationId(latest.id);
         setMessages(msgs);
@@ -437,16 +444,30 @@ export function App() {
     // dependency the body reads — this is boot restore, not a live sync.
   }, [backendReady]);
 
+  // A conversation belongs to the project it was started under, so opening
+  // one aligns the scope to match: its project opens, or the scope closes for
+  // an unowned one. The history row wears the project's name, which is what
+  // makes the click informed — there is no "resume the transcript but not the
+  // scope" state, because a conversation half in its project answered with
+  // the wrong files and nothing visibly wrong.
   const openConversation = useCallback(async (conv) => {
     stopSpeaking();
     teardownVoiceRef.current();
     followRef.current = true;
     setShowJump(false);
     setCanvas(null);
+    if (conv.projectId && conv.projectId !== project?.id) {
+      // A deleted project degrades to a scopeless transcript, never an error.
+      await openProjectApi(conv.projectId).catch(() => {});
+      setProject(await currentProject().catch(() => null));
+    } else if (!conv.projectId && project) {
+      await closeProjectApi().catch(() => {});
+      setProject(null);
+    }
     const msgs = await restoreThread(conv.id).catch(() => []);
     setConversationId(conv.id);
     setMessages(msgs);
-  }, [restoreThread]);
+  }, [restoreThread, project]);
 
   // After opening a project: land in its latest conversation, or a fresh one
   // that the server will tag with it.
@@ -488,18 +509,6 @@ export function App() {
     setContext(null);
     setConversationId(await createConversation().catch(() => null));
   }, []);
-
-  // A conversation from another project: the click on "open project" is the
-  // consent that re-scopes the sandbox — resuming alone never does.
-  const openConversationInProject = useCallback(async (conv) => {
-    try {
-      await openProjectApi(conv.projectId);
-      setProject(await currentProject().catch(() => null));
-    } catch {
-      /* The conversation still opens; only the scope switch failed. */
-    }
-    await openConversation(conv);
-  }, [openConversation]);
 
   const newChat = useCallback(async () => {
     stopSpeaking();
@@ -792,9 +801,13 @@ export function App() {
         project={project}
         onProjects={() => setProjectsOpen(true)}
         onCloseProject={async () => {
-          // Only the session's scope ends; the project and its files stay.
+          // Leaving, not closing: the current conversation belongs to the
+          // project, so staying in it scopeless would be the half-state
+          // openConversation exists to prevent. The project and its files
+          // stay; you land in a fresh chat outside it.
           await closeProjectApi().catch(() => {});
           setProject(null);
+          await newChat();
         }}
         onHistory={() => setHistoryOpen(true)}
         onPipelines={() => setPipelinesOpen(true)}
@@ -845,7 +858,12 @@ export function App() {
         onOpenChange={setProjectsOpen}
         activeId={project?.id}
         onOpened={projectOpened}
-        onClosed={() => setProject(null)}
+        onClosed={async () => {
+          // The dialog already ended the scope server-side; if the current
+          // conversation belongs to a project, land outside it too.
+          setProject(null);
+          await newChat();
+        }}
         onStartChat={startProjectChat}
       />
 
@@ -884,7 +902,6 @@ export function App() {
         currentId={conversationId}
         activeProjectId={project?.id}
         onPick={openConversation}
-        onOpenProject={openConversationInProject}
         onDiscarded={(id) => {
           // Discarding took its attachments with it, so this thread cannot
           // keep the id — the folder it was filing into is gone.

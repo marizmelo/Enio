@@ -242,7 +242,17 @@ project the user last chose to have open* (recorded in `project-state.json`,
 cleared on close, and reopened through the authed endpoint like any other
 open). It must never be inferred from data — restoring the newest
 conversation's tag instead meant closing a project never survived a relaunch,
-and every new chat afterwards silently inherited a project nobody opened. While
+and every new chat afterwards silently inherited a project nobody opened.
+A conversation *belongs to* the project it was started under, and the desktop
+keeps scope and conversation aligned: opening a conversation opens its project
+(the history row wears the project's name, which is what makes that click
+informed consent), opening an unowned one closes the scope, and leaving a
+project lands in a fresh chat rather than stranding the user in a project's
+conversation without its scope. That alignment does not soften the
+inferred-from-data rule — boot restore still keys off `project-state.json`,
+and when it is empty but the newest conversation is owned, the faithful
+restore is a fresh chat, because null-while-owned can only mean the user left.
+While
 one is open the readable roots are the attached paths (addressed by alias as
 the first path segment), the project's own out dir (unprefixed paths), and a
 read-only fallback to the global workspace for files that already exist there

@@ -1305,6 +1305,48 @@ documented rather than locked); tasks/heartbeat run in the separate daemon
 process and never see a project — if the scheduler ever moves into `serve`,
 task turns must run with the project suspended.
 
+### Conversations belong to their project (August 2026)
+
+The tag became ownership. `sessions.project_id` had always been stamped at
+creation, but the desktop treated it as decoration: picking a conversation
+from history restored the transcript while leaving whatever project happened
+to be open — or none — as the scope. That produced a state nobody could see
+was wrong: a project's conversation answering with the workspace's files, or
+an unowned chat quietly reading a project's mounts. The user named it
+directly ("project can be removed from conversation… more like conversations
+must belong to project").
+
+Now scope follows the conversation, in the desktop client only:
+
+- **Opening a conversation opens its project**; opening an unowned one closes
+  the scope. The history row wears the project's name as a badge, which is
+  what makes the click informed — the badge stopped being a second, smaller
+  button (the old "open in its project" affordance) because there is no
+  longer a transcript-only open for it to differ from.
+- **The chip's × means leave, not close**: it lands in a fresh chat outside
+  the project, because the conversation you were in still belongs to it.
+  Same for the dialog's button (relabelled Leave) and deleting the active
+  project.
+- **Boot restore keeps the inferred-from-data rule intact.**
+  `project-state.json` stays the record of the user's last scope act — open
+  writes it, close/leave clears it, and the server keeps it in sync for free
+  as conversations switch. The one ambiguous boot state is `lastOpenedId`
+  null while the newest conversation is owned; that combination can only
+  arise by leaving (opening the conversation would have set the id), so the
+  faithful restore is a fresh chat. Restoring the newest *unowned*
+  conversation instead was considered and rejected: it could surface a
+  weeks-old thread and called it "where you left off".
+
+**Rejected: server-side alignment at message time** (POST into an owned
+conversation auto-opens its project). It would cover the CLI too, but closing
+the scope for unowned conversations symmetrically would yank a project out
+from under `enio project open <p>` followed by resuming an old untagged chat
+— the CLI's explicit open/close verbs are already its consent surface.
+**Rejected: per-turn scope derived from the conversation** (activation stops
+being process memory). It is the real fix for the scheduler residual above
+too, but it touches every reader of `activeProject()` — worth doing when
+task turns move into `serve`, not as a side effect of a UX fix.
+
 ### Acting, not just reading: edit_file, look-before-guess, verify (August 2026)
 
 The section above solved *reading* a codebase. Twelve coder turns in the

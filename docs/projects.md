@@ -8,8 +8,9 @@ nav_order: 4
 
 A project gives Enio standing context for a body of work: what it is about,
 how you want it handled, and which files and folders matter — each with a
-note saying what it is for. Open a project and every conversation under it
-carries that context; close it and everything reverts.
+note saying what it is for. Conversations started under a project belong to
+it: they carry its context for good, and opening one later brings the
+project with it.
 
 ```sh
 enio project new game --type code --desc "my Godot platformer"
@@ -22,9 +23,11 @@ In the desktop app the same lives behind the briefcase icon in the status
 bar: create a project, attach files and folders with the picker, write
 instructions, and open it. The chip then shows which project is active,
 because an open project quietly shapes every turn — and carries an **×** to
-close it, since ending a scope should be as easy as granting it. Closing
-only ends the session's scope: the project, its instructions and every
-attached file stay exactly as they were.
+leave it, since stepping out should be as easy as stepping in. Leaving lands
+you in a fresh chat outside the project — the conversation you were in still
+belongs to it, and reopening it from history brings the project back. The
+project itself, its instructions and every attached file stay exactly as
+they were.
 
 ## Not a mode
 
@@ -156,11 +159,14 @@ in history.
 
 ## Resume
 
-Conversations started under a project are tagged with it. `enio project open`
+Conversations started under a project belong to it. `enio project open`
 drops you into the project's most recent conversation; the desktop does the
-same, and its history dialog can filter to the current project. Launching the
-desktop app restores the project you last had **open** — closing one sticks,
-so a closed project stays closed across restarts and new chats started after
-it are untagged. Opening a conversation that
-belongs to a *different* project does not silently switch — the badge naming
-its project next to it is the click that does.
+same, and its history dialog can filter to the current project. A
+conversation opens *with* its project: pick any conversation from history
+and the scope follows — its project opens, or, for a conversation started
+outside any project, the scope closes. The badge naming the project on each
+history row is what tells you where a click will land. Launching the desktop
+app restores the project you last had **open** — leaving one sticks, so a
+left project stays closed across restarts, and if the newest conversation
+belongs to a project you left, the app starts a fresh chat rather than
+dragging you back in.

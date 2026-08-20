@@ -397,7 +397,7 @@ export function ProjectsDialog({ open, onOpenChange, activeId, onOpened, onClose
                       onClosed?.();
                     }}
                   >
-                    Close
+                    Leave
                   </Button>
                 ) : (
                   <Button

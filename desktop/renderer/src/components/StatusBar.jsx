@@ -80,14 +80,14 @@ export function StatusBar({
               <Briefcase className="size-3" />
               <span className="max-w-40 truncate">{project.name}</span>
             </button>
-            {/* Closing is one click because opening was: the chip is scope
+            {/* Leaving is one click because entering was: the chip is scope
                 the user granted, and revoking a grant should never be buried
-                a dialog deep. Files are untouched — this only ends the
-                session's scope. */}
+                a dialog deep. This conversation stays the project's — leaving
+                lands in a fresh chat outside it, files untouched. */}
             <button
               onClick={onCloseProject}
               className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-              title={`Close project ${project.name}`}
+              title={`Leave ${project.name} — starts a new chat outside it`}
             >
               <X className="size-3" />
             </button>

@@ -50,7 +50,6 @@ export function HistoryDialog({
   currentId,
   activeProjectId,
   onPick,
-  onOpenProject,
   onDiscarded,
 }) {
   const [conversations, setConversations] = useState([]);
@@ -247,31 +246,18 @@ export function HistoryDialog({
                   />
                 </span>
                 <span className="min-w-0 flex-1 truncate">{c.title}</span>
-                {/* The project a tagged conversation belongs to, by name.
-                    For a project this window does not have open, the badge is
-                    a button: picking the row resumes the transcript only,
-                    while this explicit click re-scopes the sandbox to that
-                    project — consent stays a user act. */}
+                {/* The project this conversation belongs to, by name. A
+                    conversation opens *in* its project — picking the row is
+                    what re-scopes — so the badge's job is to make that click
+                    informed rather than to be a second, smaller click. */}
                 {c.projectId && projectNames[c.projectId] && (
-                  c.projectId !== activeProjectId && onOpenProject ? (
-                    <button
-                      className="ml-2 flex max-w-32 shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted"
-                      title={`Open this conversation in its project, ${projectNames[c.projectId]}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenChange(false);
-                        onOpenProject(c);
-                      }}
-                    >
-                      <Briefcase className="size-2.5 shrink-0" />
-                      <span className="truncate">{projectNames[c.projectId]}</span>
-                    </button>
-                  ) : (
-                    <span className="ml-2 flex max-w-32 shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                      <Briefcase className="size-2.5 shrink-0" />
-                      <span className="truncate">{projectNames[c.projectId]}</span>
-                    </span>
-                  )
+                  <span
+                    className="ml-2 flex max-w-32 shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                    title={`Opens in its project, ${projectNames[c.projectId]}`}
+                  >
+                    <Briefcase className="size-2.5 shrink-0" />
+                    <span className="truncate">{projectNames[c.projectId]}</span>
+                  </span>
                 )}
                 {/* Marks the conversations whose deletion would cost something
                     memory keeps. The count is the tooltip, not the label: the
