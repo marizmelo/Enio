@@ -1428,6 +1428,30 @@ whole story of the model being corrected by the bind guard, in the badge.
 A badge with nothing behind it (a turn restored from before this) stays a
 label rather than becoming a button that opens an empty panel.
 
+### There is no drop-in multimodal model: mlx-lm has no image path (August 2026)
+
+The question worth settling first, and the one the trial below skipped past:
+can a multimodal model simply replace the chat model, same server, same
+flags, same prompt cache? **No, and not because of the model.**
+
+`mlx_lm/server.py` raises `ValueError("Only 'text' content type is
+supported.")` for any non-text content part -- there is no way to send an
+image through it. And `mlx_lm/models/qwen3_vl.py` opens with
+`weights.pop("vision_tower", None)`: mlx-lm supports Qwen3-VL by *discarding
+the vision half* and serving the language model. Loading a VL checkpoint
+through the current runtime therefore buys nothing at all -- the text half at
+the same speed, and no eyes.
+
+So multimodality is a *server* question, not a model question. Vision means
+running mlx-vlm, which is a second process with its own cache behaviour (see
+below), and that is a change of architecture rather than a swap. The shipped
+design already reflects this: text on mlx-lm, images through OCR by default
+and through an mlx-vlm sidecar that the user starts deliberately, because it
+holds the model resident with no unload.
+
+Worth re-checking when mlx-lm gains image input; the models are already
+there.
+
 ### Qwen3-VL-4B measured against the chat model (August 2026)
 
 Asked whether a multimodal model of the same class could replace the chat

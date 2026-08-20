@@ -189,10 +189,17 @@ a model load.
 
 ## One model for chat and vision?
 
-`Qwen3-VL-4B-Instruct` is the multimodal sibling of the default chat model —
-same family, same size, 2.9GB against 2.1GB — and it can serve both roles,
-because `mlx_vlm.server` speaks the same OpenAI API with `tools` and
-streaming. No code change is needed to try it:
+Not by swapping the model. mlx-lm — the server enio runs — accepts text
+only: its `/v1/chat/completions` refuses any non-text content part, and its
+Qwen3-VL support explicitly drops the vision tower and serves the language
+half. Point it at a VL checkpoint and you get the text model at the same
+speed, with no vision.
+
+Multimodality is a change of *server*, not of model. `Qwen3-VL-4B-Instruct`
+is the multimodal sibling of the default chat model — same family, same size,
+2.9GB against 2.1GB — and `mlx_vlm.server` can serve both roles, speaking the
+same OpenAI API with `tools` and streaming. No code change is needed to try
+it:
 
 ```sh
 enio vision --install                       # once, if you have not
