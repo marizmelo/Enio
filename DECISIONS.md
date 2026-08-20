@@ -1614,6 +1614,40 @@ sequencing problem, and sequencing is what this model size is worst at — it
 would have to plan the chunks, keep them ordered, and know when it was done.
 Raising the ceiling costs one number; the alternative costs a state machine.
 
+### Being good at code: what the traces actually say (August 2026)
+
+Stated as the goal, so the plan comes from the trace table rather than
+taste. Across the coder's turns, tool outcomes:
+
+| tool | calls | failed |
+|---|---|---|
+| search_code | 10 | 0 |
+| write_file | 7 | 0 |
+| read_file | 6 | **5** |
+| list_dir | 4 | 0 |
+| run_command | 3 | 1 |
+| edit_file | 2 | 0 |
+
+**Reading is where it fails, and only reading.** Every failure was an
+invented path -- and two of them named a file that existed one folder away
+(`library/coffee-brewing.md` for `coffee-brewing.md` at the workspace root).
+The basename was right; the folder was a guess. A bare ENOENT ends the turn
+there, so `read_file` now answers a miss with where that name actually lives:
+matched on basename only, three candidates at most, silent when there is no
+exact basename match, because a fuzzy match over whole paths would supply a
+second wrong answer. Same shape as the mkdir refusal that points at
+write_file -- when the harness knows, the error is the place to put it.
+
+This is the cheap half of look-before-guess. The seed already searches before
+the first call, but only with a project open; the redirect works everywhere,
+including the workspace, and costs nothing when the path was right.
+
+Left for later, in order of what the traces support: `list_dir` is not on the
+coder (dropped for edit_file) so it cannot cheaply see a folder -- `ls` via
+run_command covers it but the model rarely reaches for it; the search seed
+does not fire without a project; and `write_file` still wins over `edit_file`
+on some models, which is whole-file rewriting with the drift that implies.
+
 ### Acting, not just reading: edit_file, look-before-guess, verify (August 2026)
 
 The section above solved *reading* a codebase. Twelve coder turns in the

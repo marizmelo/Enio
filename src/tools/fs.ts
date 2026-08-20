@@ -5,6 +5,10 @@ import { config } from "../config.js";
 import { extractPdfText, looksLikePdf } from "../pdf.js";
 import { activeProject, findMount } from "../project.js";
 import { conversationMounts, findConversationMount } from "../conversation-attachments.js";
+// Safe to import: mentions.ts reaches config, project, attachments and skills,
+// and none of those import back into tools/ -- checked, because a cycle here
+// would surface as an undefined at call time rather than a build error.
+import { workspaceFiles } from "../mentions.js";
 import type { ToolDef } from "../types.js";
 
 /**
@@ -174,6 +178,35 @@ function stripGutter(s: string): string {
   return stripped.join("\n") + (body.length < lines.length ? "\n" : "");
 }
 
+/**
+ * What the model probably meant, when the path it invented is not there.
+ *
+ * Measured, and it is the coder's largest single failure: five of six
+ * `read_file` calls in the traces errored, every one a guessed path -- and
+ * two of them named a file that DID exist, one folder away
+ * (`library/coffee-brewing.md` for `coffee-brewing.md`). A bare ENOENT ends
+ * the turn there; the basename is almost always right, so saying where that
+ * name actually lives turns a dead end into the next call.
+ *
+ * Same shape as the mkdir refusal pointing at write_file: when the harness
+ * knows the answer, the error is the place to put it. Matching is on the
+ * basename only -- a fuzzy match over whole paths would invent a second
+ * wrong answer, and this one is either exactly right or silent.
+ */
+function didYouMean(requested: string): string {
+  const wanted = requested.split("/").pop()?.toLowerCase();
+  if (!wanted) return "";
+  let candidates: string[];
+  try {
+    candidates = workspaceFiles(400);
+  } catch {
+    return "";
+  }
+  const hits = candidates.filter((f) => f.split("/").pop()?.toLowerCase() === wanted).slice(0, 3);
+  if (hits.length === 0) return "";
+  return ` Did you mean ${hits.map((h) => `"${h}"`).join(" or ")}?`;
+}
+
 export const fsTools: ToolDef[] = [
   {
     name: "read_file",
@@ -192,7 +225,16 @@ export const fsTools: ToolDef[] = [
       required: ["path"],
     },
     async run(args) {
-      const target = safePath(String(args.path ?? ""));
+      const requested = String(args.path ?? "");
+      const target = safePath(requested);
+
+      // A path that is not there is the coder's commonest error, and the
+      // basename is usually right -- so the miss carries the real location
+      // rather than only the failure. Checked before the read so the message
+      // is the same whatever the reason for the miss.
+      if (!existsSync(target)) {
+        return `Error: no file at ${rel(target)}.${didYouMean(requested)}`;
+      }
 
       // Binary must become real text or an honest refusal -- never bytes.
       // A PDF read as UTF-8 decodes to pages of mojibake that burn the
