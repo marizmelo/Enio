@@ -133,15 +133,22 @@ export const ABILITIES: Ability[] = [
   },
   {
     id: "file-search",
-    title: "Find in files",
-    description: "Find where something lives in your project or code — by name or exact text.",
+    // Three tiles say "find" and the old titles did not say what separates
+    // them, which is the only thing a person needs at the moment of choosing:
+    // WHERE each looks and WHAT it matches. This one looks inside the files
+    // enio has been given, and matches their text. Its old suggestions made
+    // it worse -- they promised personal documents ("where my resume drafts
+    // are saved") from a tool that searches project folders, so the tile
+    // failed exactly the people its name attracted.
+    title: "Search my project",
+    description: "Look inside the files in your project folders — by exact text or file name.",
     icon: "file-search",
     specialist: "coder",
     promptTemplate: "@coder Search my files for ___",
     suggestions: [
-      "the notes I wrote about my project goals",
-      "every file that mentions an invoice",
-      "where my resume drafts are saved",
+      "every file that mentions the API key",
+      "where the login form is defined",
+      "the TODO comments left in this project",
     ],
     inputs: ["text"],
     outputs: ["text", "file"],
@@ -152,8 +159,11 @@ export const ABILITIES: Ability[] = [
     // different question, different specialist, different blast radius
     // (the librarian has no web and no shell beside a found filename).
     id: "find-file",
-    title: "Find on my computer",
-    description: "Locate any file on this Mac by name. Locations only — nothing is read.",
+    // The widest reach and the shallowest read: anywhere on the Mac, by name
+    // only. Named for the matching rule rather than the place, because
+    // "on my computer" was true of every other tile here too.
+    title: "Find a file by name",
+    description: "Locate any file or folder on this Mac with Spotlight. Paths only — nothing is read.",
     icon: "file-search",
     specialist: "librarian",
     promptTemplate: "@librarian Where is ___ on my computer?",
@@ -169,6 +179,9 @@ export const ABILITIES: Ability[] = [
   {
     id: "library",
     title: "My library",
+    // The third "find": saved documents, matched by MEANING rather than by
+    // text or name. Left titled for the place because that is what
+    // distinguishes it -- the library is a collection you put things into.
     description:
       "Ask your saved documents — and what enio wrote for you — by meaning, cited by file.",
     icon: "library",
