@@ -1461,12 +1461,27 @@ warm in one process: **28.1s then 10.9s**, against 13.0s / 12.7s. So the cost
 is a large first-turn penalty per fresh conversation, not a slower model --
 `APC_ENABLED=1` (mlx-vlm's prompt caching, off by default) did not move it.
 
-**Not switched.** The first-turn penalty lands on exactly the interaction a
-local agent is judged by, and the trial covered a handful of prompts, not the
-router's whole surface, memory extraction, or compaction. What it does settle:
-this is a real option rather than a guess, the runtime is compatible today,
-and the one thing that would decide it is where the cold-start cost comes
-from. Kept as the vision backend, which is what it was already configured as.
+**The cold start turned out to be a missing capability, not a warmup.**
+Chased it directly, with the same system prompt and a different last message
+on each server. mlx-lm: 6.67s, then 0.32s, 0.32s -- true prefix reuse, the
+system prompt processed once. mlx-vlm 0.6.10 with `APC_ENABLED=1`: 6.67s,
+6.25s, 6.26s. Its cache matches a prompt it has seen *in full* -- an identical
+request replays in 0.33s and the stats record the hit, but change the question
+and it is 6.85s with `matched_tokens` unchanged. Every real turn ends in a
+different message, so the entire system prompt is re-prefilled on every turn.
+
+That is what makes it unusable as the default rather than merely slower: enio
+loads identity, date, role, skills, project, memory and attachments into every
+prompt, and this would charge full price for all of it, forever. The earlier
+"first turn is slow, later ones are fast" reading was an artifact of repeated
+identical prompts inside one process -- exactly the case the cache does cover.
+
+**Not switched, and not wired in as a preset either.** `ENIO_BACKEND=custom`
+with a base URL already does it in full, so the honest deliverable was the
+recipe and the measurement, documented in docs/models.md, rather than a
+first-class option that would recommend by existing. If a later mlx-vlm gains
+prefix reuse this becomes the better choice on both counts -- one 2.9GB model
+instead of two totalling 5.0GB, and vision that sees rather than reads.
 
 ### Ten KV cache slots ate a 24GB machine (August 2026)
 

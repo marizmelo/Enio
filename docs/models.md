@@ -187,6 +187,40 @@ prompt processing rather than token generation. Maple also holds far less
 context (see the budget table above). Try both — switching costs one click and
 a model load.
 
+## One model for chat and vision?
+
+`Qwen3-VL-4B-Instruct` is the multimodal sibling of the default chat model —
+same family, same size, 2.9GB against 2.1GB — and it can serve both roles,
+because `mlx_vlm.server` speaks the same OpenAI API with `tools` and
+streaming. No code change is needed to try it:
+
+```sh
+enio vision --install                       # once, if you have not
+APC_ENABLED=1 ~/.enio/vision-venv/bin/python -m mlx_vlm.server \
+  --model mlx-community/Qwen3-VL-4B-Instruct-4bit --port 8082 --host 127.0.0.1
+
+ENIO_BACKEND=custom \
+ENIO_BASE_URL=http://127.0.0.1:8082/v1 \
+ENIO_MODEL=mlx-community/Qwen3-VL-4B-Instruct-4bit \
+enio serve
+```
+
+It behaves well: routing matches, tool calls come back correctly shaped with
+no JSON repair, and it quotes `edit_file`'s `old_string` more accurately than
+the default model does. Screenshots get described rather than OCR'd.
+
+**The reason it is not the default** is prompt caching. mlx-lm reuses a shared
+prefix, so enio's large system prompt is processed once and every later turn
+skips it — measured at 6.7s for the first request and 0.32s for the next with
+a different question. mlx-vlm 0.6.10 only matches a prompt it has seen in
+full: an identical request replays in 0.33s, but change the question and it is
+6.85s again, with the cache reporting no additional matched tokens. Since
+every real turn ends in a different message, that is the whole system prompt
+re-processed on every single turn.
+
+If a later mlx-vlm gains prefix reuse, this becomes the better choice on both
+counts — one model instead of two, and vision that actually sees.
+
 ## When the local model is not enough
 
 A small model has a long tail it cannot do — a 5,000-word memo, a deep
