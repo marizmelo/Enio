@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ScriptSetup } from "@/components/ScriptSetup";
 import {
   GRANT_LABELS,
+  accountStatus,
   cancelConnect,
   connectStatus,
   listAccounts,
@@ -43,11 +44,20 @@ export function AccountsPanel({ onError }) {
   // did nothing and got pressed again, against a secret the success had
   // already consumed.
   const [adding, setAdding] = useState(false);
+  // id -> { ok, error } | undefined while checking. Same honesty as the MCP
+  // rows: the dot answers "does it currently work", not "was it once saved".
+  const [status, setStatus] = useState({});
   const pollRef = useRef(null);
 
   const refresh = useCallback(async () => {
     try {
-      setState(await listAccounts());
+      const next = await listAccounts();
+      setState(next);
+      for (const a of next.accounts) {
+        accountStatus(a.id)
+          .then((s) => setStatus((prev) => ({ ...prev, [a.id]: s })))
+          .catch(() => setStatus((prev) => ({ ...prev, [a.id]: { ok: false, error: "unreachable" } })));
+      }
     } catch (err) {
       onError?.(String(err.message ?? err));
     }
@@ -100,6 +110,22 @@ export function AccountsPanel({ onError }) {
       <div className="rounded-md border">
         {state.accounts.map((a) => (
           <div key={a.id} className="flex items-start gap-2 border-b p-3 last:border-b-0">
+            <span
+              className={`mt-1.5 size-2 shrink-0 rounded-full ${
+                status[a.id] === undefined
+                  ? "bg-muted-foreground/40"
+                  : status[a.id].ok
+                    ? "bg-emerald-500"
+                    : "bg-destructive"
+              }`}
+              title={
+                status[a.id] === undefined
+                  ? "Checking…"
+                  : status[a.id].ok
+                    ? "Connected — the account answers"
+                    : status[a.id].error || "Not answering"
+              }
+            />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">
                 {a.email === "unknown" ? "Google account (via script)" : a.email}

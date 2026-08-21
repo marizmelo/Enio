@@ -157,6 +157,23 @@ It does not revoke the grant at Google — only Google can do that, at
 and the panel links there next to the button. Do both if you are removing an
 account because something went wrong.
 
+## Email through the account
+
+Once an account with the mail grants is connected, the **Email** tile on the
+landing page comes alive and the mail tools flow through it — no IMAP or
+SMTP setup needed. The three routes, in the order worth trying:
+
+1. **A connected Google account** — this page; the script route needs no
+   Google Cloud setup at all
+2. **The Mail app on this computer** — enable desktop control and Enio reads
+   what Mail shows, through the app itself
+3. **Any provider by hand** — `ENIO_IMAP_*` to read, `ENIO_SMTP_*` to send
+
+A connected account outranks IMAP when both exist, and two lines hold
+whatever the backend: sending stays a **dry run** until `ENIO_EMAIL_SEND=1`,
+and an account connected without the send grant is not a send path — the
+grant is checked where the send happens, not in a prompt.
+
 ## What the agent can and cannot do with it
 
 The agent never holds a credential. It asks for an action — read this thread,

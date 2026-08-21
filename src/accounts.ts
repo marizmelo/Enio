@@ -273,6 +273,27 @@ export function updateScriptVersion(id: string, version: number): void {
   write(data);
 }
 
+/**
+ * The account mail should flow through, if any.
+ *
+ * For the HARNESS: the mail tools call this to decide backend and to fetch
+ * the deployment, and the model sees only the results. Split by kind because
+ * reading and sending are separate grants -- an account connected read-only
+ * must never be a send path, which is the recorded read/act line enforced at
+ * the call site rather than in a prompt.
+ */
+export function scriptMailAccount(
+  kind: "read" | "send",
+): { id: string; email: string; url: string; secret: string } | null {
+  const grant: Grant = kind === "read" ? "mail.read" : "mail.send";
+  const account = read().accounts.find(
+    (a) => a.provider === "appsscript" && a.scriptUrl && a.scriptSecret && a.grants.includes(grant),
+  );
+  return account
+    ? { id: account.id, email: account.email, url: account.scriptUrl!, secret: account.scriptSecret! }
+    : null;
+}
+
 export function removeAccount(id: string): boolean {
   const data = read();
   const before = data.accounts.length;

@@ -1,6 +1,8 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { config } from "../config.js";
+import { scriptMailAccount } from "../accounts.js";
+import { callScript } from "../appsscript.js";
 import type { ToolDef } from "../types.js";
 
 /**
@@ -59,8 +61,9 @@ const emailTool: ToolDef = {
       );
     }
 
+    const account = scriptMailAccount("send");
     const rendered =
-      `From: ${config.emailFrom}\nTo: ${to}\n` +
+      `From: ${account?.email || config.emailFrom}\nTo: ${to}\n` +
       (args.cc ? `Cc: ${args.cc}\n` : "") +
       `Subject: ${subject}\n\n${body}\n`;
 
@@ -73,6 +76,23 @@ const emailTool: ToolDef = {
         `Saved to ${file}\n` +
         `Set ENIO_EMAIL_SEND=1 to send for real.`
       );
+    }
+
+    // The connected account outranks SMTP, and the send grant is checked by
+    // scriptMailAccount itself: a read-only account is not a send path, which
+    // is the read/act line enforced where the send happens rather than in a
+    // prompt. The ENIO_EMAIL_SEND dry-run gate above applies to both
+    // backends identically -- an irreversible act stays opt-in whatever
+    // carries it.
+    if (account) {
+      const result = await callScript(account.url, account.secret, "mail.send", {
+        to,
+        subject,
+        body: args.cc ? `${body}\n\n(cc requested: ${args.cc})` : body,
+      });
+      return result.ok
+        ? `Sent to ${to} from ${account.email}.`
+        : `Could not send: ${result.error}`;
     }
 
     try {
@@ -103,4 +123,5 @@ const emailTool: ToolDef = {
 
 /** Withheld entirely when SMTP isn't configured — a tool that always fails
  *  just burns the model's limited attention on a dead end. */
-export const emailTools: ToolDef[] = emailConfigured() ? [emailTool] : [];
+export const emailTools: ToolDef[] =
+  emailConfigured() || scriptMailAccount("send") ? [emailTool] : [];

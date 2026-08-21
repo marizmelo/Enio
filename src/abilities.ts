@@ -291,31 +291,39 @@ export const ABILITIES: Ability[] = [
     requiredTools: ["write_file"],
   },
   {
+    // One tile for the whole capability. Read and Send were separate tiles,
+    // which made mail read as two half-features needing two setups -- when
+    // the person's question is just "can Enio do my email". The id stays
+    // read-email: saved pipelines reference ability ids.
     id: "read-email",
-    title: "Read email",
-    description: "Search and read your mailbox.",
+    title: "Email",
+    description: "Read, search and send mail.",
     icon: "inbox",
     specialist: "mail",
     promptTemplate: "@mail ___",
     suggestions: [
       "Did anything important arrive today?",
       "Find the last email from my accountant",
-      "Summarise this week's unread messages",
+      "Send Ana a note that the draft is ready",
     ],
     inputs: ["text"],
     outputs: ["text"],
     requiredTools: ["search_email"],
     setup: {
-      summary: "Reading mail needs IMAP configured.",
+      summary: "Email works through any one of three routes.",
       steps: [
-        "Set ENIO_IMAP_HOST, ENIO_IMAP_USER and ENIO_IMAP_PASS.",
-        "Restart Enio; the mail tools appear once the account connects.",
+        "Google account: connect one in Connections (the + menu) — the script route needs no Google Cloud setup.",
+        "Mail app on this computer: enable desktop control, and Enio reads Mail through the app itself.",
+        "Any provider by hand: set ENIO_IMAP_* to read and ENIO_SMTP_* to send, then restart.",
       ],
-      docs: "docs/configuration.md",
+      docs: "docs/accounts.md",
     },
   },
   {
     id: "send-email",
+    // Folded into the Email tile above; kept as an ability because pipelines
+    // pick abilities by id, and a graph that sends mail still needs this one.
+    launcherHidden: true,
     title: "Send email",
     description: "Draft and send email — dry-run until you enable real sending.",
     icon: "send",

@@ -1,4 +1,6 @@
 import { config } from "../config.js";
+import { scriptMailAccount } from "../accounts.js";
+import { callScript } from "../appsscript.js";
 import type { ToolDef } from "../types.js";
 
 /**
@@ -98,6 +100,34 @@ const searchTool: ToolDef = {
     const limit = Math.min(25, Math.max(1, Number(args.limit ?? 10) || 10));
     const days = Math.max(1, Number(args.days ?? 30) || 30);
 
+    // A connected account outranks IMAP: it is the setup the user did most
+    // recently and deliberately. The credential is attached HERE, harness
+    // side -- the model asked to search, and never sees a URL or secret.
+    const account = scriptMailAccount("read");
+    if (account) {
+      const parts: string[] = [];
+      if (args.query) parts.push(String(args.query));
+      if (args.from) parts.push(`from:${String(args.from)}`);
+      parts.push(`newer_than:${days}d`);
+      const result = await callScript(account.url, account.secret, "mail.recent", {
+        query: parts.join(" ") || "in:inbox",
+        max: limit,
+      });
+      if (!result.ok) return `Mail search failed: ${result.error}`;
+      const rows = (result.result as Array<Record<string, string>>) ?? [];
+      if (rows.length === 0) return `No messages matched in ${account.email}.`;
+      const lines = rows.map(
+        (m) =>
+          `[${m.id}] ${String(m.date ?? "").slice(0, 10)}  ${m.from ?? "unknown"}\n` +
+          `      ${m.subject || "(no subject)"}\n` +
+          `      ${String(m.snippet ?? "").replace(/\s+/g, " ").slice(0, 140)}`,
+      );
+      return (
+        `${rows.length} matches in ${account.email}:\n\n${lines.join("\n\n")}\n\n` +
+        `Read one with read_email using its [id].`
+      );
+    }
+
     let connection: Connection | null = null;
     try {
       connection = await connect(folder);
@@ -152,12 +182,30 @@ const readTool: ToolDef = {
   parameters: {
     type: "object",
     properties: {
-      id: { type: "number", description: "The [id] shown by search_email." },
+      id: { type: "string", description: "The [id] shown by search_email." },
       folder: { type: "string", description: `Optional. Default ${config.imapFolders[0] ?? "INBOX"}.` },
     },
     required: ["id"],
   },
   async run(args) {
+    const account = scriptMailAccount("read");
+    if (account) {
+      const result = await callScript(account.url, account.secret, "mail.read", {
+        id: String(args.id ?? ""),
+      });
+      if (!result.ok) return `Could not read message: ${result.error}`;
+      const m = result.result as Record<string, string>;
+      const body = String(m.body ?? "");
+      return [
+        `From:    ${m.from ?? "unknown"}`,
+        `To:      ${m.to ?? ""}`,
+        `Date:    ${String(m.date ?? "").slice(0, 16).replace("T", " ")}`,
+        `Subject: ${m.subject ?? "(no subject)"}`,
+        "",
+        body.length > 12_000 ? body.slice(0, 12_000) + "\n[...truncated]" : body || "(empty message)",
+      ].join("\n");
+    }
+
     const uid = Number(args.id);
     if (!Number.isFinite(uid)) return "Error: id must be the number shown by search_email.";
     const folder = String(args.folder ?? config.imapFolders[0] ?? "INBOX");
@@ -209,4 +257,8 @@ const readTool: ToolDef = {
 
 /** Withheld unless IMAP is configured — a tool that can only fail wastes the
  *  model's attention on a dead end. */
-export const mailTools: ToolDef[] = mailConfigured() ? [searchTool, readTool] : [];
+// Offered when either backend can serve it: IMAP config, or a connected
+// account holding the read grant. Evaluated at load like every other
+// config gate -- connecting an account mid-session shows up on restart.
+export const mailTools: ToolDef[] =
+  mailConfigured() || scriptMailAccount("read") ? [searchTool, readTool] : [];

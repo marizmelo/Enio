@@ -4,10 +4,12 @@ import { readBody, sendJson } from "../http-util.js";
 import {
   GRANTS,
   READ_GRANTS,
+  accessTokenFor,
   addScriptAccount,
   clearPendingScriptSecret,
   pendingScriptSecret,
   scriptAccountByUrl,
+  scriptFor,
   scriptUpgradeSecret,
   updateScriptVersion,
   beginConsent,
@@ -227,6 +229,29 @@ export async function handle(
       flows.delete(poll[1]!);
     }
     sendJson(res, 200, { cancelled: true });
+    return true;
+  }
+
+  /**
+   * Whether a connected account currently answers -- the green dot, the same
+   * honesty the MCP rows have. Checked on demand rather than carried in the
+   * listing, because a ping per account would make every panel open pay for
+   * a Google round-trip it may not care about.
+   */
+  const status = url.pathname.match(/^\/accounts\/([0-9a-f]{16})\/status$/);
+  if (req.method === "GET" && status) {
+    const script = scriptFor(status[1]!);
+    if (script) {
+      const ping = await callScript(script.url, script.secret, "ping");
+      sendJson(res, 200, ping.ok ? { ok: true } : { ok: false, error: ping.error });
+      return true;
+    }
+    try {
+      await accessTokenFor(status[1]!);
+      sendJson(res, 200, { ok: true });
+    } catch (err) {
+      sendJson(res, 200, { ok: false, error: (err as Error).message });
+    }
     return true;
   }
 

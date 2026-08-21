@@ -41,6 +41,9 @@ export const cancelConnect = (flowId) =>
 
 export const removeAccount = (id) => call(`/accounts/${id}`, { method: "DELETE" });
 
+/** Does the account currently answer? The green dot's question. */
+export const accountStatus = (id) => call(`/accounts/${id}/status`);
+
 /** The script enio ships, with this install's secret already in it. */
 export const scriptSource = () => call("/accounts/script");
 
