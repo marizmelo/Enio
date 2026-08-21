@@ -109,6 +109,18 @@ export function AccountsPanel({ onError }) {
           <li>2. In APIs &amp; Services → Library, enable the Gmail, Calendar and Drive APIs</li>
           <li>3. In OAuth consent screen, choose External and add yourself under Test users</li>
           <li>4. In Credentials, create an OAuth client ID of type Desktop app</li>
+          {/* The step everyone misses, and it fails a week later rather than
+              immediately: an external consent screen left in "Testing" issues
+              refresh tokens that expire after 7 days, so the account quietly
+              stops working. Publishing keeps them; the unverified warning is
+              yours to accept on your own app. */}
+          <li className="text-foreground">
+            5. Back on OAuth consent screen, press{" "}
+            <span className="font-medium">Publish app</span> — in Testing, Google expires the
+            sign-in after 7 days and you would reconnect every week. You will see an
+            &ldquo;unverified app&rdquo; notice at sign-in; it is your own app, so choose
+            Advanced and continue.
+          </li>
         </ol>
         <div className="space-y-2">
           <input

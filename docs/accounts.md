@@ -52,15 +52,23 @@ needs one to identify itself as. It uses one **you** own:
 2. In **APIs & Services → Library**, enable the Gmail, Calendar and Drive APIs
 3. In **OAuth consent screen**, choose External and add yourself under **Test users**
 4. In **Credentials**, create an OAuth client ID of type **Desktop app**
+5. Back on **OAuth consent screen**, press **Publish app**
 
 Paste the client ID and secret into Connections. About five minutes, once.
+
+Step 5 is the one worth not skipping, because leaving it out fails a week
+later rather than straight away. Google issues an external consent screen
+left in *Testing* a sign-in that **expires after seven days**, so the account
+would quietly stop working and you would reconnect every week. Publishing
+keeps it. You will see an "unverified app" notice when you sign in — it is
+your own app, so choose Advanced and continue.
 
 That step exists because of how Google treats these permissions, not because
 Enio wants your details: Gmail's read permission is a *restricted* scope, and
 an application published for everyone to use needs Google's review plus a
-security assessment renewed every year. With your own client you are your own
-developer and your own test user — the quota is yours, the consent screen is
-yours, and there is no shared secret anywhere.
+security assessment renewed every year. With your own client none of that
+applies to you: it is your project, your quota and your consent screen, used
+by one person, and there is no shared secret anywhere.
 
 Sign-in happens in your normal browser, never in a window Enio draws. That is
 not a preference: Google refuses OAuth inside embedded browsers outright,

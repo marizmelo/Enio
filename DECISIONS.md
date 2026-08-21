@@ -1966,6 +1966,42 @@ the two are never granted in one step. Revocation stays real -- tokens are
 revoked at Google, and the panel links there rather than pretending a local
 delete is enough.
 
+### Firebase Auth, and whether enio needs an online service (August 2026)
+
+Two questions raised while wiring Google accounts, both answered no, and both
+worth recording because they look like obvious shortcuts.
+
+**Firebase Auth does not fit.** It offers exactly the button being asked for
+-- `GoogleAuthProvider.addScope()` and a one-click sign-in -- but **it does
+not hand back a refresh token**. What you get is an access token good for
+about an hour with no unattended renewal, and an agent that checks mail on a
+schedule or acts while the user is away needs offline refresh above all else.
+The documented workaround is to run your own OAuth flow, which is what enio
+already does. It would also not dodge verification: the restricted-scope
+rules attach to the Google Cloud project behind the Firebase app.
+
+**An online service would make this worse, not better.** The appeal was a
+verified client so users get one click -- but that does not require a server.
+**Publishing an OAuth client is not the same as running a service**: a desktop
+client id is public by design, and the token goes from Google straight to a
+loopback listener on the user's own machine. So enio could ship a verified
+client, give everyone one-click sign-in, and still run nothing.
+
+Whereas a hosted enio would land in CASA's expensive band, which keys on
+storing or transmitting restricted-scope data on servers -- the tier with
+annual penetration tests -- and would take on breach liability for every
+user's tokens, while contradicting the one claim the product is built on. The
+ranking is therefore: published client with no service, then bring-your-own
+client (today), and a hosted service last.
+
+**The seven-day trap, found in the same pass.** A Google consent screen left
+in *Testing* issues refresh tokens that **expire after seven days**, so an
+account connected that way stops working a week later rather than failing
+visibly at setup. Publishing the app keeps them; the unverified-app notice is
+the user's own to accept on their own client. The setup steps in the panel and
+in docs/accounts.md say so, because a five-step setup where step five is
+missing does not read as broken, it reads as enio losing the account.
+
 ## Open questions
 
 - Does LoRA work at all on Maple's architecture? Ten minutes to test, never done.
