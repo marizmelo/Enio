@@ -36,6 +36,7 @@ No API keys. No account. Nothing leaves your computer.
 | [Agents and routing](agents.md) | Why there are six agents and how one gets picked |
 | [Browsing](browsing.md) | Reading the web as a session |
 | [Skills](skills.md) | Teaching it know-how, in markdown, with no code |
+| [Accounts](accounts.md) | Google over OAuth — what Enio may read and change, and no passwords |
 | [Watches](watches.md) | Standing checks that speak up only when something changed |
 | [Meetings](meetings.md) | Record, transcribe and summarize locally — into memory |
 | [MCP servers](mcp.md) | Adding third-party tools |
