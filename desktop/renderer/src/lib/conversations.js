@@ -87,3 +87,21 @@ export const pendingPlans = () => call("/plans/pending").then((d) => d.plans);
 /** What the OS currently allows. Re-probed server-side on every call, so this
  *  is how a grant made in System Settings gets noticed without a restart. */
 export const permissions = () => call("/permissions");
+
+/** "Good answer": save the exchange as a worked example for similar future
+ *  questions. The desktop's /good. */
+export async function saveExemplar(question, answer) {
+  const token = await window.maple?.getToken();
+  const res = await fetch("http://127.0.0.1:8787/memory/exemplar", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ question, answer }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error?.message ?? "not saved");
+  }
+}

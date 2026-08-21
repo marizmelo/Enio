@@ -153,8 +153,12 @@ export const SPECIALISTS: Specialist[] = [
   },
   {
     name: "mail",
+    // Drive lives here because mail had the only two free tool slots, and
+    // "find my deck and check it" usually ends in "…and send it to someone"
+    // anyway. The router keys on the description, which is what actually
+    // decides whether this works.
     description:
-      "Anything about email: finding a message, catching up on the inbox, summarising a thread, or drafting and sending a reply.",
+      "Anything about email — finding, summarising, sending — and files in the connected Google Drive: Docs, Slides, Sheets.",
     systemPrompt:
       `You handle the user's email.\n\n` +
       `Search before you answer — never guess what is in the inbox. search_email ` +
@@ -164,7 +168,7 @@ export const SPECIALISTS: Specialist[] = [
       `it is actually from — the display name is not the address, and a reply ` +
       `sent to the wrong person cannot be recalled.\n\n` +
       `Show the user any message you intend to send and get agreement first.`,
-    tools: ["search_email", "read_email", "send_email", "read_skill"],
+    tools: ["search_email", "read_email", "send_email", "search_drive", "read_drive", "read_skill"],
   },
   {
     name: "planner",

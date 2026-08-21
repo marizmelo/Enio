@@ -9,6 +9,7 @@ import {
   setFactPinned,
 } from "../memory/store.js";
 import { distilFacts } from "../memory/distil.js";
+import { addExemplar } from "../memory/learning.js";
 import { graphView } from "../memory/traces.js";
 import { listPreferences, removePreference } from "../memory/learning.js";
 
@@ -48,6 +49,19 @@ export async function handle(
    * up under their conversation in the history dialog and die with it if
    * the user chooses "forget" there.
    */
+  /**
+   * "Good answer" under a reply: the desktop's /good. Saves the exchange as
+   * an exemplar, and similar future questions get it injected as a worked
+   * example -- the CLI has had this for months while the desktop, where most
+   * answers actually happen, had no way to say "more like this".
+   */
+  if (req.method === "POST" && url.pathname === "/memory/exemplar") {
+    const body = JSON.parse((await readBody(req)) || "{}") as { question?: string; answer?: string };
+    const result = await addExemplar(String(body.question ?? ""), String(body.answer ?? ""));
+    sendJson(res, result.added ? 200 : 400, result.added ? { added: true } : { error: { message: result.reason ?? "not saved" } });
+    return true;
+  }
+
   if (req.method === "POST" && url.pathname === "/memory/distil") {
     const body = JSON.parse((await readBody(req)) || "{}") as {
       question?: string;

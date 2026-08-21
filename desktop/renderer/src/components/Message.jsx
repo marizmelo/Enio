@@ -6,6 +6,7 @@ import { AttachmentPreviews } from "@/components/AttachmentPreviews";
 import { SendToAi } from "@/components/SendToAi";
 import { SourcesFooter } from "@/components/Sources";
 import { MessageActions } from "@/components/MessageActions";
+import { saveExemplar } from "@/lib/conversations";
 import { FileText, Info, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { escapeHtml, renderMarkdownish } from "@/lib/markdown";
@@ -265,6 +266,9 @@ export function Message({
           onTryUpgrade={!isUser ? onTryUpgrade : undefined}
           onRemember={!isUser && !error ? () => setRemembering((v) => !v) : undefined}
           remembering={remembering}
+          onGoodAnswer={
+            !isUser && question ? () => saveExemplar(question, content) : undefined
+          }
         />
       )}
       {remembering && (

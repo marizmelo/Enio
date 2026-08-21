@@ -30,7 +30,7 @@
  *  operation surface only -- cosmetic fixes to the source (the ping email
  *  lookup, say) do not bump it, because forcing a redeploy has a real cost
  *  and an old deployment still serves every operation correctly. */
-export const SCRIPT_VERSION = 4;
+export const SCRIPT_VERSION = 5;
 
 /** What the script can do. The model never picks from this freely -- the
  *  harness calls one by name -- but it is the whole surface of what a
@@ -403,15 +403,37 @@ var OPS = {
   "drive.read": function (a) {
     var f = DriveApp.getFileById(a.id);
     var type = f.getMimeType();
-    // A Google Doc has no plain bytes; export it as text instead of
-    // returning something unreadable.
+    // Google's own formats have no plain bytes; each is exported as text
+    // instead of returning something unreadable. v5 added Slides and Sheets,
+    // because "verify this deck" is the same request as "verify this doc".
     if (type === "application/vnd.google-apps.document") {
       return { name: f.getName(), text: DocumentApp.openById(a.id).getBody().getText().slice(0, 20000) };
+    }
+    if (type === "application/vnd.google-apps.presentation") {
+      var slides = SlidesApp.openById(a.id).getSlides();
+      var parts = [];
+      for (var i = 0; i < Math.min(slides.length, 50); i++) {
+        var texts = [];
+        var shapes = slides[i].getShapes();
+        for (var j = 0; j < shapes.length; j++) {
+          try {
+            var t = shapes[j].getText().asString().trim();
+            if (t) texts.push(t);
+          } catch (ignored) {}
+        }
+        parts.push("— slide " + (i + 1) + " —\n" + texts.join("\n"));
+      }
+      return { name: f.getName(), text: parts.join("\n\n").slice(0, 20000) };
+    }
+    if (type === "application/vnd.google-apps.spreadsheet") {
+      var rows = SpreadsheetApp.openById(a.id).getSheets()[0].getDataRange().getValues().slice(0, 100);
+      var lines = rows.map(function (r) { return r.join("\t"); });
+      return { name: f.getName(), text: lines.join("\n").slice(0, 20000) };
     }
     if (type.indexOf("text/") === 0 || type === "application/json") {
       return { name: f.getName(), text: f.getBlob().getDataAsString().slice(0, 20000) };
     }
-    return { name: f.getName(), type: type, note: "Not a text file; nothing was read." };
+    return { name: f.getName(), type: type, note: "Not a readable document; nothing was read." };
   },
 };
 `;

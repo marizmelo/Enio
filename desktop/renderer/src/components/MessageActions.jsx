@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowUpRight, Brain, Check, Copy, Cpu, Globe, Square, Volume2 } from "lucide-react";
+import { ArrowUpRight, Brain, Check, Copy, Cpu, Globe, Square, ThumbsUp, Volume2 } from "lucide-react";
 import { TipButton } from "@/components/TipButton";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +16,7 @@ import { speakAll, stopSpeaking } from "@/lib/speech";
  * Under the message rather than beside it: these act on a finished reply, and
  * putting them inline would put them in the way of reading it.
  */
-export function MessageActions({ content, canSpeak = true, onAskBigger, upgrade, onTryUpgrade, onRemember, remembering = false }) {
+export function MessageActions({ content, canSpeak = true, onAskBigger, upgrade, onTryUpgrade, onRemember, remembering = false, onGoodAnswer }) {
   const [copied, setCopied] = useState(false);
   const [playing, setPlaying] = useState(false);
 
@@ -70,6 +70,14 @@ export function MessageActions({ content, canSpeak = true, onAskBigger, upgrade,
           otherwise fills only with what the model decided mattered, and it
           decided `sky PREFERS being blue` once; a person pressing this is
           the better signal. Distilled and previewed before anything lands. */}
+      {/* "More like this": saves question and answer as a worked example,
+          injected into future prompts when a similar question arrives. The
+          CLI's /good has done this for months; the desktop, where most
+          answers happen, had no way to say it. Distinct from Remember,
+          which keeps FACTS -- this keeps a SHAPE of answer. */}
+      {onGoodAnswer && (
+        <GoodAnswerButton onGoodAnswer={onGoodAnswer} />
+      )}
       {onRemember && (
         <TipButton
           tip={remembering ? "Choosing what to keep…" : "Remember this — add to memory"}
@@ -131,5 +139,27 @@ export function MessageActions({ content, canSpeak = true, onAskBigger, upgrade,
         </DropdownMenu>
       )}
     </div>
+  );
+}
+
+function GoodAnswerButton({ onGoodAnswer }) {
+  const [state, setState] = useState("idle"); // idle | saving | saved
+  return (
+    <TipButton
+      tip={state === "saved" ? "Saved as an example" : "Good answer — save as an example to imitate"}
+      className={`size-7 ${state === "saved" ? "text-emerald-600" : ""}`}
+      onClick={async () => {
+        if (state !== "idle") return;
+        setState("saving");
+        try {
+          await onGoodAnswer();
+          setState("saved");
+        } catch {
+          setState("idle");
+        }
+      }}
+    >
+      {state === "saved" ? <Check className="size-3.5" /> : <ThumbsUp className="size-3.5" />}
+    </TipButton>
   );
 }

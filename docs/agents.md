@@ -14,7 +14,7 @@ You'll see the choice in the transcript as `→ coder`.
 | `researcher` | The outside world: news, docs, anything needing a lookup | `web_search`, `web_fetch`, `browse`, `recall`, `weather`, `read_skill` |
 | `coder` | Reading, editing, running and debugging code in the working folders | `read_file`, `edit_file`, `write_file`, `run_command`, `search_code`, `read_skill` |
 | `librarian` | You: preferences, earlier conversations, your library, finding files by name | `recall`, `remember`, `set_preference`, `library_search`, `find_file`, `read_skill` |
-| `mail` | Finding, reading, summarising and drafting email | `search_email`, `read_email`, `send_email`, `read_skill` |
+| `mail` | Email, and files in the connected Google Drive | `search_email`, `read_email`, `send_email`, `search_drive`, `read_drive`, `read_skill` |
 | `planner` | Your calendar, todos and contacts, through a connected account | `read_calendar`, `add_event`, `list_todos`, `add_todo`, `find_contact`, `read_skill` |
 | `operator` | Doing things in Mac apps | `mac_recipe`, `open_app`, `propose_plan`, `take_screenshot`, `read_image`, `read_skill` |
 | `generalist` | Conversation, reasoning, anything else | `recall`, `current_time`, `weather`, `read_image`, `read_skill` |

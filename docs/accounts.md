@@ -187,8 +187,11 @@ write path, and the agent will say so rather than trying anyway. Todos need
 the Tasks service enabled once in the script editor; the error tells you
 exactly where when it is missing.
 
-Documents — creating Docs, Slides and Forms from chat — are wired next; the
-script already carries those operations.
+Drive is readable from chat too: "find my Q3 deck and tell me what it
+claims" searches by name and reads Docs, Slides and Sheets as text (script
+v5 — upgrade if yours is older). Creating documents from chat is the one
+piece still unwired; automations can compose the read half with mail today,
+which covers check-then-send.
 
 ## What the agent can and cannot do with it
 

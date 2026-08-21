@@ -160,6 +160,69 @@ const findContactTool: ToolDef = {
   },
 };
 
+const searchDriveTool: ToolDef = {
+  name: "search_drive",
+  description:
+    "Find files in the connected Google Drive by name: Docs, Slides, Sheets and uploads. Returns ids for read_drive.",
+  origin: "builtin",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Part of the file's name." },
+    },
+    required: ["query"],
+  },
+  async run(args) {
+    const account = scriptAccountWith("drive.read");
+    if (!account) return "The connected account was not granted Drive reading.";
+    const result = await callScript(account.url, account.secret, "drive.find", {
+      query: String(args.query ?? ""),
+    });
+    if (!result.ok) return `Could not search Drive: ${result.error}`;
+    const files = (result.result as Array<Record<string, string>>) ?? [];
+    if (files.length === 0) return `Nothing named like "${args.query}" in ${account.email}'s Drive.`;
+    return (
+      files.map((f) => `[${f.id}] ${f.name}  (${shortType(f.type)})`).join("\n") +
+      "\n\nRead one with read_drive using its [id]."
+    );
+  },
+};
+
+const readDriveTool: ToolDef = {
+  name: "read_drive",
+  description:
+    "Read a Drive file as text by the id from search_drive. Docs, Slides and Sheets are exported as text automatically.",
+  origin: "builtin",
+  parameters: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "The [id] shown by search_drive." },
+    },
+    required: ["id"],
+  },
+  async run(args) {
+    const account = scriptAccountWith("drive.read");
+    if (!account) return "The connected account was not granted Drive reading.";
+    const result = await callScript(account.url, account.secret, "drive.read", {
+      id: String(args.id ?? ""),
+    });
+    if (!result.ok) return `Could not read the file: ${result.error}`;
+    const file = result.result as Record<string, string>;
+    if (!file.text) return `${file.name}: ${file.note ?? "nothing readable inside."}`;
+    return `${file.name}\n\n${file.text}`;
+  },
+};
+
+/** "application/vnd.google-apps.presentation" says nothing a person needs;
+ *  the last word does. */
+function shortType(mime: string | undefined): string {
+  const type = String(mime ?? "");
+  if (type.endsWith(".document")) return "Doc";
+  if (type.endsWith(".presentation")) return "Slides";
+  if (type.endsWith(".spreadsheet")) return "Sheet";
+  return type.split("/").pop() ?? "file";
+}
+
 /**
  * Reads exist with any connected account; writes only with their grant.
  * Load-time like every other config gate — connecting an account shows the
@@ -170,5 +233,6 @@ const findContactTool: ToolDef = {
 export const googleTools: ToolDef[] = [
   ...(scriptAccountWith("calendar.read") ? [readCalendarTool] : []),
   ...(scriptAccountWith("calendar.write") ? [addEventTool, addTodoTool] : []),
+  ...(scriptAccountWith("drive.read") ? [searchDriveTool, readDriveTool] : []),
   ...(scriptAccountWith(null) ? [listTodosTool, findContactTool] : []),
 ];

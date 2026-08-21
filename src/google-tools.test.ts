@@ -65,7 +65,7 @@ describe("the planner", () => {
     // With every grant present all five register.
     assert.deepEqual(
       googleTools.map((t) => t.name).sort(),
-      ["add_event", "add_todo", "find_contact", "list_todos", "read_calendar"],
+      ["add_event", "add_todo", "find_contact", "list_todos", "read_calendar", "read_drive", "search_drive"],
     );
   });
 
@@ -101,5 +101,30 @@ describe("the planner", () => {
     const todos = googleTools.find((t) => t.name === "list_todos")!;
     const out = String(await todos.run({}));
     assert.match(out, /Tasks service is not enabled/);
+  });
+});
+
+describe("drive reading", () => {
+  test("search prints ids and readable types, read returns the text", async () => {
+    stubScript({
+      "drive.find": [{ id: "d1", name: "Q3 deck", type: "application/vnd.google-apps.presentation" }],
+    });
+    const search = googleTools.find((t) => t.name === "search_drive")!;
+    const found = String(await search.run({ query: "deck" }));
+    assert.match(found, /\[d1\] Q3 deck  \(Slides\)/);
+
+    stubScript({ "drive.read": { name: "Q3 deck", text: "— slide 1 —\nRevenue up" } });
+    const read = googleTools.find((t) => t.name === "read_drive")!;
+    const out = String(await read.run({ id: "d1" }));
+    assert.match(out, /Revenue up/);
+  });
+
+  test("the v5 script exports Slides and Sheets as text", async () => {
+    // "Verify this deck" is the same request as "verify this doc", and until
+    // v5 a presentation came back as "not a text file".
+    const { scriptSource } = await import("./appsscript.js");
+    const src = scriptSource("s");
+    assert.match(src, /vnd\.google-apps\.presentation/);
+    assert.match(src, /vnd\.google-apps\.spreadsheet/);
   });
 });
