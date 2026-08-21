@@ -8,6 +8,7 @@ import { streamTurn } from "@/lib/agent";
 import { appendMention, attachedFiles, enableDesktopControl, fetchCapabilities } from "@/lib/capabilities";
 import { FilesDialog } from "@/components/FilesDialog";
 import { CommandsDialog } from "@/components/CommandsDialog";
+import { AgentsDialog } from "@/components/AgentsDialog";
 import { listCommands } from "@/lib/commands";
 import { FileViewer } from "@/components/FileViewer";
 import {
@@ -136,6 +137,7 @@ export function App() {
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [commandsOpen, setCommandsOpen] = useState(false);
+  const [agentsOpen, setAgentsOpen] = useState(false);
   // How many processes an agent has left running. Polled, because they start
   // and die outside any stream -- a turn can leave a web server behind and
   // the window would otherwise never learn of it.
@@ -852,7 +854,10 @@ export function App() {
         onFiles={() => setFilesOpen(true)}
         running={running}
         onCommands={() => setCommandsOpen(true)}
+        onAgents={() => setAgentsOpen(true)}
       />
+
+      <AgentsDialog open={agentsOpen} onOpenChange={setAgentsOpen} />
 
       <CommandsDialog
         open={commandsOpen}

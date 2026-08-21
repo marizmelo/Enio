@@ -120,6 +120,7 @@ import { embeddingsDegraded } from "./memory/embed.js";
 import { generatedFiles, mentionContext, parseMentions } from "./mentions.js";
 import { SPECIALISTS } from "./specialists.js";
 import { extractSources } from "./sources.js";
+import { agentsView } from "./agents-view.js";
 import { callDetail, callStatus } from "./tool-detail.js";
 import { loadSkills } from "./skills.js";
 import { synthesize, transcribeWav, warmVoice, whisperInstalled } from "./voice.js";
@@ -316,6 +317,16 @@ async function handle(
    * accurate for the turn, wrong as an answer. This is the whole picture, it
    * costs no tokens, and it cannot hallucinate.
    */
+  /**
+   * The agents, for the management panel: who exists, what each can reach
+   * RIGHT NOW, which skills it can act on, and which automations run through
+   * it. Users see "agents"; the code says specialists, as everywhere.
+   */
+  if (req.method === "GET" && url.pathname === "/agents") {
+    sendJson(res, 200, { agents: agentsView(registry) });
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/capabilities") {
     const ctx = mentionContext(registry);
     sendJson(res, 200, {

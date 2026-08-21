@@ -19,6 +19,11 @@ You'll see the choice in the transcript as `→ coder`.
 | `operator` | Doing things in Mac apps | `mac_recipe`, `open_app`, `propose_plan`, `take_screenshot`, `read_image`, `read_skill` |
 | `generalist` | Conversation, reasoning, anything else | `recall`, `current_time`, `weather`, `read_image`, `read_skill` |
 
+The app shows this live: click the **tool count** in the top right and each
+agent appears with its tools as they stand right now — a crossed-out tool is
+withheld until its setup exists — plus the skills it can act on and the
+automations that run through it.
+
 ## Why split at all
 
 Not org-chart aesthetics — the tool budget. Past roughly sixteen tool

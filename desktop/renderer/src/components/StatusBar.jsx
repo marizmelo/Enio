@@ -45,6 +45,7 @@ export function StatusBar({
   onCloseProject,
   running = 0,
   onCommands,
+  onAgents,
 }) {
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
@@ -183,8 +184,17 @@ export function StatusBar({
             costs two flex gaps, which reads as a hole between the model name
             and the tool count now that the ready state sends no prose. */}
         {message && <span className="truncate">{message}</span>}
+        {/* The count is the door to the agents panel: "26 tools" begs the
+            question of who holds which, and this is where it gets answered.
+            no-drag, because the whole bar is otherwise a drag region. */}
         {typeof tools === "number" && (
-          <span className="shrink-0 tabular-nums">· {tools} tools</span>
+          <button
+            onClick={onAgents}
+            className="shrink-0 tabular-nums [-webkit-app-region:no-drag] hover:text-foreground"
+            title="The agents — who holds which tools, skills and automations"
+          >
+            · {tools} tools
+          </button>
         )}
         <span className={cn("size-2 shrink-0 rounded-full", DOT[phase] ?? DOT.starting)} />
       </div>
