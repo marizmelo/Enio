@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, Trash2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ScriptSetup } from "@/components/ScriptSetup";
 import {
   GRANT_LABELS,
   cancelConnect,
@@ -31,6 +32,10 @@ export function AccountsPanel({ onError }) {
   const [clientSecret, setClientSecret] = useState("");
   const [picked, setPicked] = useState(() => new Set(["mail.read"]));
   const [connecting, setConnecting] = useState(false);
+  // Which way to connect. Script first, because it is the shorter road and
+  // needs no Google Cloud project at all -- the OAuth route's five Console
+  // steps buy an application identity that a script does not need.
+  const [how, setHow] = useState("script");
   const pollRef = useRef(null);
 
   const refresh = useCallback(async () => {
@@ -88,6 +93,26 @@ export function AccountsPanel({ onError }) {
   // it to someone who does not would be four steps of pure noise.
   if (!state.client) {
     return (
+      <div className="space-y-2">
+        <div className="flex gap-1">
+          {[
+            ["script", "Deploy a script"],
+            ["oauth", "Register an app"],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setHow(id)}
+              className={`rounded-md px-2 py-1 text-xs ${
+                how === id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {how === "script" ? (
+          <ScriptSetup grants={state.grants} onError={onError} onConnected={refresh} />
+        ) : (
       <div className="space-y-3 rounded-md border p-3">
         <div>
           <p className="text-sm font-medium">Connect a Google account</p>
@@ -154,6 +179,8 @@ export function AccountsPanel({ onError }) {
             Save
           </Button>
         </div>
+      </div>
+        )}
       </div>
     );
   }

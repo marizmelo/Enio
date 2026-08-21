@@ -4,6 +4,7 @@ import { readBody, sendJson } from "../http-util.js";
 import {
   GRANTS,
   READ_GRANTS,
+  addScriptAccount,
   beginConsent,
   clientSource,
   hasClient,
@@ -14,6 +15,7 @@ import {
   type Grant,
   type PendingConsent,
 } from "../accounts.js";
+import { SCRIPT_VERSION, callScript, scriptSource } from "../appsscript.js";
 
 /**
  * Connecting a Google account, and seeing what is connected.
@@ -38,6 +40,11 @@ interface Flow {
 }
 
 const flows = new Map<string, Flow>();
+
+/** The secret handed out with the script source, held until the deployment
+ *  URL comes back. One at a time: a second Copy before the first is pasted
+ *  would otherwise strand whichever script was deployed. */
+let pendingSecret: string | null = null;
 
 /** Consent is a person walking through screens; ten minutes is generous and
  *  bounded, where an unbounded map would hold a listener open forever on
@@ -109,6 +116,67 @@ export async function handle(
     } catch (err) {
       sendJson(res, 400, { error: { message: (err as Error).message } });
     }
+    return true;
+  }
+
+  /**
+   * The script path: enio hands over source with a secret already in it, the
+   * user deploys it, and pastes the URL back.
+   *
+   * The secret is minted here rather than in the browser so it is generated
+   * once, server-side, and lands in the same file every other credential
+   * does. Asking again returns the same code for the same pending secret --
+   * a regenerated secret between "copy" and "paste" would mean the deployed
+   * script and the stored one disagree, which fails at the first call with
+   * "unauthorized" and no explanation.
+   */
+  if (req.method === "GET" && url.pathname === "/accounts/script") {
+    if (!pendingSecret) pendingSecret = randomBytes(24).toString("base64url");
+    sendJson(res, 200, { version: SCRIPT_VERSION, source: scriptSource(pendingSecret) });
+    return true;
+  }
+
+  if (req.method === "POST" && url.pathname === "/accounts/script") {
+    const body = JSON.parse((await readBody(req)) || "{}") as { url?: string; grants?: string[] };
+    const deployment = String(body.url ?? "").trim();
+    if (!/^https:\/\/script\.google\.com\/.*\/exec$/.test(deployment)) {
+      sendJson(res, 400, {
+        error: {
+          message: 'That is not a deployment URL. It comes from Deploy > New deployment and ends in "/exec".',
+        },
+      });
+      return true;
+    }
+    if (!pendingSecret) {
+      sendJson(res, 400, { error: { message: "Ask for the script again — its secret was not kept." } });
+      return true;
+    }
+    // Called before it is saved: a URL that does not answer is a setup that
+    // silently does nothing later, and the failure is far easier to fix while
+    // the person is still looking at the deploy screen.
+    const ping = await callScript(deployment, pendingSecret, "ping");
+    if (!ping.ok) {
+      sendJson(res, 400, { error: { message: ping.error } });
+      return true;
+    }
+    const info = ping.result as { email?: string; version?: number };
+    if (info?.version !== SCRIPT_VERSION) {
+      sendJson(res, 400, {
+        error: {
+          message: `That deployment runs v${info?.version ?? "?"} of the script and this enio expects v${SCRIPT_VERSION}. Copy the code again and redeploy.`,
+        },
+      });
+      return true;
+    }
+    const account = addScriptAccount({
+      email: info.email || "unknown",
+      url: deployment,
+      secret: pendingSecret,
+      version: SCRIPT_VERSION,
+      grants: (body.grants ?? []) as Grant[],
+    });
+    pendingSecret = null;
+    sendJson(res, 200, { account });
     return true;
   }
 

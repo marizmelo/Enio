@@ -205,3 +205,77 @@ describe("bundled vs bring-your-own client", () => {
     assert.equal(url.searchParams.get("client_id"), "1234.apps.googleusercontent.com");
   });
 });
+
+/**
+ * The Apps Script path.
+ *
+ * It exists because the OAuth route needs a Google Cloud project per user,
+ * and that cost buys nothing for someone who just wants their own mail. A
+ * script runs inside the user's own account: no client to register, no
+ * consent screen to publish, no verification, no seven-day expiry.
+ *
+ * The trade is that the deployment URL is a bearer credential, so what has
+ * to hold is that neither it nor the secret ever comes back out.
+ */
+describe("script accounts", () => {
+  test("the source carries the secret and a version, and defines a closed set of operations", async () => {
+    const { scriptSource, SCRIPT_VERSION, OPERATIONS } = await import("./appsscript.js");
+    const src = scriptSource("s3cret-value");
+    assert.match(src, /const SECRET = "s3cret-value"/);
+    assert.match(src, new RegExp(`const VERSION = ${SCRIPT_VERSION}`));
+    // Every operation enio can call must exist in the script it ships, or a
+    // call fails at runtime with "unknown operation".
+    for (const op of OPERATIONS) {
+      assert.ok(src.includes(`"${op}"`), `the script is missing ${op}`);
+    }
+    // Nothing that destroys: the URL is a bearer credential, so the surface
+    // it unlocks is the whole security argument.
+    assert.ok(!/moveToTrash|setTrashed|deleteFile|deleteEvent/.test(src), "the script can destroy something");
+  });
+
+  test("a stored script account never hands back its URL or secret", () => {
+    writeFileSync(accounts.accountsFile(), JSON.stringify({ client: null, accounts: [] }));
+    const added = accounts.addScriptAccount({
+      email: "me@example.com",
+      url: "https://script.google.com/macros/s/AKfy/exec",
+      secret: "deployment-secret",
+      version: 1,
+      grants: ["mail.read"],
+    });
+    assert.equal(added.provider, "appsscript");
+    const listed = JSON.stringify(accounts.listAccounts());
+    assert.ok(!listed.includes("deployment-secret"), "the secret leaked");
+    assert.ok(!listed.includes("script.google.com"), "the deployment URL leaked");
+  });
+
+  test("the harness can fetch the deployment, and removing takes it away", () => {
+    const [only] = accounts.listAccounts();
+    const script = accounts.scriptFor(only!.id);
+    assert.equal(script?.url, "https://script.google.com/macros/s/AKfy/exec");
+    assert.equal(script?.secret, "deployment-secret");
+    accounts.removeAccount(only!.id);
+    assert.equal(accounts.scriptFor(only!.id), null);
+    assert.ok(!readFileSync(accounts.accountsFile(), "utf8").includes("deployment-secret"));
+  });
+
+  test("re-deploying replaces rather than doubling", () => {
+    const add = (url: string) =>
+      accounts.addScriptAccount({
+        email: "me@example.com",
+        url,
+        secret: "s",
+        version: 1,
+        grants: ["mail.read"],
+      });
+    add("https://script.google.com/macros/s/one/exec");
+    add("https://script.google.com/macros/s/two/exec");
+    const mine = accounts.listAccounts().filter((a) => a.email === "me@example.com");
+    assert.equal(mine.length, 1, "the same address behind a new URL is one account");
+    assert.match(accounts.scriptFor(mine[0]!.id)!.url, /two/);
+  });
+
+  test("a token refresh is not attempted on a script account", async () => {
+    const [only] = accounts.listAccounts().filter((a) => a.provider === "appsscript");
+    await assert.rejects(() => accounts.accessTokenFor(only!.id), /script, not an OAuth grant/);
+  });
+});

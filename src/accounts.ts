@@ -51,7 +51,10 @@ export const READ_GRANTS: Grant[] = ["mail.read", "calendar.read", "drive.read"]
 
 export interface Account {
   id: string;
-  provider: "google";
+  /** "google" is OAuth with a registered client; "appsscript" is a script
+   *  the user deployed into their own account, which needs no client at
+   *  all. Same concept, different plumbing. */
+  provider: "google" | "appsscript";
   /** The address the tokens belong to, so two accounts are tellable apart. */
   email: string;
   grants: Grant[];
@@ -59,9 +62,15 @@ export interface Account {
 }
 
 interface StoredAccount extends Account {
-  refreshToken: string;
+  /** OAuth accounts. */
+  refreshToken?: string;
   accessToken?: string;
   expiresAt?: number;
+  /** Apps Script accounts: the deployment and the secret that authorizes a
+   *  call to it. Both are credentials and neither is ever returned. */
+  scriptUrl?: string;
+  scriptSecret?: string;
+  scriptVersion?: number;
 }
 
 interface AccountsFile {
@@ -153,6 +162,56 @@ export function setClient(id: string, secret: string): void {
     throw new Error('That does not look like a Google client ID (it ends in ".apps.googleusercontent.com").');
   }
   write({ ...read(), client: { id: trimmedId, secret: trimmedSecret } });
+}
+
+/**
+ * Record a deployed script as an account.
+ *
+ * The grants are what the script can do rather than what Google was asked
+ * for -- with a script there is no scope list, the code IS the scope, so
+ * this records the capability the deployment actually has.
+ */
+export function addScriptAccount(input: {
+  email: string;
+  url: string;
+  secret: string;
+  version: number;
+  grants: Grant[];
+}): Account {
+  const data = read();
+  const account: StoredAccount = {
+    id: randomBytes(8).toString("hex"),
+    provider: "appsscript",
+    email: input.email,
+    grants: input.grants,
+    addedAt: Date.now(),
+    scriptUrl: input.url,
+    scriptSecret: input.secret,
+    scriptVersion: input.version,
+  };
+  // Re-deploying replaces rather than doubles: the same address behind a new
+  // URL is the same account with a new door.
+  data.accounts = [...data.accounts.filter((a) => a.email !== input.email), account];
+  write(data);
+  return {
+    id: account.id,
+    provider: account.provider,
+    email: account.email,
+    grants: account.grants,
+    addedAt: account.addedAt,
+  };
+}
+
+/** The deployment behind a script account, for the harness only. No tool
+ *  imports this -- same rule as accessTokenFor. */
+export function scriptFor(accountId: string): { url: string; secret: string; version: number } | null {
+  const account = read().accounts.find((a) => a.id === accountId);
+  if (!account?.scriptUrl || !account.scriptSecret) return null;
+  return {
+    url: account.scriptUrl,
+    secret: account.scriptSecret,
+    version: account.scriptVersion ?? 0,
+  };
 }
 
 export function removeAccount(id: string): boolean {
@@ -363,6 +422,7 @@ export async function accessTokenFor(accountId: string): Promise<string> {
   const data = read();
   const account = data.accounts.find((a) => a.id === accountId);
   if (!account) throw new Error("No such account.");
+  if (!account.refreshToken) throw new Error("That account is a script, not an OAuth grant.");
   if (account.accessToken && account.expiresAt && account.expiresAt > Date.now() + 60_000) {
     return account.accessToken;
   }

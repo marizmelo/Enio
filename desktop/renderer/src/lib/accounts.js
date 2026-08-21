@@ -41,6 +41,14 @@ export const cancelConnect = (flowId) =>
 
 export const removeAccount = (id) => call(`/accounts/${id}`, { method: "DELETE" });
 
+/** The script enio ships, with this install's secret already in it. */
+export const scriptSource = () => call("/accounts/script");
+
+/** Hand back the deployment URL. The server calls it once before saving, so
+ *  a URL that does not answer fails here rather than silently later. */
+export const saveScript = (url, grants) =>
+  call("/accounts/script", { method: "POST", body: JSON.stringify({ url, grants }) });
+
 /** What each grant is called, and whether it changes anything.
  *  The server owns the list; these are only the words for it. */
 export const GRANT_LABELS = {
