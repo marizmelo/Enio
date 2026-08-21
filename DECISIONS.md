@@ -2699,3 +2699,58 @@ different time than its English claims, silently); folding *recipes* into
 automations (when desktop-action steps become composable into flows --
 today a recipe is a single approved script, and the approval sheet is its
 whole identity).
+
+## Custom agents: the invariant opened without being weakened (August 2026)
+
+The agents panel shipped read-only, with a footer saying tool sets are not
+editable by design. The next message asked for exactly what it refused:
+a first-class Agents section, and creating new agents. (Telling detail: the
+panel had been found "in tools" — behind the tool-count in the status bar.
+A surface people are meant to create things in needs a front door, so the
+robot button went into the top bar and the count stayed as a second door.)
+
+The apparent collision with the six-disjoint-tools invariant dissolved on
+inspection, because the invariant was never "the list of agents is fixed" —
+it is "the model sees at most one small, coherent slice of the registry per
+turn." A user-defined agent IS a slice: name, router description, prompt, up
+to five tools picked from a catalog, `read_skill` riding along. Enforced at
+save like project fields — refuse, never truncate — with the same caps
+philosophy (description 300, prompt 2000, sized against the smallest context
+budget).
+
+What did NOT open:
+
+- **Editing built-ins.** Their tool sets are pinned by tests, and every
+  router example was earned by a measured failure; "edit" would mean
+  silently un-fixing bugs. Edit and Delete render only on `custom` cards.
+- **The read/act boundary.** A user could otherwise assemble the one agent
+  the built-ins refuse to be: web_fetch plus run_command, a page's
+  instructions with a shell. Save refuses the combination using the same
+  lists web.test.ts pins — duplicated on purpose, so weakening either copy
+  trips the other.
+- **run_applescript.** Never held, same reason as always: proposing and
+  running stay separated by a human decision.
+- **The model's reach.** Creation is the authed HTTP routes and nothing
+  else, like projects — no tool writes agents.json, so an agent cannot mint
+  itself a colleague with tools it was not given. A test greps the registry
+  for anything that claims otherwise.
+
+Custom agents get a stored `example` field because of the router-example
+finding above: at this size the router routes by pattern-matching examples
+far more than descriptions, so an agent without one effectively does not
+exist. The panel warns rather than requires — requiring it at save punishes
+experimentation.
+
+Found while wiring: the router's accepted-names enum was hand-written and
+had silently omitted the planner — routing to it survived only because the
+fuzzy-salvage path caught the failed parse. The accepted set now derives
+from the live list (`allSpecialists()`), which custom agents needed anyway.
+One deliberate semantic addition: `toolsFor` matches MCP tools by *name* for
+whatever agent lists them, where built-ins grant whole servers — a custom
+agent picks five individual tools, and handing it a server's entire tool
+set would blow the ceiling it exists to respect.
+
+Rejected: per-agent model overrides (one model is the architecture);
+agent-to-agent delegation from custom agents (one hop is load-bearing);
+renaming on edit (a rename is a new agent — the name is identity in the
+router, the DB column and @mentions).

@@ -857,7 +857,12 @@ export function App() {
         onAgents={() => setAgentsOpen(true)}
       />
 
-      <AgentsDialog open={agentsOpen} onOpenChange={setAgentsOpen} />
+      <AgentsDialog
+        open={agentsOpen}
+        onOpenChange={setAgentsOpen}
+        onOpenSkills={() => setSkillsOpen(true)}
+        onOpenPipelines={() => setPipelinesOpen(true)}
+      />
 
       <CommandsDialog
         open={commandsOpen}

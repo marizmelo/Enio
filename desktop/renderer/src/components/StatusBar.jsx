@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, TerminalSquare, Workflow, X } from "lucide-react";
+import { BookOpen, Bot, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, TerminalSquare, Workflow, X } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -111,6 +111,13 @@ export function StatusBar({
             scripts moved inside Automations, where the things that act live. */}
         <TipButton tip="Skills" className="size-7" onClick={onSkills}>
           <BookOpen className="size-4" />
+        </TipButton>
+        {/* The actors themselves, beside the things that shape them:
+            automations run, skills inform, agents DO. This was reachable only
+            through the "N tools" count on the right, and it was found by
+            accident -- a section people create things in needs a front door. */}
+        <TipButton tip="Agents" className="size-7" onClick={onAgents}>
+          <Bot className="size-4" />
         </TipButton>
         {/* What Enio remembers about you -- and the way to prune it. Beside
             the other standing surfaces because memory speaks in every turn,

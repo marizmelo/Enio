@@ -71,3 +71,30 @@ genuine follow-ups like "try again" stay where they were.
 
 Turn routing off entirely with `ENIO_ROUTING=0`, and one agent gets every tool
 up to the sixteen-tool cap.
+
+## Your own agents
+
+The Agents panel (the robot icon in the top bar) creates agents alongside the
+built-in ones. A custom agent is the same bargain the built-ins strike — a
+description the router reads, instructions, and **up to five tools** picked
+from the catalog, with `read_skill` always included — so creating one never
+weakens what makes routing work.
+
+Three fields matter more than they look:
+
+- **What requests should come here** is read by the router, not by your agent.
+  Write it the way you'd phrase the request.
+- **Example request** teaches the router by pattern. At this model size an
+  example does more than the description — an agent saved without one is
+  rarely picked, and the panel warns about it.
+- **Instructions** are the agent. Say what it does, and just as usefully, what
+  it must not do.
+
+The rules the built-ins live by apply at save, refused rather than trimmed:
+six tools at most, no tool that does not exist, and never a combination that
+both reads the web and acts — a page could tell that agent what to do, and it
+would be able to. Split such a job into two agents, or better, an automation.
+
+Skills attach themselves: any skill whose allowed tools overlap your agent's
+is available to it. Built-in agents stay as shipped — their tool sets are
+pinned by tests and their routing was tuned against measured failures.

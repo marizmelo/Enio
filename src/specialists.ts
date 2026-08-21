@@ -1,6 +1,6 @@
-import { z } from "zod";
 import { complete } from "./model.js";
 import { activeProject } from "./project.js";
+import { listCustomAgents } from "./custom-agents.js";
 import type { Registry } from "./tools/index.js";
 import type { Message, ToolDef } from "./types.js";
 
@@ -280,11 +280,25 @@ export const SPECIALISTS: Specialist[] = [
 
 export const DEFAULT_SPECIALIST = "generalist";
 
-const routeSchema = z.object({
-  specialist: z.enum([
-    "researcher", "coder", "librarian", "mail", "operator", "generalist",
-  ]),
-});
+/**
+ * Built-ins plus the user's own agents, in that order. Every consumer that
+ * answers "who exists" reads this, never SPECIALISTS directly — the router's
+ * accepted-names list was once a hand-written enum, and it silently omitted
+ * the planner when that specialist was added: routing to it survived only
+ * because the fuzzy salvage path happened to catch the parse failure.
+ * Deriving from the live list closes that class of drift.
+ */
+export function allSpecialists(): Specialist[] {
+  return [
+    ...SPECIALISTS,
+    ...listCustomAgents().map((a) => ({
+      name: a.name,
+      description: a.description,
+      systemPrompt: a.systemPrompt,
+      tools: a.tools,
+    })),
+  ];
+}
 
 /**
  * Picks a specialist for the request.
@@ -300,8 +314,10 @@ export async function route(
 ): Promise<string> {
   // A known specialist from earlier in the conversation, or nothing. Validated
   // against the list because it comes from a database column that outlives
-  // renames of the specialists themselves.
-  const sticky = SPECIALISTS.some((s) => s.name === previous) ? previous! : null;
+  // renames of the specialists themselves — and deletions: a conversation
+  // routed by a custom agent the user later removed falls back cleanly here.
+  const list = allSpecialists();
+  const sticky = list.some((s) => s.name === previous) ? previous! : null;
 
   // Very short inputs carry almost no routing signal of their own -- but they
   // are usually not greetings, they are follow-ups: "try again", "yes", "go
@@ -321,7 +337,16 @@ export async function route(
     return sticky ?? DEFAULT_SPECIALIST;
   }
 
-  const menu = SPECIALISTS.map((s) => `- ${s.name}: ${s.description}`).join("\n");
+  const menu = list.map((s) => `- ${s.name}: ${s.description}`).join("\n");
+
+  // One example per specialist -- see the comment on the built-in block
+  // below. A custom agent supplies its own at creation, because without one
+  // it effectively does not exist to the router; agents saved without an
+  // example simply are not exampled, which the panel warns about.
+  const customExamples = listCustomAgents()
+    .filter((a) => a.example)
+    .map((a) => `"${a.example}" -> {"specialist": "${a.name}"}`)
+    .join("\n");
 
   // A prior, not an override: an open project of type "code" makes the
   // ambiguous "fix this" mean the coder, while "did Sam reply" still names
@@ -392,7 +417,8 @@ export async function route(
         // searches and six paragraphs of narration; the generalist is the
         // one whose prompt knows where automations come from.
         `"create an automation that emails me a summary" -> {"specialist": "generalist"}\n` +
-        `"explain monads to me" -> {"specialist": "generalist"}`,
+        `"explain monads to me" -> {"specialist": "generalist"}` +
+        (customExamples ? `\n${customExamples}` : ""),
     },
     { role: "user", content: userInput.slice(0, 500) },
   ];
@@ -404,8 +430,9 @@ export async function route(
     const result = await complete(messages, [], {}, undefined, { temperature: 0 });
     const match = /\{[\s\S]*\}/.exec(result.content);
     if (!match) return fuzzyRoute(result.content, sticky);
-    const parsed = routeSchema.safeParse(JSON.parse(match[0]));
-    return parsed.success ? parsed.data.specialist : fuzzyRoute(result.content, sticky);
+    // Membership in the live list, not a schema enum -- see allSpecialists.
+    const chosen = String((JSON.parse(match[0]) as { specialist?: unknown })?.specialist ?? "");
+    return list.some((s) => s.name === chosen) ? chosen : fuzzyRoute(result.content, sticky);
   } catch {
     // A router that errored knows nothing; the conversation's history knows
     // something. Prefer it.
@@ -417,16 +444,17 @@ export async function route(
  *  Salvaging that is worth more than a strict parse. */
 function fuzzyRoute(text: string, sticky: string | null = null): string {
   const lower = text.toLowerCase();
-  for (const s of SPECIALISTS) {
+  for (const s of allSpecialists()) {
     if (lower.includes(s.name)) return s.name;
   }
   return sticky ?? DEFAULT_SPECIALIST;
 }
 
 export function getSpecialist(name: string): Specialist {
+  const list = allSpecialists();
   return (
-    SPECIALISTS.find((s) => s.name === name) ??
-    SPECIALISTS.find((s) => s.name === DEFAULT_SPECIALIST)!
+    list.find((s) => s.name === name) ??
+    list.find((s) => s.name === DEFAULT_SPECIALIST)!
   );
 }
 
@@ -435,7 +463,11 @@ export function toolsFor(specialist: Specialist, registry: Registry): ToolDef[] 
   const allowedServers = new Set(specialist.mcpServers ?? []);
   return registry.all.filter((tool) => {
     if (tool.origin === "mcp") {
-      return tool.server ? allowedServers.has(tool.server) : false;
+      // By server for built-ins, which grant a connection wholesale -- or by
+      // name, which is how a custom agent picks individual MCP tools without
+      // being handed a whole server's worth and blowing the ceiling.
+      if (tool.server && allowedServers.has(tool.server)) return true;
+      return specialist.tools.includes(tool.name);
     }
     return specialist.tools.includes(tool.name);
   });

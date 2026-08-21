@@ -118,9 +118,10 @@ import { buildIndexInBackground } from "./project-index.js";
 import { latestSessionForProject } from "./memory/store.js";
 import { embeddingsDegraded } from "./memory/embed.js";
 import { generatedFiles, mentionContext, parseMentions } from "./mentions.js";
-import { SPECIALISTS } from "./specialists.js";
+import { SPECIALISTS, allSpecialists } from "./specialists.js";
 import { extractSources } from "./sources.js";
 import { agentsView } from "./agents-view.js";
+import { saveCustomAgent, deleteCustomAgent } from "./custom-agents.js";
 import { callDetail, callStatus } from "./tool-detail.js";
 import { loadSkills } from "./skills.js";
 import { synthesize, transcribeWav, warmVoice, whisperInstalled } from "./voice.js";
@@ -323,8 +324,60 @@ async function handle(
    * it. Users see "agents"; the code says specialists, as everywhere.
    */
   if (req.method === "GET" && url.pathname === "/agents") {
-    sendJson(res, 200, { agents: agentsView(registry) });
+    sendJson(res, 200, {
+      agents: agentsView(registry),
+      // What a new agent may pick from: the registry as it stands, minus
+      // run_applescript, which no agent ever holds -- offering it in a
+      // picker just to refuse it at save would be a trap.
+      catalog: registry.all
+        .filter((t) => t.name !== "run_applescript")
+        .map((t) => ({
+          name: t.name,
+          description: (t.description.split(". ")[0] ?? "").slice(0, 110),
+          server: t.server ?? null,
+        })),
+    });
     return;
+  }
+
+  // Custom agents are created and removed here and over the CLI only --
+  // like projects, no tool reaches these routes, so the model can never mint
+  // itself a colleague holding tools it was not given.
+  if (req.method === "POST" && url.pathname === "/agents") {
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse((await readBody(req)) || "{}");
+    } catch {
+      sendJson(res, 400, { error: { message: "Invalid JSON body" } });
+      return;
+    }
+    try {
+      saveCustomAgent(
+        body,
+        registry.all.map((t) => t.name),
+        SPECIALISTS.map((s) => s.name),
+      );
+      sendJson(res, 200, { agents: agentsView(registry) });
+    } catch (err) {
+      sendJson(res, 400, { error: { message: String((err as Error).message ?? err) } });
+    }
+    return;
+  }
+
+  {
+    const one = /^\/agents\/([a-z][a-z0-9-]*)$/.exec(url.pathname);
+    if (req.method === "DELETE" && one) {
+      if (SPECIALISTS.some((s) => s.name === one[1])) {
+        sendJson(res, 400, { error: { message: `${one[1]} is built in — it cannot be removed.` } });
+        return;
+      }
+      if (!deleteCustomAgent(one[1]!)) {
+        sendJson(res, 404, { error: { message: `No custom agent named ${one[1]}.` } });
+        return;
+      }
+      sendJson(res, 200, { agents: agentsView(registry) });
+      return;
+    }
   }
 
   if (req.method === "GET" && url.pathname === "/capabilities") {
@@ -340,7 +393,7 @@ async function handle(
         name: s.name,
         description: s.description,
       })),
-      agents: SPECIALISTS.map((s) => ({
+      agents: allSpecialists().map((s) => ({
         name: s.name,
         description: s.description,
         tools: s.tools,

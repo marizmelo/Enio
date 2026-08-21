@@ -4,7 +4,7 @@ import { config } from "./config.js";
 import { activeProject } from "./project.js";
 import { conversationMounts } from "./conversation-attachments.js";
 import { loadSkills, type Skill } from "./skills.js";
-import { SPECIALISTS } from "./specialists.js";
+import { allSpecialists } from "./specialists.js";
 import type { Registry } from "./tools/index.js";
 
 /**
@@ -60,7 +60,7 @@ export function mentionContext(registry?: Registry): MentionContext {
     : [];
   return {
     skillNames: skills,
-    specialists: SPECIALISTS.map((s) => s.name),
+    specialists: allSpecialists().map((s) => s.name),
     servers,
     files: workspaceFiles(),
   };
