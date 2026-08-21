@@ -859,7 +859,13 @@ export function App() {
 
       <AgentsDialog
         open={agentsOpen}
-        onOpenChange={setAgentsOpen}
+        onOpenChange={(open) => {
+          setAgentsOpen(open);
+          // Creating or deleting an agent changes who "Send to agent" and
+          // the @mention palette can name, and both read the cached
+          // capabilities — same refetch-on-close as Connections.
+          if (!open) fetchCapabilities().then(setCapabilities);
+        }}
         onOpenSkills={() => setSkillsOpen(true)}
         onOpenPipelines={() => setPipelinesOpen(true)}
       />
