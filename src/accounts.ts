@@ -294,6 +294,30 @@ export function scriptMailAccount(
     : null;
 }
 
+/**
+ * The connected script account, optionally requiring a grant.
+ *
+ * The generalisation of scriptMailAccount for the rest of the account's
+ * life: calendar, todos, contacts, documents. Same rules -- harness-only,
+ * the model sees results and never a credential, and a write grant absent
+ * means the acting tool is WITHHELD rather than offered-and-refused, since a
+ * dead-end tool burns the model's limited attention.
+ */
+export function scriptAccountWith(
+  grant: Grant | null,
+): { id: string; email: string; url: string; secret: string } | null {
+  const account = read().accounts.find(
+    (a) =>
+      a.provider === "appsscript" &&
+      a.scriptUrl &&
+      a.scriptSecret &&
+      (grant === null || a.grants.includes(grant)),
+  );
+  return account
+    ? { id: account.id, email: account.email, url: account.scriptUrl!, secret: account.scriptSecret! }
+    : null;
+}
+
 export function removeAccount(id: string): boolean {
   const data = read();
   const before = data.accounts.length;

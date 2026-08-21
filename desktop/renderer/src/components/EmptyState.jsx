@@ -21,6 +21,7 @@ import {
   ShoppingCart,
   Sparkles,
   Workflow,
+  CalendarDays,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 // The same file the app icon and the menu bar icon are built from, so the
@@ -48,6 +49,7 @@ const ICONS = {
   "shopping-cart": ShoppingCart,
   image: Image,
   clapperboard: Clapperboard,
+  calendar: CalendarDays,
 };
 
 /**

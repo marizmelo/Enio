@@ -359,3 +359,29 @@ describe("upgrading a deployed script", () => {
     assert.equal(accounts.listAccounts().length, 1, "an upgrade is not a second account");
   });
 });
+
+describe("the read/act line for non-mail tools", () => {
+  test("a read-only account is not a write path, checked at the lookup", () => {
+    writeFileSync(
+      accounts.accountsFile(),
+      JSON.stringify({
+        client: null,
+        accounts: [
+          {
+            id: "ro1",
+            provider: "appsscript",
+            email: "ro@example.com",
+            grants: ["mail.read", "calendar.read"],
+            addedAt: 1,
+            scriptUrl: "https://script.google.com/macros/s/ro/exec",
+            scriptSecret: "s",
+          },
+        ],
+      }),
+    );
+    assert.ok(accounts.scriptAccountWith(null), "the account exists");
+    assert.ok(accounts.scriptAccountWith("calendar.read"), "reading is granted");
+    assert.equal(accounts.scriptAccountWith("calendar.write"), null, "writing is not");
+    assert.equal(accounts.scriptMailAccount("send"), null, "and neither is sending");
+  });
+});

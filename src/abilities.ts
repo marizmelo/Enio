@@ -320,6 +320,31 @@ export const ABILITIES: Ability[] = [
     },
   },
   {
+    id: "calendar",
+    title: "Calendar",
+    description: "What's coming up, new events with Meet links, todos, contacts.",
+    icon: "calendar",
+    specialist: "planner",
+    promptTemplate: "@planner ___",
+    suggestions: [
+      "What's on my calendar this week?",
+      "Add lunch with Ana on Friday at noon, with a Meet link",
+      "Add finish the deck to my todos for tomorrow",
+    ],
+    inputs: ["text"],
+    outputs: ["text"],
+    requiredTools: ["read_calendar"],
+    setup: {
+      summary: "Calendar and todos come through a connected Google account.",
+      steps: [
+        "Connect a Google account in Connections (the + menu in the composer).",
+        "Tick the calendar grants — reading, and changes if you want it adding things.",
+        "Restart Enio; the planner agent appears with the account.",
+      ],
+      docs: "docs/accounts.md",
+    },
+  },
+  {
     id: "send-email",
     // Folded into the Email tile above; kept as an ability because pipelines
     // pick abilities by id, and a graph that sends mail still needs this one.

@@ -174,6 +174,22 @@ whatever the backend: sending stays a **dry run** until `ENIO_EMAIL_SEND=1`,
 and an account connected without the send grant is not a send path — the
 grant is checked where the send happens, not in a prompt.
 
+## Calendar, todos and contacts
+
+With an account connected, a **planner** agent appears alongside the others:
+ask "what's on my calendar this week", "add lunch with Ana on Friday, with a
+Meet link", "add finish the deck to my todos", or "what's Ana's email". The
+Calendar tile on the landing page is the same thing, picked by hand.
+
+Reading works with any connected account. Adding events and todos needs the
+**Add and change events** grant — an account connected read-only is not a
+write path, and the agent will say so rather than trying anyway. Todos need
+the Tasks service enabled once in the script editor; the error tells you
+exactly where when it is missing.
+
+Documents — creating Docs, Slides and Forms from chat — are wired next; the
+script already carries those operations.
+
 ## What the agent can and cannot do with it
 
 The agent never holds a credential. It asks for an action — read this thread,

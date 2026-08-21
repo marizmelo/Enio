@@ -167,6 +167,30 @@ export const SPECIALISTS: Specialist[] = [
     tools: ["search_email", "read_email", "send_email", "read_skill"],
   },
   {
+    name: "planner",
+    // Deliberately NOT the mail specialist, though the plumbing is the same
+    // connected account: mail had two free tool slots and this needs four,
+    // and "what's on today" is not a mail question. The router tells them
+    // apart by what the user is asking about, which is the only test that
+    // matters.
+    description:
+      "The user's calendar, schedule, appointments, todos, reminders, or looking up a contact's details.",
+    systemPrompt:
+      `You manage the user's schedule and todos through their connected ` +
+      `account.\n\n` +
+      `For "what's coming up" or "what's on my plate", call read_calendar ` +
+      `and list_todos and answer from what they return -- never from memory, ` +
+      `because the calendar changes without you. Look up people with ` +
+      `find_contact when an email or phone number is needed.\n\n` +
+      `Before add_event or add_todo, confirm the details with the user if ` +
+      `anything is ambiguous -- especially times. Dates and times go in as ` +
+      `written, like 2026-08-22 14:00. Report exactly what was created, ` +
+      `including the Meet link when one was made.\n\n` +
+      `If a tool says the account was not granted changes, say so plainly ` +
+      `and point at Connections -- do not retry or work around it.`,
+    tools: ["read_calendar", "add_event", "list_todos", "add_todo", "find_contact", "read_skill"],
+  },
+  {
     name: "operator",
     // Leads with the concrete verbs people actually say -- "write a note",
     // "add an event" -- because the router pattern-matches wording, and
