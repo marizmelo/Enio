@@ -147,6 +147,16 @@ export function AccountsPanel({ onError }) {
             Advanced and continue.
           </li>
         </ol>
+        <button
+          className="text-[11px] text-muted-foreground underline hover:text-foreground"
+          onClick={() =>
+            window.maple?.openExternal?.(
+              "https://github.com/marizmelo/Enio/blob/master/docs/accounts.md#setting-it-up-with-oauth-instead",
+            )
+          }
+        >
+          How this works, and why Google asks for it
+        </button>
         <div className="space-y-2">
           <input
             className="w-full rounded-md border bg-transparent px-2 py-1 font-mono text-xs"

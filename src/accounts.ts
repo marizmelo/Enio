@@ -77,6 +77,8 @@ interface AccountsFile {
   /** The user's own OAuth client, from their Google Cloud project. */
   client: { id: string; secret: string } | null;
   accounts: StoredAccount[];
+  /** The secret baked into the next script the user deploys. */
+  pendingScriptSecret?: string;
 }
 
 const FILE = () => join(config.dataDir, "accounts.json");
@@ -121,7 +123,11 @@ function activeClient(): { id: string; secret: string } | null {
 function read(): AccountsFile {
   try {
     const parsed = JSON.parse(readFileSync(FILE(), "utf8")) as Partial<AccountsFile>;
-    return { client: parsed.client ?? null, accounts: parsed.accounts ?? [] };
+    return {
+      client: parsed.client ?? null,
+      accounts: parsed.accounts ?? [],
+      pendingScriptSecret: parsed.pendingScriptSecret,
+    };
   } catch {
     return { client: null, accounts: [] };
   }
@@ -212,6 +218,30 @@ export function scriptFor(accountId: string): { url: string; secret: string; ver
     secret: account.scriptSecret,
     version: account.scriptVersion ?? 0,
   };
+}
+
+/**
+ * The secret for the next script deployment, persisted rather than held in
+ * memory. The in-memory version broke on the very first real use: the user
+ * copied the code, enio restarted before they pasted the URL back, and the
+ * new process minted a fresh secret -- so the deployed script answered
+ * "unauthorized" with every visible setting correct. A credential the user
+ * has already deployed must survive a restart.
+ */
+export function pendingScriptSecret(): string {
+  const data = read();
+  if (data.pendingScriptSecret) return data.pendingScriptSecret;
+  const secret = randomBytes(24).toString("base64url");
+  write({ ...data, pendingScriptSecret: secret });
+  return secret;
+}
+
+/** Consumed on a successful connect: the secret now lives on the account. */
+export function clearPendingScriptSecret(): void {
+  const data = read();
+  if (!data.pendingScriptSecret) return;
+  delete data.pendingScriptSecret;
+  write(data);
 }
 
 export function removeAccount(id: string): boolean {

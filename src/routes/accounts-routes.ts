@@ -5,6 +5,8 @@ import {
   GRANTS,
   READ_GRANTS,
   addScriptAccount,
+  clearPendingScriptSecret,
+  pendingScriptSecret,
   beginConsent,
   clientSource,
   hasClient,
@@ -40,11 +42,6 @@ interface Flow {
 }
 
 const flows = new Map<string, Flow>();
-
-/** The secret handed out with the script source, held until the deployment
- *  URL comes back. One at a time: a second Copy before the first is pasted
- *  would otherwise strand whichever script was deployed. */
-let pendingSecret: string | null = null;
 
 /** Consent is a person walking through screens; ten minutes is generous and
  *  bounded, where an unbounded map would hold a listener open forever on
@@ -131,8 +128,11 @@ export async function handle(
    * "unauthorized" and no explanation.
    */
   if (req.method === "GET" && url.pathname === "/accounts/script") {
-    if (!pendingSecret) pendingSecret = randomBytes(24).toString("base64url");
-    sendJson(res, 200, { version: SCRIPT_VERSION, source: scriptSource(pendingSecret) });
+    // The same secret every time until a connect succeeds, and persisted --
+    // held in memory it did not survive a restart between "copy" and
+    // "paste", leaving the deployed script answering "unauthorized" with
+    // every visible setting correct.
+    sendJson(res, 200, { version: SCRIPT_VERSION, source: scriptSource(pendingScriptSecret()) });
     return true;
   }
 
@@ -147,16 +147,20 @@ export async function handle(
       });
       return true;
     }
-    if (!pendingSecret) {
-      sendJson(res, 400, { error: { message: "Ask for the script again — its secret was not kept." } });
-      return true;
-    }
     // Called before it is saved: a URL that does not answer is a setup that
     // silently does nothing later, and the failure is far easier to fix while
     // the person is still looking at the deploy screen.
-    const ping = await callScript(deployment, pendingSecret, "ping");
+    const secret = pendingScriptSecret();
+    const ping = await callScript(deployment, secret, "ping");
     if (!ping.ok) {
-      sendJson(res, 400, { error: { message: ping.error } });
+      // The script's own "unauthorized" means its baked-in secret is not this
+      // one -- deployed from another install, or from before a reset. Said in
+      // fix-it terms, because the raw word points nowhere.
+      const message =
+        ping.error === "unauthorized"
+          ? "That deployment holds a different secret than this Enio. Copy the code again, replace the file at script.new, and redeploy."
+          : ping.error;
+      sendJson(res, 400, { error: { message } });
       return true;
     }
     const info = ping.result as { email?: string; version?: number };
@@ -171,11 +175,11 @@ export async function handle(
     const account = addScriptAccount({
       email: info.email || "unknown",
       url: deployment,
-      secret: pendingSecret,
+      secret,
       version: SCRIPT_VERSION,
       grants: (body.grants ?? []) as Grant[],
     });
-    pendingSecret = null;
+    clearPendingScriptSecret();
     sendJson(res, 200, { account });
     return true;
   }

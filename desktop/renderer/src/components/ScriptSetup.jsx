@@ -62,9 +62,30 @@ export function ScriptSetup({ grants, onConnected, onError }) {
           3. Execute as <span className="font-medium">Me</span>, Who has access{" "}
           <span className="font-medium">Anyone</span>
         </li>
-        <li>4. Authorize it — it is your script, so choose Advanced and continue</li>
+        {/* Highlighted because it is the step that looks like something has
+            gone wrong: Google shows a red "hasn't verified this app" screen,
+            and the honest answer is that the app IS the person reading it.
+            Someone who backs out here concludes enio is unsafe rather than
+            that they are three clicks from done. */}
+        <li className="text-foreground">
+          4. Authorize it. Google will warn that the app is{" "}
+          <span className="font-medium">not verified</span> — that is expected: the app is your
+          own script, and the developer it names is you. Choose Advanced, then &ldquo;Go to
+          … (unsafe)&rdquo;, then Allow. If it ever names someone else, stop.
+        </li>
         <li>5. Copy the /exec URL it gives you and paste it below</li>
       </ol>
+
+      <button
+        className="text-[11px] text-muted-foreground underline hover:text-foreground"
+        onClick={() =>
+          window.maple?.openExternal?.(
+            "https://github.com/marizmelo/Enio/blob/master/docs/accounts.md#connecting-with-a-script",
+          )
+        }
+      >
+        How this works, and what the script can and cannot do
+      </button>
 
       <div className="relative">
         <pre className="max-h-40 overflow-auto rounded-md bg-muted/50 p-2 font-mono text-[10px] leading-relaxed">

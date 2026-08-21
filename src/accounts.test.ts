@@ -279,3 +279,48 @@ describe("script accounts", () => {
     await assert.rejects(() => accounts.accessTokenFor(only!.id), /script, not an OAuth grant/);
   });
 });
+
+describe("what a failed script call says", () => {
+  test("a 403 names the setting rather than the status code", async () => {
+    // Watched live: a correct deployment refused the call because access was
+    // left at the default. "The script returned 403" is true and useless --
+    // it sends someone back to the deploy screen with nothing to look for.
+    const { callScript } = await import("./appsscript.js");
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response("<html>denied</html>", { status: 403 })) as typeof fetch;
+    const out = await callScript("https://script.google.com/macros/s/x/exec", "s", "ping");
+    globalThis.fetch = realFetch;
+    assert.equal(out.ok, false);
+    assert.match((out as { error: string }).error, /Who has access/);
+    // Watched second: the settings SHOWED Anyone and the 403 persisted --
+    // reproduced with curl from outside enio. Access edited on an existing
+    // deployment sometimes never propagates, so the error has to offer the
+    // fix that actually works: a new deployment with a fresh URL.
+    assert.match((out as { error: string }).error, /NEW deployment/i);
+  });
+});
+
+describe("the pending script secret", () => {
+  test("survives a restart, because the user may have already deployed it", () => {
+    // The in-memory version broke on first real use: code copied, enio
+    // restarted, URL pasted -- and the fresh process had minted a fresh
+    // secret, so the deployed script answered "unauthorized" with every
+    // visible setting correct.
+    const first = accounts.pendingScriptSecret();
+    assert.equal(accounts.pendingScriptSecret(), first, "stable across calls");
+    assert.ok(readFileSync(accounts.accountsFile(), "utf8").includes(first), "persisted, not module state");
+    accounts.clearPendingScriptSecret();
+    assert.notEqual(accounts.pendingScriptSecret(), first, "cleared means consumed");
+  });
+
+  test("the script has a status page a browser can check, and it leaks nothing", async () => {
+    const { scriptSource } = await import("./appsscript.js");
+    const src = scriptSource("hidden-secret");
+    assert.match(src, /function doGet\(\)/);
+    assert.match(src, /is running/);
+    // doGet is the anonymous probe, so its output must not reference the
+    // secret even indirectly.
+    const doGet = src.slice(src.indexOf("function doGet"), src.indexOf("function doPost"));
+    assert.ok(!doGet.includes("SECRET"), "the status page touches the secret");
+  });
+});

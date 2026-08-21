@@ -43,7 +43,59 @@ something. Grant what you actually want it doing.
 Sending is granted as *send only*, never Gmail's broader "modify" permission,
 so Enio can write you a draft and send it but cannot delete your mail.
 
-## Setting it up
+## Connecting with a script
+
+The shorter road, and the one that needs nothing from Google Cloud. You paste
+a script Enio gives you into your own Google account and deploy it; the script
+runs as you, so there is no application to register and nothing to verify.
+
+Enio cannot deploy it for you. Doing that would need the Apps Script API,
+which needs a Cloud project and OAuth credentials — the very things this
+avoids. So it hands you the code and walks the deploy:
+
+1. Copy the code from Connections, open [script.new](https://script.new) and paste it, replacing what is there
+2. **Deploy → New deployment → Web app**
+3. Execute as **Me**, Who has access **Anyone**
+4. Authorize it — you will see a warning screen; see below
+5. Copy the `/exec` URL and paste it back into Enio
+
+To check a deployment yourself, open its URL in a private browser window: a
+working one says **"Enio bridge is running"**. If Enio reports that Google
+refused the call even though access says *Anyone*, make a **New deployment**
+and paste its fresh URL — access edited on an existing deployment sometimes
+never takes effect, which was observed rather than read about.
+
+### The "Google hasn't verified this app" screen
+
+You will see this at step 4, and it is expected. It means nobody has paid
+Google to review the app — and nobody would, because **the app is you**: a
+script you just wrote, in your own account, running as yourself. Choose
+**Advanced**, then the "Go to … (unsafe)" link, then **Allow**.
+
+**The check worth making every time:** the screen names the developer. If
+that address is *yours*, it is your script and continuing is right. If it
+ever names someone else, stop — that is a different app asking for your
+mailbox.
+
+### What the script can do, and what it cannot
+
+The script is a fixed list of operations: read recent mail, read one message,
+send a message, list upcoming events, add an event, find and read Drive
+files. **Nothing in it deletes anything** — there is no function that could,
+which is checked by a test in Enio itself.
+
+That matters because of how it is reached. The deployment URL is a **bearer
+credential**: whoever holds it can call what the script exposes. Enio also
+sends a secret with every call, so a leaked URL alone is not enough, but
+treat the URL like a password. Revoke it in Apps Script under **Deploy →
+Manage deployments**, or by deleting the project.
+
+The trade against OAuth, plainly: a script is faster to set up and depends on
+nobody, but its access is all-or-nothing and revoking means removing the
+deployment. OAuth grants are individually scoped and revocable at Google, at
+the cost of registering an application first.
+
+## Setting it up with OAuth instead
 
 Google ties mail and calendar access to a registered application, so Enio
 needs one to identify itself as. It uses one **you** own:

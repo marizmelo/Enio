@@ -27,7 +27,7 @@
 
 /** Bumped whenever OPERATIONS change, so a stale deployment is detected
  *  rather than failing on an unknown op with a confusing error. */
-export const SCRIPT_VERSION = 1;
+export const SCRIPT_VERSION = 2;
 
 /** What the script can do. The model never picks from this freely -- the
  *  harness calls one by name -- but it is the whole surface of what a
@@ -71,6 +71,16 @@ export function scriptSource(secret: string): string {
 
 const SECRET = ${JSON.stringify(secret)};
 const VERSION = ${SCRIPT_VERSION};
+
+// The self-check: open the /exec URL in a private browser window and this
+// line is what you should see. It proves anonymous access reaches the
+// script -- the exact thing a misconfigured deployment silently lacks --
+// and it exposes nothing, least of all the secret.
+function doGet() {
+  return ContentService.createTextOutput(
+    "Enio bridge v" + VERSION + " is running. This deployment is reachable."
+  );
+}
 
 function doPost(e) {
   var body;
@@ -218,6 +228,21 @@ export async function callScript(
       // URL; without following it the body never arrives.
       redirect: "follow",
     });
+    // 401/403 from a web app is nearly always one setting, so the error says
+    // which one. "The script returned 403" is true and useless -- it sends
+    // someone back to a deploy screen with nothing to look for.
+    if (res.status === 401 || res.status === 403) {
+      return {
+        ok: false,
+        error:
+          `Google refused the call (${res.status}). Check the deployment's "Who has access" ` +
+          `is "Anyone" — "Only myself" and "Anyone with a Google account" both require a ` +
+          `signed-in browser. If it already says Anyone, make a NEW deployment (Deploy > New ` +
+          `deployment) and paste its fresh URL: access edited on an existing deployment ` +
+          `sometimes never takes effect. A working one shows "Enio bridge is running" when ` +
+          `its URL is opened in a private browser window.`,
+      };
+    }
     if (!res.ok) return { ok: false, error: `The script returned ${res.status}.` };
     const text = await res.text();
     let body: { ok?: unknown; error?: string };
