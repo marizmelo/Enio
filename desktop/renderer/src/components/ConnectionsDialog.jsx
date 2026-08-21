@@ -14,6 +14,7 @@ import {
   removeMcpServer,
   setMcpServerDisabled,
 } from "@/lib/mcp";
+import { AccountsPanel } from "@/components/AccountsPanel";
 
 /**
  * MCP connections: the same ~/.enio/mcp.json the CLI edits, with the reload
@@ -84,13 +85,26 @@ export function ConnectionsDialog({ open, onOpenChange, onChanged }) {
         <DialogHeader className="shrink-0">
           <DialogTitle>Connections</DialogTitle>
           <DialogDescription>
-            MCP servers extend what Enio can reach. Changes connect immediately — no restart.
+            Accounts and MCP servers — what Enio can reach beyond this machine. Changes take
+            effect immediately, with no restart.
           </DialogDescription>
         </DialogHeader>
 
         {error && <p className="shrink-0 text-xs text-destructive">{error}</p>}
 
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+          <section className="space-y-2">
+            <h3 className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Google accounts
+            </h3>
+            <AccountsPanel onError={setError} />
+          </section>
+
+          <section className="space-y-2">
+            <h3 className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              MCP servers
+            </h3>
+        <div className="rounded-md border">
           {servers.length === 0 ? (
             <p className="p-3 text-xs text-muted-foreground">
               No connections yet. Add one below — it becomes tools the agent can use.
@@ -144,7 +158,7 @@ export function ConnectionsDialog({ open, onOpenChange, onChanged }) {
         </div>
 
         {adding ? (
-          <div className="flex shrink-0 flex-col gap-1.5 rounded-md border p-2.5">
+          <div className="flex flex-col gap-1.5 rounded-md border p-2.5">
             <input
               autoFocus
               className="rounded-md border bg-transparent px-2 py-1 text-xs"
@@ -179,10 +193,12 @@ export function ConnectionsDialog({ open, onOpenChange, onChanged }) {
             </div>
           </div>
         ) : (
-          <Button size="sm" variant="outline" className="shrink-0 gap-1 self-start" onClick={() => setAdding(true)}>
+          <Button size="sm" variant="outline" className="gap-1 self-start" onClick={() => setAdding(true)}>
             <Plus className="size-3.5" /> Add connection
           </Button>
         )}
+          </section>
+        </div>
       </DialogContent>
     </Dialog>
   );
