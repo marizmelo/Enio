@@ -230,7 +230,14 @@ describe("script accounts", () => {
     }
     // Nothing that destroys: the URL is a bearer credential, so the surface
     // it unlocks is the whole security argument.
-    assert.ok(!/moveToTrash|setTrashed|deleteFile|deleteEvent/.test(src), "the script can destroy something");
+    assert.ok(
+      !/moveToTrash|setTrashed|deleteFile|deleteEvent|deleteTask|removeRow|\.clear\(/.test(src),
+      "the script can destroy something",
+    );
+    // Tasks is an advanced service; a deployment without it must fail with
+    // the fix in the error, not a bare "Tasks is not defined".
+    assert.match(src, /typeof Tasks === "undefined"/);
+    assert.match(src, /Services/);
   });
 
   test("a stored script account never hands back its URL or secret", () => {
@@ -322,5 +329,30 @@ describe("the pending script secret", () => {
     // secret even indirectly.
     const doGet = src.slice(src.indexOf("function doGet"), src.indexOf("function doPost"));
     assert.ok(!doGet.includes("SECRET"), "the status page touches the secret");
+  });
+});
+
+describe("upgrading a deployed script", () => {
+  test("the upgrade secret is the connected account's, so redeploying is not reconnecting", () => {
+    writeFileSync(accounts.accountsFile(), JSON.stringify({ client: null, accounts: [] }));
+    assert.equal(accounts.scriptUpgradeSecret(), null, "no account, no upgrade secret");
+    accounts.addScriptAccount({
+      email: "me@example.com",
+      url: "https://script.google.com/macros/s/live/exec",
+      secret: "deployed-secret",
+      version: 2,
+      grants: ["mail.read"],
+    });
+    assert.equal(accounts.scriptUpgradeSecret(), "deployed-secret");
+    const byUrl = accounts.scriptAccountByUrl("https://script.google.com/macros/s/live/exec");
+    assert.equal(byUrl?.secret, "deployed-secret");
+    assert.equal(accounts.scriptAccountByUrl("https://script.google.com/macros/s/other/exec"), null);
+  });
+
+  test("a re-connect records the new version on the same account", () => {
+    const [only] = accounts.listAccounts();
+    accounts.updateScriptVersion(only!.id, 3);
+    assert.equal(accounts.scriptFor(only!.id)?.version, 3);
+    assert.equal(accounts.listAccounts().length, 1, "an upgrade is not a second account");
   });
 });

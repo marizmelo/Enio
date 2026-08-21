@@ -79,10 +79,25 @@ mailbox.
 
 ### What the script can do, and what it cannot
 
-The script is a fixed list of operations: read recent mail, read one message,
-send a message, list upcoming events, add an event, find and read Drive
-files. **Nothing in it deletes anything** — there is no function that could,
-which is checked by a test in Enio itself.
+The script is a fixed list of operations: read and send mail, list and add
+calendar events, find and read Drive files, create and append to **Docs**,
+create **Slides**, append rows to **Sheets**, and list and add **Tasks**
+(todos). **Nothing in it deletes anything** — there is no function that
+could, which is checked by a test in Enio itself. Sheets access is
+append-only for the same reason: an added row is visible and reversible by
+hand, where an overwritten cell silently destroys what was there.
+
+Two honest gaps. **Google Keep has no consumer API** — Google gates it to
+enterprise accounts, so no app of any kind can reach a personal account's
+Keep notes; Enio's own [Notes](notes.md) is the local answer. And **Tasks**
+is an "advanced service": the first time a task operation runs it will ask
+you to enable it — in the Apps Script editor, click the **+** next to
+*Services*, choose *Tasks*, press Add, and deploy a new version.
+
+**Upgrading the script** when Enio adds operations: copy the code again from
+Connections — it carries your connected account's key — replace the file,
+then *Deploy → Manage deployments → edit → Version: New version → Deploy*.
+The URL stays the same and nothing needs reconnecting.
 
 That matters because of how it is reached. The deployment URL is a **bearer
 credential**: whoever holds it can call what the script exposes. Enio also

@@ -18,14 +18,16 @@ import { saveScript, scriptSource } from "@/lib/accounts";
  */
 export function ScriptSetup({ grants, onConnected, onError }) {
   const [source, setSource] = useState("");
+  const [upgrade, setUpgrade] = useState(false);
   const [url, setUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const { source: code } = await scriptSource();
+      const { source: code, upgrade: isUpgrade } = await scriptSource();
       setSource(code);
+      setUpgrade(Boolean(isUpgrade));
     } catch (err) {
       onError?.(String(err.message ?? err));
     }
@@ -87,6 +89,13 @@ export function ScriptSetup({ grants, onConnected, onError }) {
         How this works, and what the script can and cannot do
       </button>
 
+      {upgrade && (
+        <p className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1.5 text-[11px] text-emerald-700 dark:text-emerald-400">
+          This code carries your connected account&rsquo;s key, so upgrading is simpler: replace
+          the file, then Deploy → Manage deployments → edit → Version: New version → Deploy.
+          The URL stays the same and nothing needs reconnecting.
+        </p>
+      )}
       <div className="relative">
         <pre className="max-h-40 overflow-auto rounded-md bg-muted/50 p-2 font-mono text-[10px] leading-relaxed">
           {source || "…"}

@@ -7,6 +7,9 @@ import {
   addScriptAccount,
   clearPendingScriptSecret,
   pendingScriptSecret,
+  scriptAccountByUrl,
+  scriptUpgradeSecret,
+  updateScriptVersion,
   beginConsent,
   clientSource,
   hasClient,
@@ -128,11 +131,18 @@ export async function handle(
    * "unauthorized" and no explanation.
    */
   if (req.method === "GET" && url.pathname === "/accounts/script") {
-    // The same secret every time until a connect succeeds, and persisted --
-    // held in memory it did not survive a restart between "copy" and
-    // "paste", leaving the deployed script answering "unauthorized" with
-    // every visible setting correct.
-    sendJson(res, 200, { version: SCRIPT_VERSION, source: scriptSource(pendingScriptSecret()) });
+    // With an account already connected, the source carries ITS secret: an
+    // upgrade is then replace-the-file and deploy a new version -- same URL,
+    // same secret, more operations. Handing out a fresh secret here instead
+    // orphaned the working deployment the moment the code was re-copied.
+    // Otherwise the pending secret, persisted -- in memory it did not
+    // survive a restart between "copy" and "paste".
+    const upgrade = scriptUpgradeSecret();
+    sendJson(res, 200, {
+      version: SCRIPT_VERSION,
+      upgrade: Boolean(upgrade),
+      source: scriptSource(upgrade ?? pendingScriptSecret()),
+    });
     return true;
   }
 
@@ -149,8 +159,11 @@ export async function handle(
     }
     // Called before it is saved: a URL that does not answer is a setup that
     // silently does nothing later, and the failure is far easier to fix while
-    // the person is still looking at the deploy screen.
-    const secret = pendingScriptSecret();
+    // the person is still looking at the deploy screen. A URL already
+    // connected keeps its own secret -- that is a re-connect after an
+    // upgrade, not a new account.
+    const existing = scriptAccountByUrl(deployment);
+    const secret = existing?.secret ?? scriptUpgradeSecret() ?? pendingScriptSecret();
     const ping = await callScript(deployment, secret, "ping");
     if (!ping.ok) {
       // The script's own "unauthorized" means its baked-in secret is not this
@@ -170,6 +183,11 @@ export async function handle(
           message: `That deployment runs v${info?.version ?? "?"} of the script and this enio expects v${SCRIPT_VERSION}. Copy the code again and redeploy.`,
         },
       });
+      return true;
+    }
+    if (existing) {
+      updateScriptVersion(existing.id, SCRIPT_VERSION);
+      sendJson(res, 200, { account: listAccounts().find((a) => a.id === existing.id) });
       return true;
     }
     const account = addScriptAccount({

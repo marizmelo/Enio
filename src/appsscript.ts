@@ -30,7 +30,7 @@
  *  operation surface only -- cosmetic fixes to the source (the ping email
  *  lookup, say) do not bump it, because forcing a redeploy has a real cost
  *  and an old deployment still serves every operation correctly. */
-export const SCRIPT_VERSION = 2;
+export const SCRIPT_VERSION = 3;
 
 /** What the script can do. The model never picks from this freely -- the
  *  harness calls one by name -- but it is the whole surface of what a
@@ -45,6 +45,16 @@ export const OPERATIONS = [
   "calendar.add",
   "drive.find",
   "drive.read",
+  // v3: documents and todos. Keep is absent because Google's Keep API is
+  // enterprise-only -- a consumer account cannot reach it by any route, so
+  // offering it would be a dead-end op. Enio's own Notes covers that need
+  // locally.
+  "docs.create",
+  "docs.append",
+  "slides.create",
+  "sheets.append",
+  "tasks.list",
+  "tasks.add",
 ] as const;
 
 export type Operation = (typeof OPERATIONS)[number];
@@ -109,6 +119,18 @@ function reply(payload) {
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(
     ContentService.MimeType.JSON
   );
+}
+
+// Tasks is an "advanced service" rather than a built-in, so a deployment
+// that never enabled it would throw a bare "Tasks is not defined" from deep
+// inside an op. Checked up front instead, with the fix in the error.
+function needTasks() {
+  if (typeof Tasks === "undefined") {
+    throw new Error(
+      'The Tasks service is not enabled for this script. In the Apps Script editor, ' +
+      'click the + next to "Services", choose Tasks, press Add, then deploy a new version.'
+    );
+  }
 }
 
 var OPS = {
@@ -195,6 +217,73 @@ var OPS = {
       out.push({ id: f.getId(), name: f.getName(), type: f.getMimeType(), url: f.getUrl() });
     }
     return out;
+  },
+
+  "docs.create": function (a) {
+    if (!a.title) throw new Error("title is required");
+    var doc = DocumentApp.create(String(a.title));
+    if (a.text) doc.getBody().appendParagraph(String(a.text));
+    var url = doc.getUrl();
+    doc.saveAndClose();
+    return { id: doc.getId(), url: url };
+  },
+
+  "docs.append": function (a) {
+    if (!a.id || !a.text) throw new Error("id and text are required");
+    var doc = DocumentApp.openById(a.id);
+    var url = doc.getUrl();
+    doc.getBody().appendParagraph(String(a.text));
+    doc.saveAndClose();
+    return { id: a.id, url: url };
+  },
+
+  "slides.create": function (a) {
+    if (!a.title) throw new Error("title is required");
+    var pres = SlidesApp.create(String(a.title));
+    var wanted = a.slides || [];
+    for (var i = 0; i < Math.min(wanted.length, 30); i++) {
+      var slide = pres.appendSlide(SlidesApp.PredefinedLayout.TITLE_AND_BODY);
+      var title = slide.getPlaceholder(SlidesApp.PlaceholderType.TITLE);
+      if (title) title.asShape().getText().setText(String(wanted[i].title || ""));
+      var body = slide.getPlaceholder(SlidesApp.PlaceholderType.BODY);
+      if (body) body.asShape().getText().setText(String(wanted[i].body || ""));
+    }
+    return { id: pres.getId(), url: pres.getUrl(), slides: wanted.length };
+  },
+
+  "sheets.append": function (a) {
+    // Append-only on purpose: a row added is visible and reversible by hand,
+    // where a cell overwrite silently destroys what was there.
+    if (!a.id || !a.row) throw new Error("id and row are required");
+    var sheet = SpreadsheetApp.openById(a.id).getSheets()[0];
+    sheet.appendRow((a.row || []).map(String).slice(0, 26));
+    return { id: a.id, appended: true };
+  },
+
+  "tasks.list": function () {
+    needTasks();
+    var lists = Tasks.Tasklists.list().items || [];
+    var out = [];
+    for (var i = 0; i < lists.length && i < 5; i++) {
+      var items = (Tasks.Tasks.list(lists[i].id, { showCompleted: false, maxResults: 20 }).items) || [];
+      out.push({
+        list: lists[i].title,
+        listId: lists[i].id,
+        tasks: items.map(function (t) {
+          return { id: t.id, title: t.title, due: t.due || null, notes: (t.notes || "").slice(0, 200) };
+        }),
+      });
+    }
+    return out;
+  },
+
+  "tasks.add": function (a) {
+    needTasks();
+    if (!a.title) throw new Error("title is required");
+    var listId = a.listId || ((Tasks.Tasklists.list().items || [])[0] || {}).id;
+    if (!listId) throw new Error("no task list found");
+    var task = Tasks.Tasks.insert({ title: String(a.title), notes: a.notes || "", due: a.due || undefined }, listId);
+    return { id: task.id, title: task.title, list: listId };
   },
 
   "drive.read": function (a) {

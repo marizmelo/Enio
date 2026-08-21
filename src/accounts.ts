@@ -244,6 +244,35 @@ export function clearPendingScriptSecret(): void {
   write(data);
 }
 
+/**
+ * Upgrade support: the secret of an already-connected script account.
+ *
+ * Without this, re-copying the code for a new script version minted a fresh
+ * pending secret -- so upgrading orphaned the working deployment, and the
+ * user had to reconnect from scratch. Handing out source with the EXISTING
+ * secret means an upgrade is: replace the file, deploy a new version, done.
+ * Same URL, same secret, more operations.
+ */
+export function scriptUpgradeSecret(): string | null {
+  const account = read().accounts.find((a) => a.provider === "appsscript" && a.scriptSecret);
+  return account?.scriptSecret ?? null;
+}
+
+/** A script account matched by its deployment URL, for re-connects. */
+export function scriptAccountByUrl(url: string): { id: string; secret: string } | null {
+  const account = read().accounts.find((a) => a.scriptUrl === url && a.scriptSecret);
+  return account ? { id: account.id, secret: account.scriptSecret! } : null;
+}
+
+/** Recorded after a successful re-connect against an upgraded deployment. */
+export function updateScriptVersion(id: string, version: number): void {
+  const data = read();
+  const account = data.accounts.find((a) => a.id === id);
+  if (!account) return;
+  account.scriptVersion = version;
+  write(data);
+}
+
 export function removeAccount(id: string): boolean {
   const data = read();
   const before = data.accounts.length;
