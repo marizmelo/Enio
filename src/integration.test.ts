@@ -1955,3 +1955,43 @@ describe("the file open in the canvas", () => {
     assert.match(prompt, /The user attached the following/);
   });
 });
+
+describe("the mail agent answering a read with a draft", () => {
+  test("the draft is withdrawn and the corrective round answers the question", async () => {
+    // The live failure: "check my email" read a security alert and produced
+    // a full reply to Google, steered by the alert's own urgency. The send
+    // gates held; the guard removes the noise and the invitation.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      {
+        content:
+          "This looks serious. Here is the draft of what I will send:\nSubject: Re: Security alert\nBody:\nHi Google,\nI did not authorize this.",
+      },
+      { content: "One new message: a security alert from Google about a new sign-in. Nothing needs doing." },
+    ]);
+    const notices: string[] = [];
+    const result = await runTurn("check my email", [], registry, sessionId, {
+      onNotice: (n) => notices.push(n),
+    }, { specialist: "mail" });
+    assert.ok(notices.some((n) => /drafted an email nobody asked for/.test(n)), notices.join(" | "));
+    assert.match(result.reply, /Nothing needs doing/);
+    assert.ok(!/Subject: Re:/.test(result.reply), "the draft is gone");
+  });
+
+  test("a requested draft is left alone", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      {
+        content:
+          "Here is the draft of what I will send:\nSubject: Thanks\nBody:\nThanks Ana — the deck looks great.",
+      },
+    ]);
+    const notices: string[] = [];
+    await runTurn("draft a reply to Ana thanking her for the deck", [], registry, sessionId, {
+      onNotice: (n) => notices.push(n),
+    }, { specialist: "mail" });
+    assert.equal(notices.filter((n) => /nobody asked for/.test(n)).length, 0, notices.join(" | "));
+  });
+});

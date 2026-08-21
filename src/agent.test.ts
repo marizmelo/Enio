@@ -698,3 +698,24 @@ describe("code narrated instead of written", () => {
     assert.equal(promisesToWriteWithoutWriting("Wrote src/app.js — 412 bytes."), false);
   });
 });
+
+describe("mail composed that nobody asked for", () => {
+  test("the draft shape and the intent verbs, on the observed failure", async () => {
+    const { composeIntent, looksLikeMailDraft } = await import("./agent.js");
+    // Verbatim shape from the live turn: asked to CHECK, it answered with a
+    // full reply to Google's security alert.
+    const drafted =
+      "This is a security alert indicating unauthorized access. I will draft a reply to clarify.\n" +
+      "Here is the draft of what I will send:\n" +
+      "Subject: Re: Security alert — Action needed\nBody:\nHi Google,\nThank you for the alert.";
+    assert.equal(looksLikeMailDraft(drafted), true);
+    assert.equal(composeIntent("check my email"), false);
+    assert.equal(composeIntent("did anything important arrive today?"), false);
+    // When composing WAS asked, the same shape is the task done right.
+    assert.equal(composeIntent("draft a reply to Ana saying thanks"), true);
+    assert.equal(composeIntent("send Bob the summary"), true);
+    // A summary quoting read_email's own header lines is not a draft.
+    assert.equal(looksLikeMailDraft("The message says:\nSubject: Invoice due\nIt asks for payment by Friday."), false);
+    assert.equal(looksLikeMailDraft("Three new messages, nothing urgent."), false);
+  });
+});
