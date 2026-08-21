@@ -26,7 +26,10 @@
  */
 
 /** Bumped whenever OPERATIONS change, so a stale deployment is detected
- *  rather than failing on an unknown op with a confusing error. */
+ *  rather than failing on an unknown op with a confusing error. Tracks the
+ *  operation surface only -- cosmetic fixes to the source (the ping email
+ *  lookup, say) do not bump it, because forcing a redeploy has a real cost
+ *  and an old deployment still serves every operation correctly. */
 export const SCRIPT_VERSION = 2;
 
 /** What the script can do. The model never picks from this freely -- the
@@ -110,7 +113,12 @@ function reply(payload) {
 
 var OPS = {
   "ping": function () {
-    return { version: VERSION, email: Session.getActiveUser().getEmail() };
+    // Effective user, not active: on an anonymous call getActiveUser() is
+    // empty (the caller is nobody), while the effective user is the account
+    // the deployment executes as -- the owner, which is the label wanted.
+    // Learned from the first live connect, which saved "unknown".
+    var email = Session.getEffectiveUser().getEmail() || Session.getActiveUser().getEmail() || "";
+    return { version: VERSION, email: email };
   },
 
   "mail.recent": function (a) {

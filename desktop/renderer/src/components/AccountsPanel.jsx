@@ -36,6 +36,13 @@ export function AccountsPanel({ onError }) {
   // needs no Google Cloud project at all -- the OAuth route's five Console
   // steps buy an application identity that a script does not need.
   const [how, setHow] = useState("script");
+  // Whether the add-account card is open. Collapsed once anything is
+  // connected: the first success used to leave the setup form on screen with
+  // the new account rendered nowhere -- the panel branched on the OAuth
+  // client, which a script account never sets -- so "Connect" looked like it
+  // did nothing and got pressed again, against a secret the success had
+  // already consumed.
+  const [adding, setAdding] = useState(false);
   const pollRef = useRef(null);
 
   const refresh = useCallback(async () => {
@@ -88,12 +95,64 @@ export function AccountsPanel({ onError }) {
     }
   };
 
+  const accountsList = state.accounts.length > 0 && (
+    <>
+      <div className="rounded-md border">
+        {state.accounts.map((a) => (
+          <div key={a.id} className="flex items-start gap-2 border-b p-3 last:border-b-0">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">
+                {a.email === "unknown" ? "Google account (via script)" : a.email}
+              </p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {a.provider === "appsscript" ? "script · " : ""}
+                {a.grants.map((g) => GRANT_LABELS[g] ?? g).join(" · ") || "nothing granted"}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 gap-1 px-2 text-xs"
+              onClick={async () => {
+                try {
+                  await removeAccount(a.id);
+                  refresh();
+                } catch (err) {
+                  onError?.(String(err.message ?? err));
+                }
+              }}
+            >
+              <Trash2 className="size-3" /> Remove
+            </Button>
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Remove stops Enio using the account. To end the grant itself,{" "}
+        <button
+          className="inline-flex items-center gap-0.5 underline hover:text-foreground"
+          onClick={() => window.maple?.openExternal?.("https://myaccount.google.com/permissions")}
+        >
+          revoke it at Google <ExternalLink className="size-2.5" />
+        </button>
+        {" "}— for a script, also archive its deployment in Apps Script.
+      </p>
+    </>
+  );
+
   // Nothing to set up when enio ships a verified client: the Console
   // walkthrough exists because the user has to register an app, and showing
   // it to someone who does not would be four steps of pure noise.
   if (!state.client) {
     return (
       <div className="space-y-2">
+        {accountsList}
+        {state.accounts.length > 0 && !adding ? (
+          <Button size="sm" variant="outline" className="gap-1" onClick={() => setAdding(true)}>
+            <UserPlus className="size-3.5" /> Add another account
+          </Button>
+        ) : (
+        <>
         <div className="flex gap-1">
           {[
             ["script", "Deploy a script"],
@@ -111,7 +170,14 @@ export function AccountsPanel({ onError }) {
           ))}
         </div>
         {how === "script" ? (
-          <ScriptSetup grants={state.grants} onError={onError} onConnected={refresh} />
+          <ScriptSetup
+            grants={state.grants}
+            onError={onError}
+            onConnected={() => {
+              setAdding(false);
+              refresh();
+            }}
+          />
         ) : (
       <div className="space-y-3 rounded-md border p-3">
         <div>
@@ -190,6 +256,8 @@ export function AccountsPanel({ onError }) {
           </Button>
         </div>
       </div>
+        )}
+        </>
         )}
       </div>
     );
