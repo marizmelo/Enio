@@ -1917,14 +1917,30 @@ takes the maximum risk for a partial capability. Encryption at rest does not
 rescue it either: an unattended agent needs the key available, which usually
 means the key sits beside the ciphertext.
 
-**OAuth, with the user's own client.** Gmail and Calendar scopes are
-*restricted*: an app enio shipped a client id for would show every user an
-unverified-app warning, cap at 100 test users, and need an annual third-party
-security assessment to escape that. So the user creates a Desktop-app OAuth
-client in their own Google Cloud project and pastes the id in. They are then
-their own developer and test user -- the warning is theirs to accept, the
-quota is theirs, and there is no shared secret to leak. The cost is honest:
-about five minutes of setup before anything works.
+**OAuth. Whose client is a publishing question, and both answers are built.**
+Asked directly why enio cannot just offer "Sign in with Google" like every
+other app, which was worth checking rather than re-asserting: it can, and it
+is the same flow with the publisher's client id instead of the user's. What
+separates them is not code. `gmail.readonly` is a **restricted** scope, so a
+published client needs Google verification *plus* a CASA security assessment
+renewed every twelve months. Costs run from a few hundred to a few thousand a
+year at the lower tiers, and the eye-watering figures quoted around Gmail
+attach to apps that store or transmit that data on servers -- which enio does
+not, so it would likely sit in a cheaper tier than the horror stories imply.
+Still an annual obligation on whoever publishes it, and therefore the
+publisher's decision, not an engineering one.
+
+So the code takes either. `ENIO_GOOGLE_CLIENT_ID` and its secret, when set,
+make the panel a single "Sign in with Google"; unset, it walks the user
+through registering their own Desktop-app client in their own Google Cloud
+project, where they are their own developer and test user and the unverified
+warning is theirs to accept. A user's own client always wins over a bundled
+one -- registering it was deliberate. Flipping between the two is a build
+constant, never a rewrite, so verification can happen later without rework.
+
+The cost of the bring-your-own path is honest: about five minutes of setup
+before anything works, which is why the four Console steps are in the panel
+rather than in docs.
 
 The flow is loopback + PKCE (`http://127.0.0.1:<port>`), Google's documented
 path for installed apps, not the retired out-of-band copy-paste flow.

@@ -26,7 +26,7 @@ import {
  * tell, so the link to Google's own permissions page sits next to Remove.
  */
 export function AccountsPanel({ onError }) {
-  const [state, setState] = useState({ client: false, accounts: [], grants: [] });
+  const [state, setState] = useState({ client: false, clientSource: null, accounts: [], grants: [] });
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [picked, setPicked] = useState(() => new Set(["mail.read"]));
@@ -83,6 +83,9 @@ export function AccountsPanel({ onError }) {
     }
   };
 
+  // Nothing to set up when enio ships a verified client: the Console
+  // walkthrough exists because the user has to register an app, and showing
+  // it to someone who does not would be four steps of pure noise.
   if (!state.client) {
     return (
       <div className="space-y-3 rounded-md border p-3">

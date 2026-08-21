@@ -9,10 +9,13 @@ import { config } from "./config.js";
  *
  * The decision behind this is in DECISIONS. In short: no passwords, ever --
  * a password is unscoped, bearer, unlocks changing every other credential,
- * and with MFA barely works alone anyway. OAuth instead, with the *user's
- * own* Google client, because Gmail and Calendar scopes are restricted and a
- * client id enio shipped would put every user behind an unverified-app
- * warning and a 100-test-user cap.
+ * and with MFA barely works alone anyway. OAuth instead.
+ *
+ * Whose OAuth client is a *publishing* question, not a technical one, and
+ * both answers are supported. A client enio ships gives every user one
+ * click, and costs Google verification plus an annual CASA assessment
+ * because Gmail's read scope is restricted. Until that exists, a user brings
+ * their own client and is their own test user. See BUNDLED below.
  *
  * The invariant this inherits, and the reason it is safe to have at all:
  * **credentials belong to the harness, never to the model.** The model asks
@@ -69,6 +72,43 @@ interface AccountsFile {
 
 const FILE = () => join(config.dataDir, "accounts.json");
 
+/**
+ * A client enio itself ships, if there is one.
+ *
+ * "Sign in with Google" is not a different mechanism from bring-your-own --
+ * it is the same flow with the publisher's client id instead of the user's.
+ * What stands between the two is verification, not code: Gmail's read scope
+ * is *restricted*, so publishing one means Google review plus a CASA security
+ * assessment renewed every twelve months. (Enio's own shape helps: CASA's
+ * expensive tiers key on storing or transmitting that data on servers, and
+ * nothing here leaves the machine.)
+ *
+ * So both paths exist and the code does not care which is in play. Set these
+ * and every user gets one click; leave them unset and the panel asks for
+ * their own client. Flipping between the two is a build constant, never a
+ * rewrite.
+ */
+const BUNDLED = {
+  id: process.env.ENIO_GOOGLE_CLIENT_ID ?? "",
+  secret: process.env.ENIO_GOOGLE_CLIENT_SECRET ?? "",
+};
+
+/** Where the client in use came from, so the panel can say "Sign in with
+ *  Google" instead of walking someone through Google Cloud Console. */
+export function clientSource(): "bundled" | "user" | null {
+  const { client } = read();
+  if (client?.id && client?.secret) return "user";
+  return BUNDLED.id && BUNDLED.secret ? "bundled" : null;
+}
+
+/** The client a flow should use: the user's own wins, because someone who
+ *  went to the trouble of registering one meant to use it. */
+function activeClient(): { id: string; secret: string } | null {
+  const { client } = read();
+  if (client?.id && client?.secret) return client;
+  return BUNDLED.id && BUNDLED.secret ? { ...BUNDLED } : null;
+}
+
 function read(): AccountsFile {
   try {
     const parsed = JSON.parse(readFileSync(FILE(), "utf8")) as Partial<AccountsFile>;
@@ -100,8 +140,7 @@ export function listAccounts(): Account[] {
 }
 
 export function hasClient(): boolean {
-  const { client } = read();
-  return Boolean(client?.id && client?.secret);
+  return activeClient() !== null;
 }
 
 export function setClient(id: string, secret: string): void {
@@ -158,7 +197,7 @@ export interface PendingConsent {
  * be copied by hand.
  */
 export function beginConsent(grants: Grant[]): PendingConsent {
-  const { client } = read();
+  const client = activeClient();
   if (!client) throw new Error("Add your Google OAuth client first.");
   const wanted = [...new Set(grants)];
   if (wanted.length === 0) throw new Error("Pick at least one thing to allow.");
@@ -327,13 +366,14 @@ export async function accessTokenFor(accountId: string): Promise<string> {
   if (account.accessToken && account.expiresAt && account.expiresAt > Date.now() + 60_000) {
     return account.accessToken;
   }
-  if (!data.client) throw new Error("The Google OAuth client is gone; re-add it.");
+  const client = activeClient();
+  if (!client) throw new Error("The Google OAuth client is gone; re-add it.");
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: data.client.id,
-      client_secret: data.client.secret,
+      client_id: client.id,
+      client_secret: client.secret,
       refresh_token: account.refreshToken,
       grant_type: "refresh_token",
     }),

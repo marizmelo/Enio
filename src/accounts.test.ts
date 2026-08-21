@@ -168,3 +168,40 @@ describe("the model cannot reach a credential", () => {
     }
   });
 });
+
+/**
+ * Whose client is a publishing question, not a technical one.
+ *
+ * "Sign in with Google" is the same flow with the publisher's client id
+ * instead of the user's; what separates them is Google verification plus an
+ * annual CASA assessment, because Gmail's read scope is restricted. Both
+ * paths therefore exist, and flipping between them must be a constant rather
+ * than a rewrite.
+ */
+describe("bundled vs bring-your-own client", () => {
+  test("with neither, nothing can start", () => {
+    writeFileSync(accounts.accountsFile(), JSON.stringify({ client: null, accounts: [] }));
+    delete process.env.ENIO_GOOGLE_CLIENT_ID;
+    delete process.env.ENIO_GOOGLE_CLIENT_SECRET;
+    assert.equal(accounts.clientSource(), null);
+    assert.equal(accounts.hasClient(), false);
+  });
+
+  test("a user's own client is what the panel reports", () => {
+    accounts.setClient("1234.apps.googleusercontent.com", "GOCSPX-mine");
+    assert.equal(accounts.clientSource(), "user");
+    assert.equal(accounts.hasClient(), true);
+  });
+
+  test("their own client wins over a bundled one", () => {
+    // Someone who went to the trouble of registering a client meant to use
+    // it — their quota, their consent screen.
+    assert.equal(accounts.clientSource(), "user");
+    // Cancelled, always: the flow holds a loopback listener open, and a test
+    // that leaves one behind keeps the whole process alive.
+    const pending = accounts.beginConsent(["mail.read"]);
+    const url = new URL(pending.url);
+    pending.cancel();
+    assert.equal(url.searchParams.get("client_id"), "1234.apps.googleusercontent.com");
+  });
+});

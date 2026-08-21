@@ -5,6 +5,7 @@ import {
   GRANTS,
   READ_GRANTS,
   beginConsent,
+  clientSource,
   hasClient,
   listAccounts,
   removeAccount,
@@ -59,6 +60,9 @@ export async function handle(
   if (req.method === "GET" && url.pathname === "/accounts") {
     sendJson(res, 200, {
       client: hasClient(),
+      // "bundled" means enio ships a verified client and the panel can just
+      // say Sign in with Google; "user" means they registered their own.
+      clientSource: clientSource(),
       accounts: listAccounts(),
       // The vocabulary the picker is built from, so the client never has to
       // hold its own copy of the grant list and drift from this one.
