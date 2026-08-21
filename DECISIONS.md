@@ -1901,6 +1901,55 @@ Two consequences recorded rather than hidden:
 
 ---
 
+## Accounts: Google first, and why not passwords (August 2026)
+
+Asked for an accounts concept -- give enio access to online services -- with
+the choice between storing passwords locally and OAuth put up for discussion.
+Decided: **Google first, read and acting**, over OAuth, with **no password
+storage at all**.
+
+**Passwords were rejected outright, not deferred.** A password is unscoped and
+bearer: it grants everything the account can do, including changing the
+recovery path and every other credential. It is also the one secret that
+cannot be narrowed to "read my calendar". And in 2026 it mostly does not even
+work alone -- MFA turns a stored password into a code prompt, so storing it
+takes the maximum risk for a partial capability. Encryption at rest does not
+rescue it either: an unattended agent needs the key available, which usually
+means the key sits beside the ciphertext.
+
+**OAuth, with the user's own client.** Gmail and Calendar scopes are
+*restricted*: an app enio shipped a client id for would show every user an
+unverified-app warning, cap at 100 test users, and need an annual third-party
+security assessment to escape that. So the user creates a Desktop-app OAuth
+client in their own Google Cloud project and pastes the id in. They are then
+their own developer and test user -- the warning is theirs to accept, the
+quota is theirs, and there is no shared secret to leak. The cost is honest:
+about five minutes of setup before anything works.
+
+The flow is loopback + PKCE (`http://127.0.0.1:<port>`), Google's documented
+path for installed apps, not the retired out-of-band copy-paste flow.
+
+**The invariant this inherits.** Credentials belong to the harness, never to
+the model -- the same line already drawn for background processes (start yes,
+list and kill no) and for cloud sends (package yes, send no). The model asks
+for an action; the harness attaches the token. No token ever enters a prompt,
+so a page the model reads cannot extract one and a reply cannot leak one.
+
+**What it is worth, stated honestly.** Gmail is already readable over IMAP and
+sendable over SMTP with an app password, and on macOS Calendar and Contacts
+are reachable through the local apps by AppleScript. So OAuth's real wins are
+narrower than they look: no app passwords, Gmail threads/labels/search,
+**Drive** (which has no path today at all), and working headless or off a Mac.
+That is worth building; pretending it unlocks Gmail from nothing is not.
+
+**The risk it multiplies, and the answer.** `ENIO_BROWSER_ACT` already carries
+the note that a hostile page plus a logged-in session becomes clicks in that
+session. Accounts make that worse by adding more sessions to be hijacked, so:
+every account is **read-only when added**, acting is a per-account switch, and
+the two are never granted in one step. Revocation stays real -- tokens are
+revoked at Google, and the panel links there rather than pretending a local
+delete is enough.
+
 ## Open questions
 
 - Does LoRA work at all on Maple's architecture? Ten minutes to test, never done.
