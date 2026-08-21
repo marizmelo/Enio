@@ -221,3 +221,14 @@ describe("custom agents in the machinery", () => {
     assert.equal(listCustomAgents().length, 0);
   });
 });
+
+describe("the honesty suffix on custom prompts", () => {
+  test("a loaded custom agent carries it; the stored file does not", () => {
+    saveCustomAgent(valid(), KNOWN, BUILTINS);
+    assert.match(getSpecialist("editor").systemPrompt, /never invent names,\s+dates or numbers/);
+    // Stored text stays the user's own — the suffix is applied at load so
+    // editing round-trips cleanly and the rule can improve without migration.
+    assert.equal(listCustomAgents()[0]!.systemPrompt.includes("never invent"), false);
+    deleteCustomAgent("editor");
+  });
+});

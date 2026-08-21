@@ -719,3 +719,43 @@ describe("mail composed that nobody asked for", () => {
     assert.equal(looksLikeMailDraft("Three new messages, nothing urgent."), false);
   });
 });
+
+/**
+ * The toolless fabrication: an agent with no way to search, asked about the
+ * present, inventing a checkable fact. All three lists must agree before a
+ * withdraw — the intersection is what keeps roleplay and honest admissions
+ * safe.
+ */
+describe("fresh facts asserted by an agent that cannot check", () => {
+  test("the live failure phrasing trips both input and reply tests", async () => {
+    const { asksAboutCurrentWorld, assertsFreshFact, admitsCannotCheck } = await import("./agent.js");
+    assert.equal(asksAboutCurrentWorld("what was the last spiderman movie on theaters this year"), true);
+    assert.equal(
+      assertsFreshFact(
+        "As of today, August 21, 2026, the last Spider-Man movie released in theaters this year was *Spider-Man: Beyond the Web* — released in July 2026.",
+      ),
+      true,
+    );
+    assert.equal(admitsCannotCheck("released in July 2026, a major event"), false);
+  });
+
+  test("roleplay, explanations and edits do not read as world questions", async () => {
+    const { asksAboutCurrentWorld } = await import("./agent.js");
+    assert.equal(asksAboutCurrentWorld("who are you?"), false);
+    assert.equal(asksAboutCurrentWorld("how did you get your powers"), false);
+    assert.equal(asksAboutCurrentWorld("explain monads to me"), false);
+    assert.equal(asksAboutCurrentWorld("tighten up this paragraph for me"), false);
+    assert.equal(asksAboutCurrentWorld("what's the latest iPhone"), true);
+    assert.equal(asksAboutCurrentWorld("any news on the launch?"), true);
+  });
+
+  test("an admission is recognised and never counts as a fabrication", async () => {
+    const { admitsCannotCheck, assertsFreshFact } = await import("./agent.js");
+    assert.equal(admitsCannotCheck("I can't check movie releases from here — ask @researcher."), true);
+    assert.equal(admitsCannotCheck("I have no way to check current news."), true);
+    // An admission that also mentions a year stays an admission: the guard
+    // checks admission first, so this pairing must be recognisable.
+    assert.equal(assertsFreshFact("I cannot verify anything released in 2026."), true);
+    assert.equal(admitsCannotCheck("I cannot verify anything released in 2026."), true);
+  });
+});

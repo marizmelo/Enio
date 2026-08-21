@@ -1995,3 +1995,55 @@ describe("the mail agent answering a read with a draft", () => {
     assert.equal(notices.filter((n) => /nobody asked for/.test(n)).length, 0, notices.join(" | "));
   });
 });
+
+describe("fresh facts from an agent that cannot check them", () => {
+  test("the invented release is withdrawn and the retry admits it", async () => {
+    // The live failure: a user-made agent (recall + read_skill only) was
+    // asked about "this year" and invented a film title, a release date and
+    // a plot arc. The generalist stands in here — same property, no web
+    // tools — because the guard is about capability, not about who is custom.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      {
+        content:
+          "As of today, the last Spider-Man movie released in theaters this year was *Spider-Man: Beyond the Web*, released in July 2026 — a major event.",
+      },
+      { content: "I can't check movie releases from here — ask @researcher and it will be looked up." },
+    ]);
+    const notices: string[] = [];
+    const result = await runTurn("what was the last spiderman movie on theaters this year", [], registry, sessionId, {
+      onNotice: (n) => notices.push(n),
+    }, { specialist: "generalist" });
+    assert.ok(notices.some((n) => /no way to check/.test(n)), notices.join(" | "));
+    assert.match(result.reply, /can't check/i);
+    assert.ok(!/Beyond the Web/.test(result.reply), "the invented title is gone");
+  });
+
+  test("a retry that keeps asserting lands on the honest floor", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { content: "The newest model came out in June 2026 and was announced at the summer event." },
+      { content: "It was released in 2026 with several new features." },
+    ]);
+    const result = await runTurn("what's the latest iPhone this year?", [], registry, sessionId, {}, {
+      specialist: "generalist",
+    });
+    assert.match(result.reply, /I made that up|no way to check/i);
+  });
+
+  test("roleplay without a freshness anchor is left alone", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { content: "I got my powers from a radioactive spider bite back in the day — it changed everything for me." },
+    ]);
+    const notices: string[] = [];
+    const result = await runTurn("how did you get your powers?", [], registry, sessionId, {
+      onNotice: (n) => notices.push(n),
+    }, { specialist: "generalist" });
+    assert.equal(notices.filter((n) => /no way to check/.test(n)).length, 0, notices.join(" | "));
+    assert.match(result.reply, /radioactive spider/);
+  });
+});

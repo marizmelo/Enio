@@ -288,13 +288,29 @@ export const DEFAULT_SPECIALIST = "generalist";
  * because the fuzzy salvage path happened to catch the parse failure.
  * Deriving from the live list closes that class of drift.
  */
+/**
+ * Appended to every custom agent's prompt at load, not stored: the built-in
+ * prompts each carry their own honesty rules, earned failure by failure,
+ * and a user-authored prompt ("You are Spiderman") carries none — which is
+ * how one confidently invented a film title and release date when asked
+ * about "this year". The guard in agent.ts enforces this structurally; the
+ * prompt states it, because both layers together are the pattern that has
+ * actually held at this model size.
+ */
+const CUSTOM_PROMPT_SUFFIX =
+  `You know only what your tools return, what this conversation contains, ` +
+  `and what is written above. For real-world specifics you cannot check — ` +
+  `current events, releases, prices, dates — say plainly that you cannot ` +
+  `check them from here rather than guessing, and never invent names, ` +
+  `dates or numbers.`;
+
 export function allSpecialists(): Specialist[] {
   return [
     ...SPECIALISTS,
     ...listCustomAgents().map((a) => ({
       name: a.name,
       description: a.description,
-      systemPrompt: a.systemPrompt,
+      systemPrompt: `${a.systemPrompt}\n\n${CUSTOM_PROMPT_SUFFIX}`,
       tools: a.tools,
     })),
   ];
