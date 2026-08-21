@@ -296,10 +296,39 @@ export const fsTools: ToolDef[] = [
     },
     async run(args) {
       const target = safePath(String(args.path ?? ""), { forWrite: true });
+      // What was there before, so a rewrite that loses most of a file can say
+      // so. Cheap: only the line count, and only when something exists.
+      const before = existsSync(target)
+        ? await readFile(target, "utf8")
+            .then((t) => t.split("\n").length)
+            .catch(() => 0)
+        : 0;
       const content = String(args.content ?? "");
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, content, "utf8");
-      return `Wrote ${content.length} bytes to ${rel(target)}`;
+      const head = `Wrote ${content.length} bytes to ${rel(target)}`;
+
+      // write_file replaces the whole file, so a model that regenerates a
+      // long file to change one line can drop the rest of it -- silently,
+      // because "Wrote 412 bytes" reads like success either way. This is not
+      // a refusal: rewriting IS the tool's job, and a deliberate trim would
+      // trip the same check. It just makes the loss impossible to miss, to
+      // the model in the result and to the person through the notice channel,
+      // which is the difference between a mistake caught now and one found
+      // days later. Only for files long enough for the loss to matter, and
+      // only when most of it is gone -- a threshold low enough to stay quiet
+      // on ordinary editing.
+      const after = content.split("\n").length;
+      if (before >= 20 && after < before * 0.6) {
+        const lost = before - after;
+        const warning =
+          `${rel(target)} was ${before} lines and is now ${after} — ` +
+          `${lost} lines are gone. If that was not intended, the previous ` +
+          `contents are not recoverable from here; use edit_file to change ` +
+          `part of a file.`;
+        return { text: `${head}\n${warning}`, notice: warning };
+      }
+      return head;
     },
   },
   {

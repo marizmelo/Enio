@@ -1642,11 +1642,24 @@ This is the cheap half of look-before-guess. The seed already searches before
 the first call, but only with a project open; the redirect works everywhere,
 including the workspace, and costs nothing when the path was right.
 
-Left for later, in order of what the traces support: `list_dir` is not on the
-coder (dropped for edit_file) so it cannot cheaply see a folder -- `ls` via
-run_command covers it but the model rarely reaches for it; the search seed
-does not fire without a project; and `write_file` still wins over `edit_file`
-on some models, which is whole-file rewriting with the drift that implies.
+All three of those are now closed, each in the cheapest place:
+
+- **Seeing a folder.** `list_dir` is not on the coder (edit_file took the
+  slot, and only `read_skill` was droppable -- which would have cut it off
+  from its skills to buy a listing). So `read_file` on a directory lists it,
+  through the same function `list_dir` uses. No tool spent, and it matches
+  what the model reaches for anyway; EISDIR taught it nothing.
+- **The seed without a project.** The gate was there because workspace search
+  was content-only, so the fix was in search, not the gate: `search_code` now
+  matches file names in the workspace the way the project index matched paths.
+- **write_file over edit_file.** Measured before touching it, and the evidence
+  did not support prompt surgery: the read-then-rewrite-whole pattern appears
+  **once** in the traces. The harm is worth guarding even at that rate, but
+  the harm is not the tool choice -- it is a regenerated file silently losing
+  most of itself while "Wrote 412 bytes" reads like success. So a rewrite that
+  drops most of a long file now says so, in the result and through the notice
+  channel, and is not refused: rewriting is the tool's job and a deliberate
+  trim trips the same check.
 
 ### Acting, not just reading: edit_file, look-before-guess, verify (August 2026)
 

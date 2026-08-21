@@ -179,3 +179,48 @@ test("a code project with one attached folder: plain code paths root there; docu
     project.closeProject();
   }
 });
+
+/**
+ * A whole-file rewrite that loses most of the file.
+ *
+ * `write_file` replaces everything, so a model regenerating a long file to
+ * change one line can drop the rest — and "Wrote 412 bytes" reads like
+ * success either way. Measured first: in the traces this pattern (read a
+ * file, then rewrite it whole) appears once, which is too thin to justify
+ * changing the prompt. What is worth guarding is not the tool choice but the
+ * harm, so the loss is reported rather than refused: rewriting IS the tool's
+ * job, and a deliberate trim trips the same check.
+ */
+const write = fsTools.find((t) => t.name === "write_file")!;
+const sixty = Array.from({ length: 60 }, (_, i) => `line ${i}`).join("\n");
+
+test("write_file says so when most of a long file disappears", async () => {
+  await write.run({ path: "long.txt", content: sixty });
+  const out = await write.run({ path: "long.txt", content: "just this\n" });
+  const text = typeof out === "string" ? out : out.text;
+  assert.match(text, /Wrote \d+ bytes/);
+  assert.match(text, /was 60 lines and is now 2/);
+  assert.match(text, /58 lines are gone/);
+  // And the person hears about it too, not only the model.
+  assert.ok(typeof out !== "string" && out.notice, "a lost file is worth a notice");
+});
+
+test("write_file stays quiet on ordinary editing", async () => {
+  await write.run({ path: "steady.txt", content: sixty });
+  const out = await write.run({
+    path: "steady.txt",
+    content: sixty.replace("line 3", "line three"),
+  });
+  assert.equal(typeof out, "string", "no notice for a same-size rewrite");
+});
+
+test("write_file treats a new file as no loss at all", async () => {
+  const out = await write.run({ path: "brand-new.txt", content: "hi\n" });
+  assert.equal(typeof out, "string");
+});
+
+test("write_file ignores a short file shrinking", async () => {
+  await write.run({ path: "tiny.txt", content: "a\nb\nc\n" });
+  const out = await write.run({ path: "tiny.txt", content: "a\n" });
+  assert.equal(typeof out, "string", "below the length floor");
+});
