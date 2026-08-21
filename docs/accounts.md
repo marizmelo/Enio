@@ -80,19 +80,24 @@ mailbox.
 ### What the script can do, and what it cannot
 
 The script is a fixed list of operations: read and send mail, list and add
-calendar events, find and read Drive files, create and append to **Docs**,
-create **Slides**, append rows to **Sheets**, and list and add **Tasks**
-(todos). **Nothing in it deletes anything** — there is no function that
+calendar events (with a **Meet** link on request), find and read Drive files,
+create and append to **Docs**, create **Slides**, append rows to **Sheets**,
+list and add **Tasks** (todos), create **Forms** and read their responses,
+look up **Contacts**, and **translate** text. **Nothing in it deletes anything** — there is no function that
 could, which is checked by a test in Enio itself. Sheets access is
 append-only for the same reason: an added row is visible and reversible by
 hand, where an overwritten cell silently destroys what was there.
 
-Two honest gaps. **Google Keep has no consumer API** — Google gates it to
-enterprise accounts, so no app of any kind can reach a personal account's
-Keep notes; Enio's own [Notes](notes.md) is the local answer. And **Tasks**
-is an "advanced service": the first time a task operation runs it will ask
-you to enable it — in the Apps Script editor, click the **+** next to
-*Services*, choose *Tasks*, press Add, and deploy a new version.
+The honest gaps, so nobody hunts for them: **Google Keep** and **Google
+Vids** have no API a consumer account can reach; the **Photos** API stopped
+serving anything an app did not itself upload (2025); and **Chat** needs its
+own Cloud-project app configuration — the exact dependency this path exists
+to avoid. Enio's own [Notes](notes.md) covers the Keep-shaped need locally.
+
+Three operations lean on "advanced services", each one click in the editor
+(**+** next to *Services* → Add → deploy a new version), and each fails with
+that exact instruction rather than a bare error until enabled: **Tasks** for
+todos, **Peopleapi** for contacts, **Calendar API** for Meet links.
 
 **Upgrading the script** when Enio adds operations: copy the code again from
 Connections — it carries your connected account's key — replace the file,

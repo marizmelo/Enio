@@ -231,9 +231,12 @@ describe("script accounts", () => {
     // Nothing that destroys: the URL is a bearer credential, so the surface
     // it unlocks is the whole security argument.
     assert.ok(
-      !/moveToTrash|setTrashed|deleteFile|deleteEvent|deleteTask|removeRow|\.clear\(/.test(src),
+      !/moveToTrash|setTrashed|deleteFile|deleteEvent|deleteTask|removeRow|deleteItem|deleteResponse|deleteContact|\.clear\(/.test(src),
       "the script can destroy something",
     );
+    // Never a general fetch: it would turn the deployment into an open proxy
+    // authenticated as the user, and undo every other op's restraint with it.
+    assert.ok(!src.includes("UrlFetchApp"), "the script can reach arbitrary URLs");
     // Tasks is an advanced service; a deployment without it must fail with
     // the fix in the error, not a bare "Tasks is not defined".
     assert.match(src, /typeof Tasks === "undefined"/);

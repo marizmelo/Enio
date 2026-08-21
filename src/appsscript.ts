@@ -30,7 +30,7 @@
  *  operation surface only -- cosmetic fixes to the source (the ping email
  *  lookup, say) do not bump it, because forcing a redeploy has a real cost
  *  and an old deployment still serves every operation correctly. */
-export const SCRIPT_VERSION = 3;
+export const SCRIPT_VERSION = 4;
 
 /** What the script can do. The model never picks from this freely -- the
  *  harness calls one by name -- but it is the whole surface of what a
@@ -55,6 +55,17 @@ export const OPERATIONS = [
   "sheets.append",
   "tasks.list",
   "tasks.add",
+  // v4: forms with their responses, contacts, translation, and Meet links.
+  // Deliberately absent, each for a hard reason: Google Vids and Keep have
+  // no API a consumer can reach; the Photos API stopped serving anything an
+  // app did not itself upload (2025); Chat needs its own Cloud-project app
+  // config, the exact dependency this path exists to avoid; and UrlFetch is
+  // never exposed -- it would turn the deployment into an open proxy
+  // authenticated as the user.
+  "forms.create",
+  "forms.responses",
+  "contacts.find",
+  "translate",
 ] as const;
 
 export type Operation = (typeof OPERATIONS)[number];
@@ -133,6 +144,24 @@ function needTasks() {
   }
 }
 
+function needPeople() {
+  if (typeof People === "undefined") {
+    throw new Error(
+      'The People API service is not enabled for this script. In the Apps Script editor, ' +
+      'click the + next to "Services", choose "Peopleapi", press Add, then deploy a new version.'
+    );
+  }
+}
+
+function needCalendarAPI() {
+  if (typeof Calendar === "undefined") {
+    throw new Error(
+      'Meet links need the Calendar API service. In the Apps Script editor, click the + ' +
+      'next to "Services", choose "Calendar API", press Add, then deploy a new version.'
+    );
+  }
+}
+
 var OPS = {
   "ping": function () {
     // Effective user, not active: on an anonymous call getActiveUser() is
@@ -198,6 +227,26 @@ var OPS = {
 
   "calendar.add": function (a) {
     if (!a.title || !a.start || !a.end) throw new Error("title, start and end are required");
+    // meet: true attaches a Google Meet link, which the built-in service
+    // cannot do -- it needs the advanced Calendar API, so only that variant
+    // asks for it.
+    if (a.meet) {
+      needCalendarAPI();
+      var created = Calendar.Events.insert(
+        {
+          summary: String(a.title),
+          description: a.description || "",
+          location: a.location || "",
+          start: { dateTime: new Date(a.start).toISOString() },
+          end: { dateTime: new Date(a.end).toISOString() },
+          conferenceData: { createRequest: { requestId: Utilities.getUuid() } },
+        },
+        "primary",
+        { conferenceDataVersion: 1 }
+      );
+      var entry = ((created.conferenceData || {}).entryPoints || [])[0] || {};
+      return { id: created.id, title: created.summary, meet: entry.uri || null };
+    }
     var ev = CalendarApp.getDefaultCalendar().createEvent(
       a.title,
       new Date(a.start),
@@ -284,6 +333,71 @@ var OPS = {
     if (!listId) throw new Error("no task list found");
     var task = Tasks.Tasks.insert({ title: String(a.title), notes: a.notes || "", due: a.due || undefined }, listId);
     return { id: task.id, title: task.title, list: listId };
+  },
+
+  "forms.create": function (a) {
+    if (!a.title || !a.questions) throw new Error("title and questions are required");
+    var form = FormApp.create(String(a.title));
+    if (a.description) form.setDescription(String(a.description));
+    var qs = (a.questions || []).slice(0, 30);
+    for (var i = 0; i < qs.length; i++) {
+      var q = qs[i] || {};
+      var type = String(q.type || "text");
+      var title = String(q.title || "");
+      if (type === "text") form.addTextItem().setTitle(title);
+      else if (type === "paragraph") form.addParagraphTextItem().setTitle(title);
+      else if (type === "choice")
+        form.addMultipleChoiceItem().setTitle(title).setChoiceValues((q.options || []).map(String));
+      else if (type === "checkbox")
+        form.addCheckboxItem().setTitle(title).setChoiceValues((q.options || []).map(String));
+      else if (type === "scale")
+        form.addScaleItem().setTitle(title).setBounds(1, Math.min(Number(q.max) || 5, 10));
+      else throw new Error("unknown question type: " + type + " (text, paragraph, choice, checkbox, scale)");
+    }
+    return { id: form.getId(), url: form.getPublishedUrl(), editUrl: form.getEditUrl(), questions: qs.length };
+  },
+
+  "forms.responses": function (a) {
+    if (!a.id) throw new Error("id is required");
+    var form = FormApp.openById(a.id);
+    var all = form.getResponses();
+    return {
+      title: form.getTitle(),
+      count: all.length,
+      responses: all.slice(-50).map(function (r) {
+        return {
+          at: r.getTimestamp().toISOString(),
+          answers: r.getItemResponses().map(function (ir) {
+            return { question: ir.getItem().getTitle(), answer: String(ir.getResponse()).slice(0, 300) };
+          }),
+        };
+      }),
+    };
+  },
+
+  "contacts.find": function (a) {
+    needPeople();
+    if (!a.query) throw new Error("query is required");
+    var result = People.People.searchContacts({
+      query: String(a.query),
+      readMask: "names,emailAddresses,phoneNumbers",
+      pageSize: 10,
+    });
+    return (result.results || []).map(function (m) {
+      var person = m.person || {};
+      return {
+        name: (((person.names || [])[0]) || {}).displayName || "",
+        emails: (person.emailAddresses || []).map(function (e) { return e.value; }),
+        phones: (person.phoneNumbers || []).map(function (n) { return n.value; }),
+      };
+    });
+  },
+
+  "translate": function (a) {
+    if (!a.text || !a.to) throw new Error("text and to are required");
+    // Free, built-in, and worth its slot twice over: the local model is
+    // weakest exactly where a translator is strongest.
+    return { text: LanguageApp.translate(String(a.text).slice(0, 5000), String(a.from || ""), String(a.to)) };
   },
 
   "drive.read": function (a) {
