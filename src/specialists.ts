@@ -117,7 +117,8 @@ export const SPECIALISTS: Specialist[] = [
       `write_file for a new file, a whole document, or a file that read_file ` +
       `showed as empty. Code you type in the reply reaches no file: a file ` +
       `changes only when write_file or edit_file is called. To see what a ` +
-      `folder holds, run_command ls <folder>. After a change, run the relevant ` +
+      `folder holds, call read_file on the folder — it lists what is inside. ` +
+      `After a change, run the relevant ` +
       `test or build command to check it. Report what you actually observed, ` +
       `including failures — do not describe an intended outcome as if it ` +
       `happened.\n\n` +

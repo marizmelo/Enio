@@ -59,3 +59,33 @@ describe("read_file on a path that is not there", () => {
     assert.match(out, /Did you mean "coffee-brewing\.md"\?/);
   });
 });
+
+/**
+ * Reading a folder.
+ *
+ * The coder does not hold `list_dir` -- `edit_file` took that slot under the
+ * six-tool ceiling, and nothing else was droppable. So the instinct the model
+ * already has (read the thing) is made to work, which costs nothing against
+ * the ceiling and needs no prompt line about a tool it cannot see. EISDIR
+ * taught it nothing and ended the turn.
+ */
+describe("read_file on a folder", () => {
+  test("lists the folder instead of failing", async () => {
+    const out = String(await readFile.run({ path: "notes" }));
+    assert.match(out, /plan\.md/);
+    assert.ok(!/Error/.test(out), out);
+  });
+
+  test("marks subfolders so a path can be composed from the listing", async () => {
+    const out = String(await readFile.run({ path: "." }));
+    assert.match(out, /notes\//, "a directory ends in a slash");
+    assert.match(out, /coffee-brewing\.md \(\d+ bytes\)/);
+  });
+
+  test("an empty folder says so rather than printing nothing", async () => {
+    const { mkdirSync } = await import("node:fs");
+    mkdirSync(join(ws, "hollow"), { recursive: true });
+    const out = String(await readFile.run({ path: "hollow" }));
+    assert.match(out, /is empty/);
+  });
+});

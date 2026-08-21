@@ -215,7 +215,7 @@ export const fsTools: ToolDef[] = [
     // "we can't view PDFs here" and fabricated instead of calling this tool.
     // The description is where a tool's abilities are learned from.
     description:
-      "Read a text file or PDF from the working folder. PDF text is extracted automatically. Returns the contents with line numbers.",
+      "Read a text file or PDF from the working folder. PDF text is extracted automatically. Returns the contents with line numbers. Given a folder instead of a file, it lists what is in that folder — use that to see what exists before reading.",
     origin: "builtin",
     parameters: {
       type: "object",
@@ -234,6 +234,14 @@ export const fsTools: ToolDef[] = [
       // is the same whatever the reason for the miss.
       if (!existsSync(target)) {
         return `Error: no file at ${rel(target)}.${didYouMean(requested)}`;
+      }
+
+      // A folder is not an error, it is a question with an obvious answer.
+      // The coder does not hold list_dir -- edit_file took that slot -- so
+      // reading a directory is how it sees one, which is what it reaches for
+      // anyway. EISDIR taught it nothing and ended the turn.
+      if ((await stat(target)).isDirectory()) {
+        return await listFolder(target);
       }
 
       // Binary must become real text or an honest refusal -- never bytes.
@@ -378,49 +386,61 @@ export const fsTools: ToolDef[] = [
  * caught as "web-search ability does not exist".
  */
 export const listDirTool: ToolDef = {
-    name: "list_dir",
-    description:
-      "List files and directories at a path in the working folder. Use this before reading to discover what exists.",
-    origin: "builtin",
-    parameters: {
-      type: "object",
-      properties: {
-        path: {
-          type: "string",
-          description: "Directory relative to the working folder. Defaults to the root.",
-        },
+  name: "list_dir",
+  description:
+    "List files and directories at a path in the working folder. Use this before reading to discover what exists.",
+  origin: "builtin",
+  parameters: {
+    type: "object",
+    properties: {
+      path: {
+        type: "string",
+        description: "Directory relative to the working folder. Defaults to the root.",
       },
-      required: [],
     },
-    async run(args) {
-      const target = safePath(String(args.path ?? "."));
-      const entries = await readdir(target, { withFileTypes: true });
+    required: [],
+  },
+  async run(args) {
+    return await listFolder(safePath(String(args.path ?? ".")));
+  },
+};
 
-      // At the project's own root, the attachments are the map: they are
-      // addressed by these names, so this listing is where the model copies
-      // them from. Notes ride along because "what is this for" is the whole
-      // reason they exist.
-      const active = activeProject();
-      const mounts =
-        active && target === resolve(active.outDir)
-          ? active.attachments.map((a) =>
-              `${a.alias}${a.kind === "folder" ? "/" : ""}${a.note ? ` — ${a.note}` : ""}`,
-            )
-          : [];
+/**
+ * A folder's contents, in the one format both tools print.
+ *
+ * Shared because `read_file` on a directory answers with this too. The coder
+ * does not hold `list_dir` -- that was the slot `edit_file` took, and nothing
+ * else was droppable -- so the model's own instinct, reading the folder, is
+ * made the affordance instead. It costs nothing against the tool ceiling and
+ * needs no prompt line describing a tool the model cannot see.
+ */
+export async function listFolder(target: string): Promise<string> {
+  const entries = await readdir(target, { withFileTypes: true });
 
-      if (entries.length === 0 && mounts.length === 0) return `${rel(target)} is empty.`;
-      const described = await Promise.all(
-        entries.slice(0, 200).map(async (e) => {
-          if (e.isDirectory()) return `${e.name}/`;
-          try {
-            const s = await stat(join(target, e.name));
-            return `${e.name} (${s.size} bytes)`;
-          } catch {
-            return e.name;
-          }
-        }),
-      );
-      return `${rel(target)}:\n` + [...mounts, ...described].join("\n");
-    },
-  };
+  // At the project's own root, the attachments are the map: they are
+  // addressed by these names, so this listing is where the model copies
+  // them from. Notes ride along because "what is this for" is the whole
+  // reason they exist.
+  const active = activeProject();
+  const mounts =
+    active && target === resolve(active.outDir)
+      ? active.attachments.map(
+          (a) => `${a.alias}${a.kind === "folder" ? "/" : ""}${a.note ? ` — ${a.note}` : ""}`,
+        )
+      : [];
 
+  if (entries.length === 0 && mounts.length === 0) return `${rel(target)} is empty.`;
+  const described = await Promise.all(
+    entries.slice(0, 200).map(async (e) => {
+      if (e.isDirectory()) return `${e.name}/`;
+      try {
+        const st = await stat(join(target, e.name));
+        return `${e.name} (${st.size} bytes)`;
+      } catch {
+        return e.name;
+      }
+    }),
+  );
+  const more = entries.length > 200 ? `\n[...${entries.length - 200} more]` : "";
+  return `${rel(target)}:\n` + [...mounts, ...described].join("\n") + more;
+}
