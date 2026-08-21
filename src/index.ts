@@ -20,7 +20,16 @@ import { builtinSkillsDir, findSkill, loadSkills, skillContents, skillsDir } fro
 // Only the scheduler itself: `enio daemon` hosts it. The task CLI is gone --
 // a schedule is a property of an automation now, set in the app or over the
 // API, not a separate thing with its own verbs.
-import { startScheduler } from "./tasks.js";
+import { addTask, listTasks, removeTask, startScheduler, validateSchedule } from "./tasks.js";
+import {
+  deletePipeline,
+  getPipeline,
+  listPipelines,
+  listRuns,
+  runPipeline,
+  savePipeline,
+} from "./pipelines.js";
+import { ABILITIES } from "./abilities.js";
 import { analyse, draftSkill } from "./suggest.js";
 import { visionStatus } from "./vision.js";
 import { mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
@@ -48,6 +57,51 @@ import { buildRegistry } from "./tools/index.js";
 import { closeMcp } from "./tools/mcp.js";
 
 const [, , command = "chat", ...rest] = process.argv;
+
+/**
+ * The ability a CLI-built step runs as, from the agent the user named.
+ *
+ * A node carries an ability, and the ability decides which agent runs it --
+ * so "--agent coder" has to become an ability whose specialist is the coder.
+ * Preferring the bare `@agent ___` template picks the general-purpose tile
+ * for that agent rather than a narrow one like "Search my project", which
+ * would quietly scope the step.
+ */
+function abilityForAgent(agent: string | undefined) {
+  if (!agent) return ABILITIES.find((a) => a.id === "prompt") ?? ABILITIES[0]!;
+  const mine = ABILITIES.filter((a) => a.specialist === agent);
+  return mine.find((a) => new RegExp(`^@${agent} ___$`).test(a.promptTemplate)) ?? mine[0] ?? null;
+}
+
+/** The name that makes a task a pipeline's schedule -- the same reserved
+ *  shape the panel uses, so a CLI schedule shows up on the clock chip. */
+function schedulePipeline(id: string, name: string, cron: string): string {
+  const next = validateSchedule(cron);
+  if (!next.ok) throw new Error(`${next.reason} — cron is "minute hour day month weekday".`);
+  removeTask(`auto-${id}`);
+  addTask({ name: `auto-${id}`, pipeline: name, schedule: cron });
+  // Local time, not ISO: cron fires in the machine's timezone, and printing
+  // UTC made a 09:00 schedule report "16:00" -- a number the user cannot
+  // reconcile with what they asked for.
+  return `"${name}" runs ${cron} — next ${localTime(next.next)}`;
+}
+
+/** When something happens, in the timezone the schedule actually uses. */
+function localTime(at: Date): string {
+  return at.toLocaleString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** The cron a pipeline is scheduled with, or null. */
+function scheduleFor(id: string): string | null {
+  const row = listTasks().find((t) => t.name === `auto-${id}`);
+  return row?.enabled ? row.schedule : null;
+}
 
 async function main(): Promise<void> {
   ensureDirs();
@@ -493,6 +547,148 @@ async function main(): Promise<void> {
       for (const p of set.problems) {
         console.error(`\x1b[33mskipped\x1b[0m ${p.path}\n  ${p.reason}\n`);
       }
+      break;
+    }
+
+    /**
+     * Automations from the CLI.
+     *
+     * Retiring the task commands took scheduling out of the CLI with them --
+     * the app and the HTTP API were the only ways left, which is wrong for a
+     * tool that runs headless. These are the same automations the app builds:
+     * one row in `pipelines`, and a schedule is a task named `auto-<id>`
+     * pointing at it, which is exactly the mapping the panel uses.
+     *
+     * A CLI-built automation is one step, because a graph is not something to
+     * type. Multi-step editing stays in the canvas, and this can schedule,
+     * run and remove whatever was built there.
+     */
+    case "automations": {
+      const all = listPipelines();
+      if (all.length === 0) {
+        console.log(
+          `No automations.\n\n  enio automation new NAME --prompt "..." [--agent coder]\n` +
+            `  enio suggest      find candidates in what you have already repeated`,
+        );
+        break;
+      }
+      for (const p of all) {
+        const schedule = scheduleFor(p.id);
+        // The cron AND the next fire: the expression is what you edit, the
+        // date is what you can check against what you meant.
+        const next = schedule ? validateSchedule(schedule) : null;
+        const when = schedule
+          ? `${schedule}${next?.ok ? `  next ${localTime(next.next)}` : "  (invalid)"}`
+          : "on demand";
+        console.log(`${p.name.padEnd(20)} ${String(p.nodes.length).padStart(2)} step(s)  ${when}`);
+        if (p.description) console.log(`  ${p.description}`);
+      }
+      break;
+    }
+
+    case "automation": {
+      const [action, name, ...opts] = rest;
+      const flag = (f: string) => {
+        const i = opts.indexOf(f);
+        return i >= 0 ? opts[i + 1] : undefined;
+      };
+      const found = () => {
+        const hit = listPipelines().find((p) => p.name === name);
+        if (!hit) {
+          console.error(`No automation named "${name}". List them with: enio automations`);
+          process.exit(1);
+        }
+        return hit;
+      };
+
+      if (action === "new") {
+        const prompt = flag("--prompt");
+        if (!name || !prompt) {
+          console.error(`Usage: enio automation new NAME --prompt "..." [--agent NAME] [--cron "0 9 * * 1"]`);
+          process.exit(1);
+        }
+        const agent = flag("--agent");
+        const ability = abilityForAgent(agent);
+        if (!ability) {
+          const agents = [...new Set(ABILITIES.map((a) => a.specialist))].join(", ");
+          console.error(`No agent named "${agent}". One of: ${agents}`);
+          process.exit(1);
+        }
+        try {
+          const pipeline = savePipeline({
+            name: name!,
+            nodes: [{ id: "n1", abilityId: ability.id, prompt }],
+            edges: [],
+          });
+          console.log(`Created "${pipeline.name}" — one step, ${ability.title}.`);
+          const cron = flag("--cron");
+          if (cron) console.log(schedulePipeline(pipeline.id, pipeline.name, cron));
+          else console.log(`Schedule it with: enio automation schedule ${pipeline.name} --cron "0 9 * * 1"`);
+        } catch (err) {
+          console.error((err as Error).message);
+          process.exit(1);
+        }
+        break;
+      }
+
+      if (action === "schedule") {
+        const cron = flag("--cron");
+        if (!cron) {
+          console.error(`Usage: enio automation schedule NAME --cron "0 9 * * 1"`);
+          process.exit(1);
+        }
+        const p = found();
+        try {
+          console.log(schedulePipeline(p.id, p.name, cron));
+        } catch (err) {
+          console.error((err as Error).message);
+          process.exit(1);
+        }
+        break;
+      }
+
+      if (action === "unschedule") {
+        const p = found();
+        console.log(removeTask(`auto-${p.id}`) ? `"${p.name}" no longer runs on a schedule.` : "It had no schedule.");
+        break;
+      }
+
+      if (action === "run") {
+        const p = found();
+        const registry = await buildRegistry((m) => console.log(m));
+        // Step names rather than the node ids the events carry: the ids are
+        // canvas bookkeeping, and a CLI run should read like the flow.
+        const titleOf = (nodeId: string) =>
+          p.nodes.find((n) => n.id === nodeId)?.prompt.replace(/\s+/g, " ").slice(0, 60) ?? nodeId;
+        const result = await runPipeline(p, registry, (e) => {
+          if (e.type === "node_started") console.log(`  → ${titleOf(e.nodeId)}`);
+          if (e.type === "node_failed") console.log(`    failed: ${e.error}`);
+          if (e.type === "node_skipped") console.log(`    skipped`);
+        });
+        console.log(`\n${result.status}`);
+        if (result.status !== "succeeded") process.exit(1);
+        break;
+      }
+
+      if (action === "runs") {
+        const p = found();
+        for (const r of listRuns(p.id)) {
+          const at = new Date(r.startedAt).toISOString().slice(0, 16).replace("T", " ");
+          const secs = r.finishedAt ? Math.round((r.finishedAt - r.startedAt) / 1000) : 0;
+          console.log(`${at}  ${r.status.padEnd(9)} ${secs}s`);
+        }
+        break;
+      }
+
+      if (action === "rm" || action === "remove") {
+        const p = found();
+        deletePipeline(p.id);
+        console.log(`Removed "${p.name}" and any schedule it had.`);
+        break;
+      }
+
+      console.error(`Usage: enio automation <new|schedule|unschedule|run|runs|rm> NAME [...]`);
+      process.exit(1);
       break;
     }
 
@@ -1207,6 +1403,9 @@ enio — a local agent with tools and persistent memory
   enio unpref ID          remove one
   enio examples           list saved answer examples
 
+  enio automations         list automations and when they run
+  enio automation new NAME --prompt "..." [--agent NAME] [--cron "0 9 * * 1"]
+  enio automation schedule|unschedule|run|runs|rm NAME
   enio daemon              run the scheduler
   enio suggest [--write]   find what is worth automating
 

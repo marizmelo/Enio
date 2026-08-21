@@ -135,6 +135,14 @@ describing a concept the product had stopped presenting is how documentation
 starts lying. Watches, which were documented alongside tasks, are their own
 thing and kept their own page.
 
+`enio automation` replaced what the task CLI could do, in the automation's own
+vocabulary: retiring the old commands had left scheduling reachable only from
+the app and the API, which is wrong for something that runs headless. A
+CLI-built automation is one step -- a graph is not something to type -- and its
+schedule is the same reserved `auto-<pipeline id>` task the panel writes, so
+the two surfaces cannot disagree about what is scheduled. The CLI takes cron;
+the app keeps its pickers, and the never-show-cron rule stays a *UI* rule.
+
 **One hop only.** Router → specialist → answer. No agent-to-agent conversation.
 Every hand-off compounds error and at this model size it compounds fast.
 

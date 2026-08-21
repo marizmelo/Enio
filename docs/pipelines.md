@@ -186,6 +186,32 @@ Renaming an automation carries its schedule along, and deleting one removes
 its schedule with it — a schedule pointing at a flow that no longer exists
 could only fail at the exact moment nobody is watching.
 
+## From the CLI
+
+The panel is the place to build a graph, but a one-step automation is often
+all you want, and a machine running headless has no panel at all:
+
+```sh
+enio automation new morning-brief \
+  --prompt "Summarise what is still open" --agent coder --cron "0 9 * * 1"
+
+enio automations                              # what exists, and when it next runs
+enio automation run morning-brief             # now, ignoring the schedule
+enio automation schedule morning-brief --cron "30 7 * * *"
+enio automation unschedule morning-brief      # keeps the automation
+enio automation runs morning-brief            # recent runs and outcomes
+enio automation rm morning-brief              # removes it and any schedule
+```
+
+`--agent` picks who runs the step, from the same six agents routing uses; the
+default is whoever the router would pick. Multi-step automations are built in
+the panel — a graph is not something to type — and everything above works on
+them just the same.
+
+The CLI takes cron because a terminal is where that notation belongs; the app
+keeps its calendar and repeat pickers. Either way it is the same automation
+and the same schedule, so one shows what the other did.
+
 ## When automations run
 
 **The scheduler runs inside the desktop app** (and inside `enio serve`), so a
