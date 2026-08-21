@@ -14,8 +14,9 @@ process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 process.env.ENIO_MCP_CONFIG = join(scratch, "none.json");
 
 const {
-  parseSkill, loadSkills, findSkill, skillCatalogue, skillFile, skillContents, skillsDir,
+  parseSkill, loadSkills, findSkill, skillCatalogue, skillFile, skillContents, skillsDir, skillsFor,
 } = await import("./skills.js");
+const { setAgentSkills } = await import("./custom-agents.js");
 const { skillTools } = await import("./tools/skills.js");
 
 after(() => rmSync(scratch, { recursive: true, force: true }));
@@ -223,4 +224,70 @@ test("the shipped ask-bigger-model skill parses and stands alone", async () => {
   // The two rules the handoff lives or dies by.
   assert.match(skill.body, /stand alone/i);
   assert.match(skill.body, /Do not do the task locally/i);
+});
+
+/**
+ * Who holds which skill. One rule: a skill belongs to the agents it names,
+ * plus any agent that names it; a skill nobody names belongs to everyone.
+ */
+describe("skills per agent", () => {
+  before(() => {
+    writeSkill("commits", `---
+name: commits
+agents: [coder]
+description: Writing commit messages.
+---
+Body.`);
+    writeSkill("free", `---
+name: free
+description: Names no agent, so it is everyone's.
+---
+Body.`);
+    writeSkill("pinned", `---
+name: pinned
+description: Names no agent in front matter; the panel pins it.
+---
+Body.`);
+  });
+
+  test("front matter agents: is parsed", () => {
+    assert.deepEqual(findSkill("commits")!.agents, ["coder"]);
+    assert.equal(findSkill("free")!.agents, null);
+  });
+
+  test("a skill naming agents belongs to them and nobody else", () => {
+    assert.ok(skillsFor("coder").some((s) => s.name === "commits"));
+    assert.ok(!skillsFor("mail").some((s) => s.name === "commits"));
+  });
+
+  test("a skill nobody names belongs to everyone -- until someone pins it", () => {
+    assert.ok(skillsFor("mail").some((s) => s.name === "pinned"));
+    setAgentSkills("librarian", ["pinned"], { knownSkills: ["pinned"], builtinNames: ["librarian", "mail"] });
+    assert.ok(skillsFor("librarian").some((s) => s.name === "pinned"));
+    assert.ok(!skillsFor("mail").some((s) => s.name === "pinned"), "pinning elsewhere removes the everyone default");
+    assert.ok(skillsFor("mail").some((s) => s.name === "free"), "an unpinned, unnamed skill stays everyone's");
+  });
+
+  test("a pin adds to what the front matter says, it does not replace it", () => {
+    setAgentSkills("mail", ["commits"], { knownSkills: ["commits"], builtinNames: ["mail", "coder"] });
+    assert.ok(skillsFor("mail").some((s) => s.name === "commits"));
+    assert.ok(skillsFor("coder").some((s) => s.name === "commits"), "the front-matter agent keeps it");
+    setAgentSkills("mail", [], { knownSkills: ["commits"], builtinNames: ["mail", "coder"] });
+    assert.ok(!skillsFor("mail").some((s) => s.name === "commits"));
+  });
+
+  test("a pin to a skill that is not installed is refused", () => {
+    assert.throws(
+      () => setAgentSkills("mail", ["ghost"], { knownSkills: ["commits"], builtinNames: ["mail"] }),
+      /No skill named "ghost"/,
+    );
+  });
+
+  test("the catalogue narrows to the agent; single-agent mode still lists all", () => {
+    const mail = skillCatalogue(undefined, "mail");
+    const all = skillCatalogue();
+    assert.ok(!mail.includes("- commits:"), "the mail agent does not see the coder's skill");
+    assert.ok(mail.includes("- free:"));
+    assert.ok(all.includes("- commits:"));
+  });
 });

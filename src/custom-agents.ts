@@ -29,6 +29,8 @@ export interface StoredAgent {
   example?: string;
   /** Built-in or MCP tool names; read_skill is always included. */
   tools: string[];
+  /** Skills pinned to this agent by name. See skillsFor() for the rule. */
+  skills?: string[];
 }
 
 /** Sized like project fields: against the smallest context budget, because
@@ -68,6 +70,10 @@ const MUTATES = new Set([
 const NAME_RE = /^[a-z][a-z0-9-]{1,29}$/;
 
 const agentsFile = () => join(config.dataDir, "agents.json");
+/** Skills pinned to BUILT-IN agents. Built-ins are code, and their tool sets
+ *  are not editable -- but know-how is not capability, so attaching skills
+ *  to them is allowed, and this overlay is where that lives. */
+const overlayFile = () => join(config.dataDir, "agent-skills.json");
 
 export function listCustomAgents(): StoredAgent[] {
   try {
@@ -90,14 +96,19 @@ export function listCustomAgents(): StoredAgent[] {
   }
 }
 
+/** What the caller knows that this leaf module must not duplicate: the
+ *  registry's live tool names, the built-in specialist names, the installed
+ *  skills. Passed in, so this file imports nothing that imports it. */
+export interface SaveContext {
+  knownTools: string[];
+  builtinNames: string[];
+  knownSkills?: string[];
+}
+
 /**
  * Validate and persist one agent. Saving an existing name replaces it — that
  * is the edit path, and only custom agents live in this file so a built-in
  * can never be shadowed by it (the name collision is refused instead).
- *
- * `knownTools` is the registry's current names, passed in rather than
- * imported so this module stays a leaf: what tools exist is the caller's
- * live knowledge, not something to duplicate here.
  */
 export function saveCustomAgent(
   input: {
@@ -106,9 +117,9 @@ export function saveCustomAgent(
     systemPrompt?: unknown;
     example?: unknown;
     tools?: unknown;
+    skills?: unknown;
   },
-  knownTools: string[],
-  builtinNames: string[],
+  { knownTools, builtinNames, knownSkills = [] }: SaveContext,
 ): StoredAgent {
   const name = String(input.name ?? "").trim();
   if (!NAME_RE.test(name)) {
@@ -180,6 +191,8 @@ export function saveCustomAgent(
 
   const agent: StoredAgent = { name, description, systemPrompt, tools };
   if (example) agent.example = example;
+  const skills = validSkillPins(input.skills, knownSkills);
+  if (skills.length > 0) agent.skills = skills;
   const next = existing.filter((a) => a.name !== name).concat(agent);
   writeFileSync(agentsFile(), JSON.stringify(next, null, 2) + "\n", "utf8");
   return agent;
@@ -193,4 +206,65 @@ export function deleteCustomAgent(name: string): boolean {
   if (next.length === existing.length) return false;
   writeFileSync(agentsFile(), JSON.stringify(next, null, 2) + "\n", "utf8");
   return true;
+}
+
+function validSkillPins(input: unknown, knownSkills: string[]): string[] {
+  const picked = [...new Set((Array.isArray(input) ? input : []).map(String))];
+  const known = new Set(knownSkills);
+  for (const name of picked) {
+    if (!known.has(name)) throw new Error(`No skill named "${name}" is installed.`);
+  }
+  return picked;
+}
+
+function readOverlay(): Record<string, string[]> {
+  try {
+    if (!existsSync(overlayFile())) return {};
+    const raw = JSON.parse(readFileSync(overlayFile(), "utf8"));
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out: Record<string, string[]> = {};
+    for (const [agent, skills] of Object.entries(raw)) {
+      if (Array.isArray(skills)) out[agent] = skills.map(String);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Pin skills to one agent by name. A built-in's pins go to the overlay; a
+ * custom agent's go into its own record. Either way the rule the prompt
+ * applies is the same -- see skillsFor() in skills.ts.
+ */
+export function setAgentSkills(
+  agent: string,
+  input: unknown,
+  { knownSkills, builtinNames }: { knownSkills: string[]; builtinNames: string[] },
+): string[] {
+  const skills = validSkillPins(input, knownSkills);
+  if (builtinNames.includes(agent)) {
+    const overlay = readOverlay();
+    if (skills.length > 0) overlay[agent] = skills;
+    else delete overlay[agent];
+    writeFileSync(overlayFile(), JSON.stringify(overlay, null, 2) + "\n", "utf8");
+    return skills;
+  }
+  const existing = listCustomAgents();
+  const found = existing.find((a) => a.name === agent);
+  if (!found) throw new Error(`No agent named ${agent}.`);
+  if (skills.length > 0) found.skills = skills;
+  else delete found.skills;
+  writeFileSync(agentsFile(), JSON.stringify(existing, null, 2) + "\n", "utf8");
+  return skills;
+}
+
+/** Every explicit pin, by agent: the overlay for built-ins, the records
+ *  for custom agents. What skillsFor() reads. */
+export function agentSkillPins(): Record<string, string[]> {
+  const pins = readOverlay();
+  for (const a of listCustomAgents()) {
+    if (a.skills && a.skills.length > 0) pins[a.name] = a.skills;
+  }
+  return pins;
 }

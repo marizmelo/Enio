@@ -964,7 +964,7 @@ export async function runTurn(
     dateBlock(),
     roleSystem,
     invoked,
-    invoked ? "" : skillCatalogue(),
+    invoked ? "" : skillCatalogue(undefined, specialistName ?? undefined),
     projectBlock(),
     conversationBlock(),
     preferenceBlock(),

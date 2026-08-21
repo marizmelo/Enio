@@ -33,3 +33,11 @@ export const saveAgent = (agent) =>
 
 export const deleteAgent = (name) =>
   call(`/agents/${encodeURIComponent(name)}`, { method: "DELETE" });
+
+/** Pin skills to an agent, built-in or custom — the one edit a built-in
+ *  accepts, because know-how is not capability. */
+export const setAgentSkills = (name, skills) =>
+  call(`/agents/${encodeURIComponent(name)}/skills`, {
+    method: "PUT",
+    body: JSON.stringify({ skills }),
+  });

@@ -1,5 +1,6 @@
 ---
 name: delegate-coding
+agents: [coder]
 description: Delegating a large or complex coding task to a frontier coding CLI (Claude Code or Gemini CLI) installed on this machine. Use when a change spans many files, needs deep refactoring, or has resisted two attempts here.
 allowed-tools: [run_command, read_file, search_code]
 ---

@@ -1,5 +1,6 @@
 ---
 name: local-preview
+agents: [coder]
 description: Serving a page or site locally to test it — starting a local web server, checking it responds, and giving the user a URL to open. Use when a web page, site or front end has been written and needs to be run, previewed, tested in a browser, or checked that it actually works.
 allowed-tools: [run_command, read_file]
 ---

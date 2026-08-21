@@ -1,5 +1,6 @@
 ---
 name: commit-message
+agents: [coder]
 description: Writing a git commit message, or reviewing staged changes before committing. Use whenever the user is about to commit, asks for a commit message, or says "commit this".
 allowed-tools: [run_command, read_file]
 ---

@@ -121,7 +121,7 @@ import { generatedFiles, mentionContext, parseMentions } from "./mentions.js";
 import { SPECIALISTS, allSpecialists } from "./specialists.js";
 import { extractSources } from "./sources.js";
 import { agentsView } from "./agents-view.js";
-import { saveCustomAgent, deleteCustomAgent } from "./custom-agents.js";
+import { saveCustomAgent, deleteCustomAgent, setAgentSkills } from "./custom-agents.js";
 import { callDetail, callStatus } from "./tool-detail.js";
 import { loadSkills } from "./skills.js";
 import { synthesize, transcribeWav, warmVoice, whisperInstalled } from "./voice.js";
@@ -336,8 +336,35 @@ async function handle(
           description: (t.description.split(". ")[0] ?? "").slice(0, 110),
           server: t.server ?? null,
         })),
+      // Installed skills, for the pin pickers.
+      skillCatalog: loadSkills().skills.map((sk) => ({ name: sk.name, description: sk.description })),
     });
     return;
+  }
+
+  // Pin skills to an agent, built-in or custom. Know-how is not capability,
+  // so this is the one edit a built-in accepts.
+  {
+    const pin = /^\/agents\/([a-z][a-z0-9-]*)\/skills$/.exec(url.pathname);
+    if (req.method === "PUT" && pin) {
+      let body: { skills?: unknown };
+      try {
+        body = JSON.parse((await readBody(req)) || "{}");
+      } catch {
+        sendJson(res, 400, { error: { message: "Invalid JSON body" } });
+        return;
+      }
+      try {
+        setAgentSkills(pin[1]!, body.skills, {
+          knownSkills: loadSkills().skills.map((sk) => sk.name),
+          builtinNames: SPECIALISTS.map((sp) => sp.name),
+        });
+        sendJson(res, 200, { agents: agentsView(registry) });
+      } catch (err) {
+        sendJson(res, 400, { error: { message: String((err as Error).message ?? err) } });
+      }
+      return;
+    }
   }
 
   // Custom agents are created and removed here and over the CLI only --
@@ -352,11 +379,11 @@ async function handle(
       return;
     }
     try {
-      saveCustomAgent(
-        body,
-        registry.all.map((t) => t.name),
-        SPECIALISTS.map((s) => s.name),
-      );
+      saveCustomAgent(body, {
+        knownTools: registry.all.map((t) => t.name),
+        builtinNames: SPECIALISTS.map((s) => s.name),
+        knownSkills: loadSkills().skills.map((sk) => sk.name),
+      });
       sendJson(res, 200, { agents: agentsView(registry) });
     } catch (err) {
       sendJson(res, 400, { error: { message: String((err as Error).message ?? err) } });

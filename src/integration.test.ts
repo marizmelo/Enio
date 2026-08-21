@@ -38,9 +38,20 @@ after(() => {
 });
 
 /** Queue of scripted model responses; each call to the model pops one. */
-function scriptModel(turns: Array<{ content?: string; toolCall?: { name: string; args: unknown } }>) {
+function scriptModel(
+  turns: Array<{ content?: string; toolCall?: { name: string; args: unknown } }>,
+  // Sees each request the harness sends: the way to assert on the prompt.
+  onRequest?: (body: { messages: Array<{ role: string; content: unknown }> }) => void,
+) {
   const queue = [...turns];
-  globalThis.fetch = (async () => {
+  globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+    if (onRequest) {
+      try {
+        onRequest(JSON.parse(String(init?.body ?? "{}")));
+      } catch {
+        // A non-JSON body is not a model call; nothing to observe.
+      }
+    }
     const turn = queue.shift() ?? { content: "(exhausted)" };
     const frames: string[] = [];
     if (turn.content) {
@@ -1143,6 +1154,7 @@ describe("skill invocation trace", () => {
           dir: join(scratch, "style-guide"),
           body: "Write plainly.",
           allowedTools: null,
+          agents: null,
           manualOnly: false,
           origin: "global" as const,
           overridesBuiltin: false,
@@ -2105,5 +2117,36 @@ describe("holding the reply until the guards have passed", () => {
     }, { specialist: "generalist" });
     assert.equal(restarts, 1, "the live path withdraws through onRestart");
     assert.ok(shown.join("").includes("opened Calculator"), "the live path streamed the first text");
+  });
+});
+
+describe("the skill catalogue follows the agent", () => {
+  test("a skill pinned to the coder is absent from the mail agent's prompt", async () => {
+    const { skillsDir } = await import("./skills.js");
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const dir = join(skillsDir(), "only-coder");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "SKILL.md"), `---
+name: only-coder
+agents: [coder]
+description: A coder-only skill for this test.
+---
+Body.`);
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const systems: string[] = [];
+    scriptModel([{ content: "Nothing new." }], (req) => {
+      const sys = req.messages.find((m) => m.role === "system");
+      if (sys) systems.push(String(sys.content));
+    });
+    await runTurn("check my email", [], registry, sessionId, {}, { specialist: "mail" });
+    assert.ok(systems.length > 0);
+    assert.ok(!systems.some((sys) => sys.includes("- only-coder:")), "the mail prompt listed a coder skill");
+    scriptModel([{ content: "Nothing to do." }], (req) => {
+      const sys = req.messages.find((m) => m.role === "system");
+      if (sys) systems.push(String(sys.content));
+    });
+    await runTurn("anything to tidy up here?", [], registry, sessionId, {}, { specialist: "coder" });
+    assert.ok(systems.some((sys) => sys.includes("- only-coder:")), "the coder prompt should list it");
   });
 });

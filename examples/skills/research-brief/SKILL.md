@@ -1,5 +1,6 @@
 ---
 name: research-brief
+agents: [researcher]
 description: Researching a technical question properly and reporting findings with sources. Use for "look into X", "research Y", "what are the options for Z", or any question needing current information rather than recall.
 allowed-tools: [web_search, web_fetch, web_fetch_rendered]
 ---

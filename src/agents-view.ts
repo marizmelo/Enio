@@ -1,6 +1,6 @@
 import { SPECIALISTS, allSpecialists } from "./specialists.js";
-import { listCustomAgents } from "./custom-agents.js";
-import { loadSkills } from "./skills.js";
+import { agentSkillPins, listCustomAgents } from "./custom-agents.js";
+import { loadSkills, skillsFor } from "./skills.js";
 import { listPipelines } from "./pipelines.js";
 import { getAbility } from "./abilities.js";
 import type { Registry } from "./tools/index.js";
@@ -11,11 +11,14 @@ import type { Registry } from "./tools/index.js";
  * Everything here is DERIVED, never stored: the tools are the specialist's
  * declared set intersected with what the registry actually holds right now
  * (a mail tool without an account, a desktop tool without the flag, simply
- * is not there); the skills are the ones whose allowed-tools overlap this
- * agent's, because a skill the agent cannot act on is not its skill; and the
- * automations are the saved graphs with at least one step that runs as this
+ * is not there); the skills are what skillsFor() says the prompt will list;
+ * and the automations are the saved graphs with at least one step that runs as this
  * agent. Deriving it is what keeps the panel honest -- a stored copy of any
  * of this would drift the first time a grant or a flag changed.
+ *
+ * Skills are the one place with a stored half: the pins a user set are
+ * data, and `skills` is what the prompt will actually list once the rule
+ * in skillsFor() has combined pins, front matter and the everyone default.
  *
  * Custom agents get the same derivation -- only their *definition* is stored,
  * and the flag is what tells the panel which cards carry Edit and Delete.
@@ -25,24 +28,29 @@ export interface AgentView {
   description: string;
   tools: Array<{ name: string; available: boolean; description: string }>;
   mcpServers: string[];
+  /** What this agent's prompt lists: the effective set after skillsFor(). */
   skills: string[];
+  /** The explicit pins only -- what the picker shows as checked. */
+  pinnedSkills: string[];
   automations: string[];
   /** User-defined: editable and deletable. Built-ins are neither. */
   custom: boolean;
   /** The stored routing example, custom agents only — shown in the editor
    *  and worth a warning when absent, since the router routes by example. */
   example?: string;
-  /** The stored instructions, custom agents only — the editor needs them
-   *  back; built-in prompts are code, not data to display. */
-  systemPrompt?: string;
+  /** The instructions. Stored text for a custom agent (the editor needs it
+   *  back); the code's prompt for a built-in, carried so Duplicate can
+   *  start a custom agent from it. Cards do not display it either way. */
+  systemPrompt: string;
 }
 
 export function agentsView(registry: Registry): AgentView[] {
-  const skills = loadSkills().skills;
+  const skillSet = loadSkills();
   const pipelines = listPipelines();
   const byName = new Map(registry.all.map((t) => [t.name, t]));
   const builtinNames = new Set(SPECIALISTS.map((s) => s.name));
   const stored = new Map(listCustomAgents().map((a) => [a.name, a]));
+  const pins = agentSkillPins();
 
   return allSpecialists().map((s) => ({
     name: s.name,
@@ -58,15 +66,13 @@ export function agentsView(registry: Registry): AgentView[] {
       };
     }),
     mcpServers: s.mcpServers ?? [],
-    skills: skills
-      .filter((skill) => (skill.allowedTools ?? []).some((t) => s.tools.includes(t)))
-      .map((skill) => skill.name),
+    skills: skillsFor(s.name, skillSet).map((skill) => skill.name),
+    pinnedSkills: pins[s.name] ?? [],
     automations: pipelines
       .filter((p) => p.nodes.some((n) => getAbility(n.abilityId)?.specialist === s.name))
       .map((p) => p.name),
     custom: !builtinNames.has(s.name),
-    ...(stored.has(s.name)
-      ? { example: stored.get(s.name)!.example ?? "", systemPrompt: stored.get(s.name)!.systemPrompt }
-      : {}),
+    systemPrompt: stored.get(s.name)?.systemPrompt ?? s.systemPrompt,
+    ...(stored.has(s.name) ? { example: stored.get(s.name)!.example ?? "" } : {}),
   }));
 }

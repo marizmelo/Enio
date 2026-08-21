@@ -22,6 +22,7 @@ import type { Registry } from "./tools/index.js";
 
 const BUILTINS = SPECIALISTS.map((s) => s.name);
 const KNOWN = ["recall", "weather", "web_search", "current_time", "run_applescript"];
+const CTX = { knownTools: KNOWN, builtinNames: BUILTINS, knownSkills: ["weekly-review"] };
 
 const originalFetch = globalThis.fetch;
 after(() => {
@@ -68,73 +69,65 @@ function stubRouter(content: string): { system: () => string } {
  */
 describe("saving a custom agent", () => {
   test("round-trips, with read_skill riding along like on every built-in", () => {
-    const saved = saveCustomAgent(valid(), KNOWN, BUILTINS);
+    const saved = saveCustomAgent(valid(), CTX);
     assert.deepEqual(saved.tools, ["recall", "weather", "read_skill"]);
     assert.equal(listCustomAgents().length, 1);
     assert.equal(listCustomAgents()[0]!.example, "tighten up this paragraph");
   });
 
   test("a built-in name is refused — shadowing the coder is not creating an agent", () => {
-    assert.throws(() => saveCustomAgent({ ...valid(), name: "coder" }, KNOWN, BUILTINS), /built-in/);
+    assert.throws(() => saveCustomAgent({ ...valid(), name: "coder" }, CTX), /built-in/);
   });
 
   test("names are slugs: no spaces, no capitals, no leading digit", () => {
     for (const name of ["My Agent", "Editor", "1editor", "e", ""]) {
-      assert.throws(() => saveCustomAgent({ ...valid(), name }, KNOWN, BUILTINS), /lowercase/);
+      assert.throws(() => saveCustomAgent({ ...valid(), name }, CTX), /lowercase/);
     }
   });
 
   test("more than five picked tools is refused, not trimmed", () => {
     const tools = ["a", "b", "c", "d", "e", "f"];
     assert.throws(
-      () => saveCustomAgent({ ...valid(), tools }, [...KNOWN, ...tools], BUILTINS),
+      () => saveCustomAgent({ ...valid(), tools }, { ...CTX, knownTools: [...KNOWN, ...tools] }),
       /at most six/,
     );
   });
 
   test("a tool that does not exist is refused by name", () => {
-    assert.throws(() => saveCustomAgent({ ...valid(), tools: ["telepathy"] }, KNOWN, BUILTINS), /telepathy/);
+    assert.throws(() => saveCustomAgent({ ...valid(), tools: ["telepathy"] }, CTX), /telepathy/);
   });
 
   test("reading the web and acting cannot be combined — same boundary as the built-ins", () => {
     assert.throws(
       () =>
-        saveCustomAgent(
-          { ...valid(), tools: ["web_fetch", "run_command"] },
-          [...KNOWN, "web_fetch", "run_command"],
-          BUILTINS,
-        ),
+        saveCustomAgent({ ...valid(), tools: ["web_fetch", "run_command"] }, { ...CTX, knownTools: [...KNOWN, "web_fetch", "run_command"] }),
       /read the web.*act/,
     );
     // Either half alone is fine — the refusal is the combination.
-    saveCustomAgent(
-      { ...valid(), name: "fetcher", tools: ["web_fetch"] },
-      [...KNOWN, "web_fetch"],
-      BUILTINS,
-    );
+    saveCustomAgent({ ...valid(), name: "fetcher", tools: ["web_fetch"] }, { ...CTX, knownTools: [...KNOWN, "web_fetch"] });
     assert.equal(deleteCustomAgent("fetcher"), true);
   });
 
   test("run_applescript is never held — proposing and running stay separated", () => {
     assert.throws(
-      () => saveCustomAgent({ ...valid(), tools: ["run_applescript"] }, KNOWN, BUILTINS),
+      () => saveCustomAgent({ ...valid(), tools: ["run_applescript"] }, CTX),
       /never held/,
     );
   });
 
   test("an overlong prompt is refused with the actual numbers", () => {
     assert.throws(
-      () => saveCustomAgent({ ...valid(), systemPrompt: "x".repeat(2001) }, KNOWN, BUILTINS),
+      () => saveCustomAgent({ ...valid(), systemPrompt: "x".repeat(2001) }, CTX),
       /2001.*2000/,
     );
   });
 
   test("no tools at all is refused — an agent that can only read skills does nothing", () => {
-    assert.throws(() => saveCustomAgent({ ...valid(), tools: [] }, KNOWN, BUILTINS), /at least one/);
+    assert.throws(() => saveCustomAgent({ ...valid(), tools: [] }, CTX), /at least one/);
   });
 
   test("saving the same name replaces: that is the edit path", () => {
-    saveCustomAgent({ ...valid(), description: "Only rewording now, nothing else." }, KNOWN, BUILTINS);
+    saveCustomAgent({ ...valid(), description: "Only rewording now, nothing else." }, CTX);
     assert.equal(listCustomAgents().length, 1);
     assert.match(listCustomAgents()[0]!.description, /rewording/i);
   });
@@ -142,7 +135,7 @@ describe("saving a custom agent", () => {
   test("a tool the agent already holds survives its grant lapsing", () => {
     // The registry no longer knows "weather" (say the config went away);
     // saving an unrelated edit must not force the tool's removal.
-    const saved = saveCustomAgent(valid(), ["recall"], BUILTINS);
+    const saved = saveCustomAgent(valid(), { ...CTX, knownTools: ["recall"] });
     assert.ok(saved.tools.includes("weather"));
   });
 });
@@ -173,7 +166,7 @@ describe("custom agents in the machinery", () => {
     assert.equal(await route("ok", "editor"), "editor"); // short input, sticky holds
     deleteCustomAgent("editor");
     assert.equal(await route("ok", "editor"), "generalist");
-    saveCustomAgent(valid(), KNOWN, BUILTINS); // restore for later tests
+    saveCustomAgent(valid(), CTX); // restore for later tests
   });
 
   test("toolsFor narrows the registry to the picked set, MCP tools matched by name", () => {
@@ -202,7 +195,8 @@ describe("custom agents in the machinery", () => {
     const editor = view.find((a) => a.name === "editor")!;
     assert.equal(editor.custom, true);
     assert.equal(editor.systemPrompt, "You edit text. Keep the author's voice.");
-    assert.ok(view.filter((a) => !a.custom).every((a) => a.systemPrompt === undefined));
+    // Built-ins carry their prompt too now, so Duplicate can start from one.
+    assert.ok(view.filter((a) => !a.custom).every((a) => a.systemPrompt.length > 0));
   });
 
   test("no tool creates, edits or deletes agents — that is the user's act alone", async () => {
@@ -224,11 +218,25 @@ describe("custom agents in the machinery", () => {
 
 describe("the honesty suffix on custom prompts", () => {
   test("a loaded custom agent carries it; the stored file does not", () => {
-    saveCustomAgent(valid(), KNOWN, BUILTINS);
+    saveCustomAgent(valid(), CTX);
     assert.match(getSpecialist("editor").systemPrompt, /never invent names,\s+dates or numbers/);
     // Stored text stays the user's own — the suffix is applied at load so
     // editing round-trips cleanly and the rule can improve without migration.
     assert.equal(listCustomAgents()[0]!.systemPrompt.includes("never invent"), false);
+    deleteCustomAgent("editor");
+  });
+});
+
+describe("skills on custom agents", () => {
+  test("pins are validated against installed skills and stored on the record", () => {
+    assert.throws(
+      () => saveCustomAgent({ ...valid(), skills: ["nope"] }, CTX),
+      /No skill named "nope"/,
+    );
+    const saved = saveCustomAgent({ ...valid(), skills: ["weekly-review"] }, CTX);
+    assert.deepEqual(saved.skills, ["weekly-review"]);
+    const view = listCustomAgents().find((a) => a.name === "editor")!;
+    assert.deepEqual(view.skills, ["weekly-review"]);
     deleteCustomAgent("editor");
   });
 });

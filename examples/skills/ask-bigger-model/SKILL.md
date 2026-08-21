@@ -1,5 +1,6 @@
 ---
 name: ask-bigger-model
+agents: [coder]
 description: >-
   When a task is too big for the local model — long-form writing, deep
   analysis, large designs — prepare a complete handoff prompt for a frontier

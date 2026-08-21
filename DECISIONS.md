@@ -2780,3 +2780,46 @@ it). The held reply goes out as the settled `reply` variable, the same
 text the log and transcript hold, so the bubble and the record cannot
 disagree -- which in the floor case means the floor alone, not the
 still-bad correction with the floor bolted on.
+
+## Skills belong to agents; automations sit beside them (August 2026)
+
+Asked for an organisation model: should skills, tools and automations be
+constrained under agents, with copy/fork between them? The three are not
+the same shape, so they did not get the same answer.
+
+**Tools** are capability and were already under agents -- the ≤6 slice is
+the architecture. Unchanged.
+
+**Skills** are know-how, and the surprise was that they were *not* under
+agents in the one place it mattered: `skillCatalogue()` was global, so the
+mail agent's prompt listed `commit-message`, `local-preview` and
+`delegate-coding`, paying context budget for skills it could never use and
+choosing from a longer list. The panel's per-agent skill list was a display
+derivation (allowed-tools overlap) the model never saw.
+
+Chose: attachment by reference, one rule -- a skill belongs to the agents
+it names (front matter `agents:`), plus any agent that names it (pins set
+in the panel; an overlay file for built-ins, a field for custom agents);
+a skill nobody names belongs to everyone. The prompt lists `skillsFor(agent)`.
+Pinning is allowed on built-ins because know-how is not capability -- it
+breaks nothing the tool invariant protects. The everyone default keeps a
+freshly written skill working before it is filed; the shipped skills all
+name their agents so the default does not quietly keep the catalogues
+global. Single-agent mode (`ENIO_ROUTING=0`) still lists everything: there
+is no one to narrow to.
+
+Rejected: copying skills per agent (one file, many agents; copies drift);
+deriving attachment from allowed-tools (a proxy that put `weekly-review` on
+the coder because both touch run_command).
+
+**Automations** are cross-agent by nature -- verify a doc, then mail it --
+so they sit beside agents, not under one; "runs through this agent" stays
+a derived view. Forcing ownership would lie the first time a step changed
+agent.
+
+**Duplicate** exists for agents only: any card, built-in included, into a
+new custom agent. The fork clears the name and warns while the description
+still matches the parent, because the recorded finding about per-domain
+coders applies -- near-identical descriptions make the router pick at
+random. The built-in prompts were measured (478-1709 chars) to confirm a
+fork fits the 2000-char cap with room to edit.

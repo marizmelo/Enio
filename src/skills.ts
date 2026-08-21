@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
+import { agentSkillPins } from "./custom-agents.js";
 import { config, projectRoot } from "./config.js";
 import { activeProject } from "./project.js";
 
@@ -33,6 +34,8 @@ export interface Skill {
   body: string;
   /** Optional: restricts which tools the skill's instructions may use. */
   allowedTools: string[] | null;
+  /** Optional: the agents this skill belongs to. See skillsFor(). */
+  agents: string[] | null;
   /** Optional: excluded from the catalogue; only reachable by explicit name. */
   manualOnly: boolean;
   /** Which root it was loaded from. */
@@ -185,6 +188,7 @@ export function parseSkill(source: string, dir: string, fallbackName: string): S
     dir,
     body: (match[2] ?? "").trim(),
     allowedTools: Array.isArray(allowed) ? allowed.map(String) : null,
+    agents: Array.isArray(meta.agents) ? meta.agents.map(String) : null,
     manualOnly:
       meta["disable-model-invocation"] === true || meta.disableModelInvocation === true,
     origin: skillOrigin(dir),
@@ -202,12 +206,37 @@ export function parseSkill(source: string, dir: string, fallbackName: string): S
  */
 const MAX_CATALOGUE = 40;
 
-export function skillCatalogue(set: SkillSet = loadSkills()): string {
-  const listed = set.skills.filter((s) => !s.manualOnly).slice(0, MAX_CATALOGUE);
+/**
+ * Which skills one agent holds.
+ *
+ * Know-how attaches by reference, never by copy -- one file, any number of
+ * agents -- and the rule is one sentence: a skill belongs to the agents it
+ * names (front matter `agents:`), plus any agent that names it (the pins a
+ * user sets in the panel); a skill nobody names belongs to everyone. The
+ * last clause is what keeps a freshly dropped-in skill working before
+ * anyone has filed it, and what the shipped skills opt out of by naming
+ * their agents -- so the mail agent's prompt stops listing commit-message.
+ */
+export function skillsFor(agent: string, set: SkillSet = loadSkills()): Skill[] {
+  const pins = agentSkillPins();
+  const mine = new Set(pins[agent] ?? []);
+  const pinnedAnywhere = new Set(Object.values(pins).flat());
+  return set.skills.filter((s) => {
+    if (mine.has(s.name)) return true;
+    if (s.agents && s.agents.length > 0) return s.agents.includes(agent);
+    return !pinnedAnywhere.has(s.name);
+  });
+}
+
+/** The prompt's skill menu -- for one agent when routing chose one, for
+ *  everything in single-agent mode, where there is no one to narrow to. */
+export function skillCatalogue(set: SkillSet = loadSkills(), agent?: string): string {
+  const pool = agent ? skillsFor(agent, set) : set.skills;
+  const listed = pool.filter((s) => !s.manualOnly).slice(0, MAX_CATALOGUE);
   if (listed.length === 0) return "";
 
   const lines = listed.map((s) => `- ${s.name}: ${s.description}`);
-  const overflow = set.skills.filter((s) => !s.manualOnly).length - listed.length;
+  const overflow = pool.filter((s) => !s.manualOnly).length - listed.length;
   if (overflow > 0) lines.push(`- (${overflow} more, not shown)`);
 
   return (

@@ -40,6 +40,32 @@ Never mention tooling or assistance in the message.
 The `description` is what the model reads to decide whether the skill applies,
 so write it as the situation it covers, not as a title.
 
+## Which agents hold a skill
+
+Skills attach to agents by reference — one file, any number of agents. The
+rule is one sentence: **a skill belongs to the agents it names, plus any agent
+that names it; a skill nobody names belongs to everyone.**
+
+A skill names its agents in front matter:
+
+```markdown
+---
+name: commit-message
+agents: [coder]
+description: How to write a commit message for this project
+---
+```
+
+An agent names its skills in the Agents panel — the **pin…** control on any
+card, built-in or your own. Pinning is the one edit a built-in agent accepts:
+know-how is not capability, so it touches nothing the tool rules protect.
+
+The everyone default is what keeps a freshly written skill working before
+you have filed it. The reason to file it anyway is the prompt: each agent's
+skill menu lists only its own skills, so a small model reads a shorter list
+and picks from it better. The bundled skills all name their agents for that
+reason — the mail agent never sees `commit-message`.
+
 ## Bundled skills, and your own
 
 Enio ships with a handful of skills (commit messages, weekly review, research

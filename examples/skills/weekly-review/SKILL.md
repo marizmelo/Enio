@@ -1,5 +1,6 @@
 ---
 name: weekly-review
+agents: [librarian, generalist]
 description: Producing a weekly review or summary of what the user has been working on, what changed, and what is unresolved. Use for "what did I do this week", "weekly review", or "catch me up".
 allowed-tools: [recall, run_command, read_file]
 ---

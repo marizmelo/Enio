@@ -55,6 +55,7 @@ const handoffSkill: Skill = {
   dir: scratch,
   body: "compose a handoff",
   allowedTools: null,
+  agents: null,
   manualOnly: false,
   origin: "global",
   overridesBuiltin: false,

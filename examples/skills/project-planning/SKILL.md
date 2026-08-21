@@ -1,5 +1,6 @@
 ---
 name: project-planning
+agents: [coder, generalist]
 description: Breaking a goal into a plan — milestones, next actions, and open questions. Use when the user wants to plan a project, organise work, decide what to do next, or turn a vague ambition into steps.
 allowed-tools: [write_file, read_file, edit_file]
 ---

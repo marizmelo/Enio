@@ -95,6 +95,14 @@ six tools at most, no tool that does not exist, and never a combination that
 both reads the web and acts — a page could tell that agent what to do, and it
 would be able to. Split such a job into two agents, or better, an automation.
 
-Skills attach themselves: any skill whose allowed tools overlap your agent's
-is available to it. Built-in agents stay as shipped — their tool sets are
+Skills attach by reference: pick them in the editor, or pin them to any
+card — built-ins included — from the panel. A skill that names no agent and is
+pinned nowhere is everyone's; see [Skills](skills.md) for the rule.
+
+**Duplicate** on any card starts a new agent of your own from it — the way to
+make "a coder for Godot" or "mail, but terse". It copies the description,
+example, instructions, tools and pins; the name is yours to choose, and the
+editor warns while the description still matches the parent, because two
+agents the router cannot tell apart is the one way a fork makes things
+worse. Built-in agents themselves stay as shipped — their tool sets are
 pinned by tests and their routing was tuned against measured failures.

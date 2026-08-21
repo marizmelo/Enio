@@ -168,7 +168,8 @@ describe("invoked skill block", () => {
   test("injects the body outright rather than offering it", () => {
     const skill = {
       name: "x", description: "d", dir: "/tmp", body: "Do the thing.",
-      allowedTools: null, manualOnly: false,
+      allowedTools: null,
+      agents: null, manualOnly: false,
       origin: "global" as const, overridesBuiltin: false,
     };
     const block = invokedSkillBlock([skill]);
