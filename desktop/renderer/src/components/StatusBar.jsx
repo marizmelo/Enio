@@ -29,7 +29,6 @@ const DOT = {
 export function StatusBar({
   phase,
   message,
-  tools,
   context,
   project,
   onNewChat,
@@ -191,18 +190,10 @@ export function StatusBar({
             costs two flex gaps, which reads as a hole between the model name
             and the tool count now that the ready state sends no prose. */}
         {message && <span className="truncate">{message}</span>}
-        {/* The count is the door to the agents panel: "26 tools" begs the
-            question of who holds which, and this is where it gets answered.
-            no-drag, because the whole bar is otherwise a drag region. */}
-        {typeof tools === "number" && (
-          <button
-            onClick={onAgents}
-            className="shrink-0 tabular-nums [-webkit-app-region:no-drag] hover:text-foreground"
-            title="The agents — who holds which tools, skills and automations"
-          >
-            · {tools} tools
-          </button>
-        )}
+        {/* The tool count used to sit here as the door to the agents panel.
+            Once the panel got its own button on the left, the number was
+            answering a question nobody was asking — a raw count carries no
+            decision — so it went. The per-agent view is where tools live. */}
         <span className={cn("size-2 shrink-0 rounded-full", DOT[phase] ?? DOT.starting)} />
       </div>
     </header>
