@@ -103,7 +103,7 @@ export function RecipesPanel({ open }) {
       <div className="min-h-0 flex-1 overflow-y-auto pr-1">
         {!canRun && (
           <p className="mb-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
-            Saved recipes need desktop mode to run or be saved. Start enio with{" "}
+            Saved scripts need desktop mode to run or be saved. Start enio with{" "}
             <code className="rounded bg-muted px-1">ENIO_DESKTOP=1</code>.
           </p>
         )}
@@ -162,10 +162,10 @@ export function RecipesPanel({ open }) {
                 }}
               />
               <span>
-                <span className="text-foreground">Run safe recipes automatically</span>
+                <span className="text-foreground">Run safe scripts automatically</span>
                 <br />
                 <span className="text-muted-foreground">
-                  Only recipes on this tab that you ticked “safe”. A plan Enio has just
+                  Only scripts on this tab that you ticked “safe”. A plan Enio has just
                   written always asks first, whatever this says.
                 </span>
               </span>

@@ -563,12 +563,12 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipe
       <DialogContent className="flex h-[80vh] w-[80vw] max-w-none flex-col gap-3 sm:max-w-none">
         <DialogHeader className="shrink-0">
           <div className="flex items-center gap-3">
-            <DialogTitle>{view === "list" && tab === "recipes" ? "Recipes" : "Automations"}</DialogTitle>
+            <DialogTitle>{view === "list" && tab === "recipes" ? "Scripts" : "Automations"}</DialogTitle>
             {view === "list" && showRecipes && (
               <nav className="flex gap-1 text-xs">
                 {[
                   ["automations", "Automations"],
-                  ["recipes", "Recipes"],
+                  ["recipes", "Scripts"],
                 ].map(([id, label]) => (
                   <button
                     key={id}

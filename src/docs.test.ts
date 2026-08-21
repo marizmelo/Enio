@@ -100,12 +100,15 @@ describe("the docs describe the code that exists", () => {
   test("every recipe named in the docs is a real recipe", async () => {
     const { builtinRecipes } = await import("./tools/desktop.js");
     const known = new Set(builtinRecipes().map((r) => r.name));
-    // The recipe table is the one place they are all listed by name.
+    // The table is the one place they are all listed by name. Headed
+    // "Script" in the docs -- users read script, the code says recipe -- so
+    // the locator follows the user's word while the check stays on the real
+    // recipe names.
     const macDoc = readFileSync(join(DOCS, "mac-control.md"), "utf8");
-    // Scoped to the recipe table: the plan-step table below it has the same
-    // row shape and lists step kinds, which are not recipes.
-    const table = /\| Recipe \| Returns \| Needs \|([\s\S]*?)\n\n/.exec(macDoc);
-    assert.ok(table, "the recipe table should be findable");
+    // Scoped to that table: the plan-step table below it has the same row
+    // shape and lists step kinds, which are not recipes.
+    const table = /\| Script \| Returns \| Needs \|([\s\S]*?)\n\n/.exec(macDoc);
+    assert.ok(table, "the script table should be findable");
     const named = [...table[1]!.matchAll(/^\| `([a-z_]+)` \|/gm)].map((m) => m[1]!);
     const unknown = named.filter((n) => !known.has(n));
     assert.deepEqual(unknown, [], `documented recipes that do not exist: ${unknown.join(", ")}`);

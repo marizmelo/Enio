@@ -105,7 +105,7 @@ the composer knows what request each flow answers.
 
 An automation that was saved but never ran teaches nothing, and a failed run
 doesn't count — abandoned drafts and broken flows must not shape the next
-draft. It is the recipes rule again: reality vouches, not saving.
+draft. It is the saved-script rule again: reality vouches, not saving.
 
 **Suggest from my history** (in the automations dialog) goes one step further:
 Enio mines its own traces for tool sequences you have repeated at least three
@@ -138,9 +138,9 @@ declares an [MCP server](mcp.md) requirement — home automation and Home
 Assistant, today — inherits that server's tools inside its step, exactly the
 way `@server` grants them for one chat turn.
 
-## Recipes: saved computer scripts
+## Scripts: saved computer actions
 
-The panel's second tab is **Recipes** — the tested scripts Enio picks by name
+The panel's second tab is **Scripts** — the tested ones Enio picks by name
 instead of writing AppleScript from scratch. They live here rather than in a
 drawer of their own because they are the same kind of thing as an automation:
 something that *runs*, chosen from a list you curate, vouched by having worked
@@ -148,7 +148,7 @@ once. A *Control my computer* step reaches for exactly this list, so the tab
 is where you see and edit what such a step can do. (The tab appears on macOS
 only; the scripts are AppleScript.)
 
-The switch that lets a vouched recipe run without asking lives on that tab and
+The switch that lets a vouched script run without asking lives on that tab and
 governs only that tab. Nothing on the Automations tab, and nothing in
 [Skills](skills.md), is covered by it — and a plan Enio has just written still
 goes to the approval sheet, whatever the switch says. See
@@ -178,10 +178,34 @@ The scheduled trigger is deterministic — when the clock fires, the harness
 walks the graph directly, with no model and no routing between the schedule
 and the flow you built. The steps inside run as ordinary turns, exactly as
 when you press run yourself. Schedules fire while the desktop app is open (or
-`enio serve` / `enio daemon` runs); see [scheduled tasks](tasks.md) for the
+`enio serve` / `enio daemon` runs); see [when automations run](#when-automations-run) for the
 machinery and the CLI, including scheduling a plain prompt rather than an
 automation.
 
 Renaming an automation carries its schedule along, and deleting one removes
 its schedule with it — a schedule pointing at a flow that no longer exists
 could only fail at the exact moment nobody is watching.
+
+## When automations run
+
+**The scheduler runs inside the desktop app** (and inside `enio serve`), so a
+schedule set in the panel fires while Enio is open — no second process to
+remember. `enio daemon` is the headless alternative for a machine where the
+app isn't running; to survive reboots, wrap it in a launchd plist (macOS) or
+a systemd user unit (Linux).
+
+Running both is safe. A **lease** in the database decides which process fires:
+one holds it and schedules, the other stands by and takes over within a couple
+of minutes if the holder goes away (about 30 seconds on a clean quit). Fires
+that land exactly in a handover gap are dropped, not replayed — a task runs
+once or not at all, never twice.
+
+The scheduler re-reads schedules every 30 seconds, so adding or removing one
+takes effect without a restart.
+
+Overlapping runs are **skipped rather than stacked** — a turn can take tens of
+seconds, and a `*/1 * * * *` schedule would otherwise pile up until nothing
+finishes. A failing run is recorded and the others keep running.
+
+A schedule is validated when you set it, not at 3am when it silently fails to
+fire.

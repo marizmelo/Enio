@@ -1,6 +1,6 @@
 # Working on enio
 
-A local AI agent: tools, memory, skills, scheduled tasks. Runs against Maple
+A local AI agent: tools, memory, skills, automations. Runs against Maple
 (Apple Silicon) or any OpenAI-compatible server.
 
 ```sh
@@ -31,7 +31,7 @@ window.
 | `DECISIONS.md` | You, later | Before proposing an architectural change |
 
 `docs/` is checked by `src/docs.test.ts`: every environment variable, tool,
-recipe and agent it names must exist, every page needs Pages front matter, and
+script and agent it names must exist, every page needs Pages front matter, and
 internal links must resolve. Prose drifts silently otherwise — the README
 accumulated four false claims in a single session before that test existed.
 
@@ -116,6 +116,24 @@ UI and the docs prose say. Model-facing text is the exception that proves it:
 the tool stays `run_pipeline` — renaming a working classifier's key buys
 nothing — but its *description* and the router examples use "automation",
 because that is the word arriving in the user's message.
+
+**Users see "scripts"; the code says "recipes".** The third pairing, for the
+same reason as the other two. A recipe is a plan the user approved and named,
+which enio then selects rather than re-authors; "recipe" describes that
+mechanism accurately and is what `plans.ts`, the DB table, the HTTP routes and
+`mac_recipe` all say. What the user has is a saved computer script, so the tab
+is **Scripts**, the switch says "Run safe scripts automatically", and the docs
+say script throughout. `mac_recipe` keeps its name: it is model-facing, and
+renaming a working classifier's key buys nothing.
+
+Scheduling is not a separate concept at all. **Tasks were retired as a user
+concept** (August 2026): a schedule is a property of an automation, set in the
+app or over the API. `src/tasks.ts`, the `tasks` table and `/tasks/schedule`
+remain as the machinery, and `enio daemon` still hosts the scheduler — but
+there is no `enio task` CLI and no tasks page, because three surfaces
+describing a concept the product had stopped presenting is how documentation
+starts lying. Watches, which were documented alongside tasks, are their own
+thing and kept their own page.
 
 **One hop only.** Router → specialist → answer. No agent-to-agent conversation.
 Every hand-off compounds error and at this model size it compounds fast.

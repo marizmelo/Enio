@@ -20,7 +20,7 @@ They answer different questions, and they are deliberately not one switch.
 | | Question it answers | Default |
 |---|---|---|
 | **Desktop control** | May it change anything at all? | off |
-| **Run safe recipes automatically** | May a *vouched* script run without asking? | off |
+| **Run safe scripts automatically** | May a *vouched* script run without asking? | off |
 
 The first is one deliberate click: pick **Control my computer** (or **Screenshot**)
 on the launcher and press **Enable desktop control**. The consent is recorded
@@ -33,7 +33,7 @@ environment-variable form of the same switch, and wins when set:
 cd desktop && ENIO_DESKTOP=1 npm start
 ```
 
-The second lives on the **Recipes** tab of the Automations panel, not in an
+The second lives on the **Scripts** tab of the Automations panel, not in an
 environment variable, because it is a decision you revisit. Turning both on in
 one gesture would be bundled consent.
 
@@ -44,7 +44,7 @@ content it reads, so the ability to reach your apps is something you grant,
 never something that ships pre-granted.
 
 {: .warning }
-Auto-run applies **only to recipes you personally ticked "safe"**. A plan Enio
+Auto-run applies **only to scripts you personally ticked "safe"**. A plan Enio
 has just written always goes to the approval sheet, whatever that switch says.
 That line is not negotiable by any setting.
 
@@ -67,7 +67,7 @@ Google Chrome. Quitting the app undoes it, which is the whole test the
 **Reading from apps** goes through `mac_recipe`, which runs tested scripts
 selected by name rather than written on the spot:
 
-| Recipe | Returns | Needs |
+| Script | Returns | Needs |
 |---|---|---|
 | `recent_emails` | Subject and sender of recent inbox messages | Automation |
 | `unread_count` | How many unread messages | Automation |
@@ -125,7 +125,7 @@ public API.
 
 ## Plans, and the approval sheet
 
-When no recipe covers what you asked, Enio writes down what it *would* do and
+When no saved script covers what you asked, Enio writes down what it *would* do and
 stops. It cannot run it; only you can.
 
 A step is one action, and can be any of these:
@@ -157,26 +157,26 @@ Steps run in order and stop at the first failure, so a half-finished plan is
 visible as a half-finished plan rather than an error with no account of what
 already happened.
 
-## Turning a plan into a recipe
+## Turning a plan into a saved script
 
 This is the part worth understanding, because it is the only thing in the
 design that converts a one-off into permanent capability.
 
-Approve a plan and choose **Save as recipe**, give it a name, and from then on
+Approve a plan and choose **Save as script**, give it a name, and from then on
 the model *selects* it by name instead of writing it again. The model
 improvises once — expensive and unreliable — you approve once, and after that
 it is deterministic with no model involved.
 
-A recipe is only saved **after every step ran successfully**. A script that
+A script is only saved **after every step ran successfully**. A script that
 never worked would otherwise be re-run verbatim forever, failing identically,
 with nothing positioned to notice.
 
 Tick **"safe to run on its own"** while saving, and with auto-run enabled Enio
-uses that recipe without asking. Saving records that a script *worked*; ticking
+uses that script without asking. Saving records that a script *worked*; ticking
 safe records that you are willing to have it repeat unattended. Those are
 different judgements, and only you can make the second.
 
-Manage them all on the **Recipes** tab of the Automations panel (the workflow
+Manage them all on the **Scripts** tab of the Automations panel (the workflow
 button in the status bar): built-ins are listed but not editable, yours can be
 edited, tested, vouched for or deleted. You can also write one from scratch
 there — saving runs it once and refuses to store it if it fails.

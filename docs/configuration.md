@@ -56,7 +56,7 @@ and old variables still work.
 | Variable | Default |
 |---|---|
 | `ENIO_DESKTOP` | unset — plans, AppleScript and screenshots, macOS only |
-| `ENIO_AUTO_RUN` | unset — off; overrides the Recipes drawer switch |
+| `ENIO_AUTO_RUN` | unset — off; overrides the Scripts tab switch |
 
 ## Email
 

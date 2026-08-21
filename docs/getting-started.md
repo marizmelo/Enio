@@ -108,7 +108,7 @@ prompt for it the way it prompts for the others. The desktop app shows a notice
 with a button that opens the right pane; grant it to **whatever runs Enio** —
 the desktop app itself, or your terminal if you use the CLI.
 
-Until it's granted, the two window-reading recipes are simply not offered.
+Until it's granted, the two window-reading scripts are simply not offered.
 Everything else keeps working.
 
 ## Where things live
@@ -119,4 +119,4 @@ Everything else keeps working.
 | `~/.enio` | Database, token, settings, logs |
 | `~/.enio/runtime` | The model runtime and weights |
 | `~/.enio/model.json` | Which model is selected |
-| `~/.enio/automation.json` | Whether safe recipes run automatically |
+| `~/.enio/automation.json` | Whether safe scripts run automatically |

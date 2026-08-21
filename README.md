@@ -54,11 +54,11 @@ See **[Getting started](docs/getting-started.md)** for permissions, the workspac
 
 **Keeps your documents.** Drop files into library folders — `research/`, `personal/`, whatever you name them — and they become searchable in chat, by meaning and by exact term, with the file cited. The index is derived from the files, never the reverse. → [Document library](docs/library.md)
 
-**Uses your computer.** Opens apps, reads Mail, Calendar, Notes and Finder, and clicks buttons *by name* from the accessibility tree rather than by pixel. Anything that changes something is written down as a plan you read, edit, test a step at a time, and approve. Approve once and it becomes a recipe it selects rather than rewrites. → [Controlling your computer](docs/mac-control.md)
+**Uses your computer.** Opens apps, reads Mail, Calendar, Notes and Finder, and clicks buttons *by name* from the accessibility tree rather than by pixel. Anything that changes something is written down as a plan you read, edit, test a step at a time, and approve. Approve once and it becomes a saved script it selects rather than rewrites. → [Controlling your computer](docs/mac-control.md)
 
 **Reads the web.** Search, fetch, and a real browser session that follows links across a site. → [Browsing](docs/browsing.md)
 
-**Runs on schedule.** Cron-driven tasks through the ordinary turn path, so a scheduled run is inspectable exactly like a conversation. → [Scheduled tasks](docs/tasks.md)
+**Runs on schedule.** Give an automation a repeat and it fires through the ordinary turn path, so a scheduled run is inspectable exactly like a conversation. Or set a [watch](docs/watches.md), which speaks up only when something changed. → [Automations](docs/pipelines.md)
 
 **Learns your know-how.** Skills are markdown, not code — a tool lets it send email, a skill tells it how *you* want emails written. → [Skills](docs/skills.md)
 
@@ -72,7 +72,7 @@ See **[Getting started](docs/getting-started.md)** for permissions, the workspac
 
 **One constraint drives the design: the model is small.** Enio is built to run well on a few billion parameters, not a few hundred. A model that size picks tools badly once it can see more than a handful, emits malformed JSON often enough that repair is a normal path, and is far better at *choosing from a short list* than at generating freely.
 
-So nearly everything turns generation into selection. A router picks one of six agents, each with at most six tools. Clicks are names read from the accessibility tree. Memory extraction uses a closed vocabulary of nine relations. Recipes are tested scripts selected rather than written.
+So nearly everything turns generation into selection. A router picks one of six agents, each with at most six tools. Clicks are names read from the accessibility tree. Memory extraction uses a closed vocabulary of nine relations. Computer actions are tested scripts selected rather than written.
 
 **Nothing irreversible happens without you.** Email is dry-run until a flag is set. IMAP opens read-only so the *server* refuses changes. The model proposes scripts and never runs them — the only path from "composed" to "ran" goes through a person reading the exact text.
 

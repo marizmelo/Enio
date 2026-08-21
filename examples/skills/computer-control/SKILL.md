@@ -1,5 +1,5 @@
 ---
-name: mac-control
+name: computer-control
 description: Controlling this Mac through AppleScript — reading Mail, Calendar, Notes, Reminders, and Finder. Use for "show my emails", "what's on my calendar", "read my notes", "what's due", or similar requests about the user's own apps.
 allowed-tools: [run_applescript]
 ---

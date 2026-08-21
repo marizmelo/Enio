@@ -17,10 +17,10 @@ import {
 } from "./runtime.js";
 import { currentModelLabel, currentModelPath } from "./model-settings.js";
 import { builtinSkillsDir, findSkill, loadSkills, skillContents, skillsDir } from "./skills.js";
-import {
-  addTask, getTask, listTasks, removeTask, runTask, runsFor,
-  setTaskEnabled, startScheduler, validateSchedule,
-} from "./tasks.js";
+// Only the scheduler itself: `enio daemon` hosts it. The task CLI is gone --
+// a schedule is a property of an automation now, set in the app or over the
+// API, not a separate thing with its own verbs.
+import { startScheduler } from "./tasks.js";
 import { analyse, draftSkill } from "./suggest.js";
 import { visionStatus } from "./vision.js";
 import { mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
@@ -493,93 +493,6 @@ async function main(): Promise<void> {
       for (const p of set.problems) {
         console.error(`\x1b[33mskipped\x1b[0m ${p.path}\n  ${p.reason}\n`);
       }
-      break;
-    }
-
-    case "tasks": {
-      const tasks = listTasks();
-      if (tasks.length === 0) {
-        console.log(
-          `No tasks.\n\n  enio task add <name> --cron "0 9 * * 1" --prompt "..."\n` +
-            `  enio suggest      find candidates in what you have already repeated`,
-        );
-        break;
-      }
-      for (const t of tasks) {
-        const next = validateSchedule(t.schedule);
-        const when = next.ok ? next.next.toISOString().replace("T", " ").slice(0, 16) : "invalid";
-        const state = t.enabled ? `next ${when}` : "disabled";
-        console.log(`${t.name.padEnd(24)} ${t.schedule.padEnd(16)} ${state}`);
-        console.log(
-          `  ${t.pipeline ? `pipeline: ${t.pipeline}` : t.prompt.replace(/\s+/g, " ").slice(0, 90)}`,
-        );
-        if (t.lastStatus) {
-          const ago = t.lastRunAt ? new Date(t.lastRunAt).toISOString().slice(0, 16).replace("T", " ") : "?";
-          console.log(`  last: ${t.lastStatus} at ${ago}${t.lastError ? ` — ${t.lastError}` : ""}`);
-        }
-        console.log("");
-      }
-      break;
-    }
-
-    case "task": {
-      const [action, name, ...opts] = rest;
-      const flag = (f: string) => {
-        const i = opts.indexOf(f);
-        return i >= 0 ? opts[i + 1] : undefined;
-      };
-
-      if (action === "add") {
-        if (!name) { console.error(`Usage: enio task add <name> --cron "0 9 * * 1" --prompt "..." | --pipeline <name>`); process.exit(1); }
-        try {
-          const task = addTask({
-            name,
-            prompt: flag("--prompt") ?? "",
-            pipeline: flag("--pipeline") ?? null,
-            schedule: flag("--cron") ?? "0 9 * * 1",
-            // --agent is the user-facing name (users see agents, the code says
-            // specialist); --specialist stays as a silent alias for old scripts.
-            specialist: flag("--agent") ?? flag("--specialist") ?? null,
-          });
-          const next = validateSchedule(task.schedule);
-          console.log(`Added ${task.name}. Next run: ${next.ok ? next.next.toISOString() : "?"}`);
-          console.log(`Start the scheduler with: enio daemon`);
-        } catch (err) {
-          console.error((err as Error).message);
-          process.exit(1);
-        }
-        break;
-      }
-
-      if (action === "rm" || action === "remove") {
-        console.log(removeTask(name ?? "") ? "Removed." : "No such task.");
-        break;
-      }
-      if (action === "enable" || action === "disable") {
-        const ok = setTaskEnabled(name ?? "", action === "enable");
-        console.log(ok ? `${action}d ${name}` : "No such task.");
-        break;
-      }
-      if (action === "run") {
-        const task = getTask(name ?? "");
-        if (!task) { console.error("No such task."); process.exit(1); }
-        const run = await runTask(task, (m) => console.log(m));
-        if (run.output) console.log(`\n${run.output}`);
-        break;
-      }
-      if (action === "runs") {
-        for (const r of runsFor(name ?? "")) {
-          console.log(
-            `${new Date(r.startedAt).toISOString().slice(0, 16).replace("T", " ")}  ` +
-              `${r.status.padEnd(6)} ${Math.round(r.durationMs / 1000)}s` +
-              `${r.error ? `  ${r.error}` : ""}`,
-          );
-        }
-        break;
-      }
-
-      console.error(`Usage: enio task <add|rm|enable|disable|run|runs> <name> [...]`);
-      process.exit(1);
       break;
     }
 
@@ -1294,9 +1207,6 @@ enio — a local agent with tools and persistent memory
   enio unpref ID          remove one
   enio examples           list saved answer examples
 
-  enio tasks               list scheduled tasks
-  enio task add NAME --cron "0 9 * * 1" --prompt "..." | --pipeline NAME
-  enio task run|rm|enable|disable|runs NAME
   enio daemon              run the scheduler
   enio suggest [--write]   find what is worth automating
 

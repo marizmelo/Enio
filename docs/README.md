@@ -36,7 +36,7 @@ No API keys. No account. Nothing leaves your computer.
 | [Agents and routing](agents.md) | Why there are six agents and how one gets picked |
 | [Browsing](browsing.md) | Reading the web as a session |
 | [Skills](skills.md) | Teaching it know-how, in markdown, with no code |
-| [Scheduled tasks](tasks.md) | Cron-driven runs through the ordinary turn path |
+| [Watches](watches.md) | Standing checks that speak up only when something changed |
 | [Meetings](meetings.md) | Record, transcribe and summarize locally — into memory |
 | [MCP servers](mcp.md) | Adding third-party tools |
 | [Configuration](configuration.md) | Every environment variable |
@@ -56,7 +56,7 @@ freely.
 So nearly everything here turns generation into selection. The router picks one
 of six agents, each with at most six tools. Clicking is done by *name* read
 from the accessibility tree, never by pixel coordinate. Memory extraction uses a
-closed vocabulary of nine relations. Recipes are tested scripts the model
+closed vocabulary of nine relations. Saved scripts are tested and selected, not written by the model
 selects rather than writes.
 
 **Nothing irreversible happens without you.** The model proposes; a person

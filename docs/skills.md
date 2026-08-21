@@ -105,7 +105,7 @@ the click takes you to where you fix it.
 identity lives in the `---` block at the top, and a mangled one silently
 drops out of the catalogue — so the save runs the same parse the loader does
 and rejects anything it would not accept, naming the reason. Same rule as
-saving a recipe, which runs the script first.
+saving a script, which runs it first.
 
 The panel does not create or delete: a skill is a folder you own, so
 **Show in Finder** takes you to it (that is also where its `references/` and
