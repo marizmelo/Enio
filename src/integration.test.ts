@@ -2047,3 +2047,63 @@ describe("fresh facts from an agent that cannot check them", () => {
     assert.match(result.reply, /radioactive spider/);
   });
 });
+
+/**
+ * A wrong answer is never shown and then snatched away. On turns where a
+ * withdraw guard is armed -- knowable up front from the specialist and the
+ * question -- the reply is held and delivered once, after the guards; plain
+ * conversation keeps streaming live and keeps the restart seam.
+ */
+describe("holding the reply until the guards have passed", () => {
+  test("the withdrawn text never reaches the client; the reason arrives as a notice", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { content: "As of today, the last Spider-Man film released in July 2026 was *Spider-Man: Beyond the Web*." },
+      { content: "I can't check movie releases from here — ask @researcher." },
+    ]);
+    const shown: string[] = [];
+    const notices: string[] = [];
+    let restarts = 0;
+    const result = await runTurn("what was the last spiderman movie on theaters this year", [], registry, sessionId, {
+      onContent: (d) => shown.push(d),
+      onNotice: (n) => notices.push(n),
+      onRestart: () => restarts++,
+    }, { specialist: "generalist" });
+    assert.equal(restarts, 0, "nothing was shown, so nothing is restarted");
+    assert.ok(!shown.join("").includes("Beyond the Web"), `the invention reached the client: ${shown.join("")}`);
+    assert.equal(shown.join(""), result.reply, "the held reply goes out once, verbatim");
+    assert.ok(notices.some((n) => /no way to check/.test(n)), notices.join(" | "));
+  });
+
+  test("a held reply that passes the guards is delivered whole", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "One new message from Ana about the deck. Nothing needs doing." }]);
+    const shown: string[] = [];
+    const result = await runTurn("check my email", [], registry, sessionId, {
+      onContent: (d) => shown.push(d),
+    }, { specialist: "mail" });
+    assert.equal(shown.length, 1, "one emission, not a stream");
+    assert.equal(shown[0], result.reply);
+  });
+
+  test("plain conversation still streams live and keeps the restart seam", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    // A fabricated action from the generalist: not an armed turn, so the
+    // text streams, and the correction arrives through the restart path.
+    scriptModel([
+      { content: "Done — I have opened Calculator for you and cleared the display." },
+      { content: "I cannot open apps from here — that is the operator's job." },
+    ]);
+    const shown: string[] = [];
+    let restarts = 0;
+    await runTurn("please open calculator and clear it for me now", [], registry, sessionId, {
+      onContent: (d) => shown.push(d),
+      onRestart: () => restarts++,
+    }, { specialist: "generalist" });
+    assert.equal(restarts, 1, "the live path withdraws through onRestart");
+    assert.ok(shown.join("").includes("opened Calculator"), "the live path streamed the first text");
+  });
+});

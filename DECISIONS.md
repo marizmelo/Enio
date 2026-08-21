@@ -2754,3 +2754,29 @@ Rejected: per-agent model overrides (one model is the architecture);
 agent-to-agent delegation from custom agents (one hop is load-bearing);
 renaming on edit (a rename is a new agent — the name is identity in the
 router, the DB column and @mentions).
+
+## Hold the reply where a withdraw is possible (August 2026)
+
+The withdraw guards streamed everything live and retracted afterwards.
+Honest, and it read as the agent changing its mind in front of you -- a
+confident invented film title was read before it vanished. Asked for:
+do not show it until it is verified.
+
+**Chose:** hold the reply server-side on turns where a guard is *armed*,
+deliver it once after the guards pass (or deliver the correction in its
+place); stream live everywhere else. Armed is knowable up front from the
+specialist and the question: researcher, operator and mail (their guards
+key on the specialist), the coder when it can write (its reply is one
+line anyway), and any agent asked about the present with no way to look
+it up. Plain conversation keeps streaming. The client shows its thinking
+indicator meanwhile, so a hold reads as thought, not a hang.
+
+**Rejected:** holding every reply (streaming is the one thing that makes
+a 4B feel responsive, and most turns can never be withdrawn); a
+"provisional" dimmed rendering of the streamed text (still shows the
+wrong text, which was the complaint); client-side buffering (one more
+client to get wrong -- the CLI and the API benefit from the server doing
+it). The held reply goes out as the settled `reply` variable, the same
+text the log and transcript hold, so the bubble and the record cannot
+disagree -- which in the floor case means the floor alone, not the
+still-bad correction with the floor bolted on.

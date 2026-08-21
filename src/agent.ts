@@ -1148,6 +1148,30 @@ export async function runTurn(
   const coveredByMemory = knowledgeCovers(userInput, knownFromMemory);
   const coveredByThread = !coveredByMemory && knowledgeCovers(userInput, knownFromThread);
   const alreadyKnown = coveredByMemory || coveredByThread;
+
+  // Hold the reply back from the client on turns where a withdraw is
+  // possible, so a wrong answer is never shown and then snatched away.
+  // The first version streamed everything live and withdrew afterwards,
+  // which reads as the agent changing its mind in front of you -- and a
+  // confident invented film title is read before it vanishes. Streaming
+  // is only given up where a guard is armed, which is knowable up front
+  // from the specialist and the question: the researcher, operator and
+  // mail replies (their guards key on the specialist), the coder when it
+  // can write (its reply is normally one line anyway), and any agent asked
+  // about the present without a way to look it up. Plain conversation
+  // still streams. The held text goes out in one piece once the guards
+  // have passed, or the correction goes out in its place.
+  const holdReply =
+    specialistName === "researcher" ||
+    specialistName === "operator" ||
+    specialistName === "mail" ||
+    (specialistName === "coder" && activeTools.some((t) => t.name === "write_file")) ||
+    (!alreadyKnown && asksAboutCurrentWorld(userInput));
+  let held: string[] | null = holdReply ? [] : null;
+  const emitContent = (delta: string) => {
+    if (held) held.push(delta);
+    else handlers.onContent?.(delta);
+  };
   if (
     specialistName === "researcher" &&
     searchTool &&
@@ -1234,7 +1258,7 @@ export async function runTurn(
       isLast ? [] : wireTools,
       {
         onReasoning: handlers.onReasoning,
-        onContent: handlers.onContent,
+        onContent: emitContent,
       },
       { maxTokens: outputBudget },
       handlers.shouldStop,
@@ -1355,7 +1379,7 @@ export async function runTurn(
         retry = await completeWatched(
           withDateOnLatest(history),
           retryTools,
-          { onContent: handlers.onContent },
+          { onContent: emitContent },
           { enableThinking: false, maxTokens: outputBudget },
         );
         steps.push({
@@ -1478,7 +1502,13 @@ export async function runTurn(
               : fabricatedCurrent
                 ? "That answer states recent facts this agent has no way to check. Correcting."
                 : "That reply described actions that never ran — nothing was called. Correcting.";
-    if (handlers.onRestart) handlers.onRestart(reason);
+    // Held text was never shown, so there is nothing to restart: the buffer
+    // is dropped and the reason becomes a notice -- still told, because it
+    // explains both the wait and what the agent nearly said.
+    if (held) {
+      held = [];
+      handlers.onNotice?.(reason);
+    } else if (handlers.onRestart) handlers.onRestart(reason);
     else handlers.onNotice?.(reason);
     // The withdrawn reply is already in the log and in history[]. The log
     // row goes now, so a reload never shows it. History keeps it for the
@@ -1560,13 +1590,13 @@ export async function runTurn(
     try {
       // A client that could not restart still needs the seam between the
       // withdrawn text and the retry; one that did restart starts clean.
-      if (!handlers.onRestart) handlers.onContent?.("\n\n");
+      if (!handlers.onRestart) emitContent("\n\n");
       for (let round = 0; round < 2; round++) {
         const startedAt = Date.now();
         const fix = await complete(
           history,
           round === 0 ? wireTools : [],
-          { onReasoning: handlers.onReasoning, onContent: handlers.onContent },
+          { onReasoning: handlers.onReasoning, onContent: emitContent },
           undefined,
           { maxTokens: outputBudget },
         );
@@ -1673,7 +1703,7 @@ export async function runTurn(
             : "I described doing that, but I did not actually run anything — nothing " +
           'has changed on your computer. Say "propose a plan to …" and I will write ' +
           "out the exact steps for you to approve.";
-      handlers.onContent?.("\n\n" + reply);
+      emitContent("\n\n" + reply);
       history.push({ role: "assistant", content: reply });
       logMessage(sessionId, "assistant", reply);
     }
@@ -1693,7 +1723,7 @@ export async function runTurn(
         "or ask me what I can do."
       : "I could not produce an answer for this one — the reply ran out of room twice. " +
         "Try rephrasing, or raise ENIO_MAX_TOKENS.";
-    handlers.onContent?.(reply);
+    emitContent(reply);
     const last = history[history.length - 1];
     if (last?.role === "assistant" && !String(last.content ?? "").trim() && !last.tool_calls) {
       history[history.length - 1] = { role: "assistant", content: reply };
@@ -1701,6 +1731,14 @@ export async function runTurn(
       history.push({ role: "assistant", content: reply });
     }
     logMessage(sessionId, "assistant", reply);
+  }
+
+  // A held reply goes out now, as one piece: `reply` is the settled text --
+  // the verified original, the correction, or the floor -- and it is what
+  // the log and the transcript hold, so the bubble and the record agree.
+  if (held) {
+    held = null;
+    if (reply.trim()) handlers.onContent?.(reply);
   }
 
   // The grounding check, on turns that read source material. Sources are
