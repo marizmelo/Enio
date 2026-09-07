@@ -183,6 +183,36 @@ export function contextBudget(): number {
   return DEFAULT_BUDGET;
 }
 
+/**
+ * Where a specialist's LoRA adapter lives, if it exists for the model the
+ * machine is serving right now.
+ *
+ * Adapters are keyed by base model because they are only valid on the weights
+ * they were trained against — the same reasoning as contextBudget(): follow
+ * the *selected* model, never assume identity. Machine-wide, next to the model
+ * setting, because there is one model server per machine and an adapter is a
+ * property of what it serves.
+ *
+ * Null rather than a throw when missing or trained for a different base:
+ * a specialist whose adapter is absent must degrade to the bare base model,
+ * never fail the turn.
+ */
+export function adapterPathFor(name: string): string | null {
+  if (!/^[\w][\w.-]*$/.test(name)) return null;
+  const slug = currentModelId().replace(/\//g, "--");
+  const dir = join(config.machineStateDir, "adapters", slug, name);
+  // Both files, not just the directory: mlx_lm refuses an adapter without its
+  // config, and a half-written directory (a training run killed mid-save)
+  // must read as "no adapter", not as a server error on every turn.
+  if (
+    existsSync(join(dir, "adapters.safetensors")) &&
+    existsSync(join(dir, "adapter_config.json"))
+  ) {
+    return dir;
+  }
+  return null;
+}
+
 /** Whether the current model's budget came from a measurement or a guess.
  *  Surfaced so a client can say so rather than implying more confidence than
  *  there is. */

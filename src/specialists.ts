@@ -17,8 +17,11 @@ import type { Message, ToolDef } from "./types.js";
  * additional hand-off compounds error, and with ~1B active parameters that
  * compounds fast. There is deliberately no agent-to-agent conversation.
  *
- * Because every specialist is the same weights with a different system prompt
- * and tool subset, this costs one extra short model call and nothing else.
+ * Every specialist is the same base weights with a different system prompt
+ * and tool subset, so this costs one extra short model call and nothing else.
+ * A specialist may additionally name a LoRA adapter — trained weights over
+ * that same base (scripts/train-adapter.mjs) — which the turn loop resolves
+ * against the served model at call time and degrades away when absent.
  */
 
 export interface Specialist {
@@ -30,6 +33,13 @@ export interface Specialist {
   tools: string[];
   /** MCP servers whose tools this specialist may use. */
   mcpServers?: string[];
+  /**
+   * Name of a LoRA adapter trained for this role. Resolved against the
+   * currently served base model at call time (adapterPathFor); absent on
+   * disk or trained for a different base means the bare base model serves
+   * the turn — a missing adapter never fails or reroutes anything.
+   */
+  adapter?: string;
 }
 
 /**
@@ -129,6 +139,9 @@ export const SPECIALISTS: Specialist[] = [
     // route to specialists that still hold the tool.
     tools: ["read_file", "edit_file", "write_file", "run_command", "search_code", "read_skill"],
     mcpServers: ["filesystem", "git", "github"],
+    // Dormant until scripts/train-adapter.mjs trains, gates and installs one
+    // for the served base model; until then every turn runs on the bare base.
+    adapter: "coder",
   },
   {
     name: "librarian",

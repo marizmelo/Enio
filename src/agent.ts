@@ -16,7 +16,7 @@ import { isImage, readImage } from "./vision.js";
 import type { Registry } from "./tools/index.js";
 import { createHash } from "node:crypto";
 import { toolText, toWireTool, type Message, type ToolCall, type Widget } from "./types.js";
-import { contextBudget } from "./model-settings.js";
+import { adapterPathFor, contextBudget } from "./model-settings.js";
 import { extractPdfText, looksLikePdf } from "./pdf.js";
 import { activeProject } from "./project.js";
 import { conversationMounts } from "./conversation-attachments.js";
@@ -184,7 +184,10 @@ export function knowledgeCovers(question: string, known: string[]): boolean {
 // reproducible trigger for "I don't have access to previous conversations" on
 // questions about the current thread. Sample sizes are small and the model is
 // stochastic at temp 1.0 — re-measure before re-wording.
-const SHARED_RULES = `You can read images. Anything the user attached has already been read and its contents are included below; for any other image in the workspace, call read_image. So never tell the user you are unable to see or view an image — describing what an image contains is something you do, and the answer is either already in front of you or one tool call away.
+// Exported for the adapter training pipeline (scripts/train-adapter.mjs):
+// training data must carry the same role material the specialist serves
+// under, or the trained form drifts from the served form.
+export const SHARED_RULES = `You can read images. Anything the user attached has already been read and its contents are included below; for any other image in the workspace, call read_image. So never tell the user you are unable to see or view an image — describing what an image contains is something you do, and the answer is either already in front of you or one tool call away.
 
 You can look up live information: the weather where the user is, and the exact current time. Check with a tool, then answer from what it returned. Today's date is stated above — use it.
 
@@ -935,10 +938,17 @@ export async function runTurn(
 
   let activeTools = registry.all;
   let roleSystem = BASE_SYSTEM;
+  // Resolved once per turn, not per call: the server treats a changed adapter
+  // as a model switch, so every call in this turn — including the no-think
+  // retry — must name the same one or thrash reloads mid-turn.
+  let adapterPath: string | undefined;
 
   if (specialistName) {
     const specialist = getSpecialist(specialistName);
     activeTools = toolsFor(specialist, registry);
+    if (specialist.adapter) {
+      adapterPath = adapterPathFor(specialist.adapter) ?? undefined;
+    }
 
     // @server widens the specialist's view for this turn only.
     for (const server of overrides.servers ?? []) {
@@ -1260,7 +1270,7 @@ export async function runTurn(
         onReasoning: handlers.onReasoning,
         onContent: emitContent,
       },
-      { maxTokens: outputBudget },
+      { maxTokens: outputBudget, adapter: adapterPath },
       handlers.shouldStop,
     );
 
@@ -1380,7 +1390,7 @@ export async function runTurn(
           withDateOnLatest(history),
           retryTools,
           { onContent: emitContent },
-          { enableThinking: false, maxTokens: outputBudget },
+          { enableThinking: false, maxTokens: outputBudget, adapter: adapterPath },
         );
         steps.push({
           seq: steps.length,

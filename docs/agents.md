@@ -99,6 +99,39 @@ Skills attach by reference: pick them in the editor, or pin them to any
 card — built-ins included — from the panel. A skill that names no agent and is
 pinned nowhere is everyone's; see [Skills](skills.md) for the rule.
 
+## Training an agent
+
+An agent can be more than a prompt over the shared model: it can carry its own
+trained weights — a small **adapter**, trained on your machine, layered over
+the model you already run. The base model stays loaded once; the adapter rides
+along only on that agent's turns, so a trained coder and an untrained
+researcher cost the same memory as before.
+
+Training happens locally and needs nothing but the bundled runtime:
+
+```bash
+node scripts/train-adapter.mjs coder
+```
+
+That builds a training set from curated scenarios (add `--from-traces` to also
+learn from your own successful conversations with that agent), trains the
+adapter over the currently selected model, and then **gates** it: the adapter
+is measured against the plain model on held-out tasks, and only installed if
+it does at least as well. An adapter that fails the gate stays staged and
+nothing changes.
+
+Two properties worth knowing:
+
+- **An adapter belongs to the model it was trained on.** Switch models (see
+  [Models](models.md)) and the agent quietly returns to the plain model;
+  switch back and the adapter returns too. Nothing breaks either way.
+- **Training teaches form, not facts.** The adapter makes an agent better at
+  *how* it works — choosing tools, editing precisely, staying on task. What
+  the agent knows still comes from [memory](memory.md), which is why you can
+  retrain or delete an adapter without losing anything.
+
+Deleting an adapter is removing its folder under `~/.enio/adapters/`.
+
 **Duplicate** on any card starts a new agent of your own from it — the way to
 make "a coder for Godot" or "mail, but terse". It copies the description,
 example, instructions, tools and pins; the name is yours to choose, and the

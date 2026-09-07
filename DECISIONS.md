@@ -95,6 +95,12 @@ answers with no provenance.
 LoRA on Maple specifically is likely infeasible (custom 256-expert MoE, ternary
 weights that are quantisation-aware from the start of training), but untested.
 
+*Revisited, with scope, August 2026: see "Specialist adapters" near the end.
+The facts half of this decision stands untouched — facts stay retrieved. What
+changed is the form half: form is exactly what per-specialist LoRA adapters
+teach, and on Qwen3 4B (the current default, a standard dense model) that is
+now tested and works.*
+
 ### A trace inspector, not a node canvas
 
 **Chose:** a timeline view for runs; ReactFlow only for the knowledge graph.
@@ -2004,7 +2010,10 @@ missing does not read as broken, it reads as enio losing the account.
 
 ## Open questions
 
-- Does LoRA work at all on Maple's architecture? Ten minutes to test, never done.
+- Does LoRA work at all on Maple's architecture? Still untested on Maple
+  itself. The adjacent question — does LoRA work on this serving stack at
+  all — was answered August 2026: yes, on Qwen3 4B 4-bit, trained and served
+  through the bundled runtime (see "Specialist adapters").
 - Is `enio suggest`'s clustering threshold right? Tuned by reasoning, not by
   running it against a real history.
 - Does the router actually pick well in practice? Only `enio inspect` on real
@@ -2823,3 +2832,97 @@ still matches the parent, because the recorded finding about per-domain
 coders applies -- near-identical descriptions make the router pick at
 random. The built-in prompts were measured (478-1709 chars) to confirm a
 fork fits the 2000-char cap with room to edit.
+
+### Specialist adapters: form is trainable, facts stay retrieved
+
+**Chose:** per-specialist LoRA adapters over the one shared base model,
+trained locally (`scripts/train-adapter.mjs`), selected per request through
+the server's `adapters` field, installed only after beating the base on
+held-out tasks.
+
+**Rejected:** pretraining or fully fine-tuning per-domain models (cost, and
+strictly worse than the base they would replace); multiple resident base
+models (two 4B servers measurably swap a 24GB machine — runtime.ts records
+it); off-the-shelf specialized models per specialist via switchModel (a ~90s
+restart per routing hop, and no such model exists for most domains anyway).
+
+This softens "Learning without training" by half, deliberately. That entry's
+core distinction — fine-tuning teaches form, retrieval teaches facts — is not
+overturned; it is *used*. The small model's documented failures (tool choice,
+malformed JSON, losing the thread after a few calls) are all form, so form is
+what each specialist's adapter trains on: curated scenarios rendered with the
+specialist's real system prompt and real tool schemas, plus optionally the
+user's own clean turns mined from traces — which is the raw-transcripts-are-
+source-of-truth invariant doing exactly what it was kept for. Facts still
+live in memory; an adapter can be deleted or retrained without losing
+anything, same as the graph.
+
+Measured on Qwen3 4B Instruct 4-bit (August 2026, M-series, 24-36GB):
+
+- Training runs in the bundled runtime venv (`mlx_lm.lora`), ~127 tok/s on
+  short sequences; a 120-iteration spike took ~2 minutes and reached a
+  clearly learned style marker at temperature 0. Adapter on disk: ~14MB.
+- The vendored server takes `adapters` per request and treats a change of
+  adapter as a model switch — a full reload. The feared cost did not
+  materialize: ~2-3s with weights in the page cache (adapter turn 3.8s cold
+  vs 0.9s warm), acceptable against local generation times, so no
+  patch-runtime.mjs hot-swap was needed. Revisit if a much larger base makes
+  reloads slow again.
+- The prompt cache is dropped on every switch. Sticky routing keeps switches
+  rare within a conversation; this is the real cost if routing ever becomes
+  volatile.
+
+The gate exists because the failure mode of a bad adapter is the failure mode
+this project fears most: every routed turn gets slightly worse and nothing
+visible reports it. So installation is conditional on the adapter matching or
+beating base on that specialist's golden tasks (tool choice and JSON validity
+at temperature 0, including off-domain prompts whose right answer is *no*
+tool call), and a failed gate leaves the adapter staged, not installed.
+
+The gate earned its keep on the very first real run. Training looked perfect
+(loss 7.6 → 0.05) and the adapter scored 3/15 against base's 12/15 — it had
+stopped calling tools entirely. Cause: mlx_lm's `--mask-prompt` trains only
+the *final* assistant message of a conversation, and the scenarios end in
+prose summaries, so the adapter learned "close with prose" and nothing else.
+Nothing about the trainer erred and nothing about the loss curve hinted; only
+the held-out eval saw it. The fix — explode every conversation into one row
+per assistant step, so each tool-call decision is its own trained target —
+took the second run to 14/15 tool choice and 11/11 valid JSON against base's
+12/15 and 10/10, fixing all three of base's misses (a document request
+answered in prose instead of written to a file, an edit begun with
+search_code instead of read_file, a where-is question answered without
+searching). That run installed. ~65 exploded rows from 26 scenarios, 200
+iterations, batch 2, lr 5e-5, rank 8 over 8 layers: about an hour on-device.
+
+The second trap was the chat template, and the eval let it through. The
+mlx-community Qwen3 snapshot ships a thinking-style template that prefixes
+the *final* assistant message — exactly where the trained completion starts —
+with an empty `<think>\n\n</think>\n\n` block, so every training target
+taught "open with a think block". A rank-8 adapter reproduces the rare
+`</think>` token unreliably, and one garbled close tag sends the whole
+answer down the server's reasoning channel: in the app, every final text
+answer arrived as an empty reply ("ran out of room twice") while tool calls
+— parsed on their own channel — kept working, which is why the gate's
+tool-choice score was blind to it. Two rules came out of this. Training
+renders through a train-only model dir whose template drops that prefix
+(the serving generation prompt is a bare assistant header, so the stripped
+render is the faithful one). And the eval must mirror the served request
+byte for byte — the first gate passed `enable_thinking:false` where the app
+sends nothing, and scored "no call" without checking that the answer
+arrived as *content*; both are fixed, and an answer on the reasoning
+channel now counts as a miss.
+
+Known gap, observed in the first live routed turn: every training scenario is
+a happy path, so a tool result the curriculum never showed (git status in a
+folder that is not a repo) still sends the model looping on variations. The
+curriculum needs dead-end scenarios — a tool returns an error, the right move
+is to report it plainly and stop. The per-step row explosion makes those
+cheap to add.
+
+An adapter is keyed to the base it was trained on
+(`~/.enio/adapters/<base-slug>/<name>/`) and resolves at call time against
+the *selected* model — the contextBudget() philosophy applied to weights.
+Missing, half-written, or wrong-base adapters degrade to the bare base
+silently; a turn must never fail because training was interrupted. Maple is
+refused for training outright: ternary MoE, still untested, and an hour-long
+run that ends in a confusing tuner error is worse than a refusal.

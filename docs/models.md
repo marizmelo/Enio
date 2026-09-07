@@ -267,6 +267,15 @@ Either way the payload is the handoff file you can read first, and it
 leaves this machine only on your click — which keeps the decision, and
 the data, yours.
 
+## Trained agents follow the model
+
+An agent trained with an adapter (see [Agents](agents.md)) is trained *over a
+specific model*. Adapters live under `~/.enio/adapters/`, keyed by the model
+they were trained on: while that model is selected they apply, and after a
+switch the agent serves from the plain model until an adapter trained for the
+new choice exists. A missing adapter is never an error — it is just the agent
+you had before you trained it.
+
 ## A note on Ollama's MLX engine
 
 Since v0.30 (May 2026), Ollama on Apple Silicon can serve **safetensors**

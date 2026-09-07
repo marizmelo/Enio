@@ -54,6 +54,14 @@ export interface CompleteOptions {
    * template the kwarg is simply unknown and thinking proceeds as before.
    */
   enableThinking?: boolean;
+  /**
+   * Resolved directory of a LoRA adapter to serve this call with — a path
+   * that already passed adapterPathFor's existence checks, not a name.
+   * Sent as `adapters` (the server's field name). The server treats a
+   * changed adapter as a model switch and reloads, so callers should keep
+   * this stable within a turn.
+   */
+  adapter?: string;
 }
 
 export async function complete(
@@ -82,6 +90,7 @@ export async function complete(
   if (opts.enableThinking === false) {
     body.chat_template_kwargs = { enable_thinking: false };
   }
+  if (opts.adapter) body.adapters = opts.adapter;
 
   if (tools.length > 0) body.tools = tools;
 
