@@ -6,8 +6,15 @@ import assert from "node:assert/strict";
 import { CATALOGUE } from "./model-catalogue.js";
 
 // The registry this suite builds must not depend on the developer's real
-// machine-wide settings (desktop-control consent, model choice).
-process.env.ENIO_MACHINE_STATE_DIR = join(mkdtempSync(join(tmpdir(), "enio-docs-")), "machine");
+// machine-wide settings (desktop-control consent, model choice) — nor on the
+// developer's data dir: a connected Google account there put four
+// account-gated tools into the registry, and this suite passed on the
+// machine that had the account while failing on every machine that did not.
+const docsScratch = mkdtempSync(join(tmpdir(), "enio-docs-"));
+process.env.ENIO_DATA_DIR = join(docsScratch, "data");
+process.env.ENIO_WORKSPACE = join(docsScratch, "workspace");
+process.env.ENIO_BUILTIN_SKILLS = join(docsScratch, "builtin-skills");
+process.env.ENIO_MACHINE_STATE_DIR = join(docsScratch, "machine");
 // A configured MCP server would otherwise be SPAWNED by buildRegistry:
 // the developer's own ~/.enio/mcp.json is real, and a suite that starts
 // npx servers hangs for minutes and depends on the machine.
@@ -83,6 +90,9 @@ describe("the docs describe the code that exists", () => {
       // Real, but withheld on a machine without the relevant config or flag.
       "web_search", "search_email", "read_email", "send_email",
       "web_fetch_rendered", "run_applescript", "take_screenshot", "propose_plan",
+      // Withheld until a Google account is connected — and the redirected
+      // data dir above guarantees none is, on every machine alike.
+      "search_drive", "read_drive", "read_calendar", "list_todos",
     ]);
 
     // Backticked lower_snake_case words are how the docs name tools. Anything

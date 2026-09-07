@@ -65,9 +65,16 @@ export function playwrightAvailable(): boolean {
     return false;
   }
   try {
+    const require = createRequire(import.meta.url);
     // Throws if the package isn't installed; does not launch anything.
-    createRequire(import.meta.url).resolve("playwright");
-    available = true;
+    require.resolve("playwright");
+    // The package resolving is not enough. The browser binary arrives in a
+    // separate download (npx playwright install) the installer lets the user
+    // decline — the package then sits in node_modules while every launch
+    // fails. A browse tool in that state can only fail, so it is withheld,
+    // same as when the package is missing entirely.
+    const { chromium } = require("playwright");
+    available = existsSync(chromium.executablePath());
   } catch {
     available = false;
   }
