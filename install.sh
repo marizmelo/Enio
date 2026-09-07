@@ -374,9 +374,27 @@ fi
 # ----------------------------------------------------- optional: desktop
 DESKTOP_READY=0
 if [ -d "$AGENT_DIR/desktop" ] && ask "Set up the desktop app?"; then
+  # npm install succeeding is not proof the app can launch: Electron's binary
+  # arrives in a postinstall download, and an interrupted attempt leaves the
+  # package present but empty — npm then considers it installed forever and
+  # `npm start` dies with "Electron failed to install correctly". So verify
+  # the binary really resolves, and if not, reinstall that one package once
+  # (deleting it is what makes npm run the download again).
+  desktop_ok() {
+    ( cd "$AGENT_DIR/desktop" && node -e "require('electron')" >/dev/null 2>&1 )
+  }
   if ( cd "$AGENT_DIR/desktop" && npm install --no-audit --no-fund >/dev/null 2>&1 ); then
-    DESKTOP_READY=1
-    printf '    ready — launch with: cd desktop && npm start\n'
+    if ! desktop_ok; then
+      warn "Electron's binary is missing (a download was interrupted) — fetching it again."
+      ( cd "$AGENT_DIR/desktop" && rm -rf node_modules/electron && npm install --no-audit --no-fund >/dev/null 2>&1 )
+    fi
+    if desktop_ok; then
+      DESKTOP_READY=1
+      printf '    ready — launch with: cd desktop && npm start\n'
+    else
+      warn "Electron did not install. Try: cd desktop && rm -rf node_modules && npm install"
+      FAILED_OPTIONAL+=("desktop")
+    fi
   else
     warn "Desktop dependencies failed to install."
     FAILED_OPTIONAL+=("desktop")
