@@ -17,6 +17,7 @@ No API keys. No account. Nothing leaves your computer.
 Requires **Node.js 22+** and **git**. On Apple Silicon the installer sets up a local model to get you started; everywhere else it points at Ollama. Memory, agents, tools and the inspector are identical either way.
 
 ```sh
+# On a brand-new Mac, first: xcode-select --install, and Node 22+ from nodejs.org
 git clone https://github.com/marizmelo/Enio enio
 cd enio
 bash install.sh

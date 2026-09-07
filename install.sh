@@ -101,14 +101,44 @@ else
   [ "${FREE_GB:-99}" -ge 2 ] || die "Need ~2GB free, found ${FREE_GB}GB."
 fi
 
-command -v git >/dev/null || die "git not found. Install it first$([ "$OS" = "Darwin" ] && echo " (xcode-select --install)")."
+# Required tools, collected rather than die-on-first: a brand-new Mac is
+# missing several at once, and reporting them one re-run at a time turns one
+# setup pass into three.
+MISSING=()
 
-if ! command -v node >/dev/null; then
-  die "Node.js not found. Install Node 22+ from https://nodejs.org"
+# On macOS `command -v git` is NOT the check: a /usr/bin/git shim always
+# exists and pops Apple's GUI installer the first time it runs. The real
+# question is whether the Command Line Tools are installed.
+if [ "$OS" = "Darwin" ]; then
+  if ! xcode-select -p >/dev/null 2>&1; then
+    MISSING+=("Xcode Command Line Tools — provides git and python3")
+    if ask "The Xcode Command Line Tools are missing. Open Apple's installer for them now?"; then
+      xcode-select --install >/dev/null 2>&1 || true
+      printf '    %sFinish the dialog that just opened, then re-run this installer.%s\n' "$DIM" "$OFF"
+    fi
+  fi
+else
+  command -v git >/dev/null || MISSING+=("git — install it with your package manager")
 fi
-NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
-[ "$NODE_MAJOR" -ge 22 ] || die "Node 22+ required, found $(node --version)."
-printf '    node %s\n' "$(node --version)"
+
+if command -v node >/dev/null; then
+  NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
+  if [ "$NODE_MAJOR" -ge 22 ]; then
+    printf '    node %s\n' "$(node --version)"
+  else
+    MISSING+=("Node 22+ — found $(node --version); update at https://nodejs.org")
+  fi
+elif [ "$OS" = "Darwin" ] && command -v brew >/dev/null; then
+  MISSING+=("Node 22+ — brew install node, or https://nodejs.org")
+else
+  MISSING+=("Node 22+ — download from https://nodejs.org")
+fi
+
+if [ "${#MISSING[@]}" -gt 0 ]; then
+  printf '\n%sBefore enio can install, this machine needs:%s\n' "$RED" "$OFF"
+  for m in "${MISSING[@]}"; do printf '    - %s\n' "$m"; done
+  die "Install the items above, then re-run: bash install.sh — it resumes where it stopped."
+fi
 
 # --------------------------------------------------------------------- uv
 if [ "$CAN_RUN_MAPLE" = "1" ]; then

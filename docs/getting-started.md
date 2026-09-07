@@ -10,6 +10,19 @@ nav_order: 2
 
 Everywhere: **Node.js 22+** and **git**.
 
+**On a brand-new Mac**, install two things before anything else — the `git
+clone` below is itself the first thing that fails without them:
+
+1. The Xcode Command Line Tools: run `xcode-select --install` in Terminal and
+   finish the dialog it opens. This is what actually provides `git` — a fresh
+   Mac has a `git` command that only exists to offer this install.
+2. Node.js 22+, from [nodejs.org](https://nodejs.org) (or `brew install node`
+   if you use Homebrew).
+
+The installer checks for both and lists everything missing in one pass, so if
+in doubt, just run it — it tells you exactly what to install and resumes where
+it stopped when you re-run it.
+
 | Platform | Model | Disk | Notes |
 |---|---|---|---|
 | **macOS, Apple Silicon** | local, via MLX | ~15GB | The fast path. 16GB RAM recommended; 8GB swaps. |
