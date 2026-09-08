@@ -979,6 +979,40 @@ async function main(): Promise<void> {
         console.log(`Deleted ${rest[1]} — freed ${(result.freedBytes / 1024 ** 3).toFixed(1)}GB.`);
         break;
       }
+
+      if (rest[0] === "use" && rest[1]) {
+        const wanted = rest[1];
+        if (!availableModels().includes(wanted)) {
+          console.error(`Not on this machine. One of:\n  ${availableModels().join("\n  ")}`);
+          process.exit(1);
+        }
+        if (wanted === currentModelId()) {
+          console.log(`${wanted} is already selected.`);
+          break;
+        }
+        const { switchModel } = await import("./runtime.js");
+        const { setModelId } = await import("./model-settings.js");
+        if (modelServerPid() === null) {
+          // Nothing serving: selecting is just persisting the choice — booting
+          // a ~90s model server as a side effect of "use" would surprise.
+          setModelId(wanted);
+          console.log(`Selected ${wanted}. It loads on the next enio start.`);
+          break;
+        }
+        console.log(`Switching the running server to ${wanted}…`);
+        try {
+          await switchModel(wanted, {
+            log: (m) => console.log(`  ${m}`),
+            // The list above is pre-downloaded models only; nothing to confirm.
+            confirm: async () => false,
+          });
+          console.log(`Now serving ${wanted}.`);
+        } catch (err) {
+          console.error((err as Error).message);
+          process.exit(1);
+        }
+        break;
+      }
       const current = currentModelId();
       for (const id of availableModels()) {
         const mark = id === current ? "*" : " ";
@@ -986,8 +1020,9 @@ async function main(): Promise<void> {
         const size = bytes > 0 ? `${(bytes / 1024 ** 3).toFixed(1)}GB` : "not downloaded";
         console.log(`${mark} ${id.padEnd(48)} ${size}`);
       }
-      console.log(`\n* selected. Remove one with:  enio models rm <id>`);
-      console.log(`The selected model cannot be deleted — switch first (the app's model picker).`);
+      console.log(`\n* selected.`);
+      console.log(`  enio models use <id>   select (switches the running server, or applies next start)`);
+      console.log(`  enio models rm <id>    delete weights — the selected model is refused, use another first`);
       break;
     }
 
@@ -1555,6 +1590,7 @@ enio — a local agent with tools and persistent memory
   enio token --rotate     generate a new one, invalidating the old
   enio backends           list model backends and how to switch
   enio models             list downloaded models and their sizes
+  enio models use ID      select one — switches the running server, or takes effect next start
   enio models rm ID       delete a model's weights (the selected one is refused)
   enio addons             list optional add-ons and what is installed
   enio addons add NAME    install one: search, browser, vision, voice, inspector, maple
