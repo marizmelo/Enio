@@ -38,9 +38,6 @@ export function ModelsDialog({ open, onOpenChange, onSwitched, highlight = null 
   const [data, setData] = useState(null);
   const [download, setDownload] = useState(null);
   const [switching, setSwitching] = useState("");
-  // Two-click delete: the first click arms the row, the second deletes.
-  // Gigabytes should not vanish on one mis-aim beside the switch button.
-  const [armedDelete, setArmedDelete] = useState(null);
   const [error, setError] = useState("");
   const timer = useRef(null);
 
@@ -195,21 +192,19 @@ export function ModelsDialog({ open, onOpenChange, onSwitched, highlight = null 
                   </span>
                 </button>
                 {/* The running model has no delete — the server would reload
-                    into nothing. Everything else: arm, then confirm. Overlaid
-                    inside the row's right edge (the row reserves pr-12), so
-                    the control adds nothing to the flow and cannot bend the
-                    row geometry. */}
+                    into nothing. The control is a fixed-size icon overlaid in
+                    the gutter the row reserves (pr-12): nothing in the flow,
+                    nothing that can cover the row's own text. Confirmation is
+                    a native dialog — an in-place armed state was tried twice
+                    and its pill landed on the status text both times. */}
                 {m.id !== data?.current && (
                   <button
                     type="button"
                     disabled={!!switching}
-                    title={armedDelete === m.id ? "Click again to delete the weights" : "Delete this model's weights"}
+                    title="Delete this model's weights"
                     onClick={async () => {
-                      if (armedDelete !== m.id) {
-                        setArmedDelete(m.id);
-                        return;
-                      }
-                      setArmedDelete(null);
+                      const size = m.bytes ? ` and free ${gb(m.bytes)}` : "";
+                      if (!window.confirm(`Delete ${m.label}'s weights${size}? Downloading it again is the only undo.`)) return;
                       try {
                         await deleteModel(m.id);
                         await refresh();
@@ -217,20 +212,9 @@ export function ModelsDialog({ open, onOpenChange, onSwitched, highlight = null 
                         setError(String(err?.message ?? err));
                       }
                     }}
-                    className={cn(
-                      "absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1.5",
-                      "text-muted-foreground hover:bg-muted hover:text-destructive",
-                      // Solid ground: when armed the pill is wider than the
-                      // reserved gutter, and a translucent background over
-                      // the row's status text reads as two words fighting.
-                      armedDelete === m.id && "border border-destructive/40 bg-background text-destructive",
-                    )}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive"
                   >
-                    {armedDelete === m.id ? (
-                      <span className="whitespace-nowrap px-1 text-xs font-medium">delete?</span>
-                    ) : (
-                      <Trash2 className="size-4" />
-                    )}
+                    <Trash2 className="size-4" />
                   </button>
                 )}
               </li>
