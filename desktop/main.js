@@ -746,8 +746,32 @@ ipcMain.handle("install-voice", () => {
       output += c;
       process.stderr.write(`[voice-install] ${c}`);
     });
-    child.on("exit", (code) => resolve({ ok: code === 0, output: output.slice(-2000) }));
-    child.on("error", (err) => resolve({ ok: false, output: String(err) }));
+    // The verdict is spoken, not implied: a button quietly swapping states
+    // is easy to miss, and a hover-tip is no place for an error. Success
+    // also pre-answers the next surprise — the first dictation's silent
+    // model download.
+    child.on("exit", (code) => {
+      if (code === 0) {
+        dialog.showMessageBox({
+          type: "info",
+          message: "Voice is ready",
+          detail:
+            "The microphone now dictates, and the voice button holds a spoken conversation. " +
+            "Your first dictation downloads the speech model (~500MB) — that one takes a while.",
+        });
+      } else {
+        dialog.showErrorBox(
+          "Voice setup failed",
+          `${output.trim().split("\n").slice(-8).join("\n")}\n\n` +
+            "Try it from a terminal to see everything: enio addons add voice",
+        );
+      }
+      resolve({ ok: code === 0, output: output.slice(-2000) });
+    });
+    child.on("error", (err) => {
+      dialog.showErrorBox("Voice setup failed", `${String(err)}\n\nTry from a terminal: enio addons add voice`);
+      resolve({ ok: false, output: String(err) });
+    });
   });
 });
 
