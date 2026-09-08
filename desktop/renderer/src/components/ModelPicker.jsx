@@ -84,7 +84,11 @@ export function ModelPicker({ backendReady }) {
 
   return (
     <>
-      <DropdownMenu>
+      {/* Refetched at every open: the dialog behind this menu deletes and
+          downloads models, and a list fetched once at boot kept naming
+          weights that were no longer on disk. One small request per open
+          buys a menu that is never stale. */}
+      <DropdownMenu onOpenChange={(open) => open && refresh()}>
         <DropdownMenuTrigger
           className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 hover:bg-muted [-webkit-app-region:no-drag]"
           disabled={switching}
