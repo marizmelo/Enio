@@ -94,6 +94,14 @@ describe("the context budget follows the model", () => {
     assert.equal(settings.contextBudgetMeasured(), false);
   });
 
+  test("the 1.7B sits below the 4B — a smaller model never inherits a bigger guess", () => {
+    settings.setModelId("mlx-community/Qwen3-1.7B-4bit");
+    const small = settings.contextBudget();
+    settings.setModelId("mlx-community/Qwen3-4B-Instruct-2507-4bit");
+    assert.ok(small < settings.contextBudget(), "1.7B must budget below the 4B");
+    assert.ok(small > 2000, "but above Maple's measured floor");
+  });
+
   test("an unknown model gets a conservative default, not Maple's", () => {
     settings.setModelId("mlx-community/some-unknown-model-4bit");
     const budget = settings.contextBudget();

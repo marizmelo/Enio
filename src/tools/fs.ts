@@ -272,6 +272,32 @@ export const fsTools: ToolDef[] = [
 
       const text = await readFile(target, "utf8");
       const lines = text.split("\n");
+
+      // Tabular files are computed over, never read whole. Hundreds of CSV
+      // rows are a context bomb a small model "reads", half-loses, and then
+      // fabricates from — the observed failure was invented answers about
+      // rows it could not still see. The preview teaches the shape (header,
+      // real example rows, honest totals) and names the move that actually
+      // analyzes: python through run_command. What is absent is visibly
+      // absent, which is the difference between a model that computes and
+      // one that guesses.
+      const TABULAR_PREVIEW_ROWS = 20;
+      if (/\.(csv|tsv)$/i.test(target) && lines.length > TABULAR_PREVIEW_ROWS * 2) {
+        const body = lines[lines.length - 1] === "" ? lines.slice(0, -1) : lines;
+        const preview = body
+          .slice(0, TABULAR_PREVIEW_ROWS + 1)
+          .map((l, i) => `${String(i + 1).padStart(4)} | ${l}`)
+          .join("\n");
+        const dataRows = body.length - 1;
+        return (
+          preview +
+          `\n\n[preview: ${TABULAR_PREVIEW_ROWS} of ${dataRows} data rows — the rest is NOT shown. ` +
+          `Do not answer questions about the full data from this preview.]\n` +
+          `Compute over the whole file with run_command, e.g.:\n` +
+          `  python3 -c "import csv; rows = list(csv.DictReader(open('${rel(target)}'))); print(len(rows))"`
+        );
+      }
+
       const numbered = lines
         .slice(0, 800)
         .map((l, i) => `${String(i + 1).padStart(4)} | ${l}`)

@@ -212,6 +212,12 @@ export function currentModelLabel(): string {
 const MEASURED_BUDGETS: Array<[pattern: RegExp, tokens: number, measured: boolean]> = [
   // Measured in this project: recall falls off hard past ~2k.
   [/^maple$|maple/i, 2000, true],
+  // More specific than the qwen3 line below, so it must come first. NOT
+  // measured — a conservative step DOWN from the 4B's guess, because a 1.7B
+  // holding 12k of context is not credible and the observed failure on one
+  // (fabricating about a file it had "read") is what over-budgeting looks
+  // like from the outside. Replace with a planted-fact number.
+  [/qwen3-1\.7b/i, 6000, false],
   // Dense models with real long-context training hold far more than Maple's
   // 1B active does. NOT measured here -- a conservative step up rather than
   // the 256k these advertise, and it should be replaced with a number from

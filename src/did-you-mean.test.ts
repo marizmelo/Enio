@@ -69,6 +69,37 @@ describe("read_file on a path that is not there", () => {
  * the ceiling and needs no prompt line about a tool it cannot see. EISDIR
  * taught it nothing and ended the turn.
  */
+describe("read_file on a tabular file", () => {
+  // The observed failure on a small model: hundreds of CSV rows returned
+  // whole, half of them beyond what it could still attend to, and answers
+  // fabricated about rows it "read". A big table is a preview plus the move
+  // that actually analyzes; a small one still reads whole.
+  test("a large csv is a preview with honest counts and the python pointer", async () => {
+    const rows = ["name,amount", ...Array.from({ length: 200 }, (_, i) => `item${i},${i}`)];
+    writeFileSync(join(ws, "sales.csv"), rows.join("\n") + "\n");
+    const out = String(await readFile.run({ path: "sales.csv" }));
+    assert.match(out, /name,amount/);
+    assert.match(out, /20 of 200 data rows/);
+    assert.match(out, /Do not answer questions about the full data/);
+    assert.match(out, /python3 -c/);
+    assert.ok(!out.includes("item150"), "rows past the preview must be absent, not summarized");
+  });
+
+  test("a small csv reads whole — nothing to warn about", async () => {
+    writeFileSync(join(ws, "tiny.csv"), "a,b\n1,2\n3,4\n");
+    const out = String(await readFile.run({ path: "tiny.csv" }));
+    assert.match(out, /3,4/);
+    assert.ok(!out.includes("preview"), "a table that fits is just read");
+  });
+
+  test("a large non-tabular file keeps the plain truncation", async () => {
+    writeFileSync(join(ws, "log.txt"), Array.from({ length: 900 }, (_, i) => `line ${i}`).join("\n"));
+    const out = String(await readFile.run({ path: "log.txt" }));
+    assert.match(out, /\[truncated: 100 more lines\]/);
+    assert.ok(!out.includes("python3"), "prose is not told to import csv");
+  });
+});
+
 describe("read_file on a folder", () => {
   test("lists the folder instead of failing", async () => {
     const out = String(await readFile.run({ path: "notes" }));
