@@ -278,6 +278,39 @@ async function waitForHealth(url, timeoutMs) {
 }
 
 /**
+ * A model server whose port answers is not a model that answers. mlx_lm
+ * loads weights lazily on the first completion, and a load that dies — a
+ * Metal wired-memory failure on a small machine was the live case — kills
+ * only the generate thread: /v1/models keeps returning 200 over a model
+ * that can never speak, this app said "ready", and the first message just
+ * hung. So readiness is a real one-token completion. On a healthy machine
+ * this also moves the first model load into the visible "starting" phase,
+ * where the wait at least has a progress message over it.
+ */
+async function modelActuallyAnswers(timeoutMs) {
+  try {
+    const listed = await fetch(`${MODEL_BASE}/models`, { signal: AbortSignal.timeout(5000) });
+    const modelId = (await listed.json())?.data?.[0]?.id;
+    if (!modelId) return false;
+    const res = await fetch(`${MODEL_BASE}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: modelId,
+        messages: [{ role: "user", content: "hi" }],
+        max_tokens: 1,
+        stream: false,
+      }),
+      // The whole first load happens inside this request.
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Spawn a backend child process, piping its output to our stdout/stderr so
  * `npm start` shows logs, and returning it so the caller can track the PID.
  */
@@ -396,7 +429,22 @@ async function startBackends() {
     }
   }
 
-  sendStatus("starting", "Model server ready. Checking for the agent endpoint…");
+  // Port up ≠ model up: prove it can answer before calling it ready. Applies
+  // to a reused server too — a half-dead one someone started earlier must
+  // fail here, not on the user's first message.
+  sendStatus("starting", "Model server answering. Loading the model…");
+  const answers = await modelActuallyAnswers(MODEL_TIMEOUT_MS);
+  if (!answers) {
+    sendStatus(
+      "failed",
+      "The model server is up but the model itself failed to load — on small machines this is " +
+        "usually GPU memory. Try a smaller model (Models panel), or see ~/.enio/model-server.log.",
+    );
+    watchBackends(null);
+    return;
+  }
+
+  sendStatus("starting", "Model ready. Checking for the agent endpoint…");
 
   const agentAlreadyUp = await checkHealth(AGENT_PING_URL);
   if (agentAlreadyUp) {
