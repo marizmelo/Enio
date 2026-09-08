@@ -13,7 +13,7 @@ process.env.ENIO_WORKSPACE = join(scratch, "workspace");
 // Pin the served model so the expected adapter slug is known.
 process.env.ENIO_MODEL = "mlx-community/Qwen3-4B-Instruct-2507-4bit";
 
-const { adapterPathFor } = await import("./model-settings.js");
+const { adapterPathFor, deleteModelWeights, modelWeightsDir } = await import("./model-settings.js");
 const { complete } = await import("./model.js");
 
 const SLUG = "mlx-community--Qwen3-4B-Instruct-2507-4bit";
@@ -60,6 +60,30 @@ describe("adapterPathFor", () => {
     plantAdapter(SLUG, "coder");
     assert.equal(adapterPathFor("../" + SLUG + "/coder"), null);
     assert.equal(adapterPathFor(""), null);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+
+describe("deleting model weights", () => {
+  test("the selected model is refused — the server must never reload into nothing", () => {
+    const result = deleteModelWeights("mlx-community/Qwen3-4B-Instruct-2507-4bit");
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? "", /Switch/);
+  });
+
+  test("a model with no weights on disk is an honest miss, not an rm of anything", () => {
+    const result = deleteModelWeights("mlx-community/NoSuch-Model-4bit");
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? "", /No weights/);
+  });
+
+  test("an id that is not org/repo shaped resolves to no directory at all", () => {
+    // The id becomes a path component; anything that could escape the cache's
+    // own naming convention must resolve to nothing before rm is in sight.
+    assert.equal(modelWeightsDir("../../../etc"), null);
+    assert.equal(modelWeightsDir("a/b/c"), null);
+    assert.equal(modelWeightsDir(""), null);
   });
 });
 

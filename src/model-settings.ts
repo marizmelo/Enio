@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { config } from "./config.js";
@@ -115,6 +115,58 @@ export function availableModels(): string[] {
 export function modelIsCached(id: string): boolean {
   const dir = `models--${id.replace("/", "--")}`;
   return existsSync(join(homedir(), ".cache", "huggingface", "hub", dir, "snapshots"));
+}
+
+/** Bytes on disk under a directory, for honest listings. */
+function dirBytes(dir: string): number {
+  let total = 0;
+  try {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) total += dirBytes(p);
+      else if (entry.isFile()) total += statSync(p).size;
+    }
+  } catch {
+    /* A vanished or unreadable entry counts as nothing. */
+  }
+  return total;
+}
+
+/** Where a model's weights live on this machine, or null when not installed.
+ *  Maple is the one path-addressed model; everything else is the HF cache. */
+export function modelWeightsDir(id: string): string | null {
+  if (id === MAPLE) {
+    const dir = join(config.runtimeDir, "maple-2bit-mlx");
+    return existsSync(join(dir, "config.json")) ? dir : null;
+  }
+  // The id becomes a directory name by the cache's own convention; anything
+  // that would escape that shape (slashes beyond the first, dots) cannot
+  // name a cache entry and resolves to nothing.
+  if (!/^[\w.-]+\/[\w.-]+$/.test(id)) return null;
+  const dir = join(homedir(), ".cache", "huggingface", "hub", `models--${id.replace("/", "--")}`);
+  return existsSync(dir) ? dir : null;
+}
+
+export function modelWeightsBytes(id: string): number {
+  const dir = modelWeightsDir(id);
+  return dir ? dirBytes(dir) : 0;
+}
+
+/**
+ * Delete a model's weights from disk. Refuses the selected model — the
+ * server would reload into nothing on its next restart, and "switch first"
+ * is a one-line ask. Deletion is scoped to the two places weights live and
+ * never follows an arbitrary path.
+ */
+export function deleteModelWeights(id: string): { ok: boolean; freedBytes: number; error?: string } {
+  if (id === currentModelId()) {
+    return { ok: false, freedBytes: 0, error: "That is the selected model. Switch to another model first, then delete this one." };
+  }
+  const dir = modelWeightsDir(id);
+  if (!dir) return { ok: false, freedBytes: 0, error: `No weights on this machine for ${id}.` };
+  const freedBytes = dirBytes(dir);
+  rmSync(dir, { recursive: true, force: true });
+  return { ok: true, freedBytes };
 }
 
 /** What request bodies should name. The bundled default keeps its API id;

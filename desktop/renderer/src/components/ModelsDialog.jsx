@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, Download, HardDrive, X } from "lucide-react";
+import { AlertTriangle, Check, Download, HardDrive, Trash2, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   cancelModelDownload,
   currentModel,
+  deleteModel,
   downloadModel,
   modelDownload,
 } from "@/lib/recipes";
@@ -37,6 +38,9 @@ export function ModelsDialog({ open, onOpenChange, onSwitched, highlight = null 
   const [data, setData] = useState(null);
   const [download, setDownload] = useState(null);
   const [switching, setSwitching] = useState("");
+  // Two-click delete: the first click arms the row, the second deletes.
+  // Gigabytes should not vanish on one mis-aim beside the switch button.
+  const [armedDelete, setArmedDelete] = useState(null);
   const [error, setError] = useState("");
   const timer = useRef(null);
 
@@ -145,13 +149,13 @@ export function ModelsDialog({ open, onOpenChange, onSwitched, highlight = null 
           </h3>
           <ul className="mt-2 space-y-1">
             {installedRows.map((m) => (
-              <li key={m.id}>
+              <li key={m.id} className="flex items-center gap-1">
                 <button
                   type="button"
                   disabled={!!switching}
                   onClick={() => pick(m.id)}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded border p-2.5 text-left text-sm",
+                    "flex min-w-0 flex-1 items-center gap-3 rounded border p-2.5 text-left text-sm",
                     m.id === data?.current
                       ? "border-primary/50 bg-muted/50"
                       : "hover:bg-muted/50",
@@ -187,6 +191,38 @@ export function ModelsDialog({ open, onOpenChange, onSwitched, highlight = null 
                         : "switch"}
                   </span>
                 </button>
+                {/* The running model has no delete — the server would reload
+                    into nothing. Everything else: arm, then confirm. */}
+                {m.id !== data?.current && (
+                  <button
+                    type="button"
+                    disabled={!!switching}
+                    title={armedDelete === m.id ? "Click again to delete the weights" : "Delete this model's weights"}
+                    onClick={async () => {
+                      if (armedDelete !== m.id) {
+                        setArmedDelete(m.id);
+                        return;
+                      }
+                      setArmedDelete(null);
+                      try {
+                        await deleteModel(m.id);
+                        await refresh();
+                      } catch (err) {
+                        setError(String(err?.message ?? err));
+                      }
+                    }}
+                    className={cn(
+                      "shrink-0 rounded p-2 text-muted-foreground hover:bg-muted/50 hover:text-destructive",
+                      armedDelete === m.id && "bg-destructive/10 text-destructive",
+                    )}
+                  >
+                    {armedDelete === m.id ? (
+                      <span className="px-1 text-xs font-medium">delete?</span>
+                    ) : (
+                      <Trash2 className="size-4" />
+                    )}
+                  </button>
+                )}
               </li>
             ))}
           </ul>

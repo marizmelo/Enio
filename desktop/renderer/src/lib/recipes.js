@@ -57,6 +57,11 @@ export const cancelModelDownload = () => call("/model/download", { method: "DELE
 export const switchModel = (model) =>
   call("/model", { method: "POST", body: JSON.stringify({ model }) });
 
+/** Deletes a model's weights from disk. The selected model is refused by the
+ *  server — switch away first. */
+export const deleteModel = (model) =>
+  call("/model", { method: "DELETE", body: JSON.stringify({ model }) });
+
 /** Whether a vouched-for recipe may run unattended. Separate from desktop
  *  mode: one says whether it can act, the other whether it may act unasked. */
 export const automation = () => call("/automation");

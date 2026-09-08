@@ -267,6 +267,14 @@ Either way the payload is the handoff file you can read first, and it
 leaves this machine only on your click — which keeps the decision, and
 the data, yours.
 
+## Where models live, and removing them
+
+Weights go to the shared Hugging Face cache (`~/.cache/huggingface/hub`);
+Maple keeps its own checkout under `~/.enio/runtime`. `enio models` lists
+what is on the machine with real sizes, and `enio models rm <id>` deletes
+one — the app's Models panel has the same delete on each row. The selected
+model is always refused: switch to another first, then delete.
+
 ## Trained agents follow the model
 
 An agent trained with an adapter (see [Agents](agents.md)) is trained *over a

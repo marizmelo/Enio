@@ -18,7 +18,7 @@ import {
   setPlanSession,
 } from "./tools/desktop.js";
 import { probeAssistiveAccess } from "./tools/ax.js";
-import { availableModels, currentModelId } from "./model-settings.js";
+import { availableModels, currentModelId, deleteModelWeights } from "./model-settings.js";
 import {
   ATTACH_DIR,
   FileRefused,
@@ -669,6 +669,32 @@ async function handle(
       }
       return;
     }
+  }
+
+  /**
+   * Deleting a model's weights. The selected model is refused (409) — switch
+   * first, so the server never reloads into nothing — and the deletion
+   * itself is scoped inside deleteModelWeights to the two places weights
+   * actually live.
+   */
+  if (req.method === "DELETE" && url.pathname === "/model") {
+    let wanted = "";
+    try {
+      wanted = String(JSON.parse((await readBody(req)) || "{}")?.model ?? "").trim();
+    } catch {
+      wanted = "";
+    }
+    if (!wanted) {
+      sendJson(res, 400, { error: { message: "Body must name the model to delete." } });
+      return;
+    }
+    const result = deleteModelWeights(wanted);
+    if (!result.ok) {
+      sendJson(res, wanted === currentModelId() ? 409 : 404, { error: { message: result.error } });
+      return;
+    }
+    sendJson(res, 200, { deleted: wanted, freedBytes: result.freedBytes });
+    return;
   }
 
   if (req.method === "POST" && url.pathname === "/model") {

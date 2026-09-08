@@ -36,7 +36,14 @@ import {
   WAIT_FOR_EXISTING_TICKS,
   type RunningBackend,
 } from "./runtime.js";
-import { currentModelLabel, currentModelPath } from "./model-settings.js";
+import {
+  availableModels,
+  currentModelId,
+  currentModelLabel,
+  currentModelPath,
+  deleteModelWeights,
+  modelWeightsBytes,
+} from "./model-settings.js";
 import { builtinSkillsDir, findSkill, loadSkills, skillContents, skillsDir } from "./skills.js";
 // Only the scheduler itself: `enio daemon` hosts it. The task CLI is gone --
 // a schedule is a property of an automation now, set in the app or over the
@@ -959,6 +966,31 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "models": {
+      // The ollama list / ollama rm of enio's own store. Weights live in the
+      // shared HF cache (Maple in its runtime checkout); listing walks real
+      // bytes so the sizes are what deletion would actually free.
+      if (rest[0] === "rm" && rest[1]) {
+        const result = deleteModelWeights(rest[1]);
+        if (!result.ok) {
+          console.error(result.error);
+          process.exit(1);
+        }
+        console.log(`Deleted ${rest[1]} — freed ${(result.freedBytes / 1024 ** 3).toFixed(1)}GB.`);
+        break;
+      }
+      const current = currentModelId();
+      for (const id of availableModels()) {
+        const mark = id === current ? "*" : " ";
+        const bytes = modelWeightsBytes(id);
+        const size = bytes > 0 ? `${(bytes / 1024 ** 3).toFixed(1)}GB` : "not downloaded";
+        console.log(`${mark} ${id.padEnd(48)} ${size}`);
+      }
+      console.log(`\n* selected. Remove one with:  enio models rm <id>`);
+      console.log(`The selected model cannot be deleted — switch first (the app's model picker).`);
+      break;
+    }
+
     case "addons": {
       // Optional capabilities, moved out of the installer so a first install
       // asks nothing it does not need to. The work happens in
@@ -1522,6 +1554,8 @@ enio — a local agent with tools and persistent memory
   enio token              print the API key for the HTTP endpoint
   enio token --rotate     generate a new one, invalidating the old
   enio backends           list model backends and how to switch
+  enio models             list downloaded models and their sizes
+  enio models rm ID       delete a model's weights (the selected one is refused)
   enio addons             list optional add-ons and what is installed
   enio addons add NAME    install one: search, browser, vision, voice, inspector, maple
   enio tools              list every tool, built-in and MCP
