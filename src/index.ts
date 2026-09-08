@@ -1,5 +1,26 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
+import { homedir } from "node:os";
+
+/**
+ * uv, wherever it actually is. install.sh puts it in ~/.local/bin and uses
+ * it from there during its own run — but a terminal that never sourced the
+ * profile has no such PATH entry, and a bare spawn("uv") died as an
+ * unhandled 'error' event (spawn uv ENOENT) instead of a sentence.
+ */
+function uvBin(): string {
+  const installed = join(homedir(), ".local", "bin", "uv");
+  return existsSync(installed) ? installed : "uv";
+}
+
+/** Exit code of a spawned child, with a spawn failure as 127 rather than an
+ *  unhandled 'error' event crashing the CLI. */
+function spawnExit(child: ReturnType<typeof spawn>): Promise<number> {
+  return new Promise((r) => {
+    child.on("error", () => r(127));
+    child.on("exit", (c) => r(c ?? 1));
+  });
+}
 import { existsSync, openSync, unlinkSync, writeFileSync } from "node:fs";
 import { ensureToken } from "./auth.js";
 import { join } from "node:path";
@@ -760,21 +781,23 @@ async function main(): Promise<void> {
         const { mkdirSync } = await import("node:fs");
         mkdirSync(config.visionVenvDir, { recursive: true });
         if (!existsSync(join(config.visionVenvDir, "bin", "python"))) {
-          const venv = spawn("uv", ["venv", "--python", "3.12", config.visionVenvDir], {
+          const venv = spawn(uvBin(), ["venv", "--python", "3.12", config.visionVenvDir], {
             stdio: "inherit",
           });
-          const code: number = await new Promise((r) => venv.on("exit", (c) => r(c ?? 1)));
+          const code = await spawnExit(venv);
           if (code !== 0) {
-            console.error("Could not create the venv. Is uv installed?");
+            console.error(
+              "Could not create the venv — uv was not found. Install it:  curl -LsSf https://astral.sh/uv/install.sh | sh",
+            );
             process.exit(1);
           }
         }
         const pip = spawn(
-          "uv",
+          uvBin(),
           ["pip", "install", "--python", join(config.visionVenvDir, "bin", "python"), "mlx-whisper"],
           { stdio: "inherit" },
         );
-        const code: number = await new Promise((r) => pip.on("exit", (c) => r(c ?? 1)));
+        const code = await spawnExit(pip);
         if (code !== 0) {
           console.error("mlx-whisper install failed.");
           process.exit(1);
@@ -841,18 +864,20 @@ async function main(): Promise<void> {
         const { mkdirSync } = await import("node:fs");
         mkdirSync(config.visionVenvDir, { recursive: true });
         console.log(`Installing mlx-vlm into ${config.visionVenvDir}`);
-        const venv = spawn("uv", ["venv", "--python", "3.12", config.visionVenvDir], {
+        const venv = spawn(uvBin(), ["venv", "--python", "3.12", config.visionVenvDir], {
           stdio: "inherit",
         });
-        const venvCode: number = await new Promise((r) => venv.on("exit", (c) => r(c ?? 1)));
+        const venvCode = await spawnExit(venv);
         if (venvCode !== 0) {
-          console.error("Could not create the venv. Is uv installed?");
+          console.error(
+            "Could not create the venv — uv was not found. Install it:  curl -LsSf https://astral.sh/uv/install.sh | sh",
+          );
           process.exit(1);
         }
-        const pip = spawn("uv", ["pip", "install", "--python", join(config.visionVenvDir, "bin", "python"), "mlx-vlm"], {
+        const pip = spawn(uvBin(), ["pip", "install", "--python", join(config.visionVenvDir, "bin", "python"), "mlx-vlm"], {
           stdio: "inherit",
         });
-        const pipCode: number = await new Promise((r) => pip.on("exit", (c) => r(c ?? 1)));
+        const pipCode = await spawnExit(pip);
         if (pipCode !== 0) {
           console.error("mlx-vlm install failed.");
           process.exit(1);
