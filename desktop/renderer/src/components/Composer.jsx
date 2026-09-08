@@ -50,8 +50,11 @@ export const Composer = forwardRef(function Composer({
   voiceState = null,
   onToggleVoice = () => {},
   onVoiceInterrupt = () => {},
+  onInstallVoice = null,
 }, handle) {
   const ref = useRef(null);
+  // The mic before voice is installed: null (idle) | "installing" | "failed".
+  const [voiceSetup, setVoiceSetup] = useState(null);
 
   // Grow with the content up to a ceiling, then scroll inside the box.
   useEffect(() => {
@@ -464,6 +467,38 @@ export const Composer = forwardRef(function Composer({
           disabled={disabled || transcribing}
         >
           {transcribing ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Mic className="size-4" />
+          )}
+        </TipButton>
+      )}
+
+      {/* Voice before it is installed: the mic stays visible with a setup
+          meaning instead of vanishing — a hidden control reads as "enio has
+          no voice", and nothing on screen said one install away. The click
+          IS the consent: the tip names the cost, and the app runs the voice
+          add-on behind it. On success the capabilities refetch upstream
+          swaps this button for the real controls. */}
+      {!capabilities.voice?.transcription && !streaming && onInstallVoice && (
+        <TipButton
+          tip={
+            voiceSetup === "installing"
+              ? "Setting up voice input…"
+              : voiceSetup === "failed"
+                ? "Voice setup failed — check the terminal that launched enio, or run: enio addons add voice"
+                : "Voice input — click to set up (one-time; the speech model downloads on first use)"
+          }
+          onClick={async () => {
+            if (voiceSetup === "installing") return;
+            setVoiceSetup("installing");
+            const ok = await onInstallVoice();
+            setVoiceSetup(ok ? null : "failed");
+          }}
+          disabled={disabled}
+          className={voiceSetup === "failed" ? "text-destructive" : "text-muted-foreground opacity-60"}
+        >
+          {voiceSetup === "installing" ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <Mic className="size-4" />

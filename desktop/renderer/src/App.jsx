@@ -1104,6 +1104,11 @@ export function App() {
         disabled={!backendReady}
         streaming={streaming}
         capabilities={capabilities}
+        onInstallVoice={async () => {
+          const result = await window.maple?.installVoice?.();
+          if (result?.ok) fetchCapabilities().then(setCapabilities);
+          return !!result?.ok;
+        }}
         sessionFiles={sessionFiles}
         conversationId={conversationId}
         conversationAttachments={convAttachments}

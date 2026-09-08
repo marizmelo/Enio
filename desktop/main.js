@@ -169,7 +169,8 @@ function installerEnv() {
  *  spawns npx for MCP servers and expects node's bin dir reachable. */
 function childPath() {
   const parts = (process.env.PATH || "/usr/bin:/bin:/usr/sbin:/sbin").split(":");
-  const extra = ["/opt/homebrew/bin", "/usr/local/bin"];
+  // ~/.local/bin carries uv, which the voice add-on install spawns.
+  const extra = ["/opt/homebrew/bin", "/usr/local/bin", path.join(os.homedir(), ".local", "bin")];
   if (NODE_BIN !== "node") extra.unshift(path.dirname(NODE_BIN));
   for (const p of extra) {
     if (!parts.includes(p)) parts.unshift(p);
@@ -724,6 +725,31 @@ ipcMain.handle("get-status", () => lastStatus);
 // to consume there), so it needs the key. This is our own trusted page with no
 // remote content loaded into it.
 ipcMain.handle("get-token", () => readToken());
+
+// The composer's mic in its not-yet-installed state: one click runs the
+// voice add-on through the same enio addons path the CLI uses, with the
+// launcher's resolved node and PATH. The renderer refetches capabilities on
+// success, which is what turns the setup button into the real controls.
+ipcMain.handle("install-voice", () => {
+  return new Promise((resolve) => {
+    const child = spawn(NODE_BIN, [AGENT_ENTRY, "addons", "add", "voice"], {
+      cwd: PARENT_DIR,
+      env: { ...installerEnv(), ...process.env, PATH: childPath() },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    child.stdout?.on("data", (c) => {
+      output += c;
+      process.stdout.write(`[voice-install] ${c}`);
+    });
+    child.stderr?.on("data", (c) => {
+      output += c;
+      process.stderr.write(`[voice-install] ${c}`);
+    });
+    child.on("exit", (code) => resolve({ ok: code === 0, output: output.slice(-2000) }));
+    child.on("error", (err) => resolve({ ok: false, output: String(err) }));
+  });
+});
 
 /**
  * Where attachments have to end up.

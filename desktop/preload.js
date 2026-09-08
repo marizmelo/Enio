@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld("maple", {
     return ipcRenderer.invoke("get-token");
   },
 
+  /** One-time voice setup, run from the composer's not-yet-installed mic. */
+  installVoice() {
+    return ipcRenderer.invoke("install-voice");
+  },
+
   /**
    * Native file picker. Returns names the agent can address: a file already
    * inside one of the project's attached folders comes back as its alias
