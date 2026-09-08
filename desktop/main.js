@@ -13,7 +13,7 @@ const {
   systemPreferences,
 } = require("electron");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const http = require("node:http");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -27,8 +27,155 @@ const os = require("node:os");
 // get it from productName; this is what makes `npm start` say Enio too.
 app.setName("Enio");
 
-const PARENT_DIR = path.join(__dirname, "..");
-const AGENT_ENTRY = path.join(PARENT_DIR, "dist", "index.js");
+// ---------------------------------------------------------------- launcher
+// `npm start` runs from inside the repo with the shell's environment. A
+// packaged Enio.app has neither: __dirname points inside the bundle, and a
+// Finder launch carries the bare GUI PATH — no nvm, no homebrew. So the
+// packaged app is a LAUNCHER: it finds the installed repo and a usable node,
+// remembers the repo, and explains itself when either is missing. Dev mode
+// resolves both instantly to what it always used, so `npm start` is
+// unchanged. The model runtime (venv + weights in ~/.enio) stays outside the
+// bundle either way — install.sh owns it; this app only launches it.
+let PARENT_DIR = path.join(__dirname, "..");
+let AGENT_ENTRY = path.join(PARENT_DIR, "dist", "index.js");
+let NODE_BIN = "node";
+
+const LAUNCHER_STATE = path.join(os.homedir(), ".enio", "launcher.json");
+
+function repoLooksRight(dir) {
+  return typeof dir === "string" && dir.length > 0 && fs.existsSync(path.join(dir, "dist", "index.js"));
+}
+
+function rememberedRepo() {
+  try {
+    return JSON.parse(fs.readFileSync(LAUNCHER_STATE, "utf8")).repo ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberRepo(dir) {
+  try {
+    fs.mkdirSync(path.dirname(LAUNCHER_STATE), { recursive: true });
+    fs.writeFileSync(LAUNCHER_STATE, JSON.stringify({ repo: dir }, null, 2) + "\n");
+  } catch {
+    /* Remembering is a convenience; failing to must not block a launch. */
+  }
+}
+
+/** The repo this app should run, or null after telling the user why not. */
+async function locateRepo() {
+  // Dev mode, or an app someone dropped inside the repo: the relative path.
+  if (repoLooksRight(PARENT_DIR)) return PARENT_DIR;
+  const saved = rememberedRepo();
+  if (repoLooksRight(saved)) return saved;
+  const home = os.homedir();
+  const candidates = [
+    path.join(home, "Documents", "enio"),
+    path.join(home, "Documents", "GitHub", "enio"),
+    path.join(home, "enio"),
+    path.join(home, "Projects", "enio"),
+  ];
+  for (const c of candidates) {
+    if (repoLooksRight(c)) {
+      rememberRepo(c);
+      return c;
+    }
+  }
+  const picked = await dialog.showOpenDialog({
+    title: "Where is your enio folder?",
+    message: "Pick the enio folder you installed — the one holding install.sh.",
+    properties: ["openDirectory"],
+  });
+  const dir = picked.canceled ? null : picked.filePaths[0];
+  if (repoLooksRight(dir)) {
+    rememberRepo(dir);
+    return dir;
+  }
+  if (dir) {
+    dialog.showErrorBox(
+      "That folder is not a built enio",
+      `${dir}\n\nhas no dist/index.js. Run \`bash install.sh\` in the enio folder first, then open this app again.`,
+    );
+  } else {
+    dialog.showErrorBox(
+      "enio not found",
+      "This app launches the enio installed on this machine, and could not find it. " +
+        "Install enio first (github.com/marizmelo/Enio), then open this app again.",
+    );
+  }
+  return null;
+}
+
+function nodeWorks(bin) {
+  try {
+    return spawnSync(bin, ["--version"], { timeout: 5000 }).status === 0;
+  } catch {
+    return false;
+  }
+}
+
+/** A node this machine can actually run, or null. Terminal launches resolve
+ *  on the first check; the login-shell probe is for Finder launches, where
+ *  PATH knows nothing the user's shell profile set up (nvm most of all). */
+function resolveNode() {
+  if (nodeWorks("node")) return "node";
+  try {
+    const shellBin = process.env.SHELL || "/bin/zsh";
+    const probe = spawnSync(shellBin, ["-ilc", "command -v node"], { timeout: 15000, encoding: "utf8" });
+    const found = probe.stdout?.trim().split("\n").pop();
+    if (probe.status === 0 && found && nodeWorks(found)) return found;
+  } catch {
+    /* A shell that refuses -ilc falls through to the fixed candidates. */
+  }
+  const candidates = ["/opt/homebrew/bin/node", "/usr/local/bin/node"];
+  try {
+    const nvmDir = path.join(os.homedir(), ".nvm", "versions", "node");
+    const versions = fs.readdirSync(nvmDir).sort((a, b) => {
+      const pa = a.replace(/^v/, "").split(".").map(Number);
+      const pb = b.replace(/^v/, "").split(".").map(Number);
+      return pb[0] - pa[0] || pb[1] - pa[1] || pb[2] - pa[2];
+    });
+    for (const v of versions) candidates.push(path.join(nvmDir, v, "bin", "node"));
+  } catch {
+    /* No nvm — the fixed candidates stand alone. */
+  }
+  for (const bin of candidates) {
+    if (fs.existsSync(bin) && nodeWorks(bin)) return bin;
+  }
+  return null;
+}
+
+/** ENIO_* exports from the installer's ~/.enio/env. A terminal sources that
+ *  file; a Finder launch never sources anything, so read it here. Anything
+ *  already in process.env wins, keeping terminal launches exactly as they
+ *  were. */
+function installerEnv() {
+  const out = {};
+  try {
+    const text = fs.readFileSync(path.join(os.homedir(), ".enio", "env"), "utf8");
+    for (const line of text.split("\n")) {
+      const m = /^export\s+([A-Z_][A-Z0-9_]*)="?([^"#]*?)"?\s*(#.*)?$/.exec(line.trim());
+      if (m && process.env[m[1]] === undefined) out[m[1]] = m[2].trim();
+    }
+  } catch {
+    /* No env file: the agent's own defaults apply. */
+  }
+  return out;
+}
+
+/** The child's PATH: the resolved node's directory and the usual package-
+ *  manager bins, ahead of whatever the launch environment had. The agent
+ *  spawns npx for MCP servers and expects node's bin dir reachable. */
+function childPath() {
+  const parts = (process.env.PATH || "/usr/bin:/bin:/usr/sbin:/sbin").split(":");
+  const extra = ["/opt/homebrew/bin", "/usr/local/bin"];
+  if (NODE_BIN !== "node") extra.unshift(path.dirname(NODE_BIN));
+  for (const p of extra) {
+    if (!parts.includes(p)) parts.unshift(p);
+  }
+  return parts.join(":");
+}
 
 // Follows ENIO_BASE_URL because the agent does. Hardcoding 8080 here while
 // the agent read the env meant a launch pointed at another model server
@@ -135,14 +282,16 @@ async function waitForHealth(url, timeoutMs) {
  * `npm start` shows logs, and returning it so the caller can track the PID.
  */
 function spawnBackend(args, label) {
-  // Plain `node` off PATH, not Electron's own binary — the parent project
-  // assumes a normal Node runtime (ESM loader, no Electron-specific globals).
-  const child = spawn("node", [AGENT_ENTRY, ...args], {
+  // A real node, not Electron's own binary — the parent project assumes a
+  // normal Node runtime (ESM loader, no Electron-specific globals). NODE_BIN
+  // is "node" in dev and whatever resolveNode() found in a Finder launch.
+  const child = spawn(NODE_BIN, [AGENT_ENTRY, ...args], {
     cwd: PARENT_DIR,
     // The agent hides this app while it captures the screen, so it has to
     // know what this app is called — "Enio" packaged, whatever Electron
     // reports in dev. A guess would silently stop working on a rename.
-    env: { ...process.env, ENIO_APP_NAME: app.getName() },
+    // installerEnv first so anything the launch environment DID carry wins.
+    env: { ...installerEnv(), ...process.env, ENIO_APP_NAME: app.getName(), PATH: childPath() },
     stdio: ["ignore", "pipe", "pipe"],
     // Its own process group, so shutdown can signal the whole tree.
     // `enio up` is a wrapper: the thing actually holding ~6GB is the python
@@ -179,6 +328,36 @@ function spawnBackend(args, label) {
   });
 
   return child;
+}
+
+/**
+ * Resolve where the repo and node live, then start the backends. In dev both
+ * resolve instantly to what this file always used; in a packaged Finder
+ * launch this is where the app earns the name launcher — and where it stops
+ * with a readable dialog instead of a window that waits on servers that were
+ * never going to start.
+ */
+async function bootLauncher() {
+  const repo = await locateRepo();
+  if (!repo) {
+    sendStatus("failed", "enio is not installed anywhere this app can find.");
+    return;
+  }
+  PARENT_DIR = repo;
+  AGENT_ENTRY = path.join(repo, "dist", "index.js");
+  const node = resolveNode();
+  if (!node) {
+    dialog.showErrorBox(
+      "Node.js not found",
+      "enio's backend runs on Node.js 22+, which this Mac does not appear to have. Install it from nodejs.org, then open this app again.",
+    );
+    sendStatus("failed", "Node.js was not found on this machine.");
+    return;
+  }
+  NODE_BIN = node;
+  console.log(`[launcher] repo: ${PARENT_DIR}`);
+  console.log(`[launcher] node: ${NODE_BIN}`);
+  startBackends();
 }
 
 /**
@@ -1298,7 +1477,7 @@ app.whenReady().then(() => {
 
   createTray();
   createWindow();
-  startBackends();
+  bootLauncher();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

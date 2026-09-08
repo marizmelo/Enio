@@ -44,6 +44,13 @@ That's the whole thing. It checks your hardware, installs `uv`, downloads the
 model runtime and weights, builds the agent, runs the tests, and offers to set
 up web search, browser rendering, and the desktop app.
 
+Want a double-clickable app in your Dock? Build it once with
+`cd desktop && npm run dist` — the app lands in `desktop/build/` (with a
+`.dmg` beside it) and can be moved to Applications. It is a launcher: it
+finds the enio you installed (asking once if it cannot), starts everything,
+and remembers the location for next time. The install above still has to
+exist — the app starts enio, it does not contain it.
+
 ```sh
 bash install.sh --yes        # no prompts, accept every default
 bash install.sh --minimal    # core only, skip the optional parts
