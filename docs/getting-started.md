@@ -40,9 +40,14 @@ cd enio
 bash install.sh
 ```
 
-That's the whole thing. It checks your hardware, installs `uv`, downloads the
-model runtime and weights, builds the agent, runs the tests, and offers to set
-up web search, browser rendering, and the desktop app.
+That's the whole thing. It checks your hardware, installs `uv`, downloads a
+model **sized to your machine** — Qwen3 4B normally, Qwen3 1.7B on Macs with
+less than 12GB of memory, where the larger model cannot fit in GPU memory —
+builds the agent, runs the tests, and offers the desktop app.
+
+Everything optional installs later, the day you want it, with `enio addons`:
+web search (SearXNG via Docker), browser rendering for JavaScript-heavy
+pages, image descriptions, the inspector UI, and the Maple model.
 
 Want a double-clickable app in your Dock? Build it once with
 `cd desktop && npm run dist` — the app lands in `desktop/build/` (with a

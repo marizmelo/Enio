@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, openSync, unlinkSync, writeFileSync } from "node:fs";
 import { ensureToken } from "./auth.js";
 import { join } from "node:path";
@@ -934,6 +934,67 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "addons": {
+      // Optional capabilities, moved out of the installer so a first install
+      // asks nothing it does not need to. The work happens in
+      // scripts/addons.sh; this command is the catalogue and the runner.
+      const addons: Array<{ name: string; what: string; installed: () => boolean | null }> = [
+        {
+          name: "search",
+          what: "SearXNG web search, no API key (needs Docker)",
+          // Presence can't be probed without a network call; the env var is
+          // the honest local signal.
+          installed: () => (process.env.SEARXNG_URL ? true : null),
+        },
+        {
+          name: "browser",
+          what: "Playwright, for JavaScript-heavy pages (~150MB)",
+          installed: () => {
+            try {
+              return existsSync(join(projectRoot, "node_modules", "playwright"));
+            } catch {
+              return null;
+            }
+          },
+        },
+        {
+          name: "vision",
+          what: "moondream image descriptions via Ollama (~1.7GB; OCR works without it)",
+          installed: () => null,
+        },
+        {
+          name: "inspector",
+          what: "trace viewer + knowledge graph UI (enio inspect)",
+          installed: () => existsSync(join(projectRoot, "ui", "dist")),
+        },
+        {
+          name: "maple",
+          what: "the Maple model, ternary 20B-A1B (~5GB, Apple Silicon)",
+          installed: () => existsSync(join(config.runtimeDir, "maple-2bit-mlx", "config.json")),
+        },
+      ];
+
+      const sub = rest[0];
+      if (sub === "add" && rest[1]) {
+        const wanted = addons.find((a) => a.name === rest[1]);
+        if (!wanted) {
+          console.error(`No add-on named "${rest[1]}". One of: ${addons.map((a) => a.name).join(", ")}`);
+          process.exit(1);
+        }
+        const script = join(projectRoot, "scripts", "addons.sh");
+        const run = spawnSync("bash", [script, wanted.name], { stdio: "inherit" });
+        process.exit(run.status ?? 1);
+      }
+
+      for (const a of addons) {
+        const state = a.installed();
+        const mark = state === true ? "✓" : state === false ? " " : "·";
+        console.log(`${mark} ${a.name.padEnd(10)} ${a.what}`);
+      }
+      console.log(`\nInstall one with:  enio addons add <name>`);
+      break;
+    }
+
     case "backends": {
       const current = activeBackend();
       for (const b of Object.values(BACKENDS)) {
@@ -1431,6 +1492,8 @@ enio — a local agent with tools and persistent memory
   enio token              print the API key for the HTTP endpoint
   enio token --rotate     generate a new one, invalidating the old
   enio backends           list model backends and how to switch
+  enio addons             list optional add-ons and what is installed
+  enio addons add NAME    install one: search, browser, vision, inspector, maple
   enio tools              list every tool, built-in and MCP
   enio mcp                list MCP connections
   enio mcp add NAME CMD [args...] [--tools a,b]

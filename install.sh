@@ -1,9 +1,12 @@
 #!/bin/bash
 # One-shot installer for enio and everything it needs.
 #
-#   bash install.sh              interactive, asks about optional components
+#   bash install.sh              model + agent + desktop, sized to this machine
 #   bash install.sh --yes        accept all defaults, no prompts
-#   bash install.sh --minimal    core only: model + agent, no search/browser/desktop
+#   bash install.sh --minimal    core only: model + agent, no desktop app
+#
+# Search, browser rendering, image descriptions, the inspector UI and the
+# Maple model install later, the day they are wanted:  enio addons
 #
 # Idempotent: every step checks before doing work, so re-running after a failure
 # picks up where it stopped rather than starting over.
@@ -204,13 +207,24 @@ fi
 ENIO_DIR="$ENIO_DIR" node "$AGENT_DIR/scripts/patch-runtime.mjs" || \
   warn "Could not patch the mlx-lm tool parser; tool calls may be dropped."
 
-# The default model goes to the shared HF cache (mlx_lm.server resolves it
-# from there by id). Maple keeps its own checkout in the runtime dir because
-# it is addressed by path, not by HF id -- and it is optional now.
-DEFAULT_MODEL="mlx-community/Qwen3-4B-Instruct-2507-4bit"
-say "Model weights (~2.3GB)"
-if [ -d "$HOME/.cache/huggingface/hub/models--mlx-community--Qwen3-4B-Instruct-2507-4bit/snapshots" ]; then
-  skip "default model weights present"
+# The default model follows the machine, not the other way around. MLX wires
+# every weight into GPU memory at load, and macOS caps wired memory well
+# below total RAM — the 4B was measured dying exactly there on an 8GB
+# machine ([METAL] Insufficient Memory) while the 1.7B ran. The model goes
+# to the shared HF cache (mlx_lm.server resolves it from there by id).
+if [ "${MEM_GB:-16}" -lt 12 ]; then
+  DEFAULT_MODEL="mlx-community/Qwen3-1.7B-4bit"
+  MODEL_DL_SIZE="~1GB"
+  printf '    %sGB RAM: choosing Qwen3 1.7B — larger models cannot wire into this machine'"'"'s GPU memory.\n' "$MEM_GB"
+else
+  DEFAULT_MODEL="mlx-community/Qwen3-4B-Instruct-2507-4bit"
+  MODEL_DL_SIZE="~2.3GB"
+fi
+MODEL_CACHE_DIR="models--$(printf '%s' "$DEFAULT_MODEL" | sed 's|/|--|')"
+
+say "Model weights ($MODEL_DL_SIZE)"
+if [ -d "$HOME/.cache/huggingface/hub/$MODEL_CACHE_DIR/snapshots" ]; then
+  skip "model weights present"
 else
   printf '    downloading %s — resumable, safe to interrupt\n' "$DEFAULT_MODEL"
   ( cd "$ENIO_DIR" && source .venv/bin/activate && \
@@ -218,16 +232,11 @@ else
     || die "Weight download failed. Re-run this script to resume."
 fi
 
-if [ -f "$ENIO_DIR/maple-2bit-mlx/config.json" ]; then
-  skip "Maple weights present"
-else
-  # Optional, not default: Maple is the ternary 20B-A1B experiment -- fastest
-  # per token here, but the 4B routes better and downloads at half the size.
-  if [ "$ASSUME_YES" != "1" ] && ask "Also download Maple? (~5GB, ternary 20B-A1B, fastest per token)"; then
-    ( cd "$ENIO_DIR" && source .venv/bin/activate && \
-      hf download deepgrove/maple-2bit-mlx --local-dir maple-2bit-mlx ) \
-      || warn "Maple download failed — enio works without it; re-run to retry."
-  fi
+# Record the choice so the server loads what was actually downloaded — the
+# code's own out-of-the-box default is the 4B, which a small machine now
+# deliberately does not have. An existing choice is the user's and stays.
+if [ ! -f "$DATA_DIR/model.json" ]; then
+  printf '{\n  "model": "%s"\n}\n' "$DEFAULT_MODEL" > "$DATA_DIR/model.json"
 fi
 
 else
@@ -292,60 +301,12 @@ else
   warn "Some tests failed — see /tmp/enio-test.log. Continuing."
 fi
 
-# ------------------------------------------------------ optional: search
-say "Optional components"
-
+# ---------------------------------------------------------------- add-ons
+# Search, browser rendering, image descriptions, the inspector UI and the
+# Maple model are add-ons now, installed the day they are wanted:
+#     enio addons
+# A first install asks nothing it does not need to.
 SEARXNG_ENABLED=0
-if ask "Set up SearXNG for web search? (no API key needed, requires Docker)"; then
-  if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
-    if ( cd "$AGENT_DIR/searxng" && docker compose up -d >/dev/null 2>&1 ); then
-      # First boot takes a few seconds before it answers.
-      for _ in $(seq 1 15); do
-        sleep 2
-        if curl -sf "http://127.0.0.1:8888/search?q=test&format=json" >/dev/null 2>&1; then
-          SEARXNG_ENABLED=1; break
-        fi
-      done
-      if [ "$SEARXNG_ENABLED" = "1" ]; then
-        printf '    running on http://127.0.0.1:8888\n'
-      else
-        warn "SearXNG started but isn't answering yet. Check: docker compose -f searxng/docker-compose.yml logs"
-        FAILED_OPTIONAL+=("searxng")
-      fi
-    else
-      warn "docker compose failed."
-      FAILED_OPTIONAL+=("searxng")
-    fi
-  else
-    warn "Docker isn't running. Start Docker Desktop and re-run, or set BRAVE_API_KEY instead."
-    FAILED_OPTIONAL+=("searxng")
-  fi
-fi
-
-# ----------------------------------------------------- optional: browser
-if ask "Install Playwright for JavaScript-heavy pages? (~150MB)"; then
-  if ( cd "$AGENT_DIR" && npm install playwright --no-audit --no-fund >/dev/null 2>&1 \
-       && npx playwright install chromium >/dev/null 2>&1 ); then
-    printf '    chromium installed\n'
-  else
-    warn "Playwright install failed; web_fetch_rendered will be unavailable."
-    FAILED_OPTIONAL+=("playwright")
-  fi
-fi
-
-# ------------------------------------------------------ optional: vision
-if ask "Set up image reading? (a 1.7GB vision model, loaded only while in use)"; then
-  if command -v ollama >/dev/null && curl -sf http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-    if curl -s http://127.0.0.1:11434/api/tags | grep -q "moondream"; then
-      skip "moondream already pulled"
-    else
-      ollama pull moondream:v2 || warn "Pull failed; OCR will still work."
-    fi
-  else
-    printf '    Ollama not running — images will use OCR, which needs no model.\n'
-    printf '    For descriptions later: ollama pull moondream:v2\n'
-  fi
-fi
 
 # ------------------------------------------------------ skills
 # Nothing to install: the bundled skills are read from this checkout, so an
@@ -358,17 +319,6 @@ fi
 # what it did and says nothing when there is nothing to do.
 if [ -d "$AGENT_DIR/examples/skills" ]; then
   ( cd "$AGENT_DIR" && node dist/index.js skills --tidy ) || true
-fi
-
-# ---------------------------------------------------- optional: inspector
-if [ -d "$AGENT_DIR/ui" ] && ask "Build the inspector UI? (trace viewer + knowledge graph)"; then
-  if ( cd "$AGENT_DIR/ui" && npm install --no-audit --no-fund >/dev/null 2>&1 \
-       && npm run build >/dev/null 2>&1 ); then
-    printf '    built — open it with: node dist/index.js inspect\n'
-  else
-    warn "Inspector build failed; 'enio inspect' will not work."
-    FAILED_OPTIONAL+=("inspector")
-  fi
 fi
 
 # ----------------------------------------------------- optional: desktop

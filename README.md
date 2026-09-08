@@ -65,7 +65,7 @@ See **[Getting started](docs/getting-started.md)** for permissions, the workspac
 
 **Works in projects.** Attach the folders and files a piece of work is about, each with a note saying what it's for, plus standing instructions — and every conversation under that project carries the context. Not a "code mode": routing keeps working, the project just biases it. → [Projects](docs/projects.md)
 
-**Runs the model you choose.** Any MLX chat model that can call tools — switched from the status bar without losing your conversation, and the context budget follows the model rather than being fixed. Ships with Qwen3 4B Instruct, with [Maple](https://huggingface.co/deepgrove/maple-preview) (20B-A1B ternary, ~218 tok/s) as an optional extra. → [Models](docs/models.md)
+**Runs the model you choose.** Any MLX chat model that can call tools — switched from the status bar without losing your conversation, and the context budget follows the model rather than being fixed. Ships with a Qwen3 sized to your machine (4B, or 1.7B under 12GB of RAM), with [Maple](https://huggingface.co/deepgrove/maple-preview) (20B-A1B ternary, ~218 tok/s) as an `enio addons` extra. → [Models](docs/models.md)
 
 ---
 
