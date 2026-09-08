@@ -963,6 +963,11 @@ async function main(): Promise<void> {
           installed: () => null,
         },
         {
+          name: "voice",
+          what: "mlx-whisper speech-in — the mic button in the app (~500MB on first use)",
+          installed: () => existsSync(join(config.visionVenvDir, "bin", "python")),
+        },
+        {
           name: "inspector",
           what: "trace viewer + knowledge graph UI (enio inspect)",
           installed: () => existsSync(join(projectRoot, "ui", "dist")),
@@ -1493,7 +1498,7 @@ enio — a local agent with tools and persistent memory
   enio token --rotate     generate a new one, invalidating the old
   enio backends           list model backends and how to switch
   enio addons             list optional add-ons and what is installed
-  enio addons add NAME    install one: search, browser, vision, inspector, maple
+  enio addons add NAME    install one: search, browser, vision, voice, inspector, maple
   enio tools              list every tool, built-in and MCP
   enio mcp                list MCP connections
   enio mcp add NAME CMD [args...] [--tools a,b]

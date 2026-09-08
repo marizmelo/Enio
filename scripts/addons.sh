@@ -4,6 +4,7 @@
 #   bash scripts/addons.sh search      SearXNG web search (needs Docker)
 #   bash scripts/addons.sh browser     Playwright, for JavaScript-heavy pages
 #   bash scripts/addons.sh vision      moondream image descriptions (needs Ollama)
+#   bash scripts/addons.sh voice       mlx-whisper speech-in for the mic button
 #   bash scripts/addons.sh inspector   trace viewer + knowledge graph UI
 #   bash scripts/addons.sh maple       the Maple model (~5GB, Apple Silicon only)
 #
@@ -60,6 +61,12 @@ case "${1:-}" in
     else
       ollama pull moondream:v2 || die "Pull failed."
     fi
+    ;;
+
+  voice)
+    say "Voice input (mlx-whisper; the ~500MB model downloads on first use)"
+    ( cd "$AGENT_DIR" && node dist/index.js voice --install ) || die "Voice install failed."
+    printf '    relaunch the app — the microphone button appears in the composer\n'
     ;;
 
   inspector)

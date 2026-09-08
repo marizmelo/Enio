@@ -47,7 +47,8 @@ builds the agent, runs the tests, and offers the desktop app.
 
 Everything optional installs later, the day you want it, with `enio addons`:
 web search (SearXNG via Docker), browser rendering for JavaScript-heavy
-pages, image descriptions, the inspector UI, and the Maple model.
+pages, image descriptions, voice input for the app's microphone button, the
+inspector UI, and the Maple model.
 
 Want a double-clickable app in your Dock? Build it once with
 `cd desktop && npm run dist` — the app lands in `desktop/build/` (with a
