@@ -149,13 +149,16 @@ export function ModelsDialog({ open, onOpenChange, onSwitched, highlight = null 
           </h3>
           <ul className="mt-2 space-y-1">
             {installedRows.map((m) => (
-              <li key={m.id} className="flex items-center gap-1">
+              <li key={m.id} className="relative">
                 <button
                   type="button"
                   disabled={!!switching}
                   onClick={() => pick(m.id)}
                   className={cn(
-                    "flex min-w-0 flex-1 items-center gap-3 rounded border p-2.5 text-left text-sm",
+                    "flex w-full items-center gap-3 rounded border p-2.5 text-left text-sm",
+                    // Room for the overlaid delete control on deletable rows,
+                    // so the trash never covers the row's own status text.
+                    m.id !== data?.current && "pr-12",
                     m.id === data?.current
                       ? "border-primary/50 bg-muted/50"
                       : "hover:bg-muted/50",
@@ -192,7 +195,10 @@ export function ModelsDialog({ open, onOpenChange, onSwitched, highlight = null 
                   </span>
                 </button>
                 {/* The running model has no delete — the server would reload
-                    into nothing. Everything else: arm, then confirm. */}
+                    into nothing. Everything else: arm, then confirm. Overlaid
+                    inside the row's right edge (the row reserves pr-12), so
+                    the control adds nothing to the flow and cannot bend the
+                    row geometry. */}
                 {m.id !== data?.current && (
                   <button
                     type="button"
@@ -212,12 +218,16 @@ export function ModelsDialog({ open, onOpenChange, onSwitched, highlight = null 
                       }
                     }}
                     className={cn(
-                      "shrink-0 rounded p-2 text-muted-foreground hover:bg-muted/50 hover:text-destructive",
-                      armedDelete === m.id && "bg-destructive/10 text-destructive",
+                      "absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1.5",
+                      "text-muted-foreground hover:bg-muted hover:text-destructive",
+                      // Solid ground: when armed the pill is wider than the
+                      // reserved gutter, and a translucent background over
+                      // the row's status text reads as two words fighting.
+                      armedDelete === m.id && "border border-destructive/40 bg-background text-destructive",
                     )}
                   >
                     {armedDelete === m.id ? (
-                      <span className="px-1 text-xs font-medium">delete?</span>
+                      <span className="whitespace-nowrap px-1 text-xs font-medium">delete?</span>
                     ) : (
                       <Trash2 className="size-4" />
                     )}
