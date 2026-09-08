@@ -1459,20 +1459,18 @@ ipcMain.handle("send-to-ai", (_event, providerId, relPath) => {
 /**
  * Asking macOS for Accessibility access, which is what clicking by name needs.
  *
- * Two mechanisms, and it takes both. `isTrustedAccessibilityClient(true)`
- * raises the real system dialog — the one with the "Open System Settings"
- * button — but macOS shows that **once per app, ever**. Dismiss it and it never
- * appears again, no matter how many times it is called, which is why a button
- * wired only to the prompt looks broken to precisely the users who need it.
+ * One door, not two. This used to also raise the system dialog
+ * (isTrustedAccessibilityClient(true)) with the settings pane opened behind
+ * it as a fallback — the dialog shows only once per app, ever, so the pane
+ * covered the times it stayed silent. But the first time, both appeared at
+ * once: a dialog whose button opens the very window already opening. Now it
+ * only checks, and opens the pane when access is missing. The URL scheme is
+ * the documented way in and lands directly on the Accessibility list.
  *
- * So the settings pane is opened as well whenever access is still missing. The
- * URL scheme is the documented way in and lands directly on the Accessibility
- * list rather than the top of Privacy & Security.
- *
- * Note this answers for Enio.app. The process that actually runs osascript is
- * the agent, spawned as a child; the authoritative answer comes from the
- * agent's own /permissions endpoint, and this is only how the request is
- * raised.
+ * The toggle the user flips there is registered by the agent's own AX
+ * attempts (the processes that actually run the scripts), not by this
+ * prompt — which is also why the authoritative answer comes from the agent's
+ * /permissions endpoint, and this is only how the request is raised.
  */
 const ACCESSIBILITY_PANE =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
@@ -1490,13 +1488,12 @@ ipcMain.handle("request-accessibility", () => {
   if (process.platform !== "darwin") return null;
   let granted = false;
   try {
-    granted = systemPreferences.isTrustedAccessibilityClient(true);
+    // false: check without raising the system dialog — Settings is the one
+    // surface this button opens.
+    granted = systemPreferences.isTrustedAccessibilityClient(false);
   } catch {
     granted = false;
   }
-  // Opened unconditionally when still missing: the prompt above may have been
-  // silently suppressed as already-answered, and leaving the user with nothing
-  // on screen is worse than one extra window.
   if (!granted) {
     try {
       shell.openExternal(ACCESSIBILITY_PANE);
