@@ -411,6 +411,11 @@ export async function route(
         `Examples:\n` +
         `"what's new with the Vision Pro" -> {"specialist": "researcher"}\n` +
         `"why is my test failing" -> {"specialist": "coder"}\n` +
+        // Data questions are file work: the coder reads the file and answers
+        // with Python through run_command. Without this example, "analyze
+        // this csv" landed on the generalist, which has no file tools and
+        // told the user no tool exists.
+        `"analyze the numbers in sales.csv" -> {"specialist": "coder"}\n` +
         // Documents are files, and write_file lives on the coder -- "build
         // me a resume" routed to the researcher, which can only answer in
         // prose, so nothing landed on disk and the canvas had nothing to
