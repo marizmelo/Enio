@@ -543,6 +543,12 @@ const DIRECT = [
     ),
   ],
   () => [
+    user("is camelCase or snake_case the convention in python?"),
+    say(
+      "snake_case for functions, variables and modules; CapWords for classes; UPPER_SNAKE for constants. That is PEP 8, and nearly every Python codebase follows it, so matching it is the safe default.",
+    ),
+  ],
+  () => [
     user("should I use a linter on a small personal project?"),
     say(
       "Yes, if setting it up takes under ten minutes. A linter catches the class of mistake you stop seeing in your own code, and on a small project the cost is one config file. Skip the strict presets — enable the defaults and add rules when one would have caught a real bug.",
@@ -638,6 +644,20 @@ const ERRORS = recoveryScenarios([
     },
     reply:
       "Nothing in the workspace mentions Marta or a retry limit. I can only see files here — if that was said in a conversation or a document elsewhere, I do not have it.",
+  },
+  // The variant the second gated adapter found: after two empty searches
+  // for a config value it read a config file — a third look wearing a
+  // different tool. Same bound, same honest sentence.
+  {
+    ask: "what is the value of RATE_LIMIT_PER_MINUTE?",
+    call: ["search_code", { query: "RATE_LIMIT_PER_MINUTE" }],
+    error: 'No matches for "RATE_LIMIT_PER_MINUTE" in the workspace.',
+    recover: {
+      call: ["search_code", { query: "rate limit" }],
+      output: 'No matches for "rate limit" in the workspace.',
+    },
+    reply:
+      "RATE_LIMIT_PER_MINUTE is not set anywhere in the workspace, and nothing here mentions a rate limit. If it comes from the environment or a config outside the attached folders, I cannot see it.",
   },
   {
     ask: "what is DEFAULT_REGION set to?",

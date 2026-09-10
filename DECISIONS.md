@@ -3175,6 +3175,13 @@ empty looks where the base said "not here", and reached for tools on two
 explanation-only questions. Both are now curriculum families; the next
 run is the user's call.
 
+**Second run (10 Sep, 90 train / 8 valid, with the two new families):**
+loss 0.038 at 200, validation 2.47. Gate: tool choice 16/19 against
+15/19, JSON 15/15, abstention 3/4 against 4/4 — the third-search habit is
+gone; what remains is one variant, a config-file read after two empty
+searches for a config value. Stayed staged; that shape joined the
+curriculum.
+
 ### The gate measures humility, by grammar
 
 **Chose:** abstention probes in every curriculum's held-out set — things
