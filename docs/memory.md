@@ -116,7 +116,9 @@ Facts remembered from a page, a file or a bigger model's answer carry that
 origin, and a good answer remembers which pages it read. `enio sources`
 counts, per source, how many facts it gave, how many are still standing,
 how many were superseded, how many you pinned, and how many good answers
-read it. It is a counter and nothing else for now: nothing ranks on it,
+read it. A bigger model's answer counts too: under a finished handoff, **Remember**
+distils it into facts you approve, each sourced to that agent. It is a
+counter and nothing else for now: nothing ranks on it,
 because one person's month of use is what it takes for these numbers to
 mean anything. When they do, the intended use is a tie-breaker between
 otherwise equal facts — never a label on a source.

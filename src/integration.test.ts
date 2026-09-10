@@ -2211,3 +2211,21 @@ describe("reply shape rides the prompt, and the trace says so", () => {
     assert.equal(after, before, "no inert step on a turn with no block");
   });
 });
+
+describe("provenance handed between steps", () => {
+  test("a fact remembered in a turn given upstream sources carries the last page read", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { toolCall: { name: "remember", args: { fact: "The Halvorsen contract renews every March" } } },
+      { content: "Remembered." },
+    ]);
+    await runTurn("remember what the research found", [], registry, sessionId, {}, {
+      specialist: "librarian",
+      sources: ["https://example.org/first", "https://example.org/contracts/halvorsen"],
+    });
+    const fact = store.listFacts().find((f) => f.text.includes("Halvorsen contract"));
+    assert.ok(fact, "the fact was stored");
+    assert.equal(fact!.origin, "https://example.org/contracts/halvorsen", "the harness-provided page, the model supplied none");
+  });
+});

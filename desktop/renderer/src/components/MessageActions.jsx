@@ -16,7 +16,7 @@ import { speakAll, stopSpeaking } from "@/lib/speech";
  * Under the message rather than beside it: these act on a finished reply, and
  * putting them inline would put them in the way of reading it.
  */
-export function MessageActions({ content, canSpeak = true, onAskBigger, upgrade, onTryUpgrade, onRemember, remembering = false, onGoodAnswer }) {
+export function MessageActions({ content, canSpeak = true, onAskBigger, gap = false, upgrade, onTryUpgrade, onRemember, remembering = false, onGoodAnswer }) {
   const [copied, setCopied] = useState(false);
   const [playing, setPlaying] = useState(false);
 
@@ -96,10 +96,14 @@ export function MessageActions({ content, canSpeak = true, onAskBigger, upgrade,
           something bigger (the server computed that, not a guess) the arrow
           opens a choice. When it cannot, the item is withheld rather than
           greyed and the arrow goes straight to the cloud handoff. */}
+      {/* After a gap — the harness said nothing in memory, files or the
+          web was behind this answer — the escape hatch says so, and is the
+          one button on the row that is not dimmed. Same action; the
+          pre-filled handoff prompt already carries the question. */}
       {onAskBigger && !(upgrade && onTryUpgrade) && (
         <TipButton
-          tip="Ask a bigger model — package this for a cloud AI"
-          className="size-7"
+          tip={gap ? "Nothing in memory covered this — ask a bigger model" : "Ask a bigger model — package this for a cloud AI"}
+          className={`size-7 ${gap ? "text-amber-700 opacity-100 dark:text-amber-400" : ""}`}
           onClick={onAskBigger}
         >
           <ArrowUpRight className="size-3.5" />

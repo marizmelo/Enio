@@ -35,5 +35,5 @@ export const distilFacts = (question, answer) =>
 
 /** Writes exactly the facts the user approved, tagged to the conversation
  *  so they die with it if it is later forgotten. */
-export const rememberFacts = (facts, sessionId) =>
-  call("/memory/facts", { method: "POST", body: JSON.stringify({ facts, sessionId }) });
+export const rememberFacts = (facts, sessionId, origin) =>
+  call("/memory/facts", { method: "POST", body: JSON.stringify({ facts, sessionId, origin }) });

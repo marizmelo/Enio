@@ -236,7 +236,7 @@ export async function analyse(limit = 2000): Promise<{
     .map((g) => ({
       kind: "research" as const,
       title: shorten(g.question),
-      reason: `Asked ${g.count} times and memory never had it.`,
+      reason: `Asked ${g.count} times and memory never had it — the research-gaps automation looks these up and remembers what it finds.`,
       evidence: [shorten(g.question, 100)],
       suggestedName: slug(g.question),
       specialist: "researcher",

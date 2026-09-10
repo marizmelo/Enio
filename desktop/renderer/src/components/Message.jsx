@@ -262,6 +262,7 @@ export function Message({
           content={content}
           canSpeak={!isUser && !speakDisabled}
           onAskBigger={!isUser ? onAskBigger : undefined}
+          gap={basis === "model"}
           upgrade={upgrade}
           onTryUpgrade={!isUser ? onTryUpgrade : undefined}
           onRemember={!isUser && !error ? () => setRemembering((v) => !v) : undefined}

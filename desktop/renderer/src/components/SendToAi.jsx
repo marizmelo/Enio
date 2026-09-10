@@ -8,7 +8,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cancelHandoff, fetchHandoffs, openSignin, runHandoff } from "@/lib/handoffs";
+import { RememberPopover } from "@/components/RememberPopover";
+import { fetchHandoffAnswer, cancelHandoff, fetchHandoffs, openSignin, runHandoff } from "@/lib/handoffs";
 
 /**
  * The last step of a handoff, run rather than ferried.
@@ -40,6 +41,10 @@ const mmss = (ms) => {
 };
 
 export function SendToAi({ path, onOpenArtifact }) {
+  // "Remember what it found": the bigger model's answer, distilled into
+  // facts the user ticks, each stamped with the provider as its origin —
+  // the expert becomes a source the ledger can count.
+  const [remembering, setRemembering] = useState(null); // { text, provider } | null
   const [list, setList] = useState([]);
   const [defaultId, setDefaultId] = useState(
     () => localStorage.getItem(DEFAULT_KEY) ?? "claude",
@@ -110,14 +115,35 @@ export function SendToAi({ path, onOpenArtifact }) {
       <div className="flex items-center gap-1.5">
         <div className="inline-flex overflow-hidden rounded-md border">
           {done ? (
-            <button
-              type="button"
-              onClick={() => onOpenArtifact?.(run.answerFile)}
-              className="inline-flex items-center gap-1.5 bg-muted/40 px-2.5 py-1.5 text-xs hover:bg-muted"
-            >
-              <Check className="size-3.5" />
-              Open {agentName(run.provider)}&apos;s answer
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => onOpenArtifact?.(run.answerFile)}
+                className="inline-flex items-center gap-1.5 bg-muted/40 px-2.5 py-1.5 text-xs hover:bg-muted"
+              >
+                <Check className="size-3.5" />
+                Open {agentName(run.provider)}&apos;s answer
+              </button>
+              <button
+                type="button"
+                title="Remember what it found — distilled into facts you approve, sourced to this agent"
+                onClick={async () => {
+                  if (remembering) {
+                    setRemembering(null);
+                    return;
+                  }
+                  try {
+                    const a = await fetchHandoffAnswer(run.id);
+                    setRemembering({ text: a.text, provider: a.provider });
+                  } catch (err) {
+                    setError(String(err?.message ?? err));
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 border-l bg-muted/40 px-2.5 py-1.5 text-xs hover:bg-muted"
+              >
+                Remember
+              </button>
+            </>
           ) : running ? (
             <button
               type="button"
@@ -213,6 +239,15 @@ export function SendToAi({ path, onOpenArtifact }) {
         </p>
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}
+      {remembering && (
+        <RememberPopover
+          question={`What ${agentName(remembering.provider)} found for ${path.replace(/^.*\//, "")}`}
+          answer={remembering.text}
+          sessionId={null}
+          origin={`handoff:${remembering.provider}`}
+          onClose={() => setRemembering(null)}
+        />
+      )}
     </div>
   );
 }

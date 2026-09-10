@@ -14,7 +14,7 @@ import { distilFacts, rememberFacts } from "@/lib/memory";
  * lands in memory is what the user read and ticked, not what the model
  * emitted. A bad distillation costs a glance, never a bad memory.
  */
-export function RememberPopover({ question, answer, sessionId, onClose }) {
+export function RememberPopover({ question, answer, sessionId, origin = undefined, onClose }) {
   const [state, setState] = useState("loading"); // loading | pick | saving | done | error
   const [facts, setFacts] = useState([]);
   const [checked, setChecked] = useState([]);
@@ -45,7 +45,7 @@ export function RememberPopover({ question, answer, sessionId, onClose }) {
     if (chosen.length === 0) return;
     setState("saving");
     try {
-      setResult(await rememberFacts(chosen, sessionId));
+      setResult(await rememberFacts(chosen, sessionId, origin));
       setState("done");
     } catch (err) {
       setError(String(err?.message ?? err));

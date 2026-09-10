@@ -80,7 +80,15 @@ export async function handle(
       facts?: unknown;
       sessionId?: string;
       pinned?: boolean;
+      /** Where the answer being remembered came from, when the client
+       *  knows: a handoff provider. User-approved facts, user-stated
+       *  origin — the model never supplies one. */
+      origin?: string;
     };
+    const origin =
+      typeof body.origin === "string" && /^(handoff:[a-z0-9-]+|https?:\/\/\S+)$/i.test(body.origin.trim())
+        ? body.origin.trim().slice(0, 200)
+        : undefined;
     const facts = (Array.isArray(body.facts) ? body.facts : [])
       .map((f) => String(f ?? "").trim())
       .filter((f) => f.length >= 3)
@@ -96,6 +104,7 @@ export async function handle(
         pinned: body.pinned === true,
         sessionId: typeof body.sessionId === "string" ? body.sessionId : undefined,
         source: "user",
+        origin,
       });
       (r.stored ? stored : skipped).push(fact);
     }

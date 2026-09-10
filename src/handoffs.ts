@@ -165,6 +165,18 @@ export function listHandoffRuns(): HandoffRun[] {
   return [...runs.values()].sort((a, b) => b.startedAt - a.startedAt);
 }
 
+/** The finished answer's text, for "remember what it found". Read through
+ *  safePath like the write was, so the id cannot address anything else. */
+export function handoffAnswer(id: string): { provider: string; file: string; text: string } | null {
+  const run = runs.get(id);
+  if (!run || run.status !== "done" || !run.answerFile) return null;
+  try {
+    return { provider: run.provider, file: run.answerFile, text: readFileSync(safePath(run.answerFile), "utf8") };
+  } catch {
+    return null;
+  }
+}
+
 export function handoffRun(id: string): HandoffRun | null {
   return runs.get(id) ?? null;
 }

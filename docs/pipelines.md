@@ -94,6 +94,15 @@ most relevant findings"* between a search step and a document step, or
 the previous steps produced and hands text onward. You'll find it in the
 canvas palette but not on the launcher — on its own it is just chat.
 
+### What it couldn't answer
+
+A step's prompt may carry `{{gaps}}`, which enio replaces at run time with
+the three questions asked most that nothing in memory covered (see
+[Memory](memory.md)). The bundled `research-gaps` example is two steps —
+research them on the web, then remember what was found — and the pages
+the first step read travel with the facts the second step keeps, so each
+one lands in memory with its source.
+
 ## Enio learns your flows
 
 There is nothing to manage here — no example library, no separate concept.

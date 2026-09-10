@@ -4,6 +4,7 @@ import {
   HandoffRefused,
   availableAgents,
   cancelHandoffRun,
+  handoffAnswer,
   listHandoffRuns,
   openSignin,
   startHandoffRun,
@@ -36,6 +37,13 @@ export async function handle(
       const status = err instanceof HandoffRefused ? 409 : 500;
       sendJson(res, status, { error: { message: (err as Error).message } });
     }
+    return true;
+  }
+  const answerRoute = /^\/handoffs\/([a-z0-9-]+)\/answer$/.exec(url.pathname);
+  if (answerRoute && req.method === "GET") {
+    const answer = handoffAnswer(answerRoute[1]!);
+    if (!answer) sendJson(res, 404, { error: { message: "No finished answer for that handoff." } });
+    else sendJson(res, 200, answer);
     return true;
   }
   const handoffCancel = /^\/handoffs\/([a-z0-9-]+)$/.exec(url.pathname);

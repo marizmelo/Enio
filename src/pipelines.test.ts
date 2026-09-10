@@ -663,3 +663,14 @@ test("single-agent mode keeps web_search inside the 16-tool ceiling", async () =
   // list_dir is the designated casualty: registered last on purpose.
   assert.ok(registry.all.length <= 16);
 });
+
+test("a step's {{gaps}} expands to the most-asked open gaps, or says there are none", async () => {
+  const gaps = await import("./memory/gaps.js");
+  assert.equal(pipelines.expandPromptTokens("Research:\n{{gaps}}\nDone."), "Research:\n(there are no open gaps right now)\nDone.");
+  assert.equal(pipelines.expandPromptTokens("no token here"), "no token here");
+  gaps.noteTurn({ question: "when is the Halvorsen contract renewal?", specialist: "generalist", basis: "model", toolNames: [], skillsInvoked: false, at: 1 });
+  gaps.noteTurn({ question: "Halvorsen contract renewal — when?", specialist: "generalist", basis: "model", toolNames: [], skillsInvoked: false, at: 2 });
+  gaps.noteTurn({ question: "who owns the Tanaka account?", specialist: "generalist", basis: "model", toolNames: [], skillsInvoked: false, at: 3 });
+  const out = pipelines.expandPromptTokens("{{gaps}}");
+  assert.match(out, /^1\. Halvorsen contract renewal — when\? \(asked 2 times\)\n2\. who owns the Tanaka account\? \(asked 1 time\)$/);
+});

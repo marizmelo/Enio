@@ -1,0 +1,9 @@
+{
+  "name": "research-gaps",
+  "prompt": "research the questions I asked that nothing in memory covered, and remember what you find",
+  "nodes": [
+    { "id": "n1", "abilityId": "web-search", "prompt": "These are questions I asked before that nothing in memory covered:\n{{gaps}}\nFor each one, search the web, find the answer, and state it in one or two sentences with the page it came from. If the list says there are no open gaps, reply exactly: Nothing to research." },
+    { "id": "n2", "abilityId": "remember", "prompt": "From the results above, remember each answer as one self-contained fact, one remember call per fact. Skip anything uncertain. If the results say there was nothing to research, reply: Nothing to remember." }
+  ],
+  "edges": [{ "from": "n1", "to": "n2" }]
+}

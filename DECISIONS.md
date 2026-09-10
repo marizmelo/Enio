@@ -3202,6 +3202,28 @@ equal facts, never a label); crediting the search that listed a page (a
 listing is not a reading); joining exemplars to turns by question text
 (the newest repeat would win, months later).
 
+### Curiosity is an automation over the gap ledger, and experts are sources
+
+**Chose:** one harness token, `{{gaps}}`, expanded in a step's prompt at
+run time into the three most-asked open gaps, and a bundled two-step
+example (`research-gaps`: researcher, then librarian). The pages the
+first step read are handed to the second step's turn by the harness
+(`overrides.sources`), so the facts it remembers carry their page —
+neither node could do that alone: the researcher cannot remember and the
+librarian cannot browse. For handoffs, a **Remember** under the finished
+answer distils it through the same approve-before-writing popover, each
+fact stamped `handoff:<provider>`; and after a gap, the bigger-model
+button on the reply says so instead of sitting dimmed.
+
+**Rejected:** giving the researcher `remember` (the disjointness rule:
+the agent that reads the web must have no tool that changes anything);
+the model supplying a fact's origin (provenance it could author is
+provenance it could invent — the harness carries it between steps);
+attaching origins during automatic indexing (that path extracts entities
+and summaries, never facts, so there was nothing to attach to); a
+scheduled research loop by default (an automation is the person's to
+schedule; `enio suggest` names it when a gap has been asked three times).
+
 ### Personality is four constraints on the reply, derived from memory
 
 **Chose:** four axes (length, warmth, initiative, register) with three

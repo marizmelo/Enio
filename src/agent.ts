@@ -239,6 +239,11 @@ export interface TurnOverrides {
    *  `files` like any attachment; this says which one it is, so the prompt can
    *  frame it as the thing being worked ON rather than read from. */
   canvasPath?: string | null;
+  /** Pages an earlier step read, handed to this turn by the harness — a
+   *  pipeline's researcher node to its librarian node — so a fact
+   *  remembered here carries the page it came from. Harness-set only;
+   *  the model never supplies provenance (see setMemorySources). */
+  sources?: string[];
 }
 
 export interface TurnResult {
@@ -1139,8 +1144,8 @@ export async function runTurn(
   // Web pages read this turn, in order. The memory tool stamps the latest on
   // any fact remembered mid-turn (see setMemorySources). Reset here so a
   // fact remembered in a turn that read nothing carries no stale origin.
-  const turnSources: string[] = [];
-  setMemorySources([]);
+  const turnSources: string[] = [...(overrides.sources ?? [])];
+  setMemorySources(turnSources);
   let iterations = 0;
 
   // The researcher's search happens BEFORE its first model call.

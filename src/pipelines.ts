@@ -23,6 +23,8 @@ import { setPlanSession } from "./tools/desktop.js";
 import type { Registry } from "./tools/index.js";
 import type { Message, ToolDef } from "./types.js";
 export { extractArtifacts, type Artifact } from "./artifacts.js";
+import { extractSources } from "./sources.js";
+import { openGaps } from "./memory/gaps.js";
 import { extractArtifacts, type Artifact } from "./artifacts.js";
 
 /**
@@ -78,6 +80,8 @@ export interface NodeResult {
   reply: string;
   artifacts: Artifact[];
   error?: string;
+  /** Web pages this node read, for the node after it. */
+  sources?: string[];
 }
 
 export type RunEvent =
@@ -656,6 +660,22 @@ function abilityServers(ability: { requiredServer?: string }, registry: Registry
   ];
 }
 
+/**
+ * Harness tokens a step's prompt may carry. A closed list — one token —
+ * expanded from memory at run time, so an automation can be about what
+ * the person asked and nobody could answer without the model composing
+ * that list itself.
+ */
+export function expandPromptTokens(prompt: string): string {
+  if (!prompt.includes("{{gaps}}")) return prompt;
+  const gaps = openGaps(3);
+  const list =
+    gaps.length === 0
+      ? "(there are no open gaps right now)"
+      : gaps.map((g, i) => `${i + 1}. ${g.question.replace(/\s+/g, " ")} (asked ${g.count} time${g.count === 1 ? "" : "s"})`).join("\n");
+  return prompt.split("{{gaps}}").join(list);
+}
+
 export async function runPipeline(
   pipeline: Pipeline,
   registry: Registry,
@@ -739,12 +759,18 @@ export async function runPipeline(
         }
       }
       const input =
-        node.prompt +
+        expandPromptTokens(node.prompt) +
         (incomingText.length > 0
           ? `\n\nResults from the previous steps:\n\n${incomingText.join("\n\n---\n\n")}`
           : "");
+      // Pages the upstream steps read, handed to this turn so a fact it
+      // remembers carries its page: the researcher cannot remember and the
+      // librarian cannot browse, and the harness is the only honest carrier
+      // between them.
+      const upstreamSources = upstream.flatMap((id) => results.get(id)!.sources ?? []);
 
       const artifacts: Artifact[] = [];
+      const sources: string[] = [];
       const skill = abilitySkill(ability);
       try {
         const result = await runTurn(
@@ -755,7 +781,10 @@ export async function runPipeline(
           {
             onContent: (delta) => emit({ type: "node_content", nodeId, content: delta }),
             onToolStart: (name) => emit({ type: "node_tool", nodeId, tool: name }),
-            onToolEnd: (name, output) => artifacts.push(...extractArtifacts(name, output)),
+            onToolEnd: (name, output) => {
+              artifacts.push(...extractArtifacts(name, output));
+              for (const s of extractSources(name, {}, output)) if (s.url) sources.push(s.url);
+            },
             // Lets a stop land inside the node: the turn aborts its stream
             // and throws, the node fails, everything downstream skips.
             shouldStop: () => stopRequested.has(pipeline.id),
@@ -769,10 +798,11 @@ export async function runPipeline(
             // per-node server field would be the model (or a draft) widening
             // its own reach; this stays a closed list.
             servers: abilityServers(ability, registry),
+            sources: upstreamSources.length > 0 ? upstreamSources : undefined,
           },
         );
         artifacts.push({ type: "text", text: result.reply });
-        results.set(nodeId, { nodeId, status: "finished", reply: result.reply, artifacts });
+        results.set(nodeId, { nodeId, status: "finished", reply: result.reply, artifacts, sources });
         emit({ type: "node_finished", nodeId, artifacts, reply: result.reply });
       } catch (err) {
         results.set(nodeId, {
