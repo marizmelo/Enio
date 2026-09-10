@@ -7,7 +7,7 @@
  * Usage:
  *   node scripts/train-adapter.mjs coder [--iters 400] [--batch-size 2]
  *        [--num-layers 8] [--from-traces] [--eval-only] [--no-install]
- *   node scripts/train-adapter.mjs coder --behavior-gate
+ *   node scripts/train-adapter.mjs coder --behavior-gate [--only voice=terse,register=expert]
  *
  * The pipeline: authored scenarios (scripts/adapter-data/<name>.mjs), plus
  * optionally the user's own successful turns mined from the trace store, are
@@ -437,7 +437,8 @@ async function behaviorGate() {
   console.log(`noise floor             : ${noise.size} of ${baseline.detail.length} tasks change verdict between two identical baseline runs${noise.size ? ` (${[...noise].map((i) => JSON.stringify(baseline.detail[i].prompt.slice(0, 40))).join(", ")})` : ""}`);
 
   let failed = false;
-  for (const r of gateRenderings()) {
+  const only = opt("--only", "").split(",").filter(Boolean);
+  for (const r of gateRenderings().filter((r) => only.length === 0 || only.includes(r.id))) {
     const run = await evaluate(r.id, adapter, r.suffix, true);
     const h = how(run.detail);
     const w = whatKey(run.detail);
@@ -466,7 +467,7 @@ async function behaviorGate() {
     for (const f of flips) {
       const i = w.indexOf(f);
       const t = run.detail[i];
-      const extra = t.expect === "abstain" ? `  reply: ${t.content.replace(/\s+/g, " ").slice(0, 120)}` : "";
+      const extra = t.expect === "abstain" ? `  calls=${t.calls} reply: ${t.content.replace(/\s+/g, " ").slice(0, 120)}` : "";
       console.log(`    ${regressions.includes(t.prompt) ? "REGRESSED " : "changed   "}${f}   (baseline: ${bWhat[i]})${extra}`);
     }
   }

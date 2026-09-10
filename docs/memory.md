@@ -134,12 +134,17 @@ derived from, and any of them can be set by hand or returned to auto, in
 the Memory panel's **Behavior** tab or with `enio personality`.
 
 A level is one line in the prompt, and it is a constraint on the reply's
-shape — "keep each reply to two sentences", "start with the answer" — never
-a description of the assistant, because at this model size a personality
-adjective is ignored and a rule is followed. The middle level of each axis
-adds nothing, and a level that came from a preference adds nothing either:
-the preference is already in the prompt, in your words. The tab shows the
-exact block the next turn carries. Curiosity is a switch rather than an
+shape — "start with the answer", "end at the answer", "use plain words" —
+never a description of the assistant, because at this model size a
+personality adjective is ignored and a rule is followed. The middle level
+of each axis adds nothing, and a level that came from a preference adds
+nothing either: the preference is already in the prompt, in your words.
+Three levels have no line at all — terse, warm, and offer follow-ups —
+because every line is measured before it ships, and those three changed
+*what* the model did, not just how: a length rule made it write a letter
+inline instead of to a file, and "end with a next step" made it take the
+step. They still show as the derived or chosen level; they just send
+nothing. The tab shows the exact block the next turn carries. Curiosity is a switch rather than an
 axis: with it on, a question that lands in the gap ledger says so in the
 app. It is never a line in the prompt, because the rule to say "I don't
 remember that" rather than guess is not something a setting should soften.

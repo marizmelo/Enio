@@ -57,24 +57,32 @@ export const NEUTRAL: Record<Axis, Level> = {
 export type Curiosity = "quiet" | "flag";
 
 /**
- * The exact lines. Each is a constraint on the reply's shape, and the two
- * that add something ("conversational", "offer-follow-ups") are additive —
- * "after the answer…", "end with…" — so they never contradict the shared
- * rule that already says to answer directly. The expert line is built from
- * the graph's top technologies at render time.
+ * The exact lines. Each is a constraint on the reply's shape, additive
+ * where it adds ("follow the answer with…") so it never contradicts the
+ * shared rule that already says to answer directly. The expert line is
+ * built from the graph's top technologies at render time.
+ *
+ * Three levels have NO line, by measurement (the behaviour gate, coder
+ * golden tasks, temperature 0, noise floor 0/23): "terse" — both wordings
+ * tried, "keep each reply to two sentences" and "when you answer in text,
+ * keep it to two sentences", made the model write a requested letter
+ * inline instead of to a file; "warm" — the same file request answered
+ * inline; "offer-follow-ups" — "end with one next step" made the model
+ * TAKE the next step, a second search after a miss where the honest move
+ * is to stop. A level with no line still shows in the panel as what was
+ * derived or chosen; it just does not spend a token. The lines that ship
+ * each moved what they name without changing a tool choice or an
+ * abstention.
  */
 export const RENDERINGS: Record<Axis, Partial<Record<Level, string>>> = {
   voice: {
-    terse: "- Keep each reply to two sentences unless the user asks for more.",
-    conversational: "- After the answer, add a sentence or two of context or reasoning.",
+    conversational: "- When you answer in text, follow the answer with a sentence or two of context.",
   },
   warmth: {
     "matter-of-fact": "- Start with the answer: no greeting, no acknowledgement, no closing line.",
-    warm: "- Open with a few words acknowledging the request, then answer.",
   },
   initiative: {
     "answer-only": "- End at the answer. Do not suggest next steps or ask what the user wants next.",
-    "offer-follow-ups": "- End with one next step the user could take, in one sentence.",
   },
   register: {
     everyday: "- Use plain words; explain any technical term the first time it appears.",
@@ -278,6 +286,8 @@ export interface PersonalityView {
   curiosity: Curiosity;
   block: string;
   expertTerms: string[];
+  /** Axes whose level in force has no line (see RENDERINGS): shown, not sent. */
+  unrendered: Axis[];
 }
 
 export function personalityView(inputs?: DerivationInputs, budget = contextBudget()): PersonalityView {
@@ -295,6 +305,7 @@ export function personalityView(inputs?: DerivationInputs, budget = contextBudge
   const sources = {} as PersonalityView["sources"];
   const conflicts: string[] = [];
   const lines: string[] = [];
+  const unrendered: Axis[] = [];
 
   for (const axis of AXIS_NAMES) {
     const chosen = stored[axis];
@@ -311,6 +322,10 @@ export function personalityView(inputs?: DerivationInputs, budget = contextBudge
     }
 
     if (level === NEUTRAL[axis]) continue;
+    if (!(axis === "register" && level === "expert") && !RENDERINGS[axis][level]) {
+      unrendered.push(axis);
+      continue;
+    }
     // A preference-derived level is already in the prompt, in the user's
     // words. On the smallest windows only what the person set explicitly
     // spends tokens.
@@ -335,7 +350,7 @@ export function personalityView(inputs?: DerivationInputs, budget = contextBudge
     if (kept.length > 0) block = [HEADER, ...kept].join("\n");
   }
 
-  return { levels, effective, sources, conflicts, curiosity: stored.curiosity, block, expertTerms: terms };
+  return { levels, effective, sources, conflicts, curiosity: stored.curiosity, block, expertTerms: terms, unrendered };
 }
 
 /** The behaviour gate's fixed renderings: every non-neutral level as it is

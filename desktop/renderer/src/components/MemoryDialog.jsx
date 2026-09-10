@@ -330,7 +330,10 @@ function BehaviorTab({ open, onError }) {
               </button>
             </span>
             {view.levels[axis] === "auto" && <Badge variant="outline">auto</Badge>}
-            <span className="text-xs text-muted-foreground">{because(axis)}</span>
+            <span className="text-xs text-muted-foreground">
+              {because(axis)}
+              {view.unrendered.includes(axis) ? " · no prompt line for this level (it changed what the model did when measured)" : ""}
+            </span>
           </li>
         ))}
         <li className="flex flex-wrap items-center gap-2 rounded border px-2.5 py-1.5 text-sm">

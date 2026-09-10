@@ -3198,8 +3198,31 @@ and any axis can be set by hand or returned to auto; the Behavior tab and
 of every derived level, and any standing preference a choice argues
 with. A `personality` harness step records the served block. The whole
 thing is measured by `--behavior-gate`: every rendering must leave the
-per-task "what" (first tool, abstention, JSON) identical to baseline and
-move the "how" it names, or it does not ship.
+per-task "what" (first tool, abstention, JSON) no worse than baseline
+against the golden answers and move the "how" it names, or it does not
+ship.
+
+**Measured (10 Sep, coder golden tasks, 4B, temperature 0, noise floor
+0 of 23 between two identical baseline runs, baseline mean text reply
+497 chars):**
+
+| rendering | what | how | ships |
+|---|---|---|---|
+| voice=terse, "keep each reply to two sentences" | letter → written inline, not to a file | 497 → 230 | no |
+| voice=terse, "when you answer in text, keep it to two sentences" | same regression | 497 → 361 | no |
+| voice=conversational, "…follow the answer with a sentence or two of context" | 2 changed, none worse | 497 → 506 | yes |
+| warmth=matter-of-fact | 1 changed, none worse | 497 → 363, no openers to remove | yes |
+| warmth=warm | letter → written inline | — | no |
+| initiative=answer-only | identical | no follow-ups to remove | yes |
+| initiative=offer-follow-ups | after a miss, a second search instead of stopping | follow-ups 0 → 3 | no |
+| register=everyday | 1 changed, none worse | — | yes |
+| register=expert | identical | — | yes |
+
+The first gate run, before the noise floor existed, charged seven of
+eight renderings with flipping one abstention probe; the probe flipped
+by itself between identical calls, because the server was drafting
+(see the speculative-decoding correction). The gate now runs the
+baseline twice and only counts a flip on a task the baseline holds.
 
 **Rejected:** a free-text persona field (duplicates preferences, and
 prose about the assistant is ignored at this size — whatever the prompt

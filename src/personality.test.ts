@@ -60,14 +60,20 @@ describe("personality: derived from memory, rendered as constraints", () => {
     assert.equal(w2.effective.warmth, "warm");
   });
 
-  test("three short exemplars derive terse and render the two-sentence rule; two are an anecdote", () => {
+  test("three short exemplars derive terse — shown, but no line, since terse measurably cost a file write; two are an anecdote", () => {
     const short = { answer: "Yes. Use the second one." };
     const two = p.personalityView({ ...empty(), exemplars: [short, short] }, 12000);
     assert.equal(two.effective.voice, "plain");
     const three = p.personalityView({ ...empty(), exemplars: [short, short, short] }, 12000);
     assert.equal(three.effective.voice, "terse");
     assert.equal(three.sources.voice, "exemplars:3");
-    assert.match(three.block, /^Reply shape:\n- Keep each reply to two sentences/);
+    assert.equal(three.block, "");
+    assert.deepEqual(three.unrendered, ["voice"]);
+    // The long side does render, scoped to text replies.
+    const long = { answer: "x".repeat(1000) };
+    const conv = p.personalityView({ ...empty(), exemplars: [long, long, long] }, 12000);
+    assert.equal(conv.effective.voice, "conversational");
+    assert.match(conv.block, /^Reply shape:\n- When you answer in text, follow the answer with a sentence or two of context\./);
   });
 
   test("exemplars that end by offering a next step derive follow-ups — by the last line only", () => {
@@ -85,7 +91,9 @@ describe("personality: derived from memory, rendered as constraints", () => {
       12000,
     );
     assert.equal(v.effective.initiative, "offer-follow-ups");
-    assert.match(v.block, /End with one next step/);
+    assert.equal(v.block, "", "no line: measured, 'end with a next step' made the model take it");
+    // These short answers also derive terse, which has no line either.
+    assert.ok(v.unrendered.includes("initiative"));
     // A question in the middle of an answer is not an offer at the end.
     const mid = p.personalityView(
       { ...empty(), exemplars: [ex("Why? Because.\nDone."), ex("Ready? Yes.\nDone."), ex("Ok? Sure.\nDone.")] },
@@ -141,13 +149,13 @@ describe("personality: derived from memory, rendered as constraints", () => {
   });
 
   test("on the smallest window only explicit levels spend tokens", () => {
-    const short = { answer: "Yes." };
+    const long = { answer: "x".repeat(1000) };
     p.setAxis("warmth", "matter-of-fact");
-    const v = p.personalityView({ ...empty(), exemplars: [short, short, short] }, 2000);
+    const v = p.personalityView({ ...empty(), exemplars: [long, long, long] }, 2000);
     assert.match(v.block, /Start with the answer/);
-    assert.ok(!/two sentences/.test(v.block), "the derived terse line is dropped at 2k");
-    const roomy = p.personalityView({ ...empty(), exemplars: [short, short, short] }, 12000);
-    assert.match(roomy.block, /two sentences/);
+    assert.ok(!/sentence or two of context/.test(v.block), "the derived conversational line is dropped at 2k");
+    const roomy = p.personalityView({ ...empty(), exemplars: [long, long, long] }, 12000);
+    assert.match(roomy.block, /sentence or two of context/);
     p.setAxis("warmth", "auto");
   });
 
@@ -174,7 +182,7 @@ describe("personality: derived from memory, rendered as constraints", () => {
 
   test("the gate's renderings are the served lines, expert over fixed names", () => {
     const r = p.gateRenderings();
-    assert.equal(r.length, 8);
+    assert.equal(r.length, 5, "terse, warm and offer-follow-ups have no line: measured, each changed what the model did");
     assert.ok(r.every((x) => x.suffix.startsWith("Reply shape:\n- ")));
     assert.ok(r.find((x) => x.id === "register=expert")!.suffix.includes("TypeScript, SQLite and MLX"));
   });

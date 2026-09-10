@@ -1280,6 +1280,7 @@ async function main(): Promise<void> {
       }
       console.log(`${"curiosity".padEnd(11)} ${v.curiosity.padEnd(18)} ${v.curiosity === "flag" ? "says so when a turn lands in the gap ledger" : "silent about gaps"}`);
       for (const c of v.conflicts) console.log(`  conflicts with preference: "${c}"`);
+      for (const a of v.unrendered) console.log(`  ${a}: "${v.effective[a]}" has no prompt line — measured to change what the model does, so it is shown, not sent`);
       console.log(v.block ? `\n${v.block}` : "\n(nothing rendered: every axis is neutral or already covered by a preference)");
       break;
     }
