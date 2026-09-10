@@ -2926,3 +2926,30 @@ Missing, half-written, or wrong-base adapters degrade to the bare base
 silently; a turn must never fail because training was interrupted. Maple is
 refused for training outright: ternary MoE, still untested, and an hour-long
 run that ends in a confusing tuner error is worse than a refusal.
+
+### Corrections close facts; provenance rides them
+
+**Chose:** `valid_to` + `superseded_by` on free-text facts, closed only on a
+structural correction signal (the remember tool's `replaces_earlier`,
+`enio remember --corrects`), targeted by similarity, reported back in the
+turn. Web-derived facts carry `origin` = the page the turn most recently
+read, harness-set, rendered as "(source: host, Mon YYYY)" in the prompt.
+
+**Rejected:** the model judging that two facts conflict (a judgement call at
+exactly the size where judgement fails; the flag is a boolean it can
+classify); similarity alone as the trigger without a flag ("likes tea" would
+silently close "likes coffee" — both may be true); deleting the old fact
+(history rewritten with nothing visible; closed facts stay listed, struck
+through); a model-supplied `source_url` on `remember` (provenance the model
+can author is provenance it can invent); storing every source the turn read
+on every fact (the latest page is right almost always, and one origin is
+citable where a list is noise).
+
+The failure this answers was already written down before the fix existed —
+learning.ts on preferences: contradicting entries, "the model follows
+whichever it noticed last." Edges had `valid_to` from the start; facts were
+the gap.
+
+Still open: a standing *coverage map* (what memory holds anything on, sized
+for a 2,000-token budget) so every specialist, not just the researcher, has
+a structural "nothing on that" before it guesses.
