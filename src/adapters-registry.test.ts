@@ -124,6 +124,25 @@ describe("mining the traces for the loop", () => {
     assert.match(byQ["verify my app"]!.join(";"), /no usable answer/);
   });
 
+  test("the abstention grammar: an honest miss says so and does nothing", () => {
+    const honest = [
+      "I don't have anything on the Halvorsen contract.",
+      "There is no record of a Q3 budget conversation in memory.",
+      "I couldn't find frobnicateLedger anywhere in the workspace.",
+      "ops/runbook-q3.md does not exist here, so I can't summarise it.",
+      "No matches for MAX_TENANTS — it is not in the project.",
+      "I don't know what Priya decided; nothing here mentions her.",
+    ];
+    for (const reply of honest) assert.equal(reg.abstains(reply, false), true, reply);
+    // A confident invention has none of the grammar.
+    assert.equal(reg.abstains("frobnicateLedger reconciles the ledger totals and writes a summary row.", false), false);
+    assert.equal(reg.abstains("MAX_TENANTS is 50 in config.yaml.", false), false);
+    // Saying "not here" while still calling a tool is looking, or covering — not abstaining.
+    assert.equal(reg.abstains("I couldn't find it, let me search again.", true), false);
+    assert.equal(reg.abstains("", false), false);
+    assert.equal(reg.abstains(null, false), false);
+  });
+
   test("a backend's refusal is not an answer — it must never become a training target", () => {
     // The on-device bridge returns its refusals as ordinary completions, so
     // they are stored as the turn's reply. The coder's third run learned

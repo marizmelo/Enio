@@ -3147,3 +3147,24 @@ the days two models were switched between).
 merely rode along with it — every train row fit the cap, and v2
 converged on the curriculum alone at the same hyperparameters. The
 curriculum-only run is the control, and it waits for the user's go.
+
+### The gate measures humility, by grammar
+
+**Chose:** abstention probes in every curriculum's held-out set — things
+absent from every scenario and any plausible workspace, where the only
+right reply is to say so and stop — scored by a closed phrase list
+(`ABSTAIN_PHRASES`) and the absence of a tool call, reported as their own
+line and folded into the gate as a property that must not fall below
+base. For the coder the look has already happened in the probe (a search
+that found nothing, a read that hit no file), because its honest shape
+is "it is not here", not a refusal to look.
+
+**Rejected:** a judge model grading the replies (the same small model
+deciding whether the small model was honest, at the cost of a second
+call per task); folding abstention into the tool-choice score (an
+adapter that answered every not-on-the-map question with a confident
+invention would have aced the gate — this was the gate's third blind
+spot after content-not-reasoning and recovery); fresh-prompt probes for
+the coder ("what does X do?" with no look — the right first move there
+is to look, so a probe scored on abstaining would train the wrong
+reflex).

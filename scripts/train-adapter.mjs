@@ -73,7 +73,7 @@ const { searchTools } = await distImport("tools/search.js");
 const { skillTools } = await distImport("tools/skills.js");
 const scenarioModule = await import(pathToFileURL(dataModulePath).href);
 
-const { trainerFor, mineableTurns, splitDataset } = await distImport("adapters.js");
+const { trainerFor, mineableTurns, splitDataset, abstains } = await distImport("adapters.js");
 const trainer = trainerFor();
 if (!trainer.available && !flag("--eval-only")) {
   console.error(trainer.reason);
@@ -322,6 +322,8 @@ async function evaluate(label, adapter) {
   let toolRight = 0;
   let jsonValid = 0;
   let jsonTotal = 0;
+  let abstainRight = 0;
+  let abstainTotal = 0;
   const misses = [];
   for (const task of tasks) {
     const msg = await askOnce(task, adapter);
@@ -332,6 +334,15 @@ async function evaluate(label, adapter) {
     // harness. The first installed adapter failed the app exactly this way
     // while acing a tool-choice-only version of this eval.
     const spoke = typeof msg.content === "string" && msg.content.trim().length > 0;
+    if (task.expect === "abstain") {
+      // Humility is its own score, not folded into tool choice: an adapter
+      // that answers every not-on-the-map question with a confident
+      // invention would otherwise ace the gate.
+      abstainTotal += 1;
+      if (abstains(msg.content, calls.length > 0)) abstainRight += 1;
+      else misses.push(`  "${task.prompt}" → ${first ? `${first} (kept looking)` : `answered as if it knew: ${String(msg.content ?? "").slice(0, 60).replace(/\s+/g, " ")}…`} (wanted an honest "not here")`);
+      continue;
+    }
     if (first === task.expect && (task.expect !== null || spoke)) toolRight += 1;
     else if (first === task.expect) misses.push(`  "${task.prompt}" → answer landed in reasoning, not content`);
     else misses.push(`  "${task.prompt}" → ${first ?? "no call"} (wanted ${task.expect ?? "no call"})`);
@@ -345,10 +356,11 @@ async function evaluate(label, adapter) {
       }
     }
   }
-  const score = { toolRight, total: tasks.length, jsonValid, jsonTotal };
+  const total = tasks.length - abstainTotal;
+  const score = { toolRight, total, jsonValid, jsonTotal, abstainRight, abstainTotal };
   console.log(
-    `${label}: tool choice ${toolRight}/${tasks.length}, ` +
-      `valid JSON ${jsonValid}/${jsonTotal || 0}`,
+    `${label}: tool choice ${toolRight}/${total}, ` +
+      `valid JSON ${jsonValid}/${jsonTotal || 0}, abstains ${abstainRight}/${abstainTotal}`,
   );
   if (misses.length) console.log(misses.join("\n"));
   return score;
@@ -390,8 +402,11 @@ if (!(await serverUp())) {
 const base = await evaluate("base    ", null);
 const tuned = await evaluate("adapter ", stagingDir);
 
+// Every measured property must hold: an adapter below base on any one of
+// them stays staged, whatever its score on the others.
 const better =
   tuned.toolRight >= base.toolRight &&
+  tuned.abstainRight >= base.abstainRight &&
   (tuned.jsonTotal === 0 || tuned.jsonValid / tuned.jsonTotal >= (base.jsonTotal ? base.jsonValid / base.jsonTotal : 1));
 
 if (!better) {

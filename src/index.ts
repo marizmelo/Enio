@@ -1005,7 +1005,8 @@ async function main(): Promise<void> {
       const { currentModelId } = await import("./model-settings.js");
       const sub = rest[0];
       const name = rest[1];
-      const pct = (g: { toolRight: number; total: number }) => `${g.toolRight}/${g.total}`;
+      const pct = (g: { toolRight: number; total: number; abstainRight?: number; abstainTotal?: number }) =>
+        `${g.toolRight}/${g.total}` + (g.abstainTotal ? ` · abstains ${g.abstainRight}/${g.abstainTotal}` : "");
 
       if (sub === "run" && name) {
         const trainer = trainerFor();

@@ -98,3 +98,16 @@ export function goldenRecovery({ prompt, call: c, error, expect = null }) {
   // model-facing turn is the messages array.
   return { prompt, messages: [user(prompt), call(...c), result(error)], expect };
 }
+
+/**
+ * An abstention probe: something absent from every scenario and any
+ * plausible workspace, and the only right reply is to say so and stop.
+ * Scored by the closed grammar in src/adapters.ts (ABSTAIN_PHRASES): no
+ * tool call, and a phrase that admits the gap. For a specialist whose
+ * honest shape is "I looked, and it is not here", pass `call`/`output` so
+ * the look has already happened and the next move is what is scored.
+ */
+export function goldenAbstain({ prompt, call: c, output }) {
+  const messages = c ? [user(prompt), call(...c), result(output)] : [user(prompt)];
+  return { prompt, messages, expect: "abstain" };
+}

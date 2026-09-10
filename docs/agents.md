@@ -116,9 +116,12 @@ node scripts/train-adapter.mjs coder
 That builds a training set from curated scenarios (add `--from-traces` to also
 learn from your own successful conversations with that agent), trains the
 adapter over the currently selected model, and then **gates** it: the adapter
-is measured against the plain model on held-out tasks, and only installed if
-it does at least as well. An adapter that fails the gate stays staged and
-nothing changes.
+is measured against the plain model on held-out tasks — which tool it
+reaches for first, whether its calls are valid, how it recovers when a tool
+fails, and whether it says "not here" about things that are not there rather
+than inventing them — and only installed if it does at least as well on
+every one of those. An adapter that fails the gate stays staged and nothing
+changes.
 
 Two properties worth knowing:
 
