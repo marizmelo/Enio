@@ -233,13 +233,19 @@ export interface ScoredFact {
   text: string;
   score: number;
   pinned: boolean;
+  /** A URL or path the fact was learned from, when known. */
+  origin?: string | null;
+  createdAt?: number;
 }
 
 export async function searchFacts(query: string, limit = 8): Promise<ScoredFact[]> {
   const db = getDb();
   const rows = db
-    .prepare(`SELECT id, text, embedding, pinned FROM facts WHERE valid_to IS NULL`)
-    .all() as { id: number; text: string; embedding: Buffer | null; pinned: number }[];
+    .prepare(`SELECT id, text, embedding, pinned, origin, created_at FROM facts WHERE valid_to IS NULL`)
+    .all() as {
+      id: number; text: string; embedding: Buffer | null; pinned: number;
+      origin: string | null; created_at: number;
+    }[];
   if (rows.length === 0) return [];
 
   const qvec = await embed(query);
@@ -249,7 +255,10 @@ export async function searchFacts(query: string, limit = 8): Promise<ScoredFact[
     let score = 0;
     if (qvec && vec) score = cosine(qvec, vec);
     else score = keywordScore(query, r.text);
-    return { id: r.id, text: r.text, score, pinned: r.pinned === 1 };
+    return {
+      id: r.id, text: r.text, score, pinned: r.pinned === 1,
+      origin: r.origin, createdAt: r.created_at,
+    };
   });
 
   // Pinned facts bypass ranking entirely — they're identity, not retrieval.
@@ -540,6 +549,26 @@ export function referencesPast(query: string): boolean {
  * a 4000-char dump of marginally-relevant history measurably degrades answers
  * compared with 800 chars of the right thing.
  */
+/**
+ * "(source: host, Mon YYYY)" for a fact that has an origin — enough for the
+ * answer to cite where and when it learned something, cheap enough to ride
+ * every recalled fact. Facts remembered from conversation carry nothing:
+ * the transcript is their provenance and the trace already holds it.
+ */
+function provenanceNote(f: ScoredFact): string {
+  if (!f.origin) return "";
+  let where = f.origin;
+  try {
+    where = new URL(f.origin).hostname.replace(/^www\./, "");
+  } catch {
+    /* A file path stays as it is. */
+  }
+  const when = f.createdAt
+    ? new Date(f.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })
+    : "";
+  return ` (source: ${where}${when ? `, ${when}` : ""})`;
+}
+
 export async function buildMemoryBlock(query: string): Promise<string> {
   const wantsPast = referencesPast(query);
   const [facts, graph, summaries] = await Promise.all([
@@ -552,7 +581,7 @@ export async function buildMemoryBlock(query: string): Promise<string> {
 
   if (facts.length > 0) {
     sections.push(
-      "Known facts:\n" + facts.map((f) => `- ${f.text}`).join("\n"),
+      "Known facts:\n" + facts.map((f) => `- ${f.text}${provenanceNote(f)}`).join("\n"),
     );
   }
   if (graph.length > 0) {

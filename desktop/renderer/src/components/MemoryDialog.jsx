@@ -124,8 +124,15 @@ export function MemoryDialog({ open, onOpenChange }) {
                       }`}
                     >
                       <span className={`min-w-0 flex-1${f.supersededAt ? " line-through" : ""}`}>{f.text}</span>
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
-                        {f.supersededAt ? "superseded" : f.source}
+                      <span
+                        className="shrink-0 text-[10px] text-muted-foreground"
+                        title={f.origin || undefined}
+                      >
+                        {f.supersededAt
+                          ? "superseded"
+                          : f.origin
+                            ? f.origin.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]
+                            : f.source}
                       </span>
                       <TipButton
                         tip={f.pinned ? "Unpin" : "Pin — always in context"}

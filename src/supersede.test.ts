@@ -72,3 +72,30 @@ describe("a correction closes what it replaces", () => {
     assert.ok(texts(await searchFacts("what terminal does Mariz use")).includes("Mariz uses Hyper as a terminal"));
   });
 });
+
+/* ------------------------------------------------------------------ */
+
+describe("a fact remembered from the web keeps its source and date", () => {
+  test("the turn's latest page becomes the origin, and the prompt cites it", async () => {
+    const { memoryTools, setMemorySources } = await import("./tools/memory.js");
+    const { buildMemoryBlock } = await import("./memory/store.js");
+    const remember = memoryTools.find((t) => t.name === "remember")!;
+
+    setMemorySources(["https://www.example.com/pricing", "https://docs.example.com/limits"]);
+    await remember.run({ fact: "Example Cloud charges 12 dollars per seat" });
+    setMemorySources([]);
+    await remember.run({ fact: "Mariz prefers window seats on flights" });
+
+    const facts = listFacts();
+    assert.equal(
+      facts.find((f) => f.text.startsWith("Example Cloud"))?.origin,
+      "https://docs.example.com/limits",
+      "the most recent page read is the origin",
+    );
+    assert.equal(facts.find((f) => f.text.startsWith("Mariz prefers"))?.origin, null,
+      "a fact from conversation carries no origin — the transcript is its provenance");
+
+    const block = await buildMemoryBlock("how much does Example Cloud charge per seat");
+    assert.match(block, /Example Cloud charges 12 dollars per seat \(source: docs\.example\.com, \w{3} \d{4}\)/);
+  });
+});

@@ -16,6 +16,19 @@ export const setMemorySession = (id: string) => {
   currentSessionId = id;
 };
 
+/**
+ * The web pages this turn has read so far, set by the turn loop after each
+ * tool call. A fact remembered mid-turn takes the most recent one as its
+ * origin — the page just read is where the fact almost always came from —
+ * so "ask again next month" answers with a source and a date rather than
+ * "I remember". Harness-set, never model-supplied: provenance the model
+ * could author is provenance it could invent.
+ */
+let currentSources: string[] = [];
+export const setMemorySources = (urls: string[]) => {
+  currentSources = urls;
+};
+
 export const memoryTools: ToolDef[] = [
   {
     name: "remember",
@@ -49,6 +62,7 @@ export const memoryTools: ToolDef[] = [
         pinned: args.important === true,
         sessionId: currentSessionId,
         corrects: args.replaces_earlier === true,
+        origin: currentSources[currentSources.length - 1],
       });
       if (!result.stored) return `Not stored (${result.reason}).`;
       // What was closed is said back, so a wrong pick is visible in the turn

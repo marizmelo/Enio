@@ -17,6 +17,8 @@ import type { Registry } from "./tools/index.js";
 import { createHash } from "node:crypto";
 import { toolText, toWireTool, type Message, type ToolCall, type Widget } from "./types.js";
 import { adapterPathFor, contextBudget } from "./model-settings.js";
+import { extractSources, isWebTool } from "./sources.js";
+import { setMemorySources } from "./tools/memory.js";
 import { extractPdfText, looksLikePdf } from "./pdf.js";
 import { activeProject } from "./project.js";
 import { conversationMounts } from "./conversation-attachments.js";
@@ -1033,6 +1035,18 @@ export async function runTurn(
       const toolStartedAt = Date.now();
       const output = await executeCall(call, registry, handlers, allowedToolNames);
       toolsUsed.push(call.function.name);
+      if (isWebTool(call.function.name)) {
+        let parsed: Record<string, unknown> = {};
+        try {
+          parsed = JSON.parse(call.function.arguments || "{}");
+        } catch {
+          /* Malformed args already surfaced to the model; no source to record. */
+        }
+        for (const src of extractSources(call.function.name, parsed, output)) {
+          if (src.url && !turnSources.includes(src.url)) turnSources.push(src.url);
+        }
+        setMemorySources(turnSources);
+      }
       steps.push({
         seq: steps.length,
         kind: "tool",
@@ -1114,6 +1128,11 @@ export async function runTurn(
   // path -- a failed trace write must never break a working conversation.
   const turnStartedAt = Date.now();
   const steps: StepRecord[] = [];
+  // Web pages read this turn, in order. The memory tool stamps the latest on
+  // any fact remembered mid-turn (see setMemorySources). Reset here so a
+  // fact remembered in a turn that read nothing carries no stale origin.
+  const turnSources: string[] = [];
+  setMemorySources([]);
   let iterations = 0;
 
   // The researcher's search happens BEFORE its first model call.
