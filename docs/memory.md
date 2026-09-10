@@ -91,6 +91,17 @@ because a fact whose transcript is deleted cannot survive a reindex:
 There is no silent default. `/clear` only clears the conversation on screen; it
 does not touch what is on disk.
 
+## Knowing what it doesn't know
+
+Every turn carries a compact map of what memory has *anything* on — the
+people, projects, technologies and so on it has learned about, most
+connected first — with the rule that anything not on it and not among the
+facts is something it does not remember. So "do you know X?" is a lookup
+against a list rather than the model's own guess, which at this model size
+is the difference between "I have nothing on that" and a confident
+invention. The map is derived from memory and sized to the selected model's
+context budget, so it stays a few percent of the window.
+
 ## Correcting what it knows
 
 Tell it the change — "actually, I switched to Ghostty", "I don't work at

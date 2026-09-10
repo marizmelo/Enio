@@ -2950,6 +2950,26 @@ learning.ts on preferences: contradicting entries, "the model follows
 whichever it noticed last." Edges had `valid_to` from the start; facts were
 the gap.
 
-Still open: a standing *coverage map* (what memory holds anything on, sized
-for a 2,000-token budget) so every specialist, not just the researcher, has
-a structural "nothing on that" before it guesses.
+### The coverage map: "do I know about X" is a lookup
+
+**Chose:** a per-turn block of what memory holds anything on — entity names
+grouped by type, most connected first — with the rule that anything absent
+from it and from the facts is not remembered. Derived from the graph,
+rebuilt by `enio reindex` like everything derived. Sized from
+`contextBudget()` (4%, capped): measured on a real 53-entity graph it costs
+80 tokens on Maple and ~200 on the 4B; unabridged it would have been 220 —
+a tenth of Maple's window on a table of contents. Filled round-robin across
+types so concepts and technologies, always the crowded ones, cannot push
+people and projects off the end; "+N" tails count what was cut.
+
+**Rejected:** asking the model whether it knows something (self-assessment
+is what small models are worst at — confidently wrong); listing facts
+instead of entities (facts are what recall already ranks in; the map is
+about *existence*, which entities express in a fraction of the tokens); a
+fixed size (the same block is 4% of one budget and 10% of another); hiding
+the block when the facts section is non-empty (it also frames memory-vs-web
+for the researcher, whose search seed already keys off coverage).
+
+The essay this came from called it structural humility. The mechanism is
+the project's usual one: a judgement call the model would fail, turned into
+a membership check it can make.

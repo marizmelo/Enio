@@ -19,6 +19,7 @@ import { toolText, toWireTool, type Message, type ToolCall, type Widget } from "
 import { adapterPathFor, contextBudget } from "./model-settings.js";
 import { extractSources, isWebTool } from "./sources.js";
 import { setMemorySources } from "./tools/memory.js";
+import { coverageBlock } from "./memory/coverage.js";
 import { extractPdfText, looksLikePdf } from "./pdf.js";
 import { activeProject } from "./project.js";
 import { conversationMounts } from "./conversation-attachments.js";
@@ -910,6 +911,11 @@ export async function runTurn(
   // An explicit @specialist skips the routing call entirely — the user has
   // already made the decision the router exists to make.
   const attachmentNotes: string[] = [];
+  // A slice of the budget for the map of what memory covers — a share, not
+  // a constant, because Maple's 2,000 tokens and a 12k window cannot spend
+  // the same amount on a table of contents. Four percent, capped: on Maple
+  // ~80 tokens, and never more than ~200 on anything larger.
+  const coverage = coverageBlock(Math.min(800, Math.floor(contextBudget() * 0.04) * 4));
   const [routed, memoryBlock, exemplars, attachments] = await Promise.all([
     overrides.specialist
       ? Promise.resolve(overrides.specialist)
@@ -980,6 +986,9 @@ export async function runTurn(
     projectBlock(),
     conversationBlock(),
     preferenceBlock(),
+    // Coverage before the facts: "what is there" frames "what was found",
+    // and the not-listed rule has to precede the list it refers to.
+    coverage,
     memoryBlock,
     exemplars,
     attachments,
