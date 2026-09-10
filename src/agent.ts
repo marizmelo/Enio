@@ -19,6 +19,7 @@ import { toolText, toWireTool, type Message, type ToolCall, type Widget } from "
 import { adapterPathFor, contextBudget, currentModelId, toolOutputChars } from "./model-settings.js";
 import { distinctiveTerms, looksLikeQuestion as questionShaped } from "./memory/terms.js";
 import { noteTurn as noteGap } from "./memory/gaps.js";
+import { personalityView } from "./personality.js";
 import { extractSources, isWebTool } from "./sources.js";
 import { setMemorySources } from "./tools/memory.js";
 import { coverageBlock } from "./memory/coverage.js";
@@ -904,6 +905,10 @@ export async function runTurn(
   // the same amount on a table of contents. Four percent, capped: on Maple
   // ~80 tokens, and never more than ~200 on anything larger.
   const coverage = coverageBlock(Math.min(800, Math.floor(contextBudget() * 0.04) * 4));
+  // How the person wants replies shaped: derived from preferences,
+  // exemplars and the graph, or set by hand. Read once here so the block
+  // the prompt carries and the step the trace records are the same text.
+  const persona = personalityView();
   const [routed, memoryBlock, exemplars, attachments] = await Promise.all([
     overrides.specialist
       ? Promise.resolve(overrides.specialist)
@@ -976,6 +981,10 @@ export async function runTurn(
     projectBlock(),
     conversationBlock(),
     preferenceBlock(),
+    // Reply shape after the preferences it may refine, before memory: a
+    // constraint on the answer's form, general where the preferences are
+    // specific — and at this size a later line wins, which is documented.
+    persona.block,
     // Coverage before the facts: "what is there" frames "what was found",
     // and the not-listed rule has to precede the list it refers to.
     coverage,
@@ -1915,7 +1924,7 @@ export async function runTurn(
   // The "model" case, kept: what was asked that nothing covered is the gap
   // ledger's whole content. Every input is a fact this turn established;
   // the predicate is in one place so reindex replays it identically.
-  noteGap({
+  const gapNoted = noteGap({
     question: userInput,
     specialist: specialistName || "single",
     basis,
@@ -1923,6 +1932,24 @@ export async function runTurn(
     skillsInvoked: Boolean(overrides.skills && overrides.skills.length > 0),
     at: turnStartedAt,
   });
+  // Curiosity is a switch on the harness, not a line in the prompt: with
+  // it on, a turn that landed in the gap ledger says so in the app.
+  if (gapNoted && persona.curiosity === "flag") {
+    handlers.onNotice?.("Nothing in memory covered that — noted under What it lacked in the Memory panel.");
+  }
+  // The block as served, so `enio inspect` shows what shaped the reply.
+  // Only when non-empty: an inert step on every turn would be noise.
+  if (persona.block) {
+    steps.push({
+      seq: steps.length,
+      kind: "harness",
+      name: "personality",
+      args: JSON.stringify({ levels: persona.effective, sources: persona.sources }),
+      output: persona.block,
+      error: null,
+      durationMs: 0,
+    });
+  }
 
   // Invoked skills leave a trace. /skill (and an ability node's pinned
   // skill) injects the body whole, so no read_skill step ever records the

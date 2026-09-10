@@ -132,6 +132,10 @@ describe("mining the traces for the loop", () => {
       "ops/runbook-q3.md does not exist here, so I can't summarise it.",
       "No matches for MAX_TENANTS — it is not in the project.",
       "I don't know what Priya decided; nothing here mentions her.",
+      // The base model's own shapes, from the first gate run with probes.
+      "The function `frobnicateLedger` does not appear in the workspace.",
+      "There is no information available about Priya's decision regarding the retry budget.",
+      "The term \"MAX_TENANTS\" was not found in the workspace codebase.",
     ];
     for (const reply of honest) assert.equal(reg.abstains(reply, false), true, reply);
     // A confident invention has none of the grammar.

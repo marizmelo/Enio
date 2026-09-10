@@ -7,6 +7,7 @@
  * Usage:
  *   node scripts/train-adapter.mjs coder [--iters 400] [--batch-size 2]
  *        [--num-layers 8] [--from-traces] [--eval-only] [--no-install]
+ *   node scripts/train-adapter.mjs coder --behavior-gate
  *
  * The pipeline: authored scenarios (scripts/adapter-data/<name>.mjs), plus
  * optionally the user's own successful turns mined from the trace store, are
@@ -290,13 +291,16 @@ async function train() {
 /* ------------------------------------------------------------------ */
 /* Eval: held-out tasks, base vs staged adapter, temperature 0.        */
 
-async function askOnce(task, adapter) {
+async function askOnce(task, adapter, systemSuffix = "") {
   // A task is either a fresh prompt or a mid-flight conversation (a
-  // recovery probe: the tool just failed, score the next move).
+  // recovery probe: the tool just failed, score the next move). The suffix
+  // is the behaviour gate's: a personality rendering appended where the
+  // turn loop appends it, after the role material.
   const turn = task.messages ?? [{ role: "user", content: task.prompt }];
+  const system = systemSuffix ? `${systemPrompt}\n\n${systemSuffix}` : systemPrompt;
   const body = {
     model: modelId,
-    messages: [{ role: "system", content: systemPrompt }, ...turn],
+    messages: [{ role: "system", content: system }, ...turn],
     tools: wireTools,
     // Temperature 0 for a deterministic comparison, but otherwise the body
     // mirrors what the agent actually sends — no chat_template_kwargs. The
@@ -317,7 +321,7 @@ async function askOnce(task, adapter) {
   return out.choices?.[0]?.message ?? {};
 }
 
-async function evaluate(label, adapter) {
+async function evaluate(label, adapter, systemSuffix = "", quiet = false) {
   const tasks = scenarioModule.goldenTasks();
   let toolRight = 0;
   let jsonValid = 0;
@@ -325,10 +329,24 @@ async function evaluate(label, adapter) {
   let abstainRight = 0;
   let abstainTotal = 0;
   const misses = [];
+  // Per-task detail rides along for the behaviour gate, which compares
+  // verdicts task by task: an aggregate that stays level can hide a swap.
+  const detail = [];
   for (const task of tasks) {
-    const msg = await askOnce(task, adapter);
+    const msg = await askOnce(task, adapter, systemSuffix);
     const calls = msg.tool_calls ?? [];
     const first = calls[0]?.function?.name ?? null;
+    const content = typeof msg.content === "string" ? msg.content : "";
+    detail.push({
+      prompt: task.prompt,
+      expect: task.expect,
+      first,
+      spoke: content.trim().length > 0,
+      content,
+      abstained: abstains(msg.content, calls.length > 0),
+      calls: calls.length,
+      jsonOk: calls.filter((c) => { try { JSON.parse(c.function?.arguments ?? ""); return true; } catch { return false; } }).length,
+    });
     // A "no call" verdict must also be a real answer: text that arrived on
     // the reasoning channel instead of content is an empty reply to the
     // harness. The first installed adapter failed the app exactly this way
@@ -358,12 +376,79 @@ async function evaluate(label, adapter) {
   }
   const total = tasks.length - abstainTotal;
   const score = { toolRight, total, jsonValid, jsonTotal, abstainRight, abstainTotal };
-  console.log(
-    `${label}: tool choice ${toolRight}/${total}, ` +
-      `valid JSON ${jsonValid}/${jsonTotal || 0}, abstains ${abstainRight}/${abstainTotal}`,
-  );
-  if (misses.length) console.log(misses.join("\n"));
-  return score;
+  if (!quiet) {
+    console.log(
+      `${label}: tool choice ${toolRight}/${total}, ` +
+        `valid JSON ${jsonValid}/${jsonTotal || 0}, abstains ${abstainRight}/${abstainTotal}`,
+    );
+    if (misses.length) console.log(misses.join("\n"));
+  }
+  return { score, detail };
+}
+
+/**
+ * The behaviour gate: does a personality rendering change HOW the model
+ * answers without changing WHAT it does? Baseline plus every non-neutral
+ * rendering, over the same golden tasks, at temperature 0.
+ *
+ * The "what" half must be identical per task, not in aggregate — the tool
+ * chosen first, whether a no-tool task still spoke, the abstention verdict,
+ * JSON validity. The "how" half must move where the line asks it to, or
+ * the line is noise and should not ship: terse lowers length, answer-only
+ * lowers follow-up endings, offer-follow-ups raises them, matter-of-fact
+ * removes warm openers. Renderings are imported from dist so the text
+ * tested is the text served.
+ */
+async function behaviorGate() {
+  const { gateRenderings } = await distImport("personality.js");
+  const { adapterPathFor } = await distImport("model-settings.js");
+  const adapter = adapterPathFor(name);
+  console.log(`behaviour gate for ${name} on ${adapter ? "the installed adapter" : "the base model"} (${modelId})\n`);
+
+  const whatKey = (d) =>
+    d.map((t) =>
+      t.expect === "abstain"
+        ? `${t.prompt}→${t.abstained ? "abstain" : "answer"}`
+        : `${t.prompt}→${t.first ?? "-"}${t.expect === null && !t.spoke ? "/silent" : ""}`,
+    );
+  const how = (d) => {
+    const open = d.filter((t) => t.expect === null);
+    const last = (s) => (s.trim().split("\n").filter((l) => l.trim()).at(-1) ?? "").trim();
+    return {
+      meanLen: Math.round(open.reduce((s, t) => s + t.content.length, 0) / Math.max(1, open.length)),
+      followUps: open.filter((t) => /\?\s*$/.test(last(t.content)) || /^(next|you could|you might|if you want|from here)\b/i.test(last(t.content))).length,
+      warmOpeners: open.filter((t) => /^(sure|great|happy to|of course|absolutely)\b/i.test(t.content.trim())).length,
+      jsonRate: (() => { const c = d.reduce((s, t) => s + t.calls, 0); return c ? d.reduce((s, t) => s + t.jsonOk, 0) / c : 1; })(),
+    };
+  };
+
+  const baseline = await evaluate("baseline", adapter, "", true);
+  const b = how(baseline.detail);
+  const bWhat = whatKey(baseline.detail);
+  console.log(`baseline                : length ${b.meanLen} · follow-ups ${b.followUps} · warm openers ${b.warmOpeners} · json ${(b.jsonRate * 100).toFixed(0)}%`);
+
+  let failed = false;
+  for (const r of gateRenderings()) {
+    const run = await evaluate(r.id, adapter, r.suffix, true);
+    const h = how(run.detail);
+    const w = whatKey(run.detail);
+    const flips = w.filter((k, i) => k !== bWhat[i]);
+    const jsonOk = h.jsonRate >= b.jsonRate;
+    let verdict = "";
+    if (r.id === "voice=terse") verdict = h.meanLen < b.meanLen ? "moves" : "DOES NOT MOVE";
+    if (r.id === "initiative=answer-only") verdict = h.followUps < b.followUps ? "moves" : b.followUps === 0 ? "nothing to remove" : "DOES NOT MOVE";
+    if (r.id === "initiative=offer-follow-ups") verdict = h.followUps > b.followUps ? "moves" : "DOES NOT MOVE";
+    if (r.id === "warmth=matter-of-fact") verdict = h.warmOpeners === 0 ? (b.warmOpeners > 0 ? "moves" : "nothing to remove") : "DOES NOT MOVE";
+    if (r.id === "voice=conversational") verdict = h.meanLen > b.meanLen ? "moves" : "DOES NOT MOVE";
+    const what = flips.length === 0 && jsonOk ? "what: identical" : `WHAT FLIPPED (${flips.length}${jsonOk ? "" : ", json down"})`;
+    if (flips.length > 0 || !jsonOk || verdict.startsWith("DOES NOT")) failed = true;
+    console.log(
+      `${r.id.padEnd(24)}: length ${h.meanLen} · follow-ups ${h.followUps} · warm openers ${h.warmOpeners} · json ${(h.jsonRate * 100).toFixed(0)}% · ${what}${verdict ? ` · how: ${verdict}` : ""}`,
+    );
+    for (const f of flips) console.log(`    ${f}   (baseline: ${bWhat[w.indexOf(f)]})`);
+  }
+  console.log(failed ? "\nGate failed: a rendering changed what the model does, or did not move what it should." : "\nGate passed: every rendering moves only how, never what.");
+  process.exit(failed ? 1 : 0);
 }
 
 async function serverUp() {
@@ -384,6 +469,14 @@ if (flag("--data-only")) {
   process.exit(0);
 }
 
+if (flag("--behavior-gate")) {
+  if (!(await serverUp())) {
+    console.error(`Model server is not reachable at ${config.modelBaseUrl}; start enio first.`);
+    process.exit(1);
+  }
+  await behaviorGate();
+}
+
 if (!flag("--eval-only")) await train();
 
 if (!existsSync(join(stagingDir, "adapters.safetensors"))) {
@@ -399,8 +492,8 @@ if (!(await serverUp())) {
   process.exit(0);
 }
 
-const base = await evaluate("base    ", null);
-const tuned = await evaluate("adapter ", stagingDir);
+const base = (await evaluate("base    ", null)).score;
+const tuned = (await evaluate("adapter ", stagingDir)).score;
 
 // Every measured property must hold: an adapter below base on any one of
 // them stays staged, whatever its score on the others.

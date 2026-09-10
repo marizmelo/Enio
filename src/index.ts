@@ -1251,6 +1251,39 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "personality": {
+      // How replies are shaped: four axes, derived from memory unless set.
+      const { personalityView, setAxis, setCuriosity, AXIS_NAMES, AXES } = await import("./personality.js");
+      const sub = rest[0];
+      try {
+        if (sub === "set" && rest[1] && rest[2]) {
+          setAxis(rest[1], rest[2]);
+        } else if (sub === "reset") {
+          for (const axis of rest[1] ? [rest[1]] : AXIS_NAMES) setAxis(axis, "auto");
+        } else if (sub === "curiosity" && rest[1]) {
+          setCuriosity(rest[1]);
+        } else if (sub) {
+          console.error(
+            `Usage: enio personality [set <axis> <level> | reset [axis] | curiosity quiet|flag]\n` +
+              AXIS_NAMES.map((a) => `  ${a.padEnd(11)} ${AXES[a].join(" | ")}`).join("\n"),
+          );
+          process.exit(1);
+        }
+      } catch (err) {
+        console.error((err as Error).message);
+        process.exit(1);
+      }
+      const v = personalityView();
+      for (const axis of AXIS_NAMES) {
+        const why = v.sources[axis] === "explicit" ? "set by you" : v.sources[axis] === "none" ? "auto — no signal" : `auto — from ${v.sources[axis]}`;
+        console.log(`${axis.padEnd(11)} ${v.effective[axis].padEnd(18)} ${why}`);
+      }
+      console.log(`${"curiosity".padEnd(11)} ${v.curiosity.padEnd(18)} ${v.curiosity === "flag" ? "says so when a turn lands in the gap ledger" : "silent about gaps"}`);
+      for (const c of v.conflicts) console.log(`  conflicts with preference: "${c}"`);
+      console.log(v.block ? `\n${v.block}` : "\n(nothing rendered: every axis is neutral or already covered by a preference)");
+      break;
+    }
+
     case "prefs": {
       const prefs = listPreferences();
       console.log(
@@ -1707,6 +1740,7 @@ enio — a local agent with tools and persistent memory
   enio prefs              list standing instructions
   enio pref "..."         add one
   enio unpref ID          remove one
+  enio personality        how replies are shaped: derived from memory, or set an axis
   enio examples           list saved answer examples
 
   enio automations         list automations and when they run

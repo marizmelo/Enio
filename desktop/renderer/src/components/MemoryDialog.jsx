@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Background, Controls, ReactFlow } from "@xyflow/react";
 import { Pin, PinOff, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { fetchPersonality, setCuriosity, setPersonality } from "@/lib/personality";
 import { TipButton } from "@/components/TipButton";
 import { computePackedLayout } from "@/lib/forceLayout";
 import {
@@ -84,6 +86,7 @@ export function MemoryDialog({ open, onOpenChange }) {
             {[
               ["knows", "What it knows"],
               ["gaps", "What it lacked"],
+              ["behavior", "Behavior"],
               ["graph", "Graph"],
             ].map(([id, label]) => (
               <button
@@ -200,6 +203,8 @@ export function MemoryDialog({ open, onOpenChange }) {
               </section>
             )}
           </div>
+        ) : tab === "behavior" ? (
+          <BehaviorTab open={open && tab === "behavior"} onError={setError} />
         ) : tab === "gaps" ? (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
             {/* The gap ledger: questions the turn answered from nothing —
@@ -247,6 +252,109 @@ export function MemoryDialog({ open, onOpenChange }) {
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+const AXIS_LABELS = { voice: "Length", warmth: "Warmth", initiative: "Initiative", register: "Register" };
+const levelLabel = (l) => l.replace(/-/g, " ");
+
+/**
+ * How Enio replies: four axes with three levels, derived from what memory
+ * holds unless set here. The block at the bottom is the exact text the
+ * next turn carries — the same function the turn calls, never a trace —
+ * so "why does it still answer briefly" has an answer on this screen:
+ * a level marked auto says what it came from, and a choice that a
+ * standing preference argues with is listed as a conflict.
+ */
+function BehaviorTab({ open, onError }) {
+  const [view, setView] = useState(null);
+  const load = useCallback(async () => {
+    try {
+      setView(await fetchPersonality());
+      onError("");
+    } catch (err) {
+      onError(String(err?.message ?? err));
+    }
+  }, [onError]);
+  useEffect(() => {
+    if (open) load();
+  }, [open, load]);
+
+  const choose = (axis, level) => async () => {
+    try {
+      setView(await setPersonality(axis, level));
+    } catch (err) {
+      onError(String(err?.message ?? err));
+    }
+  };
+  const curiosity = (value) => async () => {
+    try {
+      setView(await setCuriosity(value));
+    } catch (err) {
+      onError(String(err?.message ?? err));
+    }
+  };
+  if (!view) return null;
+
+  const because = (axis) => {
+    const s = view.sources[axis];
+    if (s === "explicit") return "set here";
+    if (s === "none") return "no signal in memory";
+    if (s.startsWith("preference:")) return `from preference #${s.split(":")[1]}`;
+    if (s.startsWith("exemplars:")) return `from ${s.split(":")[1]} good answers`;
+    if (s.startsWith("graph:")) return "from what memory says you work with";
+    return s;
+  };
+  const AXES = { voice: ["terse", "plain", "conversational"], warmth: ["matter-of-fact", "friendly", "warm"], initiative: ["answer-only", "suggest-next-step", "offer-follow-ups"], register: ["everyday", "technical", "expert"] };
+  const segment = (active) =>
+    `rounded px-2 py-0.5 text-xs ${active ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50"}`;
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <p className="text-xs text-muted-foreground/70">
+        Derived from your preferences, the answers you marked good, and what memory says you
+        work with. Set an axis to override; auto restores the derived level.
+      </p>
+      <ul className="mt-3 space-y-2">
+        {Object.entries(AXES).map(([axis, levels]) => (
+          <li key={axis} className="flex flex-wrap items-center gap-2 rounded border px-2.5 py-1.5 text-sm">
+            <span className="w-20 shrink-0 text-xs font-medium text-muted-foreground">{AXIS_LABELS[axis]}</span>
+            <span className="flex gap-1">
+              {levels.map((l) => (
+                <button key={l} type="button" className={segment(view.effective[axis] === l)} onClick={choose(axis, l)}>
+                  {levelLabel(l)}
+                </button>
+              ))}
+              <button type="button" className={segment(view.levels[axis] === "auto")} onClick={choose(axis, "auto")}>
+                auto
+              </button>
+            </span>
+            {view.levels[axis] === "auto" && <Badge variant="outline">auto</Badge>}
+            <span className="text-xs text-muted-foreground">{because(axis)}</span>
+          </li>
+        ))}
+        <li className="flex flex-wrap items-center gap-2 rounded border px-2.5 py-1.5 text-sm">
+          <span className="w-20 shrink-0 text-xs font-medium text-muted-foreground">Curiosity</span>
+          <span className="flex gap-1">
+            <button type="button" className={segment(view.curiosity === "quiet")} onClick={curiosity("quiet")}>quiet</button>
+            <button type="button" className={segment(view.curiosity === "flag")} onClick={curiosity("flag")}>flag gaps</button>
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {view.curiosity === "flag" ? "says so when a question lands in What it lacked" : "a switch on the app, never a line in the prompt"}
+          </span>
+        </li>
+      </ul>
+      {view.conflicts.length > 0 && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          A standing preference argues with a choice above: {view.conflicts.map((c) => `“${c}”`).join(", ")}.
+          The preference is in the prompt too; remove it under What it knows if the choice should win.
+        </p>
+      )}
+      <h3 className="mt-4 text-xs font-medium text-muted-foreground">What the next turn carries</h3>
+      <pre className="mt-1 rounded border bg-muted/40 px-2.5 py-2 text-xs whitespace-pre-wrap">
+        {view.block || "(nothing: every axis is neutral, or its level is already a preference in the prompt)"}
+      </pre>
+    </div>
   );
 }
 

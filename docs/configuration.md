@@ -6,9 +6,10 @@ nav_order: 17
 
 # Configuration
 
-Every setting is an environment variable read at startup, except the two that
-have to outlive the process — the model choice and auto-run — which are stored
-in `~/.enio`.
+Every setting is an environment variable read at startup, except the few that
+have to outlive the process — the model choice, auto-run, and how replies are
+shaped (`personality.json`, see [Memory](memory.md)) — which are stored in
+`~/.enio`.
 
 Each also accepts a `MAPLE_` prefix instead of `ENIO_`; the project was renamed
 and old variables still work.

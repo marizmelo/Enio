@@ -121,6 +121,33 @@ does this; a plain "remember that…" never closes anything. From the
 terminal, `enio remember "..." --corrects` does the same and prints what it
 replaced. Saying the old thing again later reopens it.
 
+## Shaping how it answers
+
+Four axes, three levels each — length (terse, plain, conversational),
+warmth (matter-of-fact, friendly, warm), initiative (answer only, suggest a
+next step, offer follow-ups) and register (everyday, technical, expert).
+Each is **derived** from what memory holds: a preference like "answer
+concisely" sets length, three good answers that all end by offering a next
+step set initiative, and a graph full of the technologies you work with
+sets register to expert, naming the top three. Every axis shows what it was
+derived from, and any of them can be set by hand or returned to auto, in
+the Memory panel's **Behavior** tab or with `enio personality`.
+
+A level is one line in the prompt, and it is a constraint on the reply's
+shape — "keep each reply to two sentences", "start with the answer" — never
+a description of the assistant, because at this model size a personality
+adjective is ignored and a rule is followed. The middle level of each axis
+adds nothing, and a level that came from a preference adds nothing either:
+the preference is already in the prompt, in your words. The tab shows the
+exact block the next turn carries. Curiosity is a switch rather than an
+axis: with it on, a question that lands in the gap ledger says so in the
+app. It is never a line in the prompt, because the rule to say "I don't
+remember that" rather than guess is not something a setting should soften.
+
+If a custom agent's instructions say one thing and an axis says another,
+both are in the prompt and the axis, coming later, tends to win at this
+model size; the tab lists any standing preference a choice argues with.
+
 ## Seeing what it knows
 
 The desktop app has a **Memory** button in the top bar. It lists everything
@@ -129,6 +156,9 @@ memory holds and lets you prune it in place:
 - **Facts** — pin, unpin, or forget each one. Pinned facts ride in every
   turn; the rest only when they look related.
 - **Preferences** — the standing instructions injected into every turn.
+- **What it lacked** — the gap ledger: questions nothing covered, most
+  asked first, closed on their own once a fact answers them.
+- **Behavior** — how replies are shaped (see below).
 - **Conversation summaries** — what past conversations contribute to new
   ones. Forgetting a summary removes it from context but keeps the
   conversation itself (that lives in History). A full `enio reindex`

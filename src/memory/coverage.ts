@@ -21,9 +21,17 @@ import { ENTITY_TYPES } from "./schema.js";
  * cannot push people and projects off the end; the "+N" tails keep the
  * count honest about what was cut.
  */
-export function coverageBlock(maxChars: number): string {
-  if (maxChars < 40) return "";
-  const rows = getDb()
+export interface ConnectedEntity {
+  name: string;
+  type: string;
+  degree: number;
+}
+
+/** Every entity with its live-edge degree, most connected first. Shared
+ *  with the personality derivation, which reads the same shape of the
+ *  graph — one query per turn, not two. */
+export function connectedEntities(): ConnectedEntity[] {
+  return getDb()
     .prepare(
       `SELECT e.name, e.type, COUNT(ed.id) AS degree
          FROM entities e
@@ -31,7 +39,11 @@ export function coverageBlock(maxChars: number): string {
         GROUP BY e.id
         ORDER BY degree DESC, e.last_seen DESC`,
     )
-    .all() as Array<{ name: string; type: string; degree: number }>;
+    .all() as ConnectedEntity[];
+}
+
+export function coverageBlock(maxChars: number, rows: ConnectedEntity[] = connectedEntities()): string {
+  if (maxChars < 40) return "";
   if (rows.length === 0) return "";
 
   const byType = new Map<string, string[]>();

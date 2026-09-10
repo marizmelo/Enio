@@ -2152,3 +2152,62 @@ Body.`);
     assert.ok(systems.some((sys) => sys.includes("only-coder")), "the coder prompt should list it");
   });
 });
+
+describe("reply shape rides the prompt, and the trace says so", () => {
+  test("an explicit level sits after the preferences and before memory, and is recorded as a harness step", async () => {
+    const { setAxis } = await import("./personality.js");
+    const { addPreference } = await import("./memory/learning.js");
+    const { applyTriples } = await import("./memory/store.js");
+    addPreference("always sign off with the date");
+    // A graph, so the coverage block ("Memory has something on") is present
+    // to order against.
+    applyTriples(
+      [{ subject: "Sam", subject_type: "person", relation: "WORKS_ON", object: "enio", object_type: "project" }] as any,
+      "s-shape",
+    );
+    setAxis("warmth", "matter-of-fact");
+    try {
+      const registry = await buildRegistry();
+      const sessionId = store.startSession();
+      scriptModel([{ content: "Done." }]);
+      await runTurn("what is the capital of portugal", [], registry, sessionId);
+
+      const { system_prompt } = getDb()
+        .prepare(`SELECT system_prompt FROM turns ORDER BY id DESC LIMIT 1`)
+        .get() as { system_prompt: string };
+      const prefsAt = system_prompt.indexOf("How this user wants you to respond");
+      const shapeAt = system_prompt.indexOf("Reply shape:");
+      const coverageAt = system_prompt.indexOf("Memory has something on");
+      assert.ok(prefsAt >= 0 && shapeAt >= 0 && coverageAt >= 0, "all three blocks present");
+      assert.ok(prefsAt < shapeAt && shapeAt < coverageAt, "preferences < reply shape < coverage");
+      assert.match(system_prompt, /- Start with the answer: no greeting, no acknowledgement, no closing line\./);
+
+      const step = getDb()
+        .prepare(
+          `SELECT args, output FROM turn_steps
+            WHERE kind = 'harness' AND name = 'personality' ORDER BY id DESC LIMIT 1`,
+        )
+        .get() as { args: string; output: string } | undefined;
+      assert.ok(step, "the served block is traced");
+      assert.equal(step!.output, "Reply shape:\n- Start with the answer: no greeting, no acknowledgement, no closing line.");
+      assert.equal(JSON.parse(step!.args).levels.warmth, "matter-of-fact");
+      assert.equal(JSON.parse(step!.args).sources.warmth, "explicit");
+    } finally {
+      setAxis("warmth", "auto");
+    }
+  });
+
+  test("with nothing set and no signal there is no block and no step", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const before = (getDb().prepare(`SELECT COUNT(*) AS n FROM turn_steps WHERE name = 'personality'`).get() as { n: number }).n;
+    scriptModel([{ content: "Lisbon." }]);
+    await runTurn("and of spain?", [], registry, sessionId);
+    const { system_prompt } = getDb()
+      .prepare(`SELECT system_prompt FROM turns ORDER BY id DESC LIMIT 1`)
+      .get() as { system_prompt: string };
+    assert.ok(!system_prompt.includes("Reply shape:"), "neutral renders nothing");
+    const after = (getDb().prepare(`SELECT COUNT(*) AS n FROM turn_steps WHERE name = 'personality'`).get() as { n: number }).n;
+    assert.equal(after, before, "no inert step on a turn with no block");
+  });
+});

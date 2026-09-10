@@ -88,7 +88,9 @@ Three fields matter more than they look:
   example does more than the description — an agent saved without one is
   rarely picked, and the panel warns about it.
 - **Instructions** are the agent. Say what it does, and just as usefully, what
-  it must not do.
+  it must not do. Reply shape set under Memory → Behavior applies to every
+  agent and sits later in the prompt, so where the two disagree the shape
+  tends to win; keep instructions about *what* the agent does.
 
 The rules the built-ins live by apply at save, refused rather than trimmed:
 six tools at most, no tool that does not exist, and never a combination that

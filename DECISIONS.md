@@ -3168,3 +3168,38 @@ spot after content-not-reasoning and recovery); fresh-prompt probes for
 the coder ("what does X do?" with no look — the right first move there
 is to look, so a probe scored on abstaining would train the wrong
 reflex).
+
+### Personality is four constraints on the reply, derived from memory
+
+**Chose:** four axes (length, warmth, initiative, register) with three
+levels each, where a non-neutral level renders as ONE structural line —
+"keep each reply to two sentences", "start with the answer", "end with one
+next step", "use plain words", "the user works with X, Y and Z" — under a
+`Reply shape:` header placed after the preferences and before memory.
+Levels are derived from what memory holds (preference phrases first, then
+three or more /good exemplars, then the graph's connected technologies)
+and any axis can be set by hand or returned to auto; the Behavior tab and
+`enio personality` show the exact block the next turn carries, the source
+of every derived level, and any standing preference a choice argues
+with. A `personality` harness step records the served block. The whole
+thing is measured by `--behavior-gate`: every rendering must leave the
+per-task "what" (first tool, abstention, JSON) identical to baseline and
+move the "how" it names, or it does not ship.
+
+**Rejected:** a free-text persona field (duplicates preferences, and
+prose about the assistant is ignored at this size — whatever the prompt
+emphasises, the model *becomes*, which is why no line may start "you
+are"); the model describing or setting its own personality (`set_preference`
+stays free text: the loop already closes the right way, through a
+preference the person can read and delete); a curiosity axis in the
+prompt (the coverage footer already is "flag gaps", and a quieter level
+would be a line softening the humility invariant — it is a harness
+switch that says so in the app when a turn lands in the gap ledger);
+rendering a level that came from a preference (already in the prompt in
+the user's words); deriving "conversational" from a preference (requests
+for detail are scoped, not global) or "everyday" from the graph (many
+people in memory says nothing about the person's vocabulary); mirroring
+the user's own message style (an inference about a person, never a
+default); per-agent axes (v1 is global; custom-agent instructions are
+where per-agent behaviour lives, and the precedence is documented rather
+than engineered).
