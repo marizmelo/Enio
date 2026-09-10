@@ -1,6 +1,8 @@
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { existsSync, openSync, symlinkSync } from "node:fs";
+import { totalmem } from "node:os";
 import { dirname, join } from "node:path";
+import { DRAFT_TOKENS, draftFor } from "./model-catalogue.js";
 import { config } from "./config.js";
 import { serverIsUp } from "./model.js";
 import {
@@ -142,7 +144,25 @@ export function modelServerArgs(modelPath: string): string[] {
     // ten slots of long-generation KV from reaching 24GB on a 24GB machine.
     "--prompt-cache-size", `${config.promptCacheSlots}`,
     "--port", modelServerPort(),
+    ...draftArgs(),
   ];
+}
+
+/**
+ * The draft model, when this machine and model warrant one: the catalogue
+ * names it, its weights are here, the machine is not small (the draft is
+ * ~350MB more resident, and on 8GB the target already sits at the GPU's
+ * wired-memory limit — the model a small machine gets has no draft anyway),
+ * and nobody turned it off. Drafting makes the server serve requests one at
+ * a time instead of batched; for one person on one machine that is not a
+ * cost, and the prompt cache is kept on that path.
+ */
+function draftArgs(): string[] {
+  if (!config.speculative) return [];
+  const draft = draftFor(currentModelId());
+  if (!draft || !modelIsCached(draft)) return [];
+  if (totalmem() < 12 * 1024 ** 3) return [];
+  return ["--draft-model", draft, "--num-draft-tokens", `${DRAFT_TOKENS}`];
 }
 
 /**

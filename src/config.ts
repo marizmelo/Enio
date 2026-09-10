@@ -590,6 +590,10 @@ export const config = {
    * ENIO_ROUTING=0 to run as a single agent seeing every tool.
    */
   routingEnabled: (env("ROUTING") ?? "1") !== "0",
+  /** Speculative decoding with a small draft model when one applies (see
+   *  draftFor). Off is for measuring, or for a machine where the draft's
+   *  extra ~350MB resident is the difference. */
+  speculative: (env("SPECULATIVE") ?? "1") !== "0",
 } as const;
 
 /** Throws on an unknown backend id, with the valid list. Call once at startup. */

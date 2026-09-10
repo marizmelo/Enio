@@ -2973,3 +2973,39 @@ for the researcher, whose search seed already keys off coverage).
 The essay this came from called it structural humility. The mechanism is
 the project's usual one: a judgement call the model would fail, turned into
 a membership check it can make.
+
+### Speculative decoding: a 0.6B draft for the 4B and up, measured
+
+**Chose:** serve Qwen3 targets from 4B up with a Qwen3 0.6B draft model and
+two draft tokens, when the draft is downloaded, the machine has 12GB or
+more, and `ENIO_SPECULATIVE` is not `0`. The installer fetches the draft
+beside the 4B (~350MB); the catalogue lists it so the panel can too.
+
+Measured on an M-series Mac, Qwen3 4B Instruct 4-bit, three 350-token
+prompts at temperature 0, tokens per second:
+
+| | 4B alone | + 1.7B draft | + 0.6B draft |
+|---|---|---|---|
+| 2 draft tokens | 32.5 | 37.0 | **44.8** |
+| 3 | | | 41.6 |
+| 4 | | 28.2 | 36.5 |
+| 6 | | 21.3 | |
+
+**Rejected:** the 1.7B as the draft — the natural first guess since it was
+already downloaded, and +14% at best, negative past two tokens: a draft
+that costs 40% of the target per token makes every rejection expensive;
+more than two draft tokens — every longer setting measured slower on both
+drafts; drafting for the 1.7B itself (the ratio to the 0.6B is a third, the
+same trap) and for other families (drafting needs the target's tokenizer,
+and nothing outside Qwen3 has been measured); a fixed on-switch regardless
+of memory — on 8GB the model already sits at the GPU's wired-memory limit,
+and the small machine's model has no draft in the map anyway.
+
+Checked before shipping, because it would have negated the gain: with a
+draft the server serves one request at a time instead of batched, but its
+sequential path still fetches the nearest prompt cache and builds the
+draft's cache beside it. For one person on one machine, batching was never
+doing anything; the prompt cache was.
+
+The output is exactly the target's — drafting changes speed and nothing
+else — which is why this is on by default rather than an add-on.

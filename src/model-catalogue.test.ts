@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { existsSync } from "node:fs";
 import { describe, test } from "node:test";
-import { CATALOGUE, catalogueModel, fitFor, footprint } from "./model-catalogue.js";
+import { CATALOGUE, DRAFT_MODEL, catalogueModel, draftFor, fitFor, footprint } from "./model-catalogue.js";
 import { DownloadRefused, downloadScriptPath, startDownload } from "./model-download.js";
 
 const GB = 1_000_000_000;
@@ -144,5 +144,23 @@ describe("recommendUpgrade", () => {
     // zero and the best usable model wins.
     const up = recommendUpgrade("maple-1b-ternary", 32 * GB, "Apple M4");
     assert.equal(up?.id, MOE);
+  });
+});
+
+describe("the draft model", () => {
+  test("Qwen3 targets from 4B up draft with the 0.6B; the 1.7B and other families do not", () => {
+    // Measured, not assumed: the 1.7B as a draft lost speed past two tokens,
+    // and drafting needs the target's tokenizer, so the map is a closed list.
+    assert.equal(draftFor("mlx-community/Qwen3-4B-Instruct-2507-4bit"), DRAFT_MODEL);
+    assert.equal(draftFor("mlx-community/Qwen3-8B-4bit"), DRAFT_MODEL);
+    assert.equal(draftFor("mlx-community/Qwen3-30B-A3B-4bit"), DRAFT_MODEL);
+    assert.equal(draftFor("mlx-community/Qwen3-1.7B-4bit"), null);
+    assert.equal(draftFor("mlx-community/Llama-3.2-3B-Instruct-4bit"), null);
+    assert.equal(draftFor("maple"), null);
+  });
+
+  test("the draft never drafts for itself, and is in the catalogue so it can be fetched", () => {
+    assert.equal(draftFor(DRAFT_MODEL), null);
+    assert.ok(catalogueModel(DRAFT_MODEL), "the panel's Get button needs a catalogue entry");
   });
 });

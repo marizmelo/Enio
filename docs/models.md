@@ -48,6 +48,7 @@ The new model simply appears in **On this machine**.
 |---|---|---|
 | `mlx-community/Qwen3-4B-Instruct-2507-4bit` | 2.3GB | **The default.** Measured here: routed 8/8 at 426ms median. |
 | `deepgrove/maple-preview` | 5.3GB | Optional. 20B total, ~1B active, ternary. Fastest per token. |
+| `mlx-community/Qwen3-0.6B-4bit` | 0.3GB | Not for chatting: the draft model that makes the Qwen3 4B and up answer ~40% faster. |
 | `mlx-community/Qwen3-1.7B-4bit` | 1.0GB | Smallest that still routes and calls tools. For 8GB machines. |
 | `mlx-community/Llama-3.2-3B-Instruct-4bit` | 1.8GB | Small and quick. Shorter context than the Qwen3 models. |
 | `mlx-community/Mistral-7B-Instruct-v0.3-4bit` | 4.1GB | Strong plain prose. Weaker at picking tools than the Qwen3 models. |
@@ -266,6 +267,16 @@ open their web app, you paste. Labeled as exactly that in the menu.
 Either way the payload is the handoff file you can read first, and it
 leaves this machine only on your click — which keeps the decision, and
 the data, yours.
+
+## Faster answers from a draft model
+
+The Qwen3 4B and larger are served with a tiny 0.6B **draft model** beside
+them when it is downloaded (the installer fetches it; the Models panel
+offers it as a one-time download). The draft guesses a couple of tokens
+ahead and the real model checks them in one pass — the answer is exactly
+what the big model would have said, just sooner. Measured on the 4B: 32 →
+45 tokens a second. It costs about 350MB of memory, so small machines skip
+it; `ENIO_SPECULATIVE=0` turns it off anywhere.
 
 ## Managing models from the terminal
 

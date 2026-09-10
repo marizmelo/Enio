@@ -44,6 +44,12 @@ const GB = 1_000_000_000;
 
 export const CATALOGUE: CatalogueModel[] = [
   {
+    id: "mlx-community/Qwen3-0.6B-4bit",
+    label: "Qwen3 0.6B (draft)",
+    bytes: 0.34 * GB,
+    note: "Not for chatting: drafts tokens for the Qwen3 4B and up, which then answer ~40% faster.",
+  },
+  {
     id: "mlx-community/Qwen3-1.7B-4bit",
     label: "Qwen3 1.7B",
     bytes: 0.98 * GB,
@@ -270,4 +276,26 @@ export function recommendUpgrade(
     tokensPerSecond: speed.tokensPerSecond,
     pace: speed.pace,
   };
+}
+
+/**
+ * Speculative decoding: the small model that drafts for a bigger one.
+ *
+ * The draft proposes a few tokens, the target verifies them in one pass,
+ * and the output is exactly what the target alone would have produced —
+ * the gain is pure speed. It only pays when the draft is a small fraction of
+ * the target, which is a measured fact here, not a rule of thumb: on the 4B,
+ * a 1.7B draft gave +14% at best and went negative past two draft tokens,
+ * while the 0.6B gave +38% (32.5 → 44.8 tok/s) at two. So the map is a
+ * closed list: Qwen3 targets from 4B up get the 0.6B (same tokenizer, which
+ * drafting requires); the 1.7B gets nothing (the ratio is too close); other
+ * families get nothing until one is measured. Two draft tokens, because
+ * every longer setting measured slower.
+ */
+export const DRAFT_MODEL = "mlx-community/Qwen3-0.6B-4bit";
+export const DRAFT_TOKENS = 2;
+
+export function draftFor(targetId: string): string | null {
+  if (targetId === DRAFT_MODEL) return null;
+  return /^mlx-community\/Qwen3-(4B|8B|14B|30B)/i.test(targetId) ? DRAFT_MODEL : null;
 }
