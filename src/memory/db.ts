@@ -281,6 +281,10 @@ function migrate(d: Database.Database): void {
   // turns because nothing could tell them apart. Older rows stay NULL and
   // are never mined.
   addColumn(d, "turns", "model", "TEXT");
+  // Which exchange a good answer was: resolved at save time so the source
+  // ledger can credit the pages that turn read. Joining on question text
+  // later would hit whichever repeat came last.
+  addColumn(d, "exemplars", "turn_id", "INTEGER");
 
   // The scheduler lease: which process may fire cron jobs. One row, taken and
   // refreshed by a guarded UPSERT, so desktop serve and a headless daemon can

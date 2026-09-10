@@ -94,15 +94,20 @@ export async function addExemplar(
   if (a.length > 2000) return { added: false, reason: "answer too long to use as an example" };
 
   const db = getDb();
+  // The exchange being marked good, if it was traced: the newest turn with
+  // exactly this question and reply. Resolved now, while it is unambiguous.
+  const turn = db
+    .prepare(`SELECT id FROM turns WHERE question = ? AND reply = ? ORDER BY id DESC LIMIT 1`)
+    .get(q, a) as { id: number } | undefined;
   if (db.prepare(`SELECT id FROM exemplars WHERE question = ?`).get(q)) {
-    db.prepare(`UPDATE exemplars SET answer = ? WHERE question = ?`).run(a, q);
+    db.prepare(`UPDATE exemplars SET answer = ?, turn_id = COALESCE(?, turn_id) WHERE question = ?`).run(a, turn?.id ?? null, q);
     return { added: true };
   }
 
   const vec = await embed(q);
   db.prepare(
-    `INSERT INTO exemplars (question, answer, embedding, created_at) VALUES (?, ?, ?, ?)`,
-  ).run(q, a, vec ? toBlob(vec) : null, now());
+    `INSERT INTO exemplars (question, answer, embedding, created_at, turn_id) VALUES (?, ?, ?, ?, ?)`,
+  ).run(q, a, vec ? toBlob(vec) : null, now(), turn?.id ?? null);
   return { added: true };
 }
 

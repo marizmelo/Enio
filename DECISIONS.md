@@ -3184,6 +3184,24 @@ the coder ("what does X do?" with no look — the right first move there
 is to look, so a probe scored on abstaining would train the wrong
 reflex).
 
+### The source ledger counts before it ranks
+
+**Chose:** `enio sources` — per origin (a host, a file, a handoff
+provider): facts given, still live, superseded, pinned, and good answers
+that read it. Exemplars now store the id of the turn they were saved
+from, resolved at save time as the newest turn with exactly that question
+and reply, so credit reaches the pages that turn actually read. Computed
+on read from facts, exemplars and turn steps — everything it reads is
+already derived or authoritative, so there is no table for reindex to
+rebuild and nothing to drift.
+
+**Rejected, for now:** using any of it — re-ranking facts or search hits by
+source (single-user data is sparse; a month of counting before the
+numbers mean anything, and then only as a tie-breaker between otherwise
+equal facts, never a label); crediting the search that listed a page (a
+listing is not a reading); joining exemplars to turns by question text
+(the newest repeat would win, months later).
+
 ### Personality is four constraints on the reply, derived from memory
 
 **Chose:** four axes (length, warmth, initiative, register) with three

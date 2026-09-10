@@ -110,6 +110,17 @@ derived from the traces like the graph, so `enio reindex` replays it. See
 it under **What it lacked** in the Memory panel or with `enio gaps`; a gap
 asked three times shows up in `enio suggest` as research worth doing once.
 
+## Where knowledge came from, counted
+
+Facts remembered from a page, a file or a bigger model's answer carry that
+origin, and a good answer remembers which pages it read. `enio sources`
+counts, per source, how many facts it gave, how many are still standing,
+how many were superseded, how many you pinned, and how many good answers
+read it. It is a counter and nothing else for now: nothing ranks on it,
+because one person's month of use is what it takes for these numbers to
+mean anything. When they do, the intended use is a tie-breaker between
+otherwise equal facts — never a label on a source.
+
 ## Correcting what it knows
 
 Tell it the change — "actually, I switched to Ghostty", "I don't work at

@@ -13,6 +13,7 @@ import { addExemplar } from "../memory/learning.js";
 import { graphView } from "../memory/traces.js";
 import { listPreferences, removePreference } from "../memory/learning.js";
 import { forgetGap, listGaps } from "../memory/gaps.js";
+import { sourceLedger } from "../memory/sources-ledger.js";
 
 /** True when this feature owned the request. Moved verbatim from server.ts —
  *  the routes stay thin, the feature module owns every decision. */
@@ -35,6 +36,7 @@ export async function handle(
       preferences: listPreferences(),
       summaries: listSummaries(),
       gaps: listGaps(),
+      sources: sourceLedger(),
     });
     return true;
   }

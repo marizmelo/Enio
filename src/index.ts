@@ -436,6 +436,23 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "sources": {
+      // How each place knowledge came from has fared: a counter, read
+      // before it is used for anything, because a month of single-user
+      // data is what it takes for these numbers to mean something.
+      const { sourceLedger } = await import("./memory/sources-ledger.js");
+      const rows = sourceLedger();
+      if (rows.length === 0) {
+        console.log("No sourced knowledge yet: facts with an origin, or good answers that read a page, show up here.");
+        break;
+      }
+      console.log(`${"source".padEnd(36)} facts  live  superseded  pinned  good answers`);
+      for (const r of rows) {
+        console.log(`${r.source.slice(0, 35).padEnd(36)} ${String(r.facts).padStart(5)} ${String(r.live).padStart(5)} ${String(r.superseded).padStart(11)} ${String(r.pinned).padStart(7)} ${String(r.good).padStart(13)}`);
+      }
+      break;
+    }
+
     case "gaps": {
       // What was asked that nothing covered: the questions memory should
       // have had an answer to. Most asked first.
@@ -1737,6 +1754,7 @@ enio — a local agent with tools and persistent memory
   enio remember "..."     pin a fact by hand (--corrects closes what it replaces)
   enio forget "..."       remove a fact
   enio gaps               what was asked that memory did not have
+  enio sources            how each source of knowledge has fared (facts kept, superseded, good answers)
 
   enio prefs              list standing instructions
   enio pref "..."         add one
