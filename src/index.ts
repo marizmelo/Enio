@@ -969,6 +969,93 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "train": {
+      // The self-improvement loop, driven by a person. Status shows what
+      // has accumulated and what failed; run is the only thing that trains,
+      // and it is never scheduled — an hour of GPU is the user's call.
+      const {
+        adapterHistory, activeAdapterVersion, curriculumSpecialists, failureCases,
+        materialSince, rollbackAdapter, retireAdapter, trainerFor,
+      } = await import("./adapters.js");
+      const sub = rest[0];
+      const name = rest[1];
+      const pct = (g: { toolRight: number; total: number }) => `${g.toolRight}/${g.total}`;
+
+      if (sub === "run" && name) {
+        const trainer = trainerFor();
+        if (!trainer.available) {
+          console.error(trainer.reason);
+          process.exit(1);
+        }
+        const run = spawnSync(
+          process.execPath,
+          [join(projectRoot, "scripts", "train-adapter.mjs"), name, ...rest.slice(2)],
+          { stdio: "inherit" },
+        );
+        process.exit(run.status ?? 1);
+      }
+      if (sub === "history" && name) {
+        const history = adapterHistory(name);
+        if (history.length === 0) {
+          console.log(`No versions yet for ${name}. Train one:  enio train run ${name}`);
+          break;
+        }
+        for (const h of history) {
+          const when = new Date(h.trainedAt).toISOString().slice(0, 16).replace("T", " ");
+          console.log(
+            `${h.active ? "*" : " "} v${h.version}  ${when}  ${h.rows} rows  ` +
+              `gate ${pct(h.gate.adapter)} vs base ${pct(h.gate.base)}  (${h.trainer}, ${h.base})`,
+          );
+        }
+        console.log(`\n* active.  enio train rollback ${name}  ·  enio train off ${name}`);
+        break;
+      }
+      if (sub === "rollback" && name) {
+        const r = rollbackAdapter(name);
+        console.log(r.ok ? `Rolled ${name} back to version ${r.version}.` : r.error);
+        if (!r.ok) process.exit(1);
+        break;
+      }
+      if (sub === "off" && name) {
+        console.log(retireAdapter(name) ? `${name} now serves from the bare base model.` : `${name} had no adapter installed.`);
+        break;
+      }
+      if (sub === "failures" && name) {
+        const cases = failureCases(name);
+        if (cases.length === 0) {
+          console.log(`No failed ${name} turns in the traces.`);
+          break;
+        }
+        console.log(`Turns that went wrong — candidates for the ${name} curriculum (scripts/adapter-data/${name}.mjs):\n`);
+        for (const c of cases) {
+          console.log(`#${c.turnId}  ${c.question.slice(0, 90)}`);
+          console.log(`      ${c.reasons.join("; ")}`);
+        }
+        console.log(`\nA failure is what training removes, not what it learns from: author the corrected turn, then  enio train run ${name}`);
+        break;
+      }
+
+      // Status.
+      const trainer = trainerFor();
+      console.log(`trainer: ${trainer.available ? trainer.id : "none — " + trainer.reason}\n`);
+      for (const spec of curriculumSpecialists()) {
+        const active = activeAdapterVersion(spec);
+        const material = materialSince(spec);
+        const failed = failureCases(spec, 100).length;
+        const installed = active
+          ? `v${active.version} installed (gate ${pct(active.gate.adapter)} vs base ${pct(active.gate.base)})`
+          : "no adapter installed";
+        console.log(`${spec.padEnd(12)} ${installed}`);
+        console.log(`             ${material.clean} clean turns ${material.since ? "since it was trained" : "in the traces"} · ${failed} failed turns to learn from`);
+      }
+      console.log(
+        `\n  enio train run <agent> [--from-traces]   train, gate, install (never automatic)\n` +
+          `  enio train failures <agent>              what went wrong, for the curriculum\n` +
+          `  enio train history|rollback|off <agent>`,
+      );
+      break;
+    }
+
     case "models": {
       // The ollama list / ollama rm of enio's own store. Weights live in the
       // shared HF cache (Maple in its runtime checkout); listing walks real
@@ -1592,6 +1679,9 @@ enio — a local agent with tools and persistent memory
   enio token              print the API key for the HTTP endpoint
   enio token --rotate     generate a new one, invalidating the old
   enio backends           list model backends and how to switch
+  enio train              the self-improvement loop: what has accumulated, what failed
+  enio train run AGENT    train an adapter from the curriculum (+ --from-traces), gate it, install it
+  enio train failures|history|rollback|off AGENT
   enio models             list downloaded models and their sizes
   enio models use ID      select one — switches the running server, or takes effect next start
   enio models rm ID       delete a model's weights (the selected one is refused)

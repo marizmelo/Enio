@@ -73,6 +73,13 @@ const { searchTools } = await distImport("tools/search.js");
 const { skillTools } = await distImport("tools/skills.js");
 const scenarioModule = await import(pathToFileURL(dataModulePath).href);
 
+const { trainerFor, turnIsClean } = await distImport("adapters.js");
+const trainer = trainerFor();
+if (!trainer.available && !flag("--eval-only")) {
+  console.error(trainer.reason);
+  process.exit(1);
+}
+
 const modelId = currentModelId();
 if (modelId === "maple") {
   // Maple is a ternary-weight MoE the LoRA tuner has never been shown to
@@ -152,7 +159,7 @@ function minedConversations() {
     const db = requireDb.getDb();
     const turns = db
       .prepare(
-        `SELECT id, question, reply FROM turns
+        `SELECT id, question, reply, iterations FROM turns
          WHERE specialist = ? AND reply != '' AND iterations > 0
          ORDER BY id DESC LIMIT 200`,
       )
@@ -165,7 +172,9 @@ function minedConversations() {
     let callId = 1000;
     for (const t of turns) {
       const steps = stepsFor.all(t.id);
-      if (steps.some((s) => s.error || s.repaired || s.scavenged)) continue;
+      // The same bar `enio train` counts material with: a turn that ran to
+      // the cap or ended on the floor reply is a failure, not an example.
+      if (!turnIsClean(t, steps)) continue;
       const toolSteps = steps.filter((s) => s.kind === "tool" && s.name && s.args && s.output);
       if (toolSteps.length === 0 || toolSteps.length > 6) continue;
       if (toolSteps.some((s) => !specialist.tools.includes(s.name))) continue;
@@ -403,11 +412,13 @@ if (flag("--no-install")) {
   process.exit(0);
 }
 
-for (const f of ["adapters.safetensors", "adapter_config.json"]) {
-  copyFileSync(join(stagingDir, f), join(adapterDir, f) + ".tmp");
-  renameSync(join(adapterDir, f) + ".tmp", join(adapterDir, f));
-}
+const { recordAdapterVersion } = await distImport("adapters.js");
+const rowCount = existsSync(join(dataDir, "train.jsonl"))
+  ? readFileSync(join(dataDir, "train.jsonl"), "utf8").split("\n").filter(Boolean).length
+  : 0;
+const entry = recordAdapterVersion(name, stagingDir, { trainer: "mlx", rows: rowCount, gate: { base, adapter: tuned } });
 console.log(
-  `Installed: ${adapterDir}\n` +
-    `The ${name} specialist now serves with this adapter (resolves via adapterPathFor at call time).`,
+  `Installed as version ${entry.version}: ${adapterDir}\n` +
+    `The ${name} specialist now serves with it (resolves via adapterPathFor at call time).\n` +
+    `History and rollback:  enio train history ${name}  ·  enio train rollback ${name}`,
 );

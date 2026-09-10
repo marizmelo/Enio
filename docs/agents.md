@@ -130,7 +130,27 @@ Two properties worth knowing:
   the agent knows still comes from [memory](memory.md), which is why you can
   retrain or delete an adapter without losing anything.
 
-Deleting an adapter is removing its folder under `~/.enio/adapters/`.
+`enio train` is the loop around that command — the part that stays the
+same on every machine, whatever does the training:
+
+```sh
+enio train                    # per agent: installed version, its gate numbers, new material, failed turns
+enio train failures coder     # the turns that went wrong, as candidates for the curriculum
+enio train run coder          # train, gate, install — only ever when you say so
+enio train history coder      # every version with its measurement; * marks the active one
+enio train rollback coder     # back to the previous version (nothing is deleted)
+enio train off coder          # serve from the plain model again
+```
+
+Nothing in it starts a training run by itself. It shows what has
+accumulated since the last one and what failed; whether an hour of GPU is
+worth spending is your call. A failed turn is not training data — it is
+the very form training removes — so `failures` hands you candidates to
+author the corrected version of, in the agent's curriculum.
+
+Training itself is the one machine-specific piece: on a Mac it is the MLX
+runtime; on Linux it will be a trainer chosen with the hardware. The
+registry, history, rollback and failure mining work everywhere already.
 
 **Duplicate** on any card starts a new agent of your own from it — the way to
 make "a coder for Godot" or "mail, but terse". It copies the description,

@@ -3063,3 +3063,30 @@ guard warned after the fact and the original came back out of the trace.
 Both are model-quality wobbles the harness contains rather than bridge
 faults, and the reason the docs say: the path for a Mac the 4B cannot
 fit in, not a replacement for the 4B where it does.
+
+
+### The self-improvement loop is a registry and a person, not a scheduler
+
+**Chose:** `enio train` — a versioned adapter registry with the gate
+numbers on every version, rollback and retirement that never delete,
+failure mining from the traces into curriculum candidates, and one
+platform-specific seam (`trainerFor`) that names its platform honestly.
+Run is the only verb that trains, and it is never scheduled.
+
+**Rejected:** a cron that retrains when enough clean turns accumulate
+(the user's own rule from the day this was built: test the current
+adapter first, then say when to train — an hour of GPU is a decision,
+not a side effect); training on failed turns (a failure is a record of
+the very form training is meant to remove; only its authored correction
+belongs in the set, so `failures` hands over candidates, not data);
+building the Linux trainer before the Linux hardware is chosen (PEFT on
+CUDA, ROCm, and llama.cpp-side adapters are different work, and the
+direction is Linux — so the neutral loop ships first and the trainer
+plugs in when the box exists); model-judged failure labeling (the traces
+already say what went wrong — a tool errored, a call was repaired or
+scavenged, the loop hit its cap, the reply was the floor).
+
+Rollback exists because the gate is a small held-out set: it measures
+what it measures, and a version that passes it can still be the one that
+rewrote a file it was asked to read. Choosing the previous version is
+one command; the numbers that justified each version stay in history.
