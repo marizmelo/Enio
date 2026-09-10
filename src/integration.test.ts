@@ -2141,12 +2141,14 @@ Body.`);
     });
     await runTurn("check my email", [], registry, sessionId, {}, { specialist: "mail" });
     assert.ok(systems.length > 0);
-    assert.ok(!systems.some((sys) => sys.includes("- only-coder:")), "the mail prompt listed a coder skill");
+    // Presence, not punctuation: on the smallest budgets the catalogue is a
+    // names-only line, and the property under test is who sees the skill.
+    assert.ok(!systems.some((sys) => sys.includes("only-coder")), "the mail prompt listed a coder skill");
     scriptModel([{ content: "Nothing to do." }], (req) => {
       const sys = req.messages.find((m) => m.role === "system");
       if (sys) systems.push(String(sys.content));
     });
     await runTurn("anything to tidy up here?", [], registry, sessionId, {}, { specialist: "coder" });
-    assert.ok(systems.some((sys) => sys.includes("- only-coder:")), "the coder prompt should list it");
+    assert.ok(systems.some((sys) => sys.includes("only-coder")), "the coder prompt should list it");
   });
 });

@@ -28,7 +28,7 @@ and old variables still work.
 
 | Variable | Default |
 |---|---|
-| `ENIO_BACKEND` | `maple` — or `ollama`, `lmstudio`, `llamacpp` |
+| `ENIO_BACKEND` | `maple` — or `apple` (Apple Intelligence, macOS 26+), `ollama`, `lmstudio`, `llamacpp` |
 | `ENIO_BASE_URL` | the backend's default endpoint |
 | `ENIO_MODEL` | overrides the saved model choice for one run |
 | `ENIO_MODEL_LABEL` | what the model is called in the prompt |

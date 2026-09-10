@@ -268,6 +268,32 @@ Either way the payload is the handoff file you can read first, and it
 leaves this machine only on your click — which keeps the decision, and
 the data, yours.
 
+## Apple Intelligence: the model your Mac already has
+
+On macOS 26 and later with Apple Intelligence turned on, enio can run on
+Apple's own on-device model instead of downloading one. It runs on the
+Neural Engine — nothing to fetch, and the GPU stays free — and on this
+project's test Mac it answered at 46–57 tokens a second, faster than the
+default 4B on the same machine's GPU. It is the path for small-memory Macs
+where the MLX models cannot fit in GPU memory.
+
+```sh
+ENIO_BACKEND=apple ENIO_MODEL=apple-foundation enio start
+```
+
+Put those two lines (as `export`s) in `~/.enio/env` to make it the default.
+enio compiles a small bridge on first use (the Command Line Tools are
+enough — no Xcode) and starts it like any model server. Tools work — the
+agents route, read files, run commands and edit as usual.
+
+The honest limits: it is one fixed ~3B model with a window of roughly four
+thousand tokens (enio budgets under it, and trims what it sends), it has
+Apple's content guardrail (a declined request is reported as such rather
+than hanging), and the model picker has nothing to switch to while this
+backend is active. It is a weaker agent than the 4B — more apt to guess a
+path or reach for the wrong tool — so on a Mac where the 4B fits, keep the
+4B; this is the path for the Mac where it does not.
+
 ## Faster answers from a draft model
 
 The Qwen3 4B and larger are served with a tiny 0.6B **draft model** beside

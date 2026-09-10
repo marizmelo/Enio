@@ -230,10 +230,20 @@ export function skillsFor(agent: string, set: SkillSet = loadSkills()): Skill[] 
 
 /** The prompt's skill menu -- for one agent when routing chose one, for
  *  everything in single-agent mode, where there is no one to narrow to. */
-export function skillCatalogue(set: SkillSet = loadSkills(), agent?: string): string {
+export function skillCatalogue(set: SkillSet = loadSkills(), agent?: string, compact = false): string {
   const pool = agent ? skillsFor(agent, set) : set.skills;
   const listed = pool.filter((s) => !s.manualOnly).slice(0, MAX_CATALOGUE);
   if (listed.length === 0) return "";
+
+  // Names only, for the smallest windows: the full catalogue was the single
+  // largest block of a coder turn (~375 tokens, a fifth of a 2k budget). The
+  // names keep every skill — pinned ones included — one read_skill away.
+  if (compact) {
+    return (
+      `Skills available — call read_skill with a name for the instructions before doing the work: ` +
+      listed.map((s) => s.name).join(", ")
+    );
+  }
 
   const lines = listed.map((s) => `- ${s.name}: ${s.description}`);
   const overflow = pool.filter((s) => !s.manualOnly).length - listed.length;

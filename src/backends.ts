@@ -39,6 +39,20 @@ export const BACKENDS: Record<string, Backend> = {
     nativeToolCalls: true,
     notes: "Started by `enio up`. Serves the selected MLX model on Apple Silicon.",
   },
+  // Apple's own on-device model (Foundation Models, macOS 26+, Apple
+  // Intelligence on) through a bridge enio compiles and starts itself. Runs
+  // on the Neural Engine: nothing to download, the GPU left free, and the
+  // path for machines whose GPU memory the MLX models cannot fit in.
+  apple: {
+    id: "apple",
+    label: "Apple Intelligence (on-device, Neural Engine)",
+    baseUrl: "http://127.0.0.1:8085/v1",
+    model: "apple-foundation",
+    nativeToolCalls: true,
+    notes:
+      "macOS 26+ with Apple Intelligence enabled. Started by enio (scripts/apple-fm). " +
+      "One fixed ~3B model with a ~4k window; nothing to download.",
+  },
   ollama: {
     id: "ollama",
     label: "Ollama",

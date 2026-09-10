@@ -218,6 +218,11 @@ const MEASURED_BUDGETS: Array<[pattern: RegExp, tokens: number, measured: boolea
   // (fabricating about a file it had "read") is what over-budgeting looks
   // like from the outside. Replace with a planted-fact number.
   [/qwen3-1\.7b/i, 6000, false],
+  // Apple's on-device model: a ~4k window the framework enforces with an
+  // error, and the coder's system prompt with six tool schemas takes a
+  // third of it before any history — so the budget is the smallest class,
+  // the same band as the measured floor. Not measured for recall.
+  [/^apple-foundation$/i, 2000, false],
   // Dense models with real long-context training hold far more than Maple's
   // 1B active does. NOT measured here -- a conservative step up rather than
   // the 256k these advertise, and it should be replaced with a number from
@@ -269,6 +274,19 @@ export function adapterPathFor(name: string): string | null {
     return dir;
   }
   return null;
+}
+
+/**
+ * How much of one tool's output reaches the model, in characters. The
+ * configured ceiling holds for roomy windows; on a small one it follows the
+ * budget instead — a fixed 8,000 characters (~2k tokens) is a third of a
+ * 4k window, and one file read pushed the on-device model past its limit
+ * mid-turn, after the system prompt and tool schemas had taken their share.
+ * Sized from contextBudget() for the same reason everything else is: the
+ * model is switchable, and a constant that fits one window overflows another.
+ */
+export function toolOutputChars(): number {
+  return Math.min(config.maxToolOutputChars, Math.floor(contextBudget() * 4 * 0.35));
 }
 
 /** Whether the current model's budget came from a measurement or a guess.

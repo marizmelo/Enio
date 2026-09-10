@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { toolOutputChars } from "../model-settings.js";
 import type { ToolDef } from "../types.js";
 import { isBlockedHost, renderPage, playwrightAvailable } from "./browser.js";
 export { isBlockedHost };
@@ -282,8 +283,9 @@ function parseTarget(raw: string): URL | string {
 }
 
 function clip(text: string): string {
-  if (text.length <= config.maxToolOutputChars) return text;
-  return text.slice(0, config.maxToolOutputChars) + `\n\n[truncated]`;
+  const cap = toolOutputChars();
+  if (text.length <= cap) return text;
+  return text.slice(0, cap) + `\n\n[truncated]`;
 }
 
 /* ---------- tools ------------------------------------------------------- */

@@ -1,9 +1,9 @@
 import { spawn, spawnSync, execFileSync } from "node:child_process";
-import { existsSync, openSync, symlinkSync } from "node:fs";
-import { totalmem } from "node:os";
+import { existsSync, mkdirSync, openSync, statSync, symlinkSync } from "node:fs";
+import { release, totalmem } from "node:os";
 import { dirname, join } from "node:path";
 import { DRAFT_TOKENS, draftFor } from "./model-catalogue.js";
-import { config } from "./config.js";
+import { config, projectRoot } from "./config.js";
 import { serverIsUp } from "./model.js";
 import {
   otherModelClients,
@@ -301,6 +301,8 @@ export async function ensureBackend(opts: EnsureOptions): Promise<RunningBackend
       return startMaple(opts);
     case "ollama":
       return startOllama(opts);
+    case "apple":
+      return startApple(opts);
     default:
       throw new Error(
         `enio can't start a ${config.backendId} server for you.\n` +
@@ -309,6 +311,46 @@ export async function ensureBackend(opts: EnsureOptions): Promise<RunningBackend
           `  llamacpp:  llama-server --jinja -m <model.gguf> --port 8081\n`,
       );
   }
+}
+
+/* ---------- apple ------------------------------------------------------- */
+
+/**
+ * The bridge to Apple's on-device model is a single Swift file, compiled
+ * here on first use with the Command Line Tools' swiftc (no Xcode, no
+ * package) into the data dir, and recompiled whenever the source is newer —
+ * a git pull is exactly what makes the binary stale. macOS 26 is Darwin 25;
+ * older systems have no FoundationModels framework to link against, and the
+ * bridge itself exits 2 when Apple Intelligence is not enabled, which is
+ * the message the user needs rather than a port that never answers.
+ */
+async function startApple(opts: EnsureOptions): Promise<RunningBackend> {
+  if (process.platform !== "darwin" || Number(release().split(".")[0]) < 25) {
+    throw new Error(
+      `Apple's on-device model needs macOS 26 or later on Apple Silicon.\n\n` +
+        `Everything else in enio works here. Switch backends:\n` +
+        `    ENIO_BACKEND=maple enio start\n`,
+    );
+  }
+  const source = join(projectRoot, "scripts", "apple-fm", "server.swift");
+  const binary = join(config.dataDir, "apple-fm", "server");
+  const stale = !existsSync(binary) || statSync(binary).mtimeMs < statSync(source).mtimeMs;
+  if (stale) {
+    opts.log("Compiling the Apple Intelligence bridge (first run, or the source changed)…");
+    mkdirSync(join(config.dataDir, "apple-fm"), { recursive: true });
+    const build = spawnSync("swiftc", ["-O", "-o", binary, source], { encoding: "utf8" });
+    if (build.status !== 0) {
+      throw new Error(
+        `Could not compile the bridge. Xcode's Command Line Tools with the macOS 26 SDK are needed:\n` +
+          `    xcode-select --install\n\n${(build.stderr || "").split("\n").filter((l) => l.includes("error")).slice(0, 5).join("\n")}`,
+      );
+    }
+  }
+  const logPath = join(config.dataDir, "apple-fm.log");
+  const log = openSync(logPath, "a");
+  const child = spawn(binary, ["--port", modelServerPort()], { stdio: ["ignore", log, log] });
+  await waitForServer(child, opts, 20, "Starting Apple Intelligence", logPath);
+  return { stop: () => kill(child) };
 }
 
 /* ---------- maple ------------------------------------------------------- */

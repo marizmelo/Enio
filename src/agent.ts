@@ -16,7 +16,7 @@ import { isImage, readImage } from "./vision.js";
 import type { Registry } from "./tools/index.js";
 import { createHash } from "node:crypto";
 import { toolText, toWireTool, type Message, type ToolCall, type Widget } from "./types.js";
-import { adapterPathFor, contextBudget } from "./model-settings.js";
+import { adapterPathFor, contextBudget, toolOutputChars } from "./model-settings.js";
 import { extractSources, isWebTool } from "./sources.js";
 import { setMemorySources } from "./tools/memory.js";
 import { coverageBlock } from "./memory/coverage.js";
@@ -982,7 +982,9 @@ export async function runTurn(
     dateBlock(),
     roleSystem,
     invoked,
-    invoked ? "" : skillCatalogue(undefined, specialistName ?? undefined),
+    // Names-only on the smallest windows: the full catalogue was the largest
+    // single block of a coder turn, a fifth of a 2k budget.
+    invoked ? "" : skillCatalogue(undefined, specialistName ?? undefined, contextBudget() <= 2000),
     projectBlock(),
     conversationBlock(),
     preferenceBlock(),
@@ -2208,8 +2210,8 @@ async function executeCall(
     }
 
     const body =
-      raw.length > config.maxToolOutputChars
-        ? raw.slice(0, config.maxToolOutputChars) + "\n[...truncated]"
+      raw.length > toolOutputChars()
+        ? raw.slice(0, toolOutputChars()) + "\n[...truncated]"
         : raw;
 
     // Provenance, stamped here rather than in the MCP client for the same

@@ -3009,3 +3009,57 @@ doing anything; the prompt cache was.
 
 The output is exactly the target's — drafting changes speed and nothing
 else — which is why this is on by default rather than an add-on.
+
+### Apple Intelligence as a backend: the model the Mac already has
+
+**Chose:** an `apple` backend — Apple's on-device Foundation Model
+(macOS 26+, Apple Intelligence on) behind a bridge enio compiles on first
+use from one Swift file (`scripts/apple-fm/server.swift`, Command Line
+Tools only) and starts like any model server. It runs on the Neural
+Engine: nothing to download, the GPU left free, and the path for machines
+whose GPU wired-memory limit the MLX models cannot fit under. Measured
+here (M4): 46–57 tok/s warm — faster than the default 4B on the same
+machine's GPU (32.5) — and a tool call intercepted and resumed in 0.78s.
+
+The design point is tools. enio's harness executes them; the framework
+runs `Tool.call` inside generation. So every bridged tool is a trap:
+`Tool.call` captures the arguments and throws, generation stops at the
+call, and enio receives an OpenAI `tool_calls` delta. When the result
+comes back, the session is rebuilt from a transcript holding the call and
+its output — and a call the transcript already answered is served from
+that output inside `Tool.call` instead of intercepted again, because left
+to the history alone the model re-issued the very call whose answer it
+was holding. The latest tool result also rides in the continuation prompt
+verbatim: a small model attends to the prompt far more than to history.
+
+**Rejected:** running Qwen weights on the ANE through third-party
+runtimes — ane.cpp reaches the ANE through Apple's private
+`AppleNeuralEngine.framework` (measured 11.7 tok/s for a 4B on an M3 Max,
+dispatch-bound) and CoreML conversions are a whole runtime to own; both
+are slower than the GPU path they would replace and fragile besides. The
+framework's own model is the one ANE path Apple supports. Also rejected:
+letting the framework execute tools itself (the sandbox, allowlists and
+tracing live in the harness and stay there), and driving the bridge over
+stdio (the OpenAI shape means every existing client path just works).
+
+What it exposed, measured: the window is real and sits between 15,000
+and 20,000 characters (~4k tokens — a 3,750-token message passed, a
+5,000-token one did not). Against that, a coder turn's fixed cost was
+6,877 characters of system prompt plus 3,304 of tool schemas before any
+history: the skills catalogue alone 1,509, the cross-agent abilities
+note 796. Three things now follow the budget instead of constants: tool
+output (a fixed 8,000-character cap was a third of the window, and one
+file read overflowed it mid-turn), the skills catalogue (a one-line
+pointer on the smallest budgets — read_skill with any name still lists
+them), and this backend's budget itself, set to the smallest class. The
+bridge's first continuation prompt also copied the tool result verbatim
+"so the model would see it", which spent the window twice on every read;
+the known-output trap made that unnecessary and it was cut.
+
+Through the full harness the 3B routes, seeds a search, reads files and
+answers. It also, some runs, invents a path prefix the sandbox refuses,
+and once rewrote a 32-line file to 8 when asked only to read it — the
+guard warned after the fact and the original came back out of the trace.
+Both are model-quality wobbles the harness contains rather than bridge
+faults, and the reason the docs say: the path for a Mac the 4B cannot
+fit in, not a replacement for the 4B where it does.

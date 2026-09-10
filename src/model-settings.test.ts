@@ -94,6 +94,15 @@ describe("the context budget follows the model", () => {
     assert.equal(settings.contextBudgetMeasured(), false);
   });
 
+  test("tool output shrinks with the window — the on-device model's cap is below the constant", () => {
+    settings.setModelId("apple-foundation");
+    const small = settings.toolOutputChars();
+    assert.ok(small < 8000, `a 4k-window model must not receive 8k-char tool results, got ${small}`);
+    assert.ok(settings.contextBudget() <= 2000, "its budget is the smallest class");
+    settings.setModelId("mlx-community/Qwen3-4B-Instruct-2507-4bit");
+    assert.equal(settings.toolOutputChars(), 8000, "a roomy window keeps the configured ceiling");
+  });
+
   test("the 1.7B sits below the 4B — a smaller model never inherits a bigger guess", () => {
     settings.setModelId("mlx-community/Qwen3-1.7B-4bit");
     const small = settings.contextBudget();
