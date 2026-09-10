@@ -94,6 +94,12 @@ most relevant findings"* between a search step and a document step, or
 the previous steps produced and hands text onward. You'll find it in the
 canvas palette but not on the launcher — on its own it is just chat.
 
+### What it keeps asking for
+
+`enio suggest` also lists a skill the model has reached for in three or
+more turns that is not installed: the model already decided that know-how
+should exist, and named it.
+
 ### What it couldn't answer
 
 A step's prompt may carry `{{gaps}}`, which enio replaces at run time with

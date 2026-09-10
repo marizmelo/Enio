@@ -2,6 +2,7 @@ import { getDb } from "./memory/db.js";
 import { embed, embedBatch } from "./memory/embed.js";
 import { cosine } from "./memory/db.js";
 import { openGaps } from "./memory/gaps.js";
+import { skillUsage } from "./skill-usage.js";
 
 /**
  * Finding what's worth automating, from evidence rather than intuition.
@@ -20,6 +21,8 @@ import { openGaps } from "./memory/gaps.js";
  *     schedule, not a prompt.
  *  4. Open gaps asked more than twice — a question memory kept not having
  *     an answer to, which is research worth doing once.
+ *  5. A skill the model keeps reaching for that is not installed — the
+ *     model already decided that know-how should exist; write it.
  */
 
 export interface TurnFact {
@@ -241,8 +244,20 @@ export async function analyse(limit = 2000): Promise<{
       suggestedName: slug(g.question),
       specialist: "researcher",
     }));
+  // Already counted per turn by the usage miner; three turns asking for a
+  // skill that does not exist is a skill to write, named by the model.
+  const missingSkills: Proposal[] = skillUsage()
+    .unresolved.filter((u) => u.count >= 3)
+    .map((u) => ({
+      kind: "skill" as const,
+      title: `A skill the model keeps asking for: ${u.name}`,
+      reason: `read_skill asked for "${u.name}" in ${u.count} turns; no such skill is installed.`,
+      evidence: [u.name],
+      suggestedName: slug(u.name) === "untitled" ? u.name.replace(/[^a-z0-9-]+/g, "-") : slug(u.name),
+    }));
+  const early = [...gapProposals, ...missingSkills];
   if (facts.length < 5) {
-    return { proposals: gapProposals, turnsExamined: facts.length, usedEmbeddings: false };
+    return { proposals: early, turnsExamined: facts.length, usedEmbeddings: false };
   }
 
   // Semantic clustering catches rephrasings that word overlap misses, which is
@@ -259,7 +274,7 @@ export async function analyse(limit = 2000): Promise<{
     : (a: TurnFact, b: TurnFact) => lexicalSimilarity(a.question, b.question);
 
   const threshold = usedEmbeddings ? 0.82 : 0.4;
-  const proposals: Proposal[] = [...gapProposals];
+  const proposals: Proposal[] = early;
 
   for (const cluster of clusterBy(facts, similarity, threshold)) {
     const timing = detectTimePattern(cluster.members.map((m) => m.startedAt));

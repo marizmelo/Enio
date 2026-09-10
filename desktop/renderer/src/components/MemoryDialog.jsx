@@ -130,6 +130,11 @@ export function MemoryDialog({ open, onOpenChange }) {
                       }`}
                     >
                       <span className={`min-w-0 flex-1${f.supersededAt ? " line-through" : ""}`}>{f.text}</span>
+                      {f.recalled > 0 && (
+                        <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums" title="Turns this fact was put in front of the model">
+                          ×{f.recalled}
+                        </span>
+                      )}
                       <span
                         className="shrink-0 text-[10px] text-muted-foreground"
                         title={f.origin || undefined}

@@ -163,6 +163,29 @@ function retireRivals(newId: number, text: string, vec: Float32Array | null): st
 }
 
 /** Everything the facts table holds, for the desktop's Memory dialog. */
+/**
+ * How often each fact has actually been put in front of the model: the
+ * memory block of every traced turn lists the facts it retrieved, one
+ * "- " line each, and this counts the lines. Salience as a measurement
+ * rather than a judgement — a fact recalled forty times and one recalled
+ * never are different things to a person pruning memory, and nothing
+ * ranks on it: the number is shown, and the person decides.
+ */
+export function factRecalls(): Map<string, number> {
+  const counts = new Map<string, number>();
+  const rows = getDb()
+    .prepare(`SELECT memory_block AS block FROM turns WHERE memory_block LIKE '%- %'`)
+    .all() as Array<{ block: string }>;
+  for (const r of rows) {
+    for (const line of r.block.split("\n")) {
+      if (!line.startsWith("- ")) continue;
+      const text = line.slice(2).trim();
+      if (text) counts.set(text, (counts.get(text) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
 export function listFacts(): Array<{
   id: number;
   text: string;
@@ -173,6 +196,8 @@ export function listFacts(): Array<{
   /** Set when a later fact replaced this one. Listed, not hidden: a memory
    *  that silently rewrites history is worse than one that forgets. */
   supersededAt: number | null;
+  /** Turns whose memory block carried this fact. */
+  recalled: number;
 }> {
   const rows = getDb()
     .prepare(
@@ -183,7 +208,8 @@ export function listFacts(): Array<{
       id: number; text: string; pinned: number; source: string; origin: string | null;
       createdAt: number; supersededAt: number | null;
     }>;
-  return rows.map((r) => ({ ...r, pinned: r.pinned === 1 }));
+  const recalls = factRecalls();
+  return rows.map((r) => ({ ...r, pinned: r.pinned === 1, recalled: recalls.get(r.text) ?? 0 }));
 }
 
 export function setFactPinned(id: number, pinned: boolean): boolean {

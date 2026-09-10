@@ -172,7 +172,9 @@ The desktop app has a **Memory** button in the top bar. It lists everything
 memory holds and lets you prune it in place:
 
 - **Facts** — pin, unpin, or forget each one. Pinned facts ride in every
-  turn; the rest only when they look related.
+  turn; the rest only when they look related. A small ×N says how many
+  turns a fact has actually been put in front of the model — a count to
+  prune by, never something that ranks.
 - **Preferences** — the standing instructions injected into every turn.
 - **What it lacked** — the gap ledger: questions nothing covered, most
   asked first, closed on their own once a fact answers them.

@@ -3202,6 +3202,21 @@ equal facts, never a label); crediting the search that listed a page (a
 listing is not a reading); joining exemplars to turns by question text
 (the newest repeat would win, months later).
 
+### Salience is a count shown, and a missing skill is a suggestion
+
+**Chose:** each fact carries how many traced turns put it in front of the
+model (the memory block already lists what was retrieved, one line per
+fact; the count is those lines), shown as ×N in the Memory panel and
+nowhere else. And `enio suggest` lists a skill the model asked
+`read_skill` for in three or more turns that does not exist — counted per
+turn, like every other suggest signal, since one turn asks three ways.
+
+**Rejected:** ranking or pruning on recall counts (a fact recalled often
+is a fact that matches often, which says nothing about whether it is
+right or wanted; the person prunes, the count informs); a salience decay
+that forgets on its own (memory that changes without a person acting is
+the class of behaviour this design avoids everywhere).
+
 ### Curiosity is an automation over the gap ledger, and experts are sources
 
 **Chose:** one harness token, `{{gaps}}`, expanded in a step's prompt at

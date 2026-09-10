@@ -224,3 +224,18 @@ describe("remember this: distil then save", () => {
     assert.ok(conversationKnowledge(sid).some((f) => /^Spain won the 2026/.test(f.text)));
   });
 });
+
+describe("salience", () => {
+  test("a fact counts the turns whose memory block carried it", async () => {
+    const { recordTurn } = await import("./memory/traces.js");
+    await store.rememberFact("the user's cat is called Miso", { source: "cli" });
+    const trace = (block: string) =>
+      recordTurn({ sessionId: "s-sal", question: "q", reply: "r", specialist: "generalist", systemPrompt: "", memoryBlock: block, startedAt: Date.now(), durationMs: 1, iterations: 1, steps: [] });
+    trace("<memory>\nKnown facts:\n- the user's cat is called Miso\n- something else\n</memory>");
+    trace("<memory>\nKnown facts:\n- the user's cat is called Miso\n</memory>");
+    trace("");
+    const fact = store.listFacts().find((f) => f.text.includes("Miso"));
+    assert.equal(fact!.recalled, 2);
+    assert.equal(store.listFacts().find((f) => f.text.includes("tea"))?.recalled ?? 0, 0);
+  });
+});

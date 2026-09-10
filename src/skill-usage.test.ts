@@ -84,8 +84,13 @@ describe("skillUsage", () => {
     assert.equal(usage["no-such-skill"], undefined);
     const miss = unresolved.find((u) => u.name === "no-such-skill");
     assert.ok(miss, "the ask itself is a finding");
-    assert.equal(miss!.count, 2);
+    // Turns, not rows: one turn asking twice is one finding, the same
+    // unit `suggest` ranks question clusters in.
+    assert.equal(miss!.count, 1);
     assert.equal(miss!.lastAt, 4_000);
+    const t2 = turn(4_500);
+    step(t2, "tool", "read_skill", `{"name":"no-such-skill"}`, `No skill named "no-such-skill". Available: none installed`);
+    assert.equal(skillUsage(loadSkills()).unresolved.find((u) => u.name === "no-such-skill")!.count, 2);
   });
 
   test("harness skill_invoked rows count as uses", () => {

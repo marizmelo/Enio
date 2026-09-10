@@ -49,7 +49,10 @@ export function skillUsage(set: SkillSet = loadSkills()): {
 
   const turnsBySkill = new Map<string, Set<number>>();
   const lastBySkill = new Map<string, number>();
-  const misses = new Map<string, { count: number; lastAt: number }>();
+  // Turns, not rows, for misses too: one turn asking for a missing skill
+  // three ways is one finding, and `suggest` ranks it beside per-turn
+  // question clusters.
+  const misses = new Map<string, { turns: Set<number>; lastAt: number }>();
 
   const attribute = (rawName: string, turnId: number, at: number, missed: boolean) => {
     const raw = rawName.trim();
@@ -59,11 +62,10 @@ export function skillUsage(set: SkillSet = loadSkills()): {
     const skill = missed ? null : findSkill(raw, set);
     if (!skill) {
       const key = raw.toLowerCase();
-      const entry = misses.get(key);
-      misses.set(key, {
-        count: (entry?.count ?? 0) + 1,
-        lastAt: Math.max(entry?.lastAt ?? 0, at),
-      });
+      const entry = misses.get(key) ?? { turns: new Set<number>(), lastAt: 0 };
+      entry.turns.add(turnId);
+      entry.lastAt = Math.max(entry.lastAt, at);
+      misses.set(key, entry);
       return;
     }
     let turns = turnsBySkill.get(skill.name);
@@ -93,7 +95,7 @@ export function skillUsage(set: SkillSet = loadSkills()): {
     usage[name] = { uses: turns.size, lastUsedAt: lastBySkill.get(name) ?? null };
   }
   const unresolved = [...misses.entries()]
-    .map(([name, m]) => ({ name, count: m.count, lastAt: m.lastAt || null }))
+    .map(([name, m]) => ({ name, count: m.turns.size, lastAt: m.lastAt || null }))
     .sort((a, b) => b.count - a.count);
   return { usage, unresolved };
 }
