@@ -172,8 +172,17 @@ export function trainerFor(): { id: string; available: boolean; reason?: string 
 
 /* ---------- material: what the traces have accumulated ------------------ */
 
-/** The floor reply the harness gives when a turn produced nothing usable. */
-const FLOOR_REPLY = /could not produce an answer/i;
+/**
+ * Replies the harness or a backend authored, not the model: the floor reply
+ * for a turn that produced nothing usable, and the on-device bridge's
+ * refusals, which arrive as ordinary completions and are stored as the
+ * turn's reply. A closed list, and it must stay one: the first version
+ * matched only the floor reply, and the coder's third training run learned
+ * "start a new chat" as the answer to reading a file — ten rows of it, in
+ * train and valid both.
+ */
+const HARNESS_REPLY =
+  /could not produce an answer|longer than the on-device model's window|on-device model (declined|error)|^Tool call failed:/i;
 
 /**
  * One definition of a clean turn, shared by the material count here and
@@ -190,8 +199,118 @@ export function turnIsClean(
   if (!steps.some((s) => s.kind === "tool")) return false;
   if (steps.some((s) => s.error || s.repaired || s.scavenged)) return false;
   if (turn.iterations >= config.maxToolIterations) return false;
-  if (!turn.reply.trim() || FLOOR_REPLY.test(turn.reply)) return false;
+  if (!turn.reply.trim() || HARNESS_REPLY.test(turn.reply)) return false;
   return true;
+}
+
+export interface MineableTurn {
+  id: number;
+  question: string;
+  reply: string;
+  iterations: number;
+  startedAt: number;
+  firstTool: string | null;
+}
+
+const excludedPath = (name: string) => join(adapterDir(name), "data", "excluded.json");
+
+/** Turn ids a person struck from the material. A file beside the dataset,
+ *  not a column: the traces are rebuilt by reindex, the user's judgement
+ *  is not. */
+export function excludedTurns(name: string): number[] {
+  try {
+    const parsed = JSON.parse(readFileSync(excludedPath(name), "utf8")) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((n): n is number => Number.isInteger(n)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function excludeTurn(name: string, id: number): number[] {
+  const list = [...new Set([...excludedTurns(name), id])].sort((a, b) => a - b);
+  mkdirSync(join(adapterDir(name), "data"), { recursive: true });
+  writeFileSync(excludedPath(name), JSON.stringify(list) + "\n");
+  return list;
+}
+
+/**
+ * The turns --from-traces may learn from: clean by the bar above, produced
+ * by the model the adapter is trained over, and not struck by the user.
+ *
+ * The model match is the lesson of the coder's third run. A 4B adapter was
+ * trained on turns a 3B and Apple's on-device model had produced, because
+ * nothing on a turn said which model had — 36% of the set, teaching the
+ * base other models' habits. Turns recorded before the column existed have
+ * no model and are never mined; the count starts again, honestly, from
+ * turns this base produced. The exclusion list exists because a test
+ * conversation is structurally indistinguishable from a real one: a person
+ * is the filter, and `enio train material` is where they read the list.
+ */
+export function mineableTurns(specialist: string, since = 0): MineableTurn[] {
+  const excluded = new Set(excludedTurns(specialist));
+  const db = getDb();
+  const turns = db
+    .prepare(
+      `SELECT id, question, reply, iterations, started_at AS startedAt FROM turns
+        WHERE specialist = ? AND model = ? AND started_at > ? ORDER BY id DESC`,
+    )
+    .all(specialist, currentModelId(), since) as Array<Omit<MineableTurn, "firstTool">>;
+  const stepsFor = db.prepare(
+    `SELECT kind, name, repaired, scavenged, error FROM turn_steps WHERE turn_id = ? ORDER BY seq`,
+  );
+  const out: MineableTurn[] = [];
+  for (const t of turns) {
+    if (excluded.has(t.id)) continue;
+    const steps = stepsFor.all(t.id) as Array<{
+      kind: string; name: string | null; repaired: number; scavenged: number; error: string | null;
+    }>;
+    if (!turnIsClean(t, steps)) continue;
+    out.push({ ...t, firstTool: steps.find((s) => s.kind === "tool")?.name ?? null });
+  }
+  return out;
+}
+
+export interface DatasetRow<T> {
+  row: T;
+  mined: boolean;
+  chars: number;
+}
+
+/**
+ * Train/valid membership for an adapter's rows. Valid comes from the
+ * curriculum only: it is the held-out measure of the form being taught, and
+ * a mined row there measures whatever conversation happened to be traced —
+ * in the coder's third run, a test artefact 400 tokens over the trainer's
+ * cap, which truncated its target and left the validation loss meaning
+ * nothing. Rows over maxChars are dropped rather than left for the trainer
+ * to truncate, because truncation takes the end of the row, which is
+ * exactly the target. 12,000 characters is the 3,072-token cap at the
+ * measured 4.1 characters per token of these rows, with room to spare.
+ * The shuffle is seeded so membership is stable across runs.
+ */
+export function splitDataset<T>(
+  rows: Array<DatasetRow<T>>,
+  maxChars = 12_000,
+): { train: T[]; valid: T[]; dropped: number; mined: number } {
+  const kept = rows.filter((r) => r.chars <= maxChars);
+  let seed = 42;
+  const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x80000000);
+  const shuffle = <U>(xs: U[]): U[] => {
+    for (let i = xs.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [xs[i], xs[j]] = [xs[j]!, xs[i]!];
+    }
+    return xs;
+  };
+  const curriculum = shuffle(kept.filter((r) => !r.mined));
+  const mined = kept.filter((r) => r.mined);
+  const cut = Math.max(curriculum.length - Math.max(2, Math.round(curriculum.length * 0.08)), 1);
+  return {
+    train: shuffle([...curriculum.slice(0, cut), ...mined]).map((r) => r.row),
+    valid: curriculum.slice(cut).map((r) => r.row),
+    dropped: rows.length - kept.length,
+    mined: mined.length,
+  };
 }
 
 export interface FailureCase {
@@ -231,7 +350,7 @@ export function failureCases(specialist: string, limit = 20): FailureCase[] {
     if (steps.some((s) => s.repaired)) reasons.push("malformed JSON repaired");
     if (steps.some((s) => s.scavenged)) reasons.push("tool call scavenged from text");
     if (t.iterations >= config.maxToolIterations) reasons.push("ran to the iteration cap");
-    if (FLOOR_REPLY.test(t.reply)) reasons.push("no usable answer");
+    if (HARNESS_REPLY.test(t.reply)) reasons.push("no usable answer");
     if (reasons.length) out.push({ turnId: t.id, question: t.question, reasons, reply: t.reply.slice(0, 160) });
     if (out.length >= limit) break;
   }
@@ -239,22 +358,9 @@ export function failureCases(specialist: string, limit = 20): FailureCase[] {
 }
 
 /** Clean turns of a specialist since its active adapter was trained (or
- *  ever, with none): the material --from-traces would add next time. Uses
- *  the same bar the miner does — tools used, nothing errored, nothing
- *  repaired — so the number means what it says. */
+ *  ever, with none): the material --from-traces would add next time. The
+ *  same list the miner reads, so the number means what it says. */
 export function materialSince(specialist: string): { clean: number; since: number | null } {
   const since = activeAdapterVersion(specialist)?.trainedAt ?? null;
-  const db = getDb();
-  const turns = db
-    .prepare(
-      `SELECT id, reply, iterations FROM turns WHERE specialist = ? AND started_at > ?`,
-    )
-    .all(specialist, since ?? 0) as Array<{ id: number; reply: string; iterations: number }>;
-  const stepsFor = db.prepare(`SELECT kind, repaired, scavenged, error FROM turn_steps WHERE turn_id = ?`);
-  let clean = 0;
-  for (const t of turns) {
-    const steps = stepsFor.all(t.id) as Array<{ kind: string; repaired: number; scavenged: number; error: string | null }>;
-    if (turnIsClean(t, steps)) clean++;
-  }
-  return { clean, since };
+  return { clean: mineableTurns(specialist, since ?? 0).length, since };
 }

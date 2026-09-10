@@ -3090,3 +3090,39 @@ Rollback exists because the gate is a small held-out set: it measures
 what it measures, and a version that passes it can still be the one that
 rewrote a file it was asked to read. Choosing the previous version is
 one command; the numbers that justified each version stay in history.
+
+### Mined turns carry their model, and valid never holds them
+
+**What happened:** the coder's third run, the first with `--from-traces`,
+failed its gate with zero tool calls (5/19 against base's 13/19) and a
+loss that diverged from iteration 140. The data audit: 47 of 130 rows
+came from 13 traced turns, of which four were real work — the rest were
+end-to-end test conversations, produced by a 3B and by Apple's on-device
+model. The bridge's refusal ("That conversation is longer than the
+on-device model's window; start a new chat.") arrives as an ordinary
+completion, so it was a training target ten times, in train and valid
+both. One mined row in valid was 400 tokens over the trainer's cap, which
+truncated its target and left the validation loss measuring nothing.
+
+**Chose:** a `model` column on turns, written by `recordTurn`; the miner
+and the material count take only turns produced by the base being
+trained, so older rows (NULL) are never mined and the count restarts
+honestly. The harness-authored replies are a closed list
+(`HARNESS_REPLY`) covering the floor reply and the bridge's refusals.
+`splitDataset` draws valid from the curriculum only and drops over-length
+rows rather than letting the trainer cut their tails. `enio train
+material` shows the list and `enio train exclude` strikes from it,
+because a test conversation is structurally indistinguishable from a real
+one — a person is the filter.
+
+**Rejected:** classifying test conversations by heuristics (session
+length, question shape — every rule imagined also matched real short
+sessions); a judge model over the traces (the small model deciding what
+the small model should learn from); keeping the old rows by guessing
+their model from the timestamp (the guess would be mine, and wrong for
+the days two models were switched between).
+
+**Not established:** whether the mined rows caused the divergence or
+merely rode along with it — every train row fit the cap, and v2
+converged on the curriculum alone at the same hyperparameters. The
+curriculum-only run is the control, and it waits for the user's go.

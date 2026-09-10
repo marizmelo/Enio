@@ -83,13 +83,14 @@ const turn = (
   id: string,
   question: string,
   steps: Array<Partial<{ kind: "tool" | "model"; name: string; error: string; repaired: boolean; scavenged: boolean }>>,
-  extra: Partial<{ reply: string; iterations: number; startedAt: number }> = {},
+  extra: Partial<{ reply: string; iterations: number; startedAt: number; model: string | null }> = {},
 ) =>
   recordTurn({
     sessionId: id,
     question,
     reply: extra.reply ?? "Done.",
     specialist: "coder",
+    model: extra.model === undefined ? process.env.ENIO_MODEL : extra.model,
     systemPrompt: "",
     memoryBlock: "",
     startedAt: extra.startedAt ?? Date.now(),
@@ -123,6 +124,20 @@ describe("mining the traces for the loop", () => {
     assert.match(byQ["verify my app"]!.join(";"), /no usable answer/);
   });
 
+  test("a backend's refusal is not an answer — it must never become a training target", () => {
+    // The on-device bridge returns its refusals as ordinary completions, so
+    // they are stored as the turn's reply. The coder's third run learned
+    // "start a new chat" as the answer to reading a file, ten rows of it.
+    const step = [{ kind: "tool", repaired: 0, scavenged: 0, error: null }];
+    const refused = "That conversation is longer than the on-device model's window; start a new chat.";
+    assert.equal(reg.turnIsClean({ reply: refused, iterations: 2 }, step), false);
+    assert.equal(
+      reg.turnIsClean({ reply: "Apple's on-device model declined this request (its content guardrail).", iterations: 1 }, step),
+      false,
+    );
+    assert.equal(reg.turnIsClean({ reply: "The heading is 'Notes'.", iterations: 1 }, step), true);
+  });
+
   test("material counts only clean tool-using turns, and only since the active version", () => {
     // Everything so far is before any version: one clean turn (s1).
     assert.equal(reg.materialSince("coder").clean, 1);
@@ -130,5 +145,41 @@ describe("mining the traces for the loop", () => {
     assert.equal(reg.materialSince("coder").clean, 0, "the version's training time resets the count");
     turn("s6", "list the folder", [{ kind: "tool", name: "read_file" }], { startedAt: Date.now() + 1000 });
     assert.equal(reg.materialSince("coder").clean, 1);
+  });
+
+  test("material is only what this base produced, minus what the user struck", () => {
+    const later = Date.now() + 2000;
+    // Another model's clean turn: not an example of what this base should do.
+    turn("s7", "show the readme", [{ kind: "tool", name: "read_file" }], { startedAt: later, model: "mlx-community/Qwen3-1.7B-4bit" });
+    // A turn from before the column existed: unknown model, never mined.
+    turn("s8", "what is in package.json", [{ kind: "tool", name: "read_file" }], { startedAt: later, model: null });
+    assert.equal(reg.materialSince("coder").clean, 1, "s6 alone: s7 is another model's, s8 has none");
+
+    const [mine] = reg.mineableTurns("coder");
+    assert.equal(mine?.question, "list the folder");
+    assert.equal(mine?.firstTool, "read_file");
+
+    reg.excludeTurn("coder", mine!.id);
+    // Without a version's cutoff the list also holds s1, the first clean turn.
+    assert.deepEqual(reg.mineableTurns("coder").map((t) => t.question), ["read notes.md"], "a struck turn leaves the material");
+    assert.equal(reg.materialSince("coder").clean, 0);
+    assert.deepEqual(reg.excludedTurns("coder"), [mine!.id]);
+    assert.ok(existsSync(join(reg.adapterDir("coder"), "data", "excluded.json")), "the strike is a file, so reindex cannot undo it");
+  });
+
+  test("valid is drawn from the curriculum only, and over-length rows are dropped", () => {
+    const rows = [
+      ...Array.from({ length: 25 }, (_, i) => ({ row: `c${i}`, mined: false, chars: 7000 })),
+      ...Array.from({ length: 10 }, (_, i) => ({ row: `m${i}`, mined: true, chars: 7000 })),
+      { row: "m-long", mined: true, chars: 15_500 },
+      { row: "c-long", mined: false, chars: 12_001 },
+    ];
+    const split = reg.splitDataset(rows);
+    assert.equal(split.dropped, 2, "the trainer would truncate exactly the target off these");
+    assert.equal(split.mined, 10);
+    assert.ok(split.valid.length >= 2 && split.valid.every((r) => r.startsWith("c")), "no mined row is held out");
+    assert.equal(split.train.length + split.valid.length, 35);
+    assert.ok(!split.train.includes("m-long") && !split.train.includes("c-long"));
+    assert.deepEqual(reg.splitDataset(rows).train, split.train, "membership is stable across runs");
   });
 });

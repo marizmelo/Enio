@@ -16,7 +16,7 @@ import { isImage, readImage } from "./vision.js";
 import type { Registry } from "./tools/index.js";
 import { createHash } from "node:crypto";
 import { toolText, toWireTool, type Message, type ToolCall, type Widget } from "./types.js";
-import { adapterPathFor, contextBudget, toolOutputChars } from "./model-settings.js";
+import { adapterPathFor, contextBudget, currentModelId, toolOutputChars } from "./model-settings.js";
 import { extractSources, isWebTool } from "./sources.js";
 import { setMemorySources } from "./tools/memory.js";
 import { coverageBlock } from "./memory/coverage.js";
@@ -897,6 +897,7 @@ export async function runTurn(
           startedAt: Date.now(),
           durationMs: 0,
           iterations: 0,
+          model: currentModelId(),
           steps: [],
         });
       } catch {
@@ -1954,6 +1955,7 @@ export async function runTurn(
       startedAt: turnStartedAt,
       durationMs: Date.now() - turnStartedAt,
       iterations,
+      model: currentModelId(),
       steps,
     });
   } catch {

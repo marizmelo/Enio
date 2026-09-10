@@ -261,6 +261,11 @@ function migrate(d: Database.Database): void {
   addColumn(d, "facts", "valid_to", "INTEGER");
   addColumn(d, "facts", "superseded_by", "INTEGER");
   addColumn(d, "facts", "origin", "TEXT");
+  // Which model produced a turn. Adapter training mines turns per base, and
+  // before this column a 4B was trained on a 3B's and the on-device model's
+  // turns because nothing could tell them apart. Older rows stay NULL and
+  // are never mined.
+  addColumn(d, "turns", "model", "TEXT");
 
   // The scheduler lease: which process may fire cron jobs. One row, taken and
   // refreshed by a guarded UPSERT, so desktop serve and a headless daemon can

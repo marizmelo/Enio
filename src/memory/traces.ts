@@ -45,6 +45,9 @@ export interface TurnRecord {
   startedAt: number;
   durationMs: number;
   iterations: number;
+  /** Which model produced the turn (the served id). Adapter training mines
+   *  turns by it: a base must not learn another model's habits. */
+  model?: string | null;
   steps: StepRecord[];
 }
 
@@ -85,8 +88,8 @@ export function recordTurn(turn: TurnRecord): number {
       .prepare(
         `INSERT INTO turns
            (session_id, question, reply, specialist, system_prompt, memory_block,
-            started_at, duration_ms, iterations)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            started_at, duration_ms, iterations, model)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         t.sessionId,
@@ -98,6 +101,7 @@ export function recordTurn(turn: TurnRecord): number {
         t.startedAt,
         t.durationMs,
         t.iterations,
+        t.model ?? null,
       );
 
     const turnId = Number(result.lastInsertRowid);

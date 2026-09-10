@@ -136,6 +136,8 @@ same on every machine, whatever does the training:
 ```sh
 enio train                    # per agent: installed version, its gate numbers, new material, failed turns
 enio train failures coder     # the turns that went wrong, as candidates for the curriculum
+enio train material coder     # the turns --from-traces would learn from — read it before a run
+enio train exclude coder 412  # strike one that was a test, not real work
 enio train run coder          # train, gate, install — only ever when you say so
 enio train history coder      # every version with its measurement; * marks the active one
 enio train rollback coder     # back to the previous version (nothing is deleted)
@@ -144,7 +146,10 @@ enio train off coder          # serve from the plain model again
 
 Nothing in it starts a training run by itself. It shows what has
 accumulated since the last one and what failed; whether an hour of GPU is
-worth spending is your call. A failed turn is not training data — it is
+worth spending is your call. Only turns the *current* model produced count
+as material — an adapter must not learn another model's habits — and a
+conversation that was a test rather than real work looks identical in the
+traces, so `material` is there to be read and `exclude` to strike from. A failed turn is not training data — it is
 the very form training removes — so `failures` hands you candidates to
 author the corrected version of, in the agent's curriculum.
 

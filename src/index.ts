@@ -974,9 +974,10 @@ async function main(): Promise<void> {
       // has accumulated and what failed; run is the only thing that trains,
       // and it is never scheduled — an hour of GPU is the user's call.
       const {
-        adapterHistory, activeAdapterVersion, curriculumSpecialists, failureCases,
-        materialSince, rollbackAdapter, retireAdapter, trainerFor,
+        adapterHistory, activeAdapterVersion, curriculumSpecialists, excludeTurn, failureCases,
+        materialSince, mineableTurns, rollbackAdapter, retireAdapter, trainerFor,
       } = await import("./adapters.js");
+      const { currentModelId } = await import("./model-settings.js");
       const sub = rest[0];
       const name = rest[1];
       const pct = (g: { toolRight: number; total: number }) => `${g.toolRight}/${g.total}`;
@@ -1020,6 +1021,34 @@ async function main(): Promise<void> {
         console.log(retireAdapter(name) ? `${name} now serves from the bare base model.` : `${name} had no adapter installed.`);
         break;
       }
+      if (sub === "material" && name) {
+        // What --from-traces would train on, for a person to read before a
+        // run: a test conversation looks exactly like a real one to the
+        // traces, and only the person who had it knows which it was.
+        const turns = mineableTurns(name);
+        if (turns.length === 0) {
+          console.log(`No clean ${name} turns produced by ${currentModelId()} in the traces yet.`);
+          break;
+        }
+        console.log(`Clean ${name} turns produced by ${currentModelId()} — what --from-traces would learn from:\n`);
+        for (const t of turns) {
+          const when = new Date(t.startedAt).toISOString().slice(0, 16).replace("T", " ");
+          console.log(`#${t.id}  ${when}  ${t.question.replace(/\s+/g, " ").slice(0, 70)}`);
+          console.log(`      ${t.firstTool ?? "-"} → ${t.reply.replace(/\s+/g, " ").slice(0, 90)}`);
+        }
+        console.log(`\nStrike one that was a test, not real work:  enio train exclude ${name} <turn-id>`);
+        break;
+      }
+      if (sub === "exclude" && name) {
+        const id = Number(rest[2]);
+        if (!Number.isInteger(id) || id <= 0) {
+          console.error(`Usage: enio train exclude ${name} <turn-id>   (ids from: enio train material ${name})`);
+          process.exit(1);
+        }
+        const list = excludeTurn(name, id);
+        console.log(`Turn #${id} will not be mined for ${name}. Excluded: ${list.join(", ")}`);
+        break;
+      }
       if (sub === "failures" && name) {
         const cases = failureCases(name);
         if (cases.length === 0) {
@@ -1046,10 +1075,12 @@ async function main(): Promise<void> {
           ? `v${active.version} installed (gate ${pct(active.gate.adapter)} vs base ${pct(active.gate.base)})`
           : "no adapter installed";
         console.log(`${spec.padEnd(12)} ${installed}`);
-        console.log(`             ${material.clean} clean turns ${material.since ? "since it was trained" : "in the traces"} · ${failed} failed turns to learn from`);
+        console.log(`             ${material.clean} clean turns on this model ${material.since ? "since it was trained" : "in the traces"} · ${failed} failed turns to learn from`);
       }
       console.log(
         `\n  enio train run <agent> [--from-traces]   train, gate, install (never automatic)\n` +
+          `  enio train material <agent>              the turns --from-traces would learn from\n` +
+          `  enio train exclude <agent> <turn-id>     strike a test conversation from that list\n` +
           `  enio train failures <agent>              what went wrong, for the curriculum\n` +
           `  enio train history|rollback|off <agent>`,
       );

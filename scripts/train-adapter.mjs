@@ -73,7 +73,7 @@ const { searchTools } = await distImport("tools/search.js");
 const { skillTools } = await distImport("tools/skills.js");
 const scenarioModule = await import(pathToFileURL(dataModulePath).href);
 
-const { trainerFor, turnIsClean } = await distImport("adapters.js");
+const { trainerFor, mineableTurns, splitDataset } = await distImport("adapters.js");
 const trainer = trainerFor();
 if (!trainer.available && !flag("--eval-only")) {
   console.error(trainer.reason);
@@ -127,27 +127,22 @@ function buildRows() {
   // that and stopped calling tools altogether (3/15 against base's 12/15;
   // the gate caught it). Exploding at every assistant message makes each
   // tool-call decision, and the final reply, its own trained target.
-  const conversations = scenarioModule.scenarios();
-  if (flag("--from-traces")) conversations.push(...minedConversations());
+  const conversations = scenarioModule.scenarios().map((messages) => ({ messages, mined: false }));
+  if (flag("--from-traces")) {
+    conversations.push(...minedConversations().map((messages) => ({ messages, mined: true })));
+  }
 
   const rows = [];
-  for (const messages of conversations) {
+  for (const { messages, mined } of conversations) {
     const full = [{ role: "system", content: systemPrompt }, ...messages];
     for (let i = 0; i < full.length; i++) {
       if (full[i].role !== "assistant") continue;
-      rows.push({ messages: full.slice(0, i + 1), tools: wireTools });
+      const row = { messages: full.slice(0, i + 1), tools: wireTools };
+      rows.push({ row, mined, chars: JSON.stringify(row).length });
     }
   }
-
-  // Deterministic shuffle so train/valid membership is stable across runs.
-  let seed = 42;
-  const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x80000000);
-  for (let i = rows.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [rows[i], rows[j]] = [rows[j], rows[i]];
-  }
-  const cut = Math.max(rows.length - Math.max(2, Math.round(rows.length * 0.08)), 1);
-  return { train: rows.slice(0, cut), valid: rows.slice(cut) };
+  // Valid from the curriculum only, over-length rows dropped: see splitDataset.
+  return splitDataset(rows);
 }
 
 /** The user's own successful turns for this specialist, rebuilt as clean
@@ -156,25 +151,18 @@ function buildRows() {
  *  excluded: they are records of the very form the adapter trains away. */
 function minedConversations() {
   try {
+    // The same list `enio train material` shows: clean, produced by this
+    // base, not struck by the user. A turn from another model is not an
+    // example of what this base should do.
+    const turns = mineableTurns(name).slice(0, 200);
     const db = requireDb.getDb();
-    const turns = db
-      .prepare(
-        `SELECT id, question, reply, iterations FROM turns
-         WHERE specialist = ? AND reply != '' AND iterations > 0
-         ORDER BY id DESC LIMIT 200`,
-      )
-      .all(name);
     const stepsFor = db.prepare(
-      `SELECT kind, name, args, output, repaired, scavenged, error
-       FROM turn_steps WHERE turn_id = ? ORDER BY seq`,
+      `SELECT kind, name, args, output FROM turn_steps WHERE turn_id = ? ORDER BY seq`,
     );
     const rows = [];
     let callId = 1000;
     for (const t of turns) {
       const steps = stepsFor.all(t.id);
-      // The same bar `enio train` counts material with: a turn that ran to
-      // the cap or ended on the floor reply is a failure, not an example.
-      if (!turnIsClean(t, steps)) continue;
       const toolSteps = steps.filter((s) => s.kind === "tool" && s.name && s.args && s.output);
       if (toolSteps.length === 0 || toolSteps.length > 6) continue;
       if (toolSteps.some((s) => !specialist.tools.includes(s.name))) continue;
@@ -205,7 +193,7 @@ function minedConversations() {
       messages.push({ role: "assistant", content: t.reply });
       rows.push(messages);
     }
-    console.log(`mined ${rows.length} clean ${name} turns from traces`);
+    console.log(`mined ${rows.length} clean ${name} turns from traces (produced by ${modelId})`);
     return rows;
   } catch (err) {
     console.warn(`trace mining skipped: ${err?.message ?? err}`);
@@ -263,10 +251,14 @@ function trainModelDir() {
 }
 
 function writeDataset() {
-  const { train: trainRows, valid } = buildRows();
+  const { train: trainRows, valid, dropped, mined } = buildRows();
   writeFileSync(join(dataDir, "train.jsonl"), trainRows.map((r) => JSON.stringify(r) + "\n").join(""));
   writeFileSync(join(dataDir, "valid.jsonl"), valid.map((r) => JSON.stringify(r) + "\n").join(""));
-  console.log(`dataset: ${trainRows.length} train / ${valid.length} valid → ${dataDir}`);
+  console.log(
+    `dataset: ${trainRows.length} train (${mined} from traces) / ${valid.length} valid (curriculum only)` +
+      (dropped ? ` · ${dropped} over-length rows dropped` : "") +
+      ` → ${dataDir}`,
+  );
 }
 
 async function train() {
