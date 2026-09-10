@@ -153,9 +153,12 @@ export function modelServerArgs(modelPath: string): string[] {
  * names it, its weights are here, the machine is not small (the draft is
  * ~350MB more resident, and on 8GB the target already sits at the GPU's
  * wired-memory limit — the model a small machine gets has no draft anyway),
- * and nobody turned it off. Drafting makes the server serve requests one at
- * a time instead of batched; for one person on one machine that is not a
- * cost, and the prompt cache is kept on that path.
+ * and the user turned it on. Drafting makes the server serve requests one
+ * at a time instead of batched; for one person on one machine that is not
+ * a cost, and the prompt cache is kept on that path. What IS a cost, and
+ * why this is opt-in: with the draft, identical temperature-0 requests do
+ * not return identical answers, control tokens leak into content, and tool
+ * choice flips on tasks the plain model gets right (see DECISIONS.md).
  */
 function draftArgs(): string[] {
   if (!config.speculative) return [];

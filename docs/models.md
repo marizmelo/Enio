@@ -48,7 +48,7 @@ The new model simply appears in **On this machine**.
 |---|---|---|
 | `mlx-community/Qwen3-4B-Instruct-2507-4bit` | 2.3GB | **The default.** Measured here: routed 8/8 at 426ms median. |
 | `deepgrove/maple-preview` | 5.3GB | Optional. 20B total, ~1B active, ternary. Fastest per token. |
-| `mlx-community/Qwen3-0.6B-4bit` | 0.3GB | Not for chatting: the draft model that makes the Qwen3 4B and up answer ~40% faster. |
+| `mlx-community/Qwen3-0.6B-4bit` | 0.3GB | Not for chatting: the optional draft model for speculative decoding (off by default, see below). |
 | `mlx-community/Qwen3-1.7B-4bit` | 1.0GB | Smallest that still routes and calls tools. For 8GB machines. |
 | `mlx-community/Llama-3.2-3B-Instruct-4bit` | 1.8GB | Small and quick. Shorter context than the Qwen3 models. |
 | `mlx-community/Mistral-7B-Instruct-v0.3-4bit` | 4.1GB | Strong plain prose. Weaker at picking tools than the Qwen3 models. |
@@ -294,15 +294,19 @@ backend is active. It is a weaker agent than the 4B — more apt to guess a
 path or reach for the wrong tool — so on a Mac where the 4B fits, keep the
 4B; this is the path for the Mac where it does not.
 
-## Faster answers from a draft model
+## Faster answers from a draft model (opt-in)
 
-The Qwen3 4B and larger are served with a tiny 0.6B **draft model** beside
-them when it is downloaded (the installer fetches it; the Models panel
-offers it as a one-time download). The draft guesses a couple of tokens
-ahead and the real model checks them in one pass — the answer is exactly
-what the big model would have said, just sooner. Measured on the 4B: 32 →
-45 tokens a second. It costs about 350MB of memory, so small machines skip
-it; `ENIO_SPECULATIVE=0` turns it off anywhere.
+The Qwen3 4B and larger can be served with a tiny 0.6B **draft model**
+beside them: it guesses a couple of tokens ahead and the real model checks
+them in one pass. Measured on the 4B: 32 → 45 tokens a second. It is
+**off by default**, because a second measurement found it changes the
+answers, not only their speed: the same request at temperature 0 came back
+differently on repeated calls, occasionally with template tokens leaked
+into the text, and with the wrong tool on requests the plain model handles
+correctly. Routing runs at temperature 0 precisely so the same request
+routes the same way, so that cost lands where it hurts. Set
+`ENIO_SPECULATIVE=1` to turn it on (download the 0.6B from the Models
+panel first); small machines skip it regardless.
 
 ## Managing models from the terminal
 

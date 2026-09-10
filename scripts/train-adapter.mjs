@@ -422,17 +422,30 @@ async function behaviorGate() {
     };
   };
 
+  // The noise floor first: the same prompt twice, at temperature 0, on
+  // this server. Tasks whose verdict differs between the two runs are
+  // ones no rendering can be blamed for — the first run of this gate
+  // charged seven renderings with flipping one probe the baseline itself
+  // flipped on the next call. What remains is what a line changed.
   const baseline = await evaluate("baseline", adapter, "", true);
+  const again = await evaluate("baseline again", adapter, "", true);
   const b = how(baseline.detail);
   const bWhat = whatKey(baseline.detail);
+  const noise = new Set(whatKey(again.detail).map((k, i) => (k !== bWhat[i] ? i : -1)).filter((i) => i >= 0));
+  const right = (t) => (t.expect === "abstain" ? t.abstained : t.first === t.expect && (t.expect !== null || t.spoke));
   console.log(`baseline                : length ${b.meanLen} · follow-ups ${b.followUps} · warm openers ${b.warmOpeners} · json ${(b.jsonRate * 100).toFixed(0)}%`);
+  console.log(`noise floor             : ${noise.size} of ${baseline.detail.length} tasks change verdict between two identical baseline runs${noise.size ? ` (${[...noise].map((i) => JSON.stringify(baseline.detail[i].prompt.slice(0, 40))).join(", ")})` : ""}`);
 
   let failed = false;
   for (const r of gateRenderings()) {
     const run = await evaluate(r.id, adapter, r.suffix, true);
     const h = how(run.detail);
     const w = whatKey(run.detail);
-    const flips = w.filter((k, i) => k !== bWhat[i]);
+    const flips = w.filter((k, i) => k !== bWhat[i] && !noise.has(i));
+    // Against the golden answers, not only against baseline: a flip that
+    // lands on the right tool is still a change, but a flip that leaves
+    // the right tool is the one that must not ship.
+    const regressions = run.detail.filter((t, i) => !noise.has(i) && right(baseline.detail[i]) && !right(t)).map((t) => t.prompt);
     const jsonOk = h.jsonRate >= b.jsonRate;
     let verdict = "";
     if (r.id === "voice=terse") verdict = h.meanLen < b.meanLen ? "moves" : "DOES NOT MOVE";
@@ -440,14 +453,24 @@ async function behaviorGate() {
     if (r.id === "initiative=offer-follow-ups") verdict = h.followUps > b.followUps ? "moves" : "DOES NOT MOVE";
     if (r.id === "warmth=matter-of-fact") verdict = h.warmOpeners === 0 ? (b.warmOpeners > 0 ? "moves" : "nothing to remove") : "DOES NOT MOVE";
     if (r.id === "voice=conversational") verdict = h.meanLen > b.meanLen ? "moves" : "DOES NOT MOVE";
-    const what = flips.length === 0 && jsonOk ? "what: identical" : `WHAT FLIPPED (${flips.length}${jsonOk ? "" : ", json down"})`;
-    if (flips.length > 0 || !jsonOk || verdict.startsWith("DOES NOT")) failed = true;
+    const what =
+      flips.length === 0 && jsonOk
+        ? "what: identical"
+        : regressions.length === 0 && jsonOk
+          ? `what: ${flips.length} changed, none for the worse`
+          : `WHAT REGRESSED (${regressions.length}${jsonOk ? "" : ", json down"})`;
+    if (regressions.length > 0 || !jsonOk || verdict.startsWith("DOES NOT")) failed = true;
     console.log(
       `${r.id.padEnd(24)}: length ${h.meanLen} · follow-ups ${h.followUps} · warm openers ${h.warmOpeners} · json ${(h.jsonRate * 100).toFixed(0)}% · ${what}${verdict ? ` · how: ${verdict}` : ""}`,
     );
-    for (const f of flips) console.log(`    ${f}   (baseline: ${bWhat[w.indexOf(f)]})`);
+    for (const f of flips) {
+      const i = w.indexOf(f);
+      const t = run.detail[i];
+      const extra = t.expect === "abstain" ? `  reply: ${t.content.replace(/\s+/g, " ").slice(0, 120)}` : "";
+      console.log(`    ${regressions.includes(t.prompt) ? "REGRESSED " : "changed   "}${f}   (baseline: ${bWhat[i]})${extra}`);
+    }
   }
-  console.log(failed ? "\nGate failed: a rendering changed what the model does, or did not move what it should." : "\nGate passed: every rendering moves only how, never what.");
+  console.log(failed ? "\nGate failed: a rendering made the model worse at what it does, or did not move what it should." : "\nGate passed: no rendering makes the model worse at what it does, and each moves what it names.");
   process.exit(failed ? 1 : 0);
 }
 

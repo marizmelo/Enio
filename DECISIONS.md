@@ -3028,8 +3028,23 @@ sequential path still fetches the nearest prompt cache and builds the
 draft's cache beside it. For one person on one machine, batching was never
 doing anything; the prompt cache was.
 
-The output is exactly the target's — drafting changes speed and nothing
-else — which is why this is on by default rather than an add-on.
+The output was assumed to be exactly the target's — drafting changes
+speed and nothing else — which is why this shipped on by default.
+
+**Corrected (10 Sep):** it is not. Measured while building the behaviour
+gate: with the draft, four identical temperature-0 requests to the 4B
+returned up to three different answers, some with `<|im_start|>` leaked
+into the content, and on three golden tasks the tool choice was wrong
+where the plain model's is right; without the draft, four identical
+requests returned four identical, correct answers. The first behaviour
+gate run charged seven of eight renderings with flipping an abstention
+that the baseline itself flipped on the next call. Routing runs at
+temperature 0 so the same request routes the same way, so this cost lands
+on the decision the whole architecture depends on. Now opt-in
+(`ENIO_SPECULATIVE=1`), the installer no longer fetches the draft, and
+the throughput table above stays as the case for fixing the draft path
+rather than for turning it back on. The likely cause — the mlx_lm
+speculative path with the prompt cache — is not established here.
 
 ### Apple Intelligence as a backend: the model the Mac already has
 

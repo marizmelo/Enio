@@ -47,7 +47,7 @@ and old variables still work.
 | Variable | Default |
 |---|---|
 | `ENIO_ROUTING` | `1` — set `0` for one agent with every tool |
-| `ENIO_SPECULATIVE` | `1` — set `0` to serve without the draft model (see [Models](models.md)) |
+| `ENIO_SPECULATIVE` | `0` — set `1` to serve with the draft model, which is faster and measurably less exact (see [Models](models.md)) |
 | `ENIO_MAX_TOOLS` | `16` — the registry cap in single-agent mode |
 | `ENIO_MAX_ITERS` | tool rounds per turn |
 | `ENIO_MCP_CONFIG` | `~/.enio/mcp.json` |

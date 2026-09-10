@@ -591,9 +591,12 @@ export const config = {
    */
   routingEnabled: (env("ROUTING") ?? "1") !== "0",
   /** Speculative decoding with a small draft model when one applies (see
-   *  draftFor). Off is for measuring, or for a machine where the draft's
-   *  extra ~350MB resident is the difference. */
-  speculative: (env("SPECULATIVE") ?? "1") !== "0",
+   *  draftFor). Opt-in, not default: measured on the 4B with the 0.6B
+   *  draft, four identical temperature-0 requests gave up to three
+   *  different answers, some with <|im_start|> leaked into the content,
+   *  and the wrong tool on tasks the plain model gets right. The +38%
+   *  throughput is real; so is that. Off until the draft path is exact. */
+  speculative: env("SPECULATIVE") === "1",
 } as const;
 
 /** Throws on an unknown backend id, with the valid list. Call once at startup. */
