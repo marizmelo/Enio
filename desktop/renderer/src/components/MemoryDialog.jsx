@@ -115,9 +115,18 @@ export function MemoryDialog({ open, onOpenChange }) {
                 </p>
                 <ul className="mt-2 space-y-1">
                   {facts.map((f) => (
-                    <li key={f.id} className="group flex items-start gap-2 rounded border px-2.5 py-1.5 text-sm">
-                      <span className="min-w-0 flex-1">{f.text}</span>
-                      <span className="shrink-0 text-[10px] text-muted-foreground">{f.source}</span>
+                    <li
+                      key={f.id}
+                      className={`group flex items-start gap-2 rounded border px-2.5 py-1.5 text-sm${
+                        // Closed by a later fact: shown, dimmed. Hidden would
+                        // be a memory that silently rewrites its own history.
+                        f.supersededAt ? " opacity-50" : ""
+                      }`}
+                    >
+                      <span className={`min-w-0 flex-1${f.supersededAt ? " line-through" : ""}`}>{f.text}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {f.supersededAt ? "superseded" : f.source}
+                      </span>
                       <TipButton
                         tip={f.pinned ? "Unpin" : "Pin — always in context"}
                         className="size-6 shrink-0"

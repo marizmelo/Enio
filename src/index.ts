@@ -418,8 +418,11 @@ async function main(): Promise<void> {
         console.error('Usage: enio remember "some durable fact"');
         process.exit(1);
       }
-      const result = await rememberFact(text, { pinned: true, source: "cli" });
-      console.log(result.stored ? `Remembered: ${text}` : `Not stored (${result.reason}).`);
+      const corrects = rest.includes("--corrects");
+      const fact = rest.filter((a) => a !== "--corrects").join(" ").trim();
+      const result = await rememberFact(fact, { pinned: true, source: "cli", corrects });
+      console.log(result.stored ? `Remembered: ${fact}` : `Not stored (${result.reason}).`);
+      for (const old of result.superseded) console.log(`  replaces: ${old}`);
       break;
     }
 
@@ -1553,7 +1556,7 @@ enio — a local agent with tools and persistent memory
   enio library scan       index new and changed files in the library folders
   enio stats              what memory currently holds
   enio graph "topic"      show what the graph knows about something
-  enio remember "..."     pin a fact by hand
+  enio remember "..."     pin a fact by hand (--corrects closes what it replaces)
   enio forget "..."       remove a fact
 
   enio prefs              list standing instructions

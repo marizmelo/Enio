@@ -35,6 +35,11 @@ export const memoryTools: ToolDef[] = [
           description:
             "True for core identity or standing preferences that should be recalled in every conversation.",
         },
+        replaces_earlier: {
+          type: "boolean",
+          description:
+            "True when the user is correcting or updating something known before — they said 'actually', 'not anymore', 'now I use', 'that changed'. The earlier fact is closed, not deleted.",
+        },
       },
       required: ["fact"],
     },
@@ -43,8 +48,14 @@ export const memoryTools: ToolDef[] = [
       const result = await rememberFact(fact, {
         pinned: args.important === true,
         sessionId: currentSessionId,
+        corrects: args.replaces_earlier === true,
       });
       if (!result.stored) return `Not stored (${result.reason}).`;
+      // What was closed is said back, so a wrong pick is visible in the turn
+      // rather than discovered weeks later as a fact that went missing.
+      if (result.superseded.length > 0) {
+        return `Remembered: ${fact}\nReplaces: ${result.superseded.join("; ")}`;
+      }
       return `Remembered: ${fact}`;
     },
   },

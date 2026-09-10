@@ -253,6 +253,14 @@ function migrate(d: Database.Database): void {
   // list is small, read whole, and written whole -- and it rides the row
   // whose lifetime it shares.
   addColumn(d, "sessions", "attachments", "TEXT");
+  // A fact that stops being true is closed, not deleted — the same rule edges
+  // already follow. valid_to says when; superseded_by says by which newer
+  // fact, so a correction is traceable and a wrong one can be undone. origin
+  // is where a fact came from when that is a URL or a file, beyond the coarse
+  // source label.
+  addColumn(d, "facts", "valid_to", "INTEGER");
+  addColumn(d, "facts", "superseded_by", "INTEGER");
+  addColumn(d, "facts", "origin", "TEXT");
 
   // The scheduler lease: which process may fire cron jobs. One row, taken and
   // refreshed by a guarded UPSERT, so desktop serve and a headless daemon can

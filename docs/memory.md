@@ -91,6 +91,17 @@ because a fact whose transcript is deleted cannot survive a reindex:
 There is no silent default. `/clear` only clears the conversation on screen; it
 does not touch what is on disk.
 
+## Correcting what it knows
+
+Tell it the change — "actually, I switched to Ghostty", "I don't work at
+Acme anymore" — and the new fact **closes** the one it replaces rather than
+sitting beside it. Nothing is deleted: the old fact stays in the Memory
+panel struck through and marked *superseded*, so history is never silently
+rewritten and a wrong replacement is visible. Only an explicit correction
+does this; a plain "remember that…" never closes anything. From the
+terminal, `enio remember "..." --corrects` does the same and prints what it
+replaced. Saying the old thing again later reopens it.
+
 ## Seeing what it knows
 
 The desktop app has a **Memory** button in the top bar. It lists everything

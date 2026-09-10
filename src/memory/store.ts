@@ -73,28 +73,88 @@ export function transcriptOf(sessionId: string): string {
 
 export async function rememberFact(
   text: string,
-  opts: { pinned?: boolean; sessionId?: string; source?: string } = {},
-): Promise<{ stored: boolean; reason?: string }> {
+  opts: {
+    pinned?: boolean;
+    sessionId?: string;
+    source?: string;
+    /** Where this came from when that is a URL or a file path. */
+    origin?: string;
+    /**
+     * This fact replaces what was known before. The trigger is structural —
+     * the user said "actually", the tool was told so — never the model
+     * judging that two facts conflict. The harness picks WHICH earlier facts
+     * it replaces, by similarity, and reports them so a wrong pick is visible.
+     */
+    corrects?: boolean;
+  } = {},
+): Promise<{ stored: boolean; reason?: string; superseded: string[] }> {
   const clean = text.trim();
-  if (clean.length < 3) return { stored: false, reason: "too short" };
+  if (clean.length < 3) return { stored: false, reason: "too short", superseded: [] };
 
   const db = getDb();
-  const existing = db.prepare(`SELECT id FROM facts WHERE text = ?`).get(clean);
-  if (existing) return { stored: false, reason: "already known" };
+  const existing = db
+    .prepare(`SELECT id, valid_to FROM facts WHERE text = ?`)
+    .get(clean) as { id: number; valid_to: number | null } | undefined;
+  if (existing) {
+    // Re-asserting a closed fact reopens it: "I use Hyper again" is new
+    // information, and the row already carries the embedding.
+    if (existing.valid_to !== null) {
+      db.prepare(`UPDATE facts SET valid_to = NULL, superseded_by = NULL WHERE id = ?`).run(existing.id);
+      return { stored: true, reason: "reopened", superseded: [] };
+    }
+    return { stored: false, reason: "already known", superseded: [] };
+  }
 
   const vec = await embed(clean);
-  db.prepare(
-    `INSERT INTO facts (text, embedding, pinned, source, session_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(
-    clean,
-    vec ? toBlob(vec) : null,
-    opts.pinned ? 1 : 0,
-    opts.source ?? "tool",
-    opts.sessionId ?? null,
-    now(),
-  );
-  return { stored: true };
+  const inserted = db
+    .prepare(
+      `INSERT INTO facts (text, embedding, pinned, source, session_id, origin, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      clean,
+      vec ? toBlob(vec) : null,
+      opts.pinned ? 1 : 0,
+      opts.source ?? "tool",
+      opts.sessionId ?? null,
+      opts.origin ?? null,
+      now(),
+    );
+  const newId = Number(inserted.lastInsertRowid);
+  const superseded = opts.corrects ? retireRivals(newId, clean, vec) : [];
+  return { stored: true, superseded };
+}
+
+/**
+ * Close the earlier facts a correction replaces. Candidates are the current,
+ * unpinned facts nearest the new one — cosine when both sides have an
+ * embedding, symmetric term overlap otherwise — above a threshold high enough
+ * that "Mariz uses Ghostty" retires "Mariz uses Hyper" but not "Mariz likes
+ * coffee". Pinned facts are identity and are never retired by inference.
+ * Capped at three: a correction that would close more is more likely a
+ * threshold failure than a user who changed five things at once.
+ */
+function retireRivals(newId: number, text: string, vec: Float32Array | null): string[] {
+  const db = getDb();
+  const rows = db
+    .prepare(`SELECT id, text, embedding FROM facts WHERE valid_to IS NULL AND pinned = 0 AND id != ?`)
+    .all(newId) as { id: number; text: string; embedding: Buffer | null }[];
+  const scored = rows.map((r) => {
+    const other = fromBlob(r.embedding);
+    const semantic = vec && other;
+    const score = semantic
+      ? cosine(vec, other)
+      : Math.min(keywordScore(text, r.text), keywordScore(r.text, text));
+    return { ...r, score, threshold: semantic ? 0.75 : 0.6 };
+  });
+  const rivals = scored
+    .filter((r) => r.score >= r.threshold)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  const ts = now();
+  const close = db.prepare(`UPDATE facts SET valid_to = ?, superseded_by = ? WHERE id = ?`);
+  for (const r of rivals) close.run(ts, newId, r.id);
+  return rivals.map((r) => r.text);
 }
 
 /** Everything the facts table holds, for the desktop's Memory dialog. */
@@ -103,14 +163,21 @@ export function listFacts(): Array<{
   text: string;
   pinned: boolean;
   source: string;
+  origin: string | null;
   createdAt: number;
+  /** Set when a later fact replaced this one. Listed, not hidden: a memory
+   *  that silently rewrites history is worse than one that forgets. */
+  supersededAt: number | null;
 }> {
   const rows = getDb()
     .prepare(
-      `SELECT id, text, pinned, source, created_at AS createdAt
-         FROM facts ORDER BY pinned DESC, id DESC`,
+      `SELECT id, text, pinned, source, origin, created_at AS createdAt, valid_to AS supersededAt
+         FROM facts ORDER BY pinned DESC, (valid_to IS NOT NULL) ASC, id DESC`,
     )
-    .all() as Array<{ id: number; text: string; pinned: number; source: string; createdAt: number }>;
+    .all() as Array<{
+      id: number; text: string; pinned: number; source: string; origin: string | null;
+      createdAt: number; supersededAt: number | null;
+    }>;
   return rows.map((r) => ({ ...r, pinned: r.pinned === 1 }));
 }
 
@@ -171,7 +238,7 @@ export interface ScoredFact {
 export async function searchFacts(query: string, limit = 8): Promise<ScoredFact[]> {
   const db = getDb();
   const rows = db
-    .prepare(`SELECT id, text, embedding, pinned FROM facts`)
+    .prepare(`SELECT id, text, embedding, pinned FROM facts WHERE valid_to IS NULL`)
     .all() as { id: number; text: string; embedding: Buffer | null; pinned: number }[];
   if (rows.length === 0) return [];
 
@@ -231,7 +298,7 @@ export function searchFactsKeyword(query: string, limit = 8): ScoredFact[] {
         .prepare(
           `SELECT f.id, f.text, f.pinned, bm25(facts_fts) AS rank
            FROM facts_fts JOIN facts f ON f.id = facts_fts.rowid
-           WHERE facts_fts MATCH ? ORDER BY rank LIMIT ?`,
+           WHERE facts_fts MATCH ? AND f.valid_to IS NULL ORDER BY rank LIMIT ?`,
         )
         .all(toFtsQuery(query), limit) as any[];
       return rows.map((r) => ({
@@ -242,7 +309,7 @@ export function searchFactsKeyword(query: string, limit = 8): ScoredFact[] {
     }
   }
   const rows = db
-    .prepare(`SELECT id, text, pinned FROM facts WHERE text LIKE ? LIMIT ?`)
+    .prepare(`SELECT id, text, pinned FROM facts WHERE valid_to IS NULL AND text LIKE ? LIMIT ?`)
     .all(`%${query}%`, limit) as any[];
   return rows.map((r) => ({ id: r.id, text: r.text, score: 0.5, pinned: r.pinned === 1 }));
 }
@@ -655,7 +722,7 @@ export function stats(): MemoryStats {
   return {
     sessions: one(`SELECT COUNT(*) AS n FROM sessions`),
     messages: one(`SELECT COUNT(*) AS n FROM messages`),
-    facts: one(`SELECT COUNT(*) AS n FROM facts`),
+    facts: one(`SELECT COUNT(*) AS n FROM facts WHERE valid_to IS NULL`),
     entities: one(`SELECT COUNT(*) AS n FROM entities`),
     edges: one(`SELECT COUNT(*) AS n FROM edges`),
     unindexed: one(`SELECT COUNT(*) AS n FROM sessions WHERE indexed = 0`),
