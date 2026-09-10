@@ -107,7 +107,13 @@ export function goldenRecovery({ prompt, call: c, error, expect = null }) {
  * honest shape is "I looked, and it is not here", pass `call`/`output` so
  * the look has already happened and the next move is what is scored.
  */
-export function goldenAbstain({ prompt, call: c, output }) {
-  const messages = c ? [user(prompt), call(...c), result(output)] : [user(prompt)];
+export function goldenAbstain({ prompt, call: c, output, looks }) {
+  // `looks`: every reasonable look, already taken and already empty. For
+  // the coder that is two — its curriculum teaches a bounded two-step
+  // recovery, so a probe with one look done scores the trained second look
+  // as "kept looking". The first gate run charged the adapter exactly that.
+  const taken = looks ?? (c ? [[c[0], c[1], output]] : []);
+  const messages = [user(prompt)];
+  for (const [tool, args, out] of taken) messages.push(call(tool, args), result(out));
   return { prompt, messages, expect: "abstain" };
 }

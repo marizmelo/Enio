@@ -3163,6 +3163,18 @@ merely rode along with it — every train row fit the cap, and v2
 converged on the curriculum alone at the same hyperparameters. The
 curriculum-only run is the control, and it waits for the user's go.
 
+**Control run (10 Sep, curriculum only, 76 train / 7 valid):** loss
+converged — 1.40 at iteration 10, 0.10 by 90, 0.010 at 200, validation
+1.52 — where v3 diverged to 8.57 on the same trainer and settings. The
+mined rows caused the divergence. Its gate: tool choice 16/19 against
+base's 15/19, JSON 17/17, abstention 1/4 against base's 4/4 (with the
+probes corrected to exhaust both looks, since the curriculum teaches one
+recovery step and the first probe design scored that step as "kept
+looking"). Not installed: the adapter searched a third time after two
+empty looks where the base said "not here", and reached for tools on two
+explanation-only questions. Both are now curriculum families; the next
+run is the user's call.
+
 ### The gate measures humility, by grammar
 
 **Chose:** abstention probes in every curriculum's held-out set — things
