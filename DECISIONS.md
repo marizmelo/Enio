@@ -2974,6 +2974,27 @@ The essay this came from called it structural humility. The mechanism is
 the project's usual one: a judgement call the model would fail, turned into
 a membership check it can make.
 
+### The gap ledger is the coverage map's other half
+
+**Chose:** record, per turn, the case the basis verdict already computes
+and threw away — answered from the model's weights, nothing covered it —
+keyed by the sorted distinctive terms of the question, counted, and
+closed by the first remembered fact that carries every one of those
+words. Derived from the traces and replayed by reindex; shown as *What
+it lacked* in the Memory panel, listed by `enio gaps`, and surfaced by
+`enio suggest` as a research proposal once asked three times.
+
+**Rejected:** keying a gap on "memory did not cover it" alone (the seed
+search's own gate is memory *or the current thread*; a follow-up turn
+would record a gap on every message); recording when any tool ran (a
+weather lookup is an answer, so only `recall` — which finding nothing is
+the gap itself — is allowed); the model naming its own gaps (the coverage
+map exists because that judgement is the one it gets wrong); substring
+matching for resolution (`knowledgeCovers` uses it for the prompt, where
+"airport" answering "port" is harmless; a ledger that closed on it would
+lie); a persistent dismissal (a forgotten gap returns on reindex, the
+same rule as a forgotten summary — the traces are the truth).
+
 ### Speculative decoding: a 0.6B draft for the 4B and up, measured
 
 **Chose:** serve Qwen3 targets from 4B up with a Qwen3 0.6B draft model and

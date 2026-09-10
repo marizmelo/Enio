@@ -8,6 +8,7 @@ import {
   fetchMemory,
   fetchMemoryGraph,
   forgetFact,
+  forgetGap,
   forgetPreference,
   forgetSummary,
   pinFact,
@@ -71,6 +72,7 @@ export function MemoryDialog({ open, onOpenChange }) {
   const facts = data?.facts ?? [];
   const preferences = data?.preferences ?? [];
   const summaries = data?.summaries ?? [];
+  const gaps = data?.gaps ?? [];
   const empty = facts.length + preferences.length + summaries.length === 0;
 
   return (
@@ -81,6 +83,7 @@ export function MemoryDialog({ open, onOpenChange }) {
           <nav className="flex gap-1 text-xs">
             {[
               ["knows", "What it knows"],
+              ["gaps", "What it lacked"],
               ["graph", "Graph"],
             ].map(([id, label]) => (
               <button
@@ -189,6 +192,48 @@ export function MemoryDialog({ open, onOpenChange }) {
                         className="size-6 shrink-0"
                         onClick={act(() => forgetSummary(s.sessionId))}
                       >
+                        <Trash2 className="size-3" />
+                      </TipButton>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
+        ) : tab === "gaps" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            {/* The gap ledger: questions the turn answered from nothing —
+                no memory, no file, no search. Derived from the traces, so
+                forgetting one is until the next reindex, like a summary. */}
+            {data && gaps.length === 0 && (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                Nothing yet. Questions Enio had to answer without anything in memory,
+                files or the web behind it show up here.
+              </p>
+            )}
+            {gaps.length > 0 && (
+              <section>
+                <h3 className="text-xs font-medium text-muted-foreground">Asked, and nothing covered it</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground/70">
+                  Most asked first. A gap closes on its own once a remembered fact carries its words;
+                  closed ones stay, dimmed, so you can see what it learned later.
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {gaps.map((g) => (
+                    <li
+                      key={g.id}
+                      className={`flex items-start gap-2 rounded border px-2.5 py-1.5 text-sm${
+                        g.resolvedBy ? " opacity-50" : ""
+                      }`}
+                    >
+                      <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
+                        {when(g.lastAt)}
+                      </span>
+                      <span className="min-w-0 flex-1">{g.question}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
+                        {g.resolvedBy ? "learned" : g.count > 1 ? `×${g.count}` : ""}
+                      </span>
+                      <TipButton tip="Forget (comes back on reindex)" className="size-6 shrink-0" onClick={act(() => forgetGap(g.id))}>
                         <Trash2 className="size-3" />
                       </TipButton>
                     </li>

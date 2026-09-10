@@ -12,6 +12,7 @@ import { distilFacts } from "../memory/distil.js";
 import { addExemplar } from "../memory/learning.js";
 import { graphView } from "../memory/traces.js";
 import { listPreferences, removePreference } from "../memory/learning.js";
+import { forgetGap, listGaps } from "../memory/gaps.js";
 
 /** True when this feature owned the request. Moved verbatim from server.ts —
  *  the routes stay thin, the feature module owns every decision. */
@@ -33,6 +34,7 @@ export async function handle(
       facts: listFacts(),
       preferences: listPreferences(),
       summaries: listSummaries(),
+      gaps: listGaps(),
     });
     return true;
   }
@@ -114,6 +116,11 @@ export async function handle(
   const prefRoute = /^\/memory\/preferences\/(\d+)$/.exec(url.pathname);
   if (prefRoute && req.method === "DELETE") {
     sendJson(res, removePreference(prefRoute[1]!) ? 200 : 404, { ok: true });
+    return true;
+  }
+  const gapRoute = /^\/memory\/gaps\/(\d+)$/.exec(url.pathname);
+  if (gapRoute && req.method === "DELETE") {
+    sendJson(res, forgetGap(Number(gapRoute[1])) ? 200 : 404, { ok: true });
     return true;
   }
   const summaryRoute = /^\/memory\/summaries\/([A-Za-z0-9-]+)$/.exec(url.pathname);

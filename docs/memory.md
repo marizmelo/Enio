@@ -102,6 +102,14 @@ is the difference between "I have nothing on that" and a confident
 invention. The map is derived from memory and sized to the selected model's
 context budget, so it stays a few percent of the window.
 
+The misses are kept. When a question is answered from nothing — no memory,
+no file, no search behind it — it lands in a **gap ledger**: what was asked,
+how often, and when. A gap closes by itself once a remembered fact carries
+its words, and stays visible dimmed as something it learned later. It is
+derived from the traces like the graph, so `enio reindex` replays it. See
+it under **What it lacked** in the Memory panel or with `enio gaps`; a gap
+asked three times shows up in `enio suggest` as research worth doing once.
+
 ## Correcting what it knows
 
 Tell it the change — "actually, I switched to Ghostty", "I don't work at

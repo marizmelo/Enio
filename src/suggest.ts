@@ -1,6 +1,7 @@
 import { getDb } from "./memory/db.js";
 import { embed, embedBatch } from "./memory/embed.js";
 import { cosine } from "./memory/db.js";
+import { openGaps } from "./memory/gaps.js";
 
 /**
  * Finding what's worth automating, from evidence rather than intuition.
@@ -17,6 +18,8 @@ import { cosine } from "./memory/db.js";
  *     procedure whether or not you think of it as one.
  *  3. Time concentration inside a cluster — the same ask every Monday is a
  *     schedule, not a prompt.
+ *  4. Open gaps asked more than twice — a question memory kept not having
+ *     an answer to, which is research worth doing once.
  */
 
 export interface TurnFact {
@@ -207,7 +210,9 @@ function strongest(
 /* ---------- proposals --------------------------------------------------- */
 
 export interface Proposal {
-  kind: "skill" | "task";
+  /** "research": a gap to go and fill, not a skill to write or a task to
+   *  schedule — --write and the automation drafts both skip it. */
+  kind: "skill" | "task" | "research";
   title: string;
   reason: string;
   /** Verbatim examples, so a wrong suggestion is obvious at a glance. */
@@ -224,8 +229,20 @@ export async function analyse(limit = 2000): Promise<{
   usedEmbeddings: boolean;
 }> {
   const facts = loadTurnFacts(limit);
+  // Gaps are already counted by key, so they need no clustering and no
+  // minimum turn count: three asks of one thing is evidence at any scale.
+  const gapProposals: Proposal[] = openGaps(20)
+    .filter((g) => g.count >= 3)
+    .map((g) => ({
+      kind: "research" as const,
+      title: shorten(g.question),
+      reason: `Asked ${g.count} times and memory never had it.`,
+      evidence: [shorten(g.question, 100)],
+      suggestedName: slug(g.question),
+      specialist: "researcher",
+    }));
   if (facts.length < 5) {
-    return { proposals: [], turnsExamined: facts.length, usedEmbeddings: false };
+    return { proposals: gapProposals, turnsExamined: facts.length, usedEmbeddings: false };
   }
 
   // Semantic clustering catches rephrasings that word overlap misses, which is
@@ -242,7 +259,7 @@ export async function analyse(limit = 2000): Promise<{
     : (a: TurnFact, b: TurnFact) => lexicalSimilarity(a.question, b.question);
 
   const threshold = usedEmbeddings ? 0.82 : 0.4;
-  const proposals: Proposal[] = [];
+  const proposals: Proposal[] = [...gapProposals];
 
   for (const cluster of clusterBy(facts, similarity, threshold)) {
     const timing = detectTimePattern(cluster.members.map((m) => m.startedAt));

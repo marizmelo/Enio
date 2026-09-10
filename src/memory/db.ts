@@ -210,6 +210,21 @@ function migrate(d: Database.Database): void {
       session_id  TEXT,
       created_at  INTEGER NOT NULL
     );
+
+    -- What was asked that nothing covered (memory/gaps.ts). Derived from the
+    -- traces, so reindex drops and replays it; resolved_by is the fact that
+    -- later carried every word of the key. No foreign key on purpose: a
+    -- forgotten fact reopens its gaps explicitly in forgetFact.
+    CREATE TABLE IF NOT EXISTS gaps (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      key         TEXT NOT NULL UNIQUE,
+      question    TEXT NOT NULL,
+      specialist  TEXT NOT NULL,
+      first_at    INTEGER NOT NULL,
+      last_at     INTEGER NOT NULL,
+      count       INTEGER NOT NULL DEFAULT 1,
+      resolved_by INTEGER
+    );
   `);
 
   try {

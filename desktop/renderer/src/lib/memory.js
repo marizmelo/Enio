@@ -26,6 +26,7 @@ export const forgetPreference = (id) =>
   call(`/memory/preferences/${id}`, { method: "DELETE" });
 export const forgetSummary = (sessionId) =>
   call(`/memory/summaries/${sessionId}`, { method: "DELETE" });
+export const forgetGap = (id) => call(`/memory/gaps/${id}`, { method: "DELETE" });
 
 /** "Remember this": the reply reduced to candidate facts, for the user to
  *  read and prune. Nothing is written by this call. */

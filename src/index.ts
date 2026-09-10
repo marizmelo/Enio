@@ -370,6 +370,10 @@ async function main(): Promise<void> {
       console.log(
         `\nRebuilt from ${report.sessions} session(s): ${report.triples} triples.`,
       );
+      // The gap ledger is derived from the traces the same way the graph is
+      // derived from the transcripts, so a full rebuild replays it too.
+      const { rebuildGaps } = await import("./memory/gaps.js");
+      console.log(`Gaps: ${rebuildGaps()} question(s) nothing covered, replayed from the traces.`);
       // The library index is derived the same way -- the files on disk are
       // the source of truth -- so a full rebuild owns it too.
       const { resetLibrary, scanLibrary } = await import("./library.js");
@@ -429,6 +433,27 @@ async function main(): Promise<void> {
     case "forget": {
       const target = rest.join(" ").trim();
       console.log(forgetFact(target) ? "Forgotten." : "No matching fact.");
+      break;
+    }
+
+    case "gaps": {
+      // What was asked that nothing covered: the questions memory should
+      // have had an answer to. Most asked first.
+      const { openGaps, forgetGap } = await import("./memory/gaps.js");
+      if (rest[0] === "forget" && rest[1]) {
+        console.log(forgetGap(Number(rest[1])) ? "Forgotten (reindex re-derives it)." : "No such gap.");
+        break;
+      }
+      const open = openGaps(50);
+      if (open.length === 0) {
+        console.log("No open gaps: nothing has been asked that memory did not have.");
+        break;
+      }
+      const when = (ts: number) => new Date(ts).toISOString().slice(0, 10);
+      for (const g of open) {
+        console.log(`#${String(g.id).padEnd(4)} ×${String(g.count).padEnd(3)} ${when(g.lastAt)}  ${g.question.replace(/\s+/g, " ").slice(0, 90)}`);
+      }
+      console.log(`\nA gap closes when a fact carrying its words is remembered.  enio gaps forget <id>  drops one.`);
       break;
     }
 
@@ -1676,6 +1701,7 @@ enio — a local agent with tools and persistent memory
   enio graph "topic"      show what the graph knows about something
   enio remember "..."     pin a fact by hand (--corrects closes what it replaces)
   enio forget "..."       remove a fact
+  enio gaps               what was asked that memory did not have
 
   enio prefs              list standing instructions
   enio pref "..."         add one

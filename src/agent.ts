@@ -17,6 +17,8 @@ import type { Registry } from "./tools/index.js";
 import { createHash } from "node:crypto";
 import { toolText, toWireTool, type Message, type ToolCall, type Widget } from "./types.js";
 import { adapterPathFor, contextBudget, currentModelId, toolOutputChars } from "./model-settings.js";
+import { distinctiveTerms, looksLikeQuestion as questionShaped } from "./memory/terms.js";
+import { noteTurn as noteGap } from "./memory/gaps.js";
 import { extractSources, isWebTool } from "./sources.js";
 import { setMemorySources } from "./tools/memory.js";
 import { coverageBlock } from "./memory/coverage.js";
@@ -153,21 +155,6 @@ function withDateOnLatest(messages: Message[]): Message[] {
  * asked "did memory answer this?" would be back to the judgement call this
  * whole design removes.
  */
-const STOPWORDS = new Set(
-  "what when where which who whom whose why how does did do is are was were will would could should the this that these those about with from into over under after before then than there here have has had been being tell give show find happened happen happens latest news today year".split(
-    " ",
-  ),
-);
-function distinctiveTerms(text: string): string[] {
-  return [
-    ...new Set(
-      text
-        .toLowerCase()
-        .split(/[^a-z0-9]+/)
-        .filter((w) => w.length >= 4 && !STOPWORDS.has(w)),
-    ),
-  ];
-}
 export function knowledgeCovers(question: string, known: string[]): boolean {
   const terms = distinctiveTerms(question);
   if (terms.length === 0) return false;
@@ -1168,8 +1155,7 @@ export async function runTurn(
   // instead. The user's words are the query -- composing a better one would
   // be a model call, which is the latency this exists to remove.
   const searchTool = activeTools.find((t) => t.name === "web_search");
-  const looksLikeQuestion =
-    userInput.trim().length >= 12 && !/^(hi|hello|hey|thanks|thank you|ok|okay)\b/i.test(userInput.trim());
+  const looksLikeQuestion = questionShaped(userInput);
   // Memory and this thread come before the web. The known set is every
   // fact line in the memory block plus every earlier assistant reply here:
   // if one of them already names everything the question is about, the
@@ -1925,6 +1911,17 @@ export async function runTurn(
     output: "",
     error: null,
     durationMs: 0,
+  });
+  // The "model" case, kept: what was asked that nothing covered is the gap
+  // ledger's whole content. Every input is a fact this turn established;
+  // the predicate is in one place so reindex replays it identically.
+  noteGap({
+    question: userInput,
+    specialist: specialistName || "single",
+    basis,
+    toolNames,
+    skillsInvoked: Boolean(overrides.skills && overrides.skills.length > 0),
+    at: turnStartedAt,
   });
 
   // Invoked skills leave a trace. /skill (and an ability node's pinned

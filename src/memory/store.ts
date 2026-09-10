@@ -8,6 +8,7 @@ import type { Triple } from "./schema.js";
 import { extractSources, type Source } from "../sources.js";
 import { extractArtifacts } from "../artifacts.js";
 import { callDetail, callStatus } from "../tool-detail.js";
+import { resolveGaps } from "./gaps.js";
 
 const now = () => Date.now();
 
@@ -100,6 +101,7 @@ export async function rememberFact(
     // information, and the row already carries the embedding.
     if (existing.valid_to !== null) {
       db.prepare(`UPDATE facts SET valid_to = NULL, superseded_by = NULL WHERE id = ?`).run(existing.id);
+      resolveGaps(existing.id, clean);
       return { stored: true, reason: "reopened", superseded: [] };
     }
     return { stored: false, reason: "already known", superseded: [] };
@@ -122,6 +124,9 @@ export async function rememberFact(
     );
   const newId = Number(inserted.lastInsertRowid);
   const superseded = opts.corrects ? retireRivals(newId, clean, vec) : [];
+  // A gap asked about exactly these words is now answered: the "learned it
+  // later" half of the ledger.
+  resolveGaps(newId, clean);
   return { stored: true, superseded };
 }
 
@@ -222,10 +227,17 @@ export function forgetSummary(sessionId: string): boolean {
 export function forgetFact(idOrText: string): boolean {
   const db = getDb();
   const asId = Number(idOrText);
-  const result = Number.isFinite(asId)
-    ? db.prepare(`DELETE FROM facts WHERE id = ?`).run(asId)
-    : db.prepare(`DELETE FROM facts WHERE text = ?`).run(idOrText);
-  return result.changes > 0;
+  const row = (
+    Number.isFinite(asId)
+      ? db.prepare(`SELECT id FROM facts WHERE id = ?`).get(asId)
+      : db.prepare(`SELECT id FROM facts WHERE text = ?`).get(idOrText)
+  ) as { id: number } | undefined;
+  if (!row) return false;
+  db.prepare(`DELETE FROM facts WHERE id = ?`).run(row.id);
+  // The gaps this fact had answered are open again — forgetting the answer
+  // must not leave the question marked as learned.
+  db.prepare(`UPDATE gaps SET resolved_by = NULL WHERE resolved_by = ?`).run(row.id);
+  return true;
 }
 
 export interface ScoredFact {
@@ -732,6 +744,7 @@ export function resetDerived(): void {
   db.exec(`
     DELETE FROM edges;
     DELETE FROM entities;
+    DELETE FROM gaps;
     UPDATE sessions SET indexed = 0, summary = NULL, embedding = NULL;
   `);
 }
