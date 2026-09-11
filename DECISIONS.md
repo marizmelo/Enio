@@ -3182,6 +3182,17 @@ gone; what remains is one variant, a config-file read after two empty
 searches for a config value. Stayed staged; that shape joined the
 curriculum.
 
+**Runs 3 and 4 (10 Sep):** run 3, 94 rows — tool choice 17/19, abstention
+0/4, and its iteration-100 checkpoint 17/19 and 1/4 (2/4 once the gate's
+grammar accepted the curriculum's own sentences, which it had not). Run
+4, 105 rows with six more single-miss stops — tool choice 18/19, JSON
+15/15, abstention 3/4, validation loss 1.10, the best adapter measured;
+staged by one probe, a config-file read after two empty searches. The
+pattern across four runs is the finding: exploding a conversation per
+assistant step gives every look a row and the stop one row, and the
+adapter learns the ratio. `--stop-weight` (default 2) doubles the rows
+where a reply follows an empty tool result.
+
 ### The gate measures humility, by grammar
 
 **Chose:** abstention probes in every curriculum's held-out set — things

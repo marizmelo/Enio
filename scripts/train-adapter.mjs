@@ -6,7 +6,7 @@
  *
  * Usage:
  *   node scripts/train-adapter.mjs coder [--iters 400] [--batch-size 2]
- *        [--num-layers 8] [--from-traces] [--eval-only] [--no-install]
+ *        [--num-layers 8] [--stop-weight 2] [--from-traces] [--eval-only] [--no-install]
  *   node scripts/train-adapter.mjs coder --behavior-gate [--only voice=terse,register=expert]
  *
  * The pipeline: authored scenarios (scripts/adapter-data/<name>.mjs), plus
@@ -133,15 +133,29 @@ function buildRows() {
     conversations.push(...minedConversations().map((messages) => ({ messages, mined: true })));
   }
 
+  // The honest stop — a reply, not a call, right after a tool came back
+  // empty — is the one form four gated adapters kept losing: tool choice
+  // rose every run while "not here" after a miss fell. Exploding a
+  // conversation per assistant step gives every look a row of its own and
+  // the stop one row; weighting the stop rows evens that (--stop-weight,
+  // default 2; 1 turns it off).
+  const MISS = /^(Error: no file|No matches for|fatal:|zsh: command not found|old_string was not found)/;
+  const stopWeight = Math.max(1, Number(opt("--stop-weight", "2")) || 1);
+  let stops = 0;
   const rows = [];
   for (const { messages, mined } of conversations) {
     const full = [{ role: "system", content: systemPrompt }, ...messages];
     for (let i = 0; i < full.length; i++) {
       if (full[i].role !== "assistant") continue;
       const row = { messages: full.slice(0, i + 1), tools: wireTools };
-      rows.push({ row, mined, chars: JSON.stringify(row).length });
+      const prev = full[i - 1];
+      const honestStop = !full[i].tool_calls && prev?.role === "tool" && MISS.test(prev.content ?? "");
+      const copies = honestStop && !mined ? stopWeight : 1;
+      if (honestStop && !mined) stops++;
+      for (let c = 0; c < copies; c++) rows.push({ row, mined, chars: JSON.stringify(row).length });
     }
   }
+  if (stopWeight > 1) console.log(`honest-stop rows: ${stops}, weighted ×${stopWeight}`);
   // Valid from the curriculum only, over-length rows dropped: see splitDataset.
   return splitDataset(rows);
 }
