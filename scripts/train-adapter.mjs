@@ -6,7 +6,7 @@
  *
  * Usage:
  *   node scripts/train-adapter.mjs coder [--iters 400] [--batch-size 2]
- *        [--num-layers 8] [--stop-weight 2] [--from-traces] [--eval-only] [--no-install]
+ *        [--num-layers 8] [--stop-weight N] [--from-traces] [--eval-only] [--no-install]
  *   node scripts/train-adapter.mjs coder --behavior-gate [--only voice=terse,register=expert]
  *
  * The pipeline: authored scenarios (scripts/adapter-data/<name>.mjs), plus
@@ -137,10 +137,13 @@ function buildRows() {
   // empty — is the one form four gated adapters kept losing: tool choice
   // rose every run while "not here" after a miss fell. Exploding a
   // conversation per assistant step gives every look a row of its own and
-  // the stop one row; weighting the stop rows evens that (--stop-weight,
-  // default 2; 1 turns it off).
+  // the stop one row; --stop-weight N duplicates the stop rows. Off by
+  // default: the one run that tried it (×2) scored 15/19 and 2/4 where the
+  // run before scored 18/19 and 3/4 — no evidence for it, and five runs of
+  // abstention at 1, 3, 0, 3, 2 out of 4 say the four-probe gate cannot
+  // tell a lever from training noise. Kept as a switch for when it can.
   const MISS = /^(Error: no file|No matches for|fatal:|zsh: command not found|old_string was not found)/;
-  const stopWeight = Math.max(1, Number(opt("--stop-weight", "2")) || 1);
+  const stopWeight = Math.max(1, Number(opt("--stop-weight", "1")) || 1);
   let stops = 0;
   const rows = [];
   for (const { messages, mined } of conversations) {

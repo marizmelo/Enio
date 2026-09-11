@@ -3190,8 +3190,21 @@ grammar accepted the curriculum's own sentences, which it had not). Run
 staged by one probe, a config-file read after two empty searches. The
 pattern across four runs is the finding: exploding a conversation per
 assistant step gives every look a row and the stop one row, and the
-adapter learns the ratio. `--stop-weight` (default 2) doubles the rows
-where a reply follows an empty tool result.
+adapter learns the ratio. `--stop-weight N` duplicates the rows where a
+reply follows an empty tool result.
+
+**Run 5 (10 Sep, stops weighted ×2, 119 rows):** tool choice 15/19,
+abstention 2/4 — worse than run 4 on both. Across five runs on nearly
+identical data with the seed fixed, abstention went 1, 3, 0, 3, 2 of 4.
+That is not a lever responding; it is training noise on a four-probe
+instrument, where one flip is decisive under the strict rule. Stopped
+iterating. What has to change before the next run is the instrument,
+not the data: a held-out set large enough that one flip is not a
+verdict (a dozen abstention probes, thirty tool-choice tasks), two
+seeds per data set so run-to-run variance is measured rather than
+inferred, and every run's weights kept (staging is overwritten per run,
+so run 4 — the best adapter measured — is gone). The weighting default
+is off; the switch stays.
 
 ### The gate measures humility, by grammar
 
