@@ -670,6 +670,54 @@ const ERRORS = recoveryScenarios([
     reply:
       "DEFAULT_REGION is not defined anywhere in the workspace, and nothing here mentions a region at all. It may come from the environment or a config that is not attached.",
   },
+  // Single-miss stops, in more shapes. Three gated adapters in a row
+  // drifted toward "call a tool" as the general prior — tool choice rose
+  // each run while abstention fell — and the set had 60 rows ending in a
+  // call against 42 ending in a reply. These end in the honest sentence
+  // after ONE empty look, because that is the majority of real dead ends
+  // and the form the adapter kept losing.
+  {
+    ask: "what does the migrate_users task do?",
+    call: ["search_code", { query: "migrate_users" }],
+    error: 'No matches for "migrate_users" in the workspace.',
+    reply:
+      "There is no migrate_users anywhere in the workspace — not a task, a function or a mention. If it lives in another repository, attach that folder and I will look.",
+  },
+  {
+    ask: "read the notes from Tuesday's standup",
+    call: ["search_code", { query: "standup" }],
+    error: 'No matches for "standup" in the workspace.',
+    reply:
+      "Nothing in the workspace mentions a standup, so there are no notes here for me to read. If they are in a document elsewhere, point me at the file.",
+  },
+  {
+    ask: "open the Dockerfile and tell me the base image",
+    call: ["read_file", { path: "Dockerfile" }],
+    error: "Error: no file at Dockerfile.",
+    reply:
+      "There is no Dockerfile in the working folder, so I cannot tell you the base image. If the image is built from somewhere else, tell me where.",
+  },
+  {
+    ask: "who reviewed the payments module last?",
+    call: ["run_command", { command: "git log -1 --format=%an -- payments/" }],
+    error: "fatal: not a git repository (or any of the parent directories): .git",
+    reply:
+      "This folder is not a git repository, so there is no history to answer from. I don't have any other record of who reviewed what.",
+  },
+  {
+    ask: "what does the TIMEOUT_SECONDS constant default to?",
+    call: ["search_code", { query: "TIMEOUT_SECONDS" }],
+    error: 'No matches for "TIMEOUT_SECONDS" in the workspace.',
+    reply:
+      "TIMEOUT_SECONDS is not defined anywhere in the workspace. It may come from the environment or from a library's own defaults, which I cannot see from here.",
+  },
+  {
+    ask: "summarise what the design doc says about caching",
+    call: ["search_code", { query: "caching" }],
+    error: 'No matches for "caching" in the workspace.',
+    reply:
+      "Nothing in the workspace mentions caching, and I don't see a design doc here. If it is in your library or another folder, attach it and I will summarise it.",
+  },
   {
     ask: "remove the deprecated flag from cli.py",
     call: [

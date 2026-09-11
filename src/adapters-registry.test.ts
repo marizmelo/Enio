@@ -147,6 +147,30 @@ describe("mining the traces for the loop", () => {
     assert.equal(reg.abstains(null, false), false);
   });
 
+  test("every dead-end reply the coder curriculum teaches passes the grammar that scores it", async () => {
+    // The gate once scored the adapter's imitation of the curriculum's own
+    // honest sentence ("There is no X anywhere in the workspace") as an
+    // invention. The two must agree, or the curriculum trains what the
+    // gate then punishes.
+    const { pathToFileURL } = await import("node:url");
+    const { join } = await import("node:path");
+    const mod = (await import(pathToFileURL(join(process.cwd(), "scripts", "adapter-data", "coder.mjs")).href)) as {
+      scenarios(): Array<Array<{ role: string; content?: string; tool_calls?: unknown[] }>>;
+    };
+    const miss = /^(Error: no file|No matches for|fatal:|zsh: command not found)/;
+    let checked = 0;
+    for (const convo of mod.scenarios()) {
+      const last = convo.at(-1)!;
+      const misses = convo.filter((m) => m.role === "tool" && miss.test(m.content ?? ""));
+      // A dead end that ended in a reply after its last look came back empty.
+      const lastTool = [...convo].reverse().find((m) => m.role === "tool");
+      if (last.role !== "assistant" || last.tool_calls || misses.length === 0 || !lastTool || !miss.test(lastTool.content ?? "")) continue;
+      checked++;
+      assert.ok(reg.abstains(last.content, false), `curriculum reply not in the grammar: ${last.content}`);
+    }
+    assert.ok(checked >= 8, `expected the dead-end family to be checked, got ${checked}`);
+  });
+
   test("a backend's refusal is not an answer — it must never become a training target", () => {
     // The on-device bridge returns its refusals as ordinary completions, so
     // they are stored as the turn's reply. The coder's third run learned
