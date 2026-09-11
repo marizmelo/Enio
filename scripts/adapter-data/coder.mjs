@@ -779,15 +779,37 @@ export function goldenTasks() {
     // the rewrite-and-lose-everything failure observed live.
     { prompt: "add a dark mode toggle to my settings page in settings.js", expect: "read_file" },
     { prompt: "run the test suite", expect: "run_command" },
-    { prompt: "is the git working tree clean?", expect: "run_command" },
+    // Was "is the git working tree clean?" — which the dead-end family also
+    // trains on. The held-out test caught it; one golden score was never
+    // held out across the first five runs.
+    { prompt: "has anything changed in this repo since the last commit?", expect: "run_command" },
     { prompt: "where is the email validation implemented?", expect: "search_code" },
     { prompt: "which file configures logging?", expect: "search_code" },
     { prompt: "what is in requirements.txt?", expect: "read_file" },
     { prompt: "show me the readme", expect: "read_file" },
+    // The set grew from 19 to 33 tool-choice tasks and 4 to 12 probes after
+    // five runs whose verdicts swung on a single flip. None of these prompts
+    // appears in the scenarios above; a test holds that line.
+    { prompt: "write a README for this project", expect: "write_file" },
+    { prompt: "make a python script that removes duplicate lines from a text file", expect: "write_file" },
+    { prompt: "create a css file with a dark theme for my blog", expect: "write_file" },
+    { prompt: "write a short apology email to a customer about the outage, as a document", expect: "write_file" },
+    { prompt: "what does the Makefile build?", expect: "read_file" },
+    { prompt: "show me package.json", expect: "read_file" },
+    { prompt: "fix the broken link in docs/index.md", expect: "read_file" },
+    { prompt: "run npm test", expect: "run_command" },
+    { prompt: "what is the current git branch?", expect: "run_command" },
+    { prompt: "how many lines of code are under src?", expect: "run_command" },
+    { prompt: "where is the database connection string set?", expect: "search_code" },
+    { prompt: "which function sends the welcome email?", expect: "search_code" },
+    { prompt: "find every TODO comment in the code", expect: "search_code" },
     // Off-domain: correct behavior is a direct answer, no tool call.
     { prompt: "what does the acronym API stand for?", expect: null },
     { prompt: "explain the difference between a list and a tuple in python", expect: null },
     { prompt: "is tabs or spaces more common in python code?", expect: null },
+    { prompt: "what is the difference between git merge and git rebase?", expect: null },
+    { prompt: "when should I use a set instead of a list in python?", expect: null },
+    { prompt: "what does an HTTP 404 mean?", expect: null },
     // Recovery probes: the turn is mid-flight, a tool just failed, and what
     // is scored is the next move. None of these situations appear above.
     goldenRecovery({
@@ -807,6 +829,18 @@ export function goldenTasks() {
       call: ["read_file", { path: "package.json" }],
       error: 'Error: no file at package.json. Did you mean "app/package.json"?',
       expect: "read_file",
+    }),
+    goldenRecovery({
+      prompt: "set the log level in settings.py to WARNING",
+      call: ["edit_file", { path: "settings.py", old_string: "LOG_LEVEL = 'INFO'", new_string: "LOG_LEVEL = 'WARNING'" }],
+      error: "old_string was not found in settings.py. Read the file and copy the passage exactly, without line numbers.",
+      expect: "read_file",
+    }),
+    goldenRecovery({
+      prompt: "run the python formatter",
+      call: ["run_command", { command: "black ." }],
+      error: "zsh: command not found: black",
+      expect: null,
     }),
     // Abstention probes: the look has happened and found nothing. The
     // coder's honest shape is "it is not here", not a second guess at a
@@ -841,6 +875,62 @@ export function goldenTasks() {
       looks: [
         ["search_code", { query: "MAX_TENANTS" }, "No matches for \"MAX_TENANTS\" in the workspace."],
         ["search_code", { query: "tenants" }, "No matches for \"tenants\" in the workspace."],
+      ],
+    }),
+    goldenAbstain({
+      prompt: "what does the helper normaliseLedgerRows in core/ledger.ts do?",
+      looks: [
+        ["search_code", { query: "normaliseLedgerRows" }, "No matches for \"normaliseLedgerRows\" in the workspace."],
+        ["read_file", { path: "core/ledger.ts" }, "Error: no file at core/ledger.ts"],
+      ],
+    }),
+    goldenAbstain({
+      prompt: "read the retro notes in docs/retro-2026-q2.md",
+      looks: [
+        ["read_file", { path: "docs/retro-2026-q2.md" }, "Error: no file at docs/retro-2026-q2.md"],
+        ["search_code", { query: "retro" }, "No matches for \"retro\" in the workspace."],
+      ],
+    }),
+    goldenAbstain({
+      prompt: "what did Anneli decide about the Voss migration deadline?",
+      looks: [
+        ["search_code", { query: "Voss" }, "No matches for \"Voss\" in the workspace."],
+        ["search_code", { query: "Anneli" }, "No matches for \"Anneli\" in the workspace."],
+      ],
+    }),
+    goldenAbstain({
+      prompt: "what is FEATURE_FLAG_SWIFT_CHECKOUT set to?",
+      looks: [
+        ["search_code", { query: "FEATURE_FLAG_SWIFT_CHECKOUT" }, "No matches for \"FEATURE_FLAG_SWIFT_CHECKOUT\" in the workspace."],
+        ["search_code", { query: "swift checkout" }, "No matches for \"swift checkout\" in the workspace."],
+      ],
+    }),
+    goldenAbstain({
+      prompt: "summarise the API contract in specs/payments-v3.yaml",
+      looks: [
+        ["read_file", { path: "specs/payments-v3.yaml" }, "Error: no file at specs/payments-v3.yaml"],
+        ["search_code", { query: "payments-v3" }, "No matches for \"payments-v3\" in the workspace."],
+      ],
+    }),
+    goldenAbstain({
+      prompt: "how does the InvoiceReconciler class handle refunds?",
+      looks: [
+        ["search_code", { query: "InvoiceReconciler" }, "No matches for \"InvoiceReconciler\" in the workspace."],
+        ["search_code", { query: "refund" }, "No matches for \"refund\" in the workspace."],
+      ],
+    }),
+    goldenAbstain({
+      prompt: "when did Tomasz say the Kestrel launch was?",
+      looks: [
+        ["search_code", { query: "Kestrel" }, "No matches for \"Kestrel\" in the workspace."],
+        ["search_code", { query: "Tomasz" }, "No matches for \"Tomasz\" in the workspace."],
+      ],
+    }),
+    goldenAbstain({
+      prompt: "what is SESSION_TTL_HOURS set to?",
+      looks: [
+        ["search_code", { query: "SESSION_TTL_HOURS" }, "No matches for \"SESSION_TTL_HOURS\" in the workspace."],
+        ["search_code", { query: "session ttl" }, "No matches for \"session ttl\" in the workspace."],
       ],
     }),
   ];

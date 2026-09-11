@@ -1017,7 +1017,7 @@ async function main(): Promise<void> {
       // and it is never scheduled — an hour of GPU is the user's call.
       const {
         adapterHistory, activeAdapterVersion, curriculumSpecialists, excludeTurn, failureCases,
-        materialSince, mineableTurns, rollbackAdapter, retireAdapter, trainerFor,
+        materialSince, mineableTurns, rollbackAdapter, retireAdapter, stagedRuns, trainerFor,
       } = await import("./adapters.js");
       const { currentModelId } = await import("./model-settings.js");
       const sub = rest[0];
@@ -1062,6 +1062,26 @@ async function main(): Promise<void> {
       }
       if (sub === "off" && name) {
         console.log(retireAdapter(name) ? `${name} now serves from the bare base model.` : `${name} had no adapter installed.`);
+        break;
+      }
+      if (sub === "runs" && name) {
+        // Every run's numbers, installed or not: the record a single
+        // pass/fail line loses, and the weights are all still there.
+        const runs = stagedRuns(name);
+        if (runs.length === 0) {
+          console.log(`No measured runs yet for ${name}.`);
+          break;
+        }
+        for (const r of runs) {
+          const when = new Date(r.at).toISOString().slice(0, 16).replace("T", " ");
+          const a = r.adapter;
+          const b = r.base;
+          console.log(
+            `${r.passed ? "✓" : " "} ${when}  seed ${r.seed.padEnd(4)} ${String(r.rows).padStart(4)} rows  ` +
+              `tools ${a.toolRight}/${a.total} (base ${b.toolRight})  abstains ${a.abstainRight ?? "-"}/${a.abstainTotal ?? "-"} (base ${b.abstainRight ?? "-"})  ${r.run}`,
+          );
+        }
+        console.log(`\nWeights: ~/.enio/adapters/<model>/${name}/runs/<run>/  ·  ✓ passed the gate`);
         break;
       }
       if (sub === "material" && name) {
@@ -1121,7 +1141,8 @@ async function main(): Promise<void> {
         console.log(`             ${material.clean} clean turns on this model ${material.since ? "since it was trained" : "in the traces"} · ${failed} failed turns to learn from`);
       }
       console.log(
-        `\n  enio train run <agent> [--from-traces]   train, gate, install (never automatic)\n` +
+        `\n  enio train run <agent> [--from-traces] [--seeds 7,11]   train, gate, install (never automatic)\n` +
+          `  enio train runs <agent>                  every run's gate numbers; weights are all kept\n` +
           `  enio train material <agent>              the turns --from-traces would learn from\n` +
           `  enio train exclude <agent> <turn-id>     strike a test conversation from that list\n` +
           `  enio train failures <agent>              what went wrong, for the curriculum\n` +

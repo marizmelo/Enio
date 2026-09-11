@@ -144,6 +144,8 @@ enio train failures coder     # the turns that went wrong, as candidates for the
 enio train material coder     # the turns --from-traces would learn from — read it before a run
 enio train exclude coder 412  # strike one that was a test, not real work
 enio train run coder          # train, gate, install — only ever when you say so
+enio train run coder --seeds 7,11   # twice on the same data: the spread is the noise floor
+enio train runs coder         # every run's numbers; no run's weights are ever deleted
 enio train history coder      # every version with its measurement; * marks the active one
 enio train rollback coder     # back to the previous version (nothing is deleted)
 enio train off coder          # serve from the plain model again
@@ -151,7 +153,9 @@ enio train off coder          # serve from the plain model again
 
 Nothing in it starts a training run by itself. It shows what has
 accumulated since the last one and what failed; whether an hour of GPU is
-worth spending is your call. Only turns the *current* model produced count
+worth spending is your call. Training the same data under two seeds tells
+you how much of a change is the change and how much is chance — with
+several seeds an adapter installs only when every one of them passes. Only turns the *current* model produced count
 as material — an adapter must not learn another model's habits — and a
 conversation that was a test rather than real work looks identical in the
 traces, so `material` is there to be read and `exclude` to strike from. A failed turn is not training data — it is

@@ -154,6 +154,37 @@ export function retireAdapter(name: string): boolean {
   return removed;
 }
 
+export interface StagedRun {
+  run: string;
+  seed: string;
+  at: number;
+  rows: number;
+  base: GateScore;
+  adapter: GateScore;
+  passed: boolean;
+}
+
+/** Every training run's gate numbers, newest first — the weights beside
+ *  them are never deleted, because the best adapter measured was once
+ *  overwritten by the next attempt. */
+export function stagedRuns(name: string): StagedRun[] {
+  const dir = join(adapterDir(name), "runs");
+  const out: StagedRun[] = [];
+  try {
+    for (const run of readdirSync(dir)) {
+      try {
+        const g = JSON.parse(readFileSync(join(dir, run, "gate.json"), "utf8")) as Omit<StagedRun, "run">;
+        if (g && g.base && g.adapter) out.push({ run, ...g, seed: String(g.seed ?? "?"), passed: Boolean(g.passed) });
+      } catch {
+        /* A run without a gate.json was never measured; nothing to list. */
+      }
+    }
+  } catch {
+    /* No runs yet. */
+  }
+  return out.sort((a, b) => b.at - a.at);
+}
+
 export function activeAdapterVersion(name: string): AdapterVersion | null {
   return adapterHistory(name).find((h) => h.active) ?? null;
 }

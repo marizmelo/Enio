@@ -6,7 +6,8 @@
  *
  * Usage:
  *   node scripts/train-adapter.mjs coder [--iters 400] [--batch-size 2]
- *        [--num-layers 8] [--stop-weight N] [--from-traces] [--eval-only] [--no-install]
+ *        [--num-layers 8] [--seeds 7,11] [--stop-weight N] [--from-traces]
+ *        [--eval-only] [--no-install]
  *   node scripts/train-adapter.mjs coder --behavior-gate [--only voice=terse,register=expert]
  *
  * The pipeline: authored scenarios (scripts/adapter-data/<name>.mjs), plus
@@ -279,9 +280,7 @@ function writeDataset() {
   );
 }
 
-async function train() {
-  writeDataset();
-
+async function train(seed, outDir) {
   const py = venvPythonPath();
   const cmd = [
     "-m", "mlx_lm", "lora",
@@ -294,10 +293,10 @@ async function train() {
     "--num-layers", opt("--num-layers", "8"),
     "--learning-rate", opt("--learning-rate", "5e-5"),
     "--max-seq-length", "3072",
-    "--adapter-path", stagingDir,
-    "--seed", "7",
+    "--adapter-path", outDir,
+    "--seed", String(seed),
   ];
-  console.log(`training: ${py} ${cmd.join(" ")}`);
+  console.log(`training (seed ${seed}): ${py} ${cmd.join(" ")}`);
   await new Promise((resolve, reject) => {
     const child = spawn(py, cmd, { stdio: "inherit" });
     child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`trainer exited ${code}`))));
@@ -518,33 +517,97 @@ if (flag("--behavior-gate")) {
   await behaviorGate();
 }
 
-if (!flag("--eval-only")) await train();
+/*
+ * Every run keeps its weights under runs/<stamp>-seed<n>/, with its gate
+ * numbers beside them, forever: staging/ is a pointer to the newest, not
+ * the only copy. The fourth coder run was the best adapter measured and
+ * the fifth overwrote it.
+ *
+ * Seeds: one by default; `--seeds 7,11` trains the same data twice.
+ * Five runs on nearly identical data scored abstention 1, 3, 0, 3, 2 of 4
+ * with one seed, so a lever cannot be read off a single run. With several
+ * seeds the spread between them is printed as the noise floor, and an
+ * adapter installs only when EVERY seed passes the gate — a lever that
+ * passes with one seed and fails with another is noise, not a lever.
+ */
+const seeds = opt("--seeds", opt("--seed", "7")).split(",").map((s) => s.trim()).filter(Boolean);
+const runsDir = join(adapterDir, "runs");
+let candidates = [];
+if (flag("--eval-only")) {
+  candidates = [{ seed: "staged", dir: stagingDir }];
+} else {
+  writeDataset();
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  for (const seed of seeds) {
+    const dir = join(runsDir, `${stamp}-seed${seed}`);
+    mkdirSync(dir, { recursive: true });
+    await train(seed, dir);
+    candidates.push({ seed, dir });
+  }
+}
+const pointStaging = (dir) => {
+  if (dir === stagingDir) return;
+  mkdirSync(stagingDir, { recursive: true });
+  for (const f of ["adapters.safetensors", "adapter_config.json"]) copyFileSync(join(dir, f), join(stagingDir, f));
+};
 
-if (!existsSync(join(stagingDir, "adapters.safetensors"))) {
-  console.error(`nothing staged at ${stagingDir}`);
-  process.exit(1);
+for (const c of candidates) {
+  if (!existsSync(join(c.dir, "adapters.safetensors"))) {
+    console.error(`nothing trained at ${c.dir}`);
+    process.exit(1);
+  }
 }
 
 if (!(await serverUp())) {
+  pointStaging(candidates.at(-1).dir);
   console.log(
-    `Model server is not reachable at ${config.modelBaseUrl}; adapter is staged but NOT installed.\n` +
+    `Model server is not reachable at ${config.modelBaseUrl}; weights kept under ${runsDir}, staged, NOT installed.\n` +
       `Start enio, then re-run with --eval-only to gate and install.`,
   );
   process.exit(0);
 }
 
+const rowCount = existsSync(join(dataDir, "train.jsonl"))
+  ? readFileSync(join(dataDir, "train.jsonl"), "utf8").split("\n").filter(Boolean).length
+  : 0;
 const base = (await evaluate("base    ", null)).score;
-const tuned = (await evaluate("adapter ", stagingDir)).score;
-
 // Every measured property must hold: an adapter below base on any one of
 // them stays staged, whatever its score on the others.
-const better =
-  tuned.toolRight >= base.toolRight &&
-  tuned.abstainRight >= base.abstainRight &&
-  (tuned.jsonTotal === 0 || tuned.jsonValid / tuned.jsonTotal >= (base.jsonTotal ? base.jsonValid / base.jsonTotal : 1));
+const passes = (t) =>
+  t.toolRight >= base.toolRight &&
+  t.abstainRight >= base.abstainRight &&
+  (t.jsonTotal === 0 || t.jsonValid / t.jsonTotal >= (base.jsonTotal ? base.jsonValid / base.jsonTotal : 1));
 
-if (!better) {
-  console.log("Adapter does not beat base on its own tasks — left staged, not installed.");
+const scored = [];
+for (const c of candidates) {
+  const tuned = (await evaluate(`adapter (seed ${c.seed})`.padEnd(8), c.dir)).score;
+  const passed = passes(tuned);
+  scored.push({ ...c, tuned, passed });
+  if (c.dir !== stagingDir) {
+    writeFileSync(
+      join(c.dir, "gate.json"),
+      JSON.stringify({ seed: c.seed, at: Date.now(), rows: rowCount, base, adapter: tuned, passed }, null, 2) + "\n",
+    );
+  }
+}
+if (scored.length > 1) {
+  const spread = (k) => { const v = scored.map((s) => s.tuned[k]); return `${Math.min(...v)}–${Math.max(...v)}`; };
+  console.log(
+    `\nacross ${scored.length} seeds: tool choice ${spread("toolRight")}/${base.total}, ` +
+      `abstains ${spread("abstainRight")}/${base.abstainTotal} — the spread is this data's noise floor`,
+  );
+}
+scored.sort((a, b) => b.tuned.toolRight + b.tuned.abstainRight - (a.tuned.toolRight + a.tuned.abstainRight) || b.tuned.abstainRight - a.tuned.abstainRight);
+const best = scored[0];
+pointStaging(best.dir);
+
+const failed = scored.filter((s) => !s.passed);
+if (failed.length > 0) {
+  console.log(
+    scored.length > 1 && failed.length < scored.length
+      ? `${scored.length - failed.length} of ${scored.length} seeds passed the gate — noise, not a lever. Nothing installed; every run's weights are under ${runsDir}.`
+      : `Adapter does not beat base on its own tasks — left staged, not installed (weights kept under ${runsDir}).`,
+  );
   process.exit(1);
 }
 
@@ -554,9 +617,7 @@ if (flag("--no-install")) {
 }
 
 const { recordAdapterVersion } = await distImport("adapters.js");
-const rowCount = existsSync(join(dataDir, "train.jsonl"))
-  ? readFileSync(join(dataDir, "train.jsonl"), "utf8").split("\n").filter(Boolean).length
-  : 0;
+const tuned = best.tuned;
 const entry = recordAdapterVersion(name, stagingDir, { trainer: "mlx", rows: rowCount, gate: { base, adapter: tuned } });
 console.log(
   `Installed as version ${entry.version}: ${adapterDir}\n` +

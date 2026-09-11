@@ -171,6 +171,44 @@ describe("mining the traces for the loop", () => {
     assert.ok(checked >= 8, `expected the dead-end family to be checked, got ${checked}`);
   });
 
+  test("the held-out set is held out, and large enough that one flip is not a verdict", async () => {
+    const { pathToFileURL } = await import("node:url");
+    const mod = (await import(pathToFileURL(join(process.cwd(), "scripts", "adapter-data", "coder.mjs")).href)) as {
+      scenarios(): Array<Array<{ role: string; content?: string }>>;
+      goldenTasks(): Array<{ prompt: string; expect: string | null }>;
+    };
+    const trained = new Set(
+      mod.scenarios().flatMap((c) => c.filter((m) => m.role === "user").map((m) => (m.content ?? "").trim().toLowerCase())),
+    );
+    const golden = mod.goldenTasks();
+    for (const t of golden) {
+      assert.ok(!trained.has(t.prompt.trim().toLowerCase()), `golden prompt appears in the curriculum: ${t.prompt}`);
+    }
+    const abstain = golden.filter((t) => t.expect === "abstain").length;
+    // Five runs on nearly identical data scored 1, 3, 0, 3, 2 of 4 probes;
+    // with four, a single flip decided the gate.
+    assert.ok(abstain >= 12, `${abstain} abstention probes`);
+    assert.ok(golden.length - abstain >= 30, `${golden.length - abstain} tool-choice tasks`);
+  });
+
+  test("every run's gate numbers are kept and listed, passed or not", () => {
+    const runs = join(reg.adapterDir("coder"), "runs");
+    const gate = (seed: string, at: number, toolRight: number, abstainRight: number, passed: boolean) => ({
+      seed, at, rows: 100, passed,
+      base: { toolRight: 15, total: 19, jsonValid: 13, jsonTotal: 13, abstainRight: 4, abstainTotal: 4 },
+      adapter: { toolRight, total: 19, jsonValid: 15, jsonTotal: 15, abstainRight, abstainTotal: 4 },
+    });
+    mkdirSync(join(runs, "2026-09-10T18-00-00-seed7"), { recursive: true });
+    writeFileSync(join(runs, "2026-09-10T18-00-00-seed7", "gate.json"), JSON.stringify(gate("7", 1000, 18, 3, false)));
+    mkdirSync(join(runs, "2026-09-10T19-00-00-seed11"), { recursive: true });
+    writeFileSync(join(runs, "2026-09-10T19-00-00-seed11", "gate.json"), JSON.stringify(gate("11", 2000, 16, 4, true)));
+    mkdirSync(join(runs, "unmeasured"), { recursive: true });
+    const listed = reg.stagedRuns("coder");
+    assert.deepEqual(listed.map((r) => r.seed), ["11", "7"], "newest first; a run never measured is not listed");
+    assert.equal(listed[1]!.adapter.toolRight, 18);
+    assert.equal(listed[0]!.passed, true);
+  });
+
   test("a backend's refusal is not an answer — it must never become a training target", () => {
     // The on-device bridge returns its refusals as ordinary completions, so
     // they are stored as the turn's reply. The coder's third run learned
