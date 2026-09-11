@@ -819,8 +819,10 @@ export function goldenTasks() {
       expect: null,
     }),
     goldenRecovery({
-      prompt: "run the linter",
-      call: ["run_command", { command: "npx eslint ." }],
+      // Was "run the linter", which a scenario also asks; the held-out test
+      // caught it as the second leak.
+      prompt: "run the type checker",
+      call: ["run_command", { command: "npx tsc --noEmit" }],
       error: "zsh: command not found: npx",
       expect: null,
     }),
