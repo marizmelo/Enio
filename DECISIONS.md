@@ -3218,6 +3218,20 @@ scenarios across all five earlier runs. Nothing installed; the next lever
 is the trade itself — the stop weighted, or fewer layers — measured under
 two seeds or not at all.
 
+**Stop weighted ×2, two seeds (11 Sep):** tool choice 29 and 30 of 37
+(base 27), abstention 7 and 7 of 12 (base 12). Worse on both measures
+than the unweighted pair, and both seeds agree. Every abstention miss on
+both seeds is the same move: `search_code` after two empty looks. The
+search-heavy families teach "when unsure, search" thoroughly enough to
+override the stop, and doubling the stop rows did not compete with it.
+The knob line is closed: the next change, if any, is structural — stop
+training the look-again step as a target (base already looks again
+well) so the adapter learns looks from the happy path and stops from the
+dead ends — or leave the coder on the base model, which is honest at
+12 of 12 and four tool choices behind. Base itself moved by one task
+between two gate runs hours apart (28 then 27 of 37), so the base line
+carries about ±1 of its own.
+
 ### The gate measures humility, by grammar
 
 **Chose:** abstention probes in every curriculum's held-out set — things
