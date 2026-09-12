@@ -3206,6 +3206,18 @@ inferred, and every run's weights kept (staging is overwritten per run,
 so run 4 — the best adapter measured — is gone). The weighting default
 is off; the switch stays.
 
+**With the instrument (11 Sep, 37 tool-choice tasks and 12 probes, two
+seeds on the same 105 rows):** base 28/37 and 11/12; seed 7 32/37 and
+10/12; seed 11 33/37 and 6/12. Both seeds agree the adapter gains four
+to five tool choices; both erode abstention, by an amount the seed alone
+swings from one probe to five — every miss a third look after two empty
+ones, never an invention. So the trade is the curriculum's shape, not
+chance, and a single-seed verdict on abstention is not a verdict at all.
+The held-out test also found two golden prompts that had been training
+scenarios across all five earlier runs. Nothing installed; the next lever
+is the trade itself — the stop weighted, or fewer layers — measured under
+two seeds or not at all.
+
 ### The gate measures humility, by grammar
 
 **Chose:** abstention probes in every curriculum's held-out set — things
