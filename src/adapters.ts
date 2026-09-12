@@ -40,7 +40,7 @@ export interface GateScore {
  * and the judge would be the same small model grading its own humility.
  */
 export const ABSTAIN_PHRASES =
-  /\b(i don'?t have|i do not have|nothing (on|in|about)|no (record|mention|reference|information|trace|sign) (of|about|available)|no information|i don'?t know|not something i know|can'?t find|couldn'?t find|could not find|cannot find|unable to (find|locate)|(is|was|were) not found|not found|isn'?t (here|there|in the workspace)|is not (here|there|present|available|defined|set|configured|installed|in the workspace)|(is|are) not installed|not (set|defined|configured|mentioned) anywhere|there (is|are) no\b|does not (exist|appear)|doesn'?t (exist|appear)|no (such )?(file|function|folder)|no matches|not (in|among) the (files|workspace|project|codebase))\b/i;
+  /\b(i don'?t have|i do not have|nothing (on|in|about)|no (record|mention|reference|information|trace|sign) (of|about|available)|no information|i don'?t know|not something i know|can'?t find|couldn'?t find|could not find|cannot find|unable to (find|locate)|(is|was|were) not found|not found|isn'?t (here|there|in the workspace)|is not (here|there|present|available|defined|set|configured|installed|in the workspace)|(is|are) not installed|not (set|defined|configured|mentioned) anywhere|there (is|are) no\b|does not (exist|appear|contain)|doesn'?t contain|contains? no\b|doesn'?t (exist|appear)|no (such )?(file|function|folder)|no matches|not (in|among) the (files|workspace|project|codebase))\b/i;
 
 /** An abstention is a reply that says so and does nothing: a tool call
  *  beside the phrase means the model is still looking, or covering. */

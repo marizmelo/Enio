@@ -136,6 +136,7 @@ describe("mining the traces for the loop", () => {
       "The function `frobnicateLedger` does not appear in the workspace.",
       "There is no information available about Priya's decision regarding the retry budget.",
       "The term \"MAX_TENANTS\" was not found in the workspace codebase.",
+      "The workspace does not contain any references to `FEATURE_FLAG_SWIFT_CHECKOUT`.",
     ];
     for (const reply of honest) assert.equal(reg.abstains(reply, false), true, reply);
     // A confident invention has none of the grammar.
