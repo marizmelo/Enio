@@ -3135,6 +3135,30 @@ what it measures, and a version that passes it can still be the one that
 rewrote a file it was asked to read. Choosing the previous version is
 one command; the numbers that justified each version stay in history.
 
+### Accessibility belongs to the process tree, not the toggle
+
+**What happened:** the permission banner would not clear after the user
+added Enio under Accessibility. The agent answering on 8787 had been
+started from a terminal earlier in the day and re-parented to launchd;
+every launcher since, including the installed app, found 8787 answering
+and reused it. macOS charges an accessibility request to the tree the
+process was born in, so no entry for Enio.app could satisfy an agent
+born under a terminal. The button beside the banner opened nothing,
+because it opened Settings only when Electron's own check said access
+was missing — and Electron was trusted.
+
+**Chose:** the button opens the pane on every press, with `open` as a
+fallback and an honest result; and when Electron reports trusted while
+the agent reports not, the notice says the one thing that helps — quit
+and reopen Enio so it starts its own agent — instead of waiting for a
+toggle. Reusing a running agent stays: a CLI-started agent is a normal
+way to run enio, and the notice now explains the one case where it
+costs a permission.
+
+**Rejected:** killing a foreign agent from the launcher (it may be a
+terminal session the user is in); asking the user to also grant the
+terminal or Claude (it would work and it would be the wrong lesson).
+
 ### Four small guards from one afternoon's evidence
 
 **write_file keeps what it replaces.** A 3B rewrote a 711-line file to 92

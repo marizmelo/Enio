@@ -28,6 +28,11 @@ export function PermissionNotice({ backendReady }) {
   const [waiting, setWaiting] = useState(false);
   // Settings could not be opened for us: say where to go instead of waiting.
   const [couldNotOpen, setCouldNotOpen] = useState(false);
+  // macOS already trusts Enio.app, yet the agent says no: the agent
+  // answering was started outside the app (a terminal, an earlier session)
+  // and macOS charges its requests to that tree. No toggle fixes that; a
+  // restart does, because the app then starts an agent of its own.
+  const [foreignAgent, setForeignAgent] = useState(false);
   const polling = useRef(null);
 
   const check = useCallback(async () => {
@@ -70,8 +75,10 @@ export function PermissionNotice({ backendReady }) {
   const grant = useCallback(async () => {
     const result = await window.maple?.requestAccessibility();
     // Older mains returned a boolean; the object form says whether the
-    // pane actually opened.
-    setCouldNotOpen(Boolean(result && typeof result === "object" && result.opened === false));
+    // pane actually opened and whether Electron itself is already trusted.
+    const obj = result && typeof result === "object" ? result : { granted: result === true, opened: true };
+    setCouldNotOpen(obj.opened === false);
+    setForeignAgent(obj.granted === true);
     startPolling();
   }, [startPolling]);
 
@@ -83,7 +90,9 @@ export function PermissionNotice({ backendReady }) {
       <div className="min-w-0 flex-1">
         <p className="text-foreground">Let Enio click buttons and menus for you</p>
         <p className="mt-0.5 text-muted-foreground">
-          {couldNotOpen
+          {foreignAgent
+            ? "macOS already allows Enio, but the agent answering was started outside the app. Quit and reopen Enio so it starts its own."
+            : couldNotOpen
             ? "System Settings did not open. Open it yourself: Privacy & Security → Accessibility, add Enio, then come back."
             : waiting
               ? "Waiting for macOS… add Enio under Accessibility, then come back."
