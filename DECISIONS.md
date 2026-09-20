@@ -3043,8 +3043,16 @@ temperature 0 so the same request routes the same way, so this cost lands
 on the decision the whole architecture depends on. Now opt-in
 (`ENIO_SPECULATIVE=1`), the installer no longer fetches the draft, and
 the throughput table above stays as the case for fixing the draft path
-rather than for turning it back on. The likely cause — the mlx_lm
-speculative path with the prompt cache — is not established here.
+rather than for turning it back on.
+
+**Localized (19 Sep):** a server started with the draft model and no
+prompt-cache flags at all reproduces it — four identical temperature-0
+requests gave two to three different answers, four of sixteen replies
+carried `<|im_start|>` in the content, one switched into Chinese
+mid-sentence. The cache is not the cause; the fault is in the speculative
+path of the runtime's mlx-lm (the deepgrove fork at 0.31.3, "Maple
+support"). Whether upstream mlx-lm shares it would need a second runtime
+and was not tried. The draft stays opt-in until that path is exact.
 
 ### Apple Intelligence as a backend: the model the Mac already has
 
