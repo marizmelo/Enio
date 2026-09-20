@@ -492,9 +492,13 @@ async function behaviorGate() {
 }
 
 async function serverUp() {
+  // Same test as serverIsUp in model.ts: a JSON body with a `data` array,
+  // not any 200 — a port held by something else once passed this check.
   try {
     const res = await fetch(`${config.modelBaseUrl}/models`);
-    return res.ok;
+    if (!res.ok) return false;
+    const body = await res.json().catch(() => null);
+    return Boolean(body && Array.isArray(body.data));
   } catch {
     return false;
   }

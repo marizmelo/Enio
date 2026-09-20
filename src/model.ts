@@ -489,7 +489,14 @@ export async function serverIsUp(): Promise<boolean> {
     const res = await fetch(`${config.modelBaseUrl}/models`, {
       signal: AbortSignal.timeout(2000),
     });
-    return res.ok;
+    if (!res.ok) return false;
+    // A 200 is not a model server. Docker Desktop held 127.0.0.1:8080 for a
+    // container and answered every probe with a 200 of something else;
+    // `enio up` declared a server running that did not exist, and every
+    // gate that asked "is the server up" got a yes. The OpenAI-compatible
+    // shape is a JSON object with a `data` array — ask for that.
+    const body = (await res.json().catch(() => null)) as { data?: unknown } | null;
+    return Boolean(body && Array.isArray(body.data));
   } catch {
     return false;
   }
