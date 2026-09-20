@@ -3127,6 +3127,32 @@ what it measures, and a version that passes it can still be the one that
 rewrote a file it was asked to read. Choosing the previous version is
 one command; the numbers that justified each version stay in history.
 
+### Four small guards from one afternoon's evidence
+
+**write_file keeps what it replaces.** A 3B rewrote a 711-line file to 92
+lines twice; the warning said the previous contents were "not recoverable
+from here", and they were not. Every overwrite now stashes the previous
+version under the data dir (fifty kept) and the result names the copy.
+Not a version-control system: a stash is what the warning needed to be
+true.
+
+**A 200 is not a model server, in the launcher too.** Docker Desktop held
+127.0.0.1:8080 and both `enio up` and the desktop launcher "reused" it.
+Both probes now require the model-list shape, and the model start names
+the program holding the port instead of failing to bind in a log nobody
+reads.
+
+**The build is checked against the source.** A pulled checkout runs last
+build's code until someone runs `npm run build`; a second machine did
+that for a day. `enio start` and the launcher compare the newest source
+file with `dist/index.js` and say so — a warning, never an automatic
+rebuild, which would need node_modules in order and could hang a
+launcher.
+
+**Rejected:** rebuilding automatically (above); a full workspace history
+(git in the workspace is the user's decision, not the tool's); accepting
+any listener on the model port as "ours" (the failure that started this).
+
 ### The router is two tiers, and the fast one is a decision, not a generation
 
 **Chose:** before the model router, a nearest-example decision: every

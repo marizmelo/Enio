@@ -259,9 +259,25 @@ let lastStatus = { phase: "starting", message: "Starting up…" };
 function checkHealth(url, timeoutMs = 2000) {
   return new Promise((resolve) => {
     const req = http.get(url, { timeout: timeoutMs }, (res) => {
-      // Drain the response so the socket can be reused/closed cleanly.
-      res.resume();
-      resolve(res.statusCode != null && res.statusCode >= 200 && res.statusCode < 300);
+      const ok = res.statusCode != null && res.statusCode >= 200 && res.statusCode < 300;
+      if (url !== MODEL_HEALTH_URL) {
+        // Drain the response so the socket can be reused/closed cleanly.
+        res.resume();
+        resolve(ok);
+        return;
+      }
+      // The model port must answer with a model list, not just a 200:
+      // Docker Desktop held 127.0.0.1:8080 and this launcher "reused" it.
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (c) => { if (body.length < 65536) body += c; });
+      res.on("end", () => {
+        try {
+          resolve(ok && Array.isArray(JSON.parse(body).data));
+        } catch {
+          resolve(false);
+        }
+      });
     });
     req.on("timeout", () => req.destroy());
     req.on("error", () => resolve(false));
@@ -391,7 +407,46 @@ async function bootLauncher() {
   NODE_BIN = node;
   console.log(`[launcher] repo: ${PARENT_DIR}`);
   console.log(`[launcher] node: ${NODE_BIN}`);
+  warnIfBuildIsStale(repo);
   startBackends();
+}
+
+/**
+ * A pulled checkout runs last build's code until someone rebuilds. On a
+ * second machine that pulled and relaunched, the app ran the old build for
+ * a day while every symptom pointed at the new code. A dialog, not a
+ * rebuild — building needs node_modules in order and must not hang the
+ * launcher. Same rule as src/staleness.ts; duplicated here because this
+ * runs before anything under dist/ is trusted.
+ */
+function warnIfBuildIsStale(repo) {
+  try {
+    const distAt = fs.statSync(path.join(repo, "dist", "index.js")).mtimeMs;
+    let srcAt = 0;
+    let newest = "";
+    const walk = (d) => {
+      for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+        const full = path.join(d, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== "node_modules") walk(full);
+        } else if (entry.name.endsWith(".ts")) {
+          const at = fs.statSync(full).mtimeMs;
+          if (at > srcAt) { srcAt = at; newest = path.relative(repo, full); }
+        }
+      }
+    };
+    walk(path.join(repo, "src"));
+    if (srcAt > distAt + 60_000) {
+      dialog.showMessageBox({
+        type: "warning",
+        message: "enio's source is newer than its build",
+        detail: `${newest} changed after dist/ was built. The app is running the older build.\n\nIn ${repo}, run:  npm run build\nthen open the app again.`,
+        buttons: ["Continue anyway"],
+      });
+    }
+  } catch {
+    /* No build or no source tree: other checks own those messages. */
+  }
 }
 
 /**

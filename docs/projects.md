@@ -104,7 +104,9 @@ matches" for a file that exists would mislead.
 **Edits are exact, not rewrites.** The coder changes an existing file with
 `edit_file` — an `old_string` that must appear exactly once, and the
 `new_string` to put in its place. Zero matches or more than one is an error
-naming the file, and nothing is written. `write_file` stays for new files
+naming the file, and nothing is written. Whenever `write_file` does replace
+an existing file, the previous version is kept under `~/.enio/stash/`
+(the fifty most recent), and the result says so. `write_file` stays for new files
 and whole documents. Whole-file rewrites were the only write before, and a
 small model asked to fix one line of a long file regenerates the rest and
 drifts. (If the model copies the passage out of `read_file`'s numbered

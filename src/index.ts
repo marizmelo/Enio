@@ -1724,7 +1724,20 @@ async function startModelServer(): Promise<void> {
  * message for engines we can't launch. Only stops what it started, since an
  * already-running server usually belongs to something else.
  */
+const relativePath = (p: string) => (p.startsWith(projectRoot) ? p.slice(projectRoot.length + 1) : p);
+
 async function startEverything(showThinking: boolean): Promise<void> {
+  // A pulled checkout runs last build's code until someone rebuilds; say
+  // so up front rather than letting today's symptoms point at yesterday's
+  // code. A warning, not a rebuild: see staleness.ts.
+  const { distStaleness } = await import("./staleness.js");
+  const stale = distStaleness(projectRoot);
+  if (stale.stale) {
+    console.log(
+      `\x1b[33mThe source is newer than the build (${relativePath(stale.newest)} changed after dist/ was built).\x1b[0m\n` +
+        `\x1b[33mThis is running the older build. Rebuild with:  npm run build\x1b[0m\n`,
+    );
+  }
   let backend: RunningBackend;
   try {
     backend = await ensureBackend({

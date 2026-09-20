@@ -1,4 +1,5 @@
 import { spawn, spawnSync, execFileSync } from "node:child_process";
+import { createConnection } from "node:net";
 import { existsSync, mkdirSync, openSync, statSync, symlinkSync } from "node:fs";
 import { release, totalmem } from "node:os";
 import { dirname, join } from "node:path";
@@ -316,6 +317,33 @@ export async function ensureBackend(opts: EnsureOptions): Promise<RunningBackend
   }
 }
 
+/** The program listening on a local port, or null when nothing is. A TCP
+ *  connect says whether the port is held; lsof names the holder when it can,
+ *  and "another program" is the honest fallback when it cannot. */
+export async function portHolder(port: number): Promise<string | null> {
+  const held = await new Promise<boolean>((resolve) => {
+    const sock = createConnection({ host: "127.0.0.1", port });
+    const done = (v: boolean) => {
+      sock.destroy();
+      resolve(v);
+    };
+    sock.once("connect", () => done(true));
+    sock.once("error", () => done(false));
+    sock.setTimeout(1000, () => done(false));
+  });
+  if (!held) return null;
+  try {
+    const pid = execFileSync("lsof", ["-tiTCP:" + port, "-sTCP:LISTEN"], { encoding: "utf8" }).trim().split("\n")[0];
+    if (pid) {
+      const name = execFileSync("ps", ["-o", "comm=", "-p", pid], { encoding: "utf8" }).trim();
+      if (name) return `${name.split("/").pop()} (pid ${pid})`;
+    }
+  } catch {
+    /* No lsof, or nothing readable: still held. */
+  }
+  return "another program";
+}
+
 /* ---------- apple ------------------------------------------------------- */
 
 /**
@@ -420,6 +448,19 @@ async function startMaple(opts: EnsureOptions): Promise<RunningBackend> {
   }
   const modelPath = id === MAPLE ? join(config.runtimeDir, "maple-2bit-mlx") : currentModelPath();
   const label = id === MAPLE ? "Maple" : currentModelLabel();
+
+  // Something already answers on the port but is not a model server (the
+  // probe above said so). Docker Desktop forwards container ports to
+  // 127.0.0.1:8080; the server we are about to start would fail to bind
+  // and the only evidence would be a line in model-server.log. Say it here.
+  const holder = await portHolder(Number(modelServerPort()));
+  if (holder) {
+    throw new Error(
+      `Port ${modelServerPort()} is taken by ${holder}, which is not a model server.\n` +
+        `Free it, or point enio at another port:\n` +
+        `    ENIO_BASE_URL=http://127.0.0.1:8090/v1 enio start\n`,
+    );
+  }
 
   const child = spawn(
     modelServerBinary(),

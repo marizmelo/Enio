@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { readFile, writeFile, readdir, mkdir, stat } from "node:fs/promises";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { config } from "../config.js";
 import { extractPdfText, looksLikePdf } from "../pdf.js";
 import { activeProject, findMount } from "../project.js";
@@ -207,6 +207,36 @@ function didYouMean(requested: string): string {
   return ` Did you mean ${hits.map((h) => `"${h}"`).join(" or ")}?`;
 }
 
+
+/**
+ * Keep the version a write is about to replace, under the data dir, named
+ * by time and file so the newest is obvious. Fifty are kept; older ones go.
+ * Returned as the path relative to the data dir, which is what the tool
+ * result says and what a person can open. Never throws: a failed stash
+ * must not fail the write it was protecting.
+ */
+const STASH_KEEP = 50;
+function stashPrevious(target: string, previous: string): string | null {
+  try {
+    const dir = join(config.dataDir, "stash");
+    mkdirSync(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 23);
+    const name = `${stamp}-${basename(target)}`;
+    writeFileSync(join(dir, name), previous, "utf8");
+    const all = readdirSync(dir).sort();
+    for (const old of all.slice(0, Math.max(0, all.length - STASH_KEEP))) {
+      try {
+        rmSync(join(dir, old));
+      } catch {
+        /* A stubborn old copy is not worth failing over. */
+      }
+    }
+    return `stash/${name}`;
+  } catch {
+    return null;
+  }
+}
+
 export const fsTools: ToolDef[] = [
   {
     name: "read_file",
@@ -322,17 +352,19 @@ export const fsTools: ToolDef[] = [
     },
     async run(args) {
       const target = safePath(String(args.path ?? ""), { forWrite: true });
-      // What was there before, so a rewrite that loses most of a file can say
-      // so. Cheap: only the line count, and only when something exists.
-      const before = existsSync(target)
-        ? await readFile(target, "utf8")
-            .then((t) => t.split("\n").length)
-            .catch(() => 0)
-        : 0;
       const content = String(args.content ?? "");
+      // What was there before: its line count, so a rewrite that loses most
+      // of a file can say so — and its text, kept aside. A 3B rewrote a
+      // 711-line file to 92 lines twice in one afternoon; the warning said
+      // the previous contents were not recoverable, and they were not.
+      const previous = existsSync(target) ? await readFile(target, "utf8").catch(() => null) : null;
+      const before = previous == null ? 0 : previous.split("\n").length;
+      const kept = previous != null && previous !== content ? stashPrevious(target, previous) : null;
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, content, "utf8");
-      const head = `Wrote ${content.length} bytes to ${rel(target)}`;
+      const head =
+        `Wrote ${content.length} bytes to ${rel(target)}` +
+        (kept ? ` (previous version kept: ${kept})` : "");
 
       // write_file replaces the whole file, so a model that regenerates a
       // long file to change one line can drop the rest of it -- silently,
@@ -350,7 +382,7 @@ export const fsTools: ToolDef[] = [
         const warning =
           `${rel(target)} was ${before} lines and is now ${after} — ` +
           `${lost} lines are gone. If that was not intended, the previous ` +
-          `contents are not recoverable from here; use edit_file to change ` +
+          `version is kept at ${kept ?? "the stash"}; use edit_file to change ` +
           `part of a file.`;
         return { text: `${head}\n${warning}`, notice: warning };
       }
