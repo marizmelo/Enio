@@ -1,5 +1,7 @@
 import { complete } from "./model.js";
 import { activeProject } from "./project.js";
+import { ROUTING_EXAMPLES, fastRoute } from "./routing-fast.js";
+import { config } from "./config.js";
 import { listCustomAgents } from "./custom-agents.js";
 import type { Registry } from "./tools/index.js";
 import type { Message, ToolDef } from "./types.js";
@@ -337,10 +339,42 @@ export function allSpecialists(): Specialist[] {
  * back to the generalist, which is the safe default because it has almost no
  * tools and cannot do damage.
  */
+export interface RouteDecision {
+  specialist: string;
+  /** Which tier decided: the fast tier, the model, a sticky short input, or
+   *  the fallback after a model error. */
+  via: "fast" | "model" | "sticky" | "fallback";
+  /** The fast tier's confidence when it ran, whether or not it decided. */
+  margin?: number;
+  runnerUp?: string | null;
+  ms: number;
+}
+
+let lastDecision: RouteDecision | null = null;
+/** How the most recent route() decided — for the turn's trace, so a wrong
+ *  route can be read back as "the fast tier at margin 0.07" rather than
+ *  guessed at. */
+export function lastRouteDecision(): RouteDecision | null {
+  return lastDecision;
+}
+
 export async function route(
   userInput: string,
   previous: string | null = null,
 ): Promise<string> {
+  const started = Date.now();
+  const decided = (specialist: string, via: RouteDecision["via"], extra: Partial<RouteDecision> = {}) => {
+    lastDecision = { specialist, via, ms: Date.now() - started, ...extra };
+    return specialist;
+  };
+  const [specialist, via, extra] = await routeInner(userInput, previous);
+  return decided(specialist, via, extra);
+}
+
+async function routeInner(
+  userInput: string,
+  previous: string | null,
+): Promise<[string, RouteDecision["via"], Partial<RouteDecision>?]> {
   // A known specialist from earlier in the conversation, or nothing. Validated
   // against the list because it comes from a database column that outlives
   // renames of the specialists themselves — and deletions: a conversation
@@ -363,7 +397,24 @@ export async function route(
   // small requests get routed like any other, with the conversation's
   // specialist passed along as context for the genuine follow-ups.
   if (userInput.trim().length < 12 && !/\s/.test(userInput.trim())) {
-    return sticky ?? DEFAULT_SPECIALIST;
+    return [sticky ?? DEFAULT_SPECIALIST, "sticky"];
+  }
+
+  // The fast tier first: a decision from a closed list by nearest example,
+  // in milliseconds, taken only when its confidence — the gap between the
+  // best specialist and the next — clears the measured margin. A sticky
+  // conversation it disagrees with is the model's call: continuing versus
+  // starting something new is exactly the judgement a nearest-example
+  // cannot make. Embeddings unavailable means the model routes, as before.
+  let fastMargin: Partial<RouteDecision> = {};
+  if (config.fastRoute) {
+    const fast = await fastRoute(userInput, list);
+    if (fast) {
+      fastMargin = { margin: fast.margin, runnerUp: fast.runnerUp };
+      if (fast.margin >= config.fastRouteMargin && (!sticky || fast.specialist === sticky)) {
+        return [fast.specialist, "fast", fastMargin];
+      }
+    }
   }
 
   const menu = list.map((s) => `- ${s.name}: ${s.description}`).join("\n");
@@ -408,50 +459,13 @@ export async function route(
         // example effectively does not exist for anything its description's
         // exact words don't cover -- the operator was unreachable for "write
         // a note for groceries" until it got one.
+        // One example per lesson, from the table the fast tier scores
+        // against too (routing-fast.ts) -- one source, so the two routers
+        // cannot drift apart on what a request means.
         `Examples:\n` +
-        `"what's new with the Vision Pro" -> {"specialist": "researcher"}\n` +
-        `"why is my test failing" -> {"specialist": "coder"}\n` +
-        // Data questions are file work: the coder reads the file and answers
-        // with Python through run_command. Without this example, "analyze
-        // this csv" landed on the generalist, which has no file tools and
-        // told the user no tool exists.
-        `"analyze the numbers in sales.csv" -> {"specialist": "coder"}\n` +
-        // Documents are files, and write_file lives on the coder -- "build
-        // me a resume" routed to the researcher, which can only answer in
-        // prose, so nothing landed on disk and the canvas had nothing to
-        // open. A note-in-an-app stays with the operator (the example
-        // below); a document that should exist as a file is the coder's.
-        `"build me a resume" -> {"specialist": "coder"}\n` +
-        // The handoff flow: composing a prompt-file for a frontier model is
-        // document work, and the ask-bigger-model skill rides the turn.
-        `"ask a bigger model to write this" -> {"specialist": "coder"}\n` +
-        `"write a document about our launch plan" -> {"specialist": "coder"}\n` +
-        `"what did I say I was working on" -> {"specialist": "librarian"}\n` +
-        // Saved documents live in the library, which the librarian searches;
-        // "my files" without the library framing stays with the coder, whose
-        // search_code covers the working workspace.
-        `"find my notes about the tax audit" -> {"specialist": "librarian"}\n` +
-        // "Where is <file> on my computer" is a name search, which is the
-        // librarian's find_file -- not the coder, whose search is scoped to
-        // the workspace and reads as "can't do that" for anything outside it.
-        `"where is my tax return pdf on this computer" -> {"specialist": "librarian"}\n` +
-        `"did Sam reply about the invoice" -> {"specialist": "mail"}\n` +
-        `"write a note with my grocery list" -> {"specialist": "operator"}\n` +
-        `"add lunch to my calendar for noon" -> {"specialist": "operator"}\n` +
-        // Alarms, timers and reminders are Mac-app work, but nothing in the
-        // operator's description says so -- "can you setup my alarm?" routed
-        // to the generalist, which then denied a capability Enio has.
-        `"set an alarm for 7 tomorrow morning" -> {"specialist": "operator"}\n` +
-        // "pipeline" reads as CI: "run the quarterly-taxes pipeline" routed
-        // to the coder, who has no run_pipeline tool and denied it exists.
-        `"run my news-brief automation" -> {"specialist": "generalist"}\n` +
-        // Authoring an automation is deliberately not a model act (composing
-        // happens in the panel, where the user approves a draft). Routed to
-        // the coder it read as "write me a script" and produced two empty
-        // searches and six paragraphs of narration; the generalist is the
-        // one whose prompt knows where automations come from.
-        `"create an automation that emails me a summary" -> {"specialist": "generalist"}\n` +
-        `"explain monads to me" -> {"specialist": "generalist"}` +
+        ROUTING_EXAMPLES.filter((e) => list.some((s) => s.name === e.specialist))
+          .map((e) => `"${e.text}" -> {"specialist": "${e.specialist}"}`)
+          .join("\n") +
         (customExamples ? `\n${customExamples}` : ""),
     },
     { role: "user", content: userInput.slice(0, 500) },
@@ -463,14 +477,14 @@ export async function route(
     // differently run to run.
     const result = await complete(messages, [], {}, undefined, { temperature: 0 });
     const match = /\{[\s\S]*\}/.exec(result.content);
-    if (!match) return fuzzyRoute(result.content, sticky);
+    if (!match) return [fuzzyRoute(result.content, sticky), "model", fastMargin];
     // Membership in the live list, not a schema enum -- see allSpecialists.
     const chosen = String((JSON.parse(match[0]) as { specialist?: unknown })?.specialist ?? "");
-    return list.some((s) => s.name === chosen) ? chosen : fuzzyRoute(result.content, sticky);
+    return [list.some((s) => s.name === chosen) ? chosen : fuzzyRoute(result.content, sticky), "model", fastMargin];
   } catch {
     // A router that errored knows nothing; the conversation's history knows
     // something. Prefer it.
-    return sticky ?? DEFAULT_SPECIALIST;
+    return [sticky ?? DEFAULT_SPECIALIST, "fallback", fastMargin];
   }
 }
 

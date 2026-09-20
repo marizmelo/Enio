@@ -46,6 +46,11 @@ and old variables still work.
 
 | Variable | Default |
 |---|---|
+| `ENIO_FAST_ROUTE` | `1` — route by nearest example first, in milliseconds; `0` sends every request to the model router |
+| `ENIO_FAST_ROUTE_MARGIN` | `0.06` — the confidence the fast tier needs before it decides; below it the model decides (see [Agents](agents.md)) |
+
+| Variable | Default |
+|---|---|
 | `ENIO_ROUTING` | `1` — set `0` for one agent with every tool |
 | `ENIO_SPECULATIVE` | `0` — set `1` to serve with the draft model, which is faster and measurably less exact (see [Models](models.md)) |
 | `ENIO_MAX_TOOLS` | `16` — the registry cap in single-agent mode |

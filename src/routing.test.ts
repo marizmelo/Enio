@@ -168,3 +168,17 @@ describe("routing inside a turn", () => {
     assert.equal(result.question, "explain what a monad is");
   });
 });
+
+describe("the route decision is recorded", () => {
+  test("a short input is sticky, a routed one names the model when embeddings are absent", async () => {
+    const { lastRouteDecision } = await import("./specialists.js");
+    assert.equal(await route("ok", "operator"), "operator");
+    assert.equal(lastRouteDecision()?.via, "sticky");
+    stubReply('{"specialist": "coder"}');
+    assert.equal(await route("please fix the failing build for me"), "coder");
+    // No embedding model in this scratch data dir: the fast tier yields and
+    // the record says the model decided.
+    assert.equal(lastRouteDecision()?.via, "model");
+    assert.equal(lastRouteDecision()?.specialist, "coder");
+  });
+});

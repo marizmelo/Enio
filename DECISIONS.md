@@ -3127,6 +3127,43 @@ what it measures, and a version that passes it can still be the one that
 rewrote a file it was asked to read. Choosing the previous version is
 one command; the numbers that justified each version stay in history.
 
+### The router is two tiers, and the fast one is a decision, not a generation
+
+**Chose:** before the model router, a nearest-example decision: every
+specialist's routing examples (the prompt's own table plus a tier-only
+list of about nine per specialist) and its description are embedded once;
+the request is embedded; each specialist takes its best-matching example
+and the gap between the top two is the confidence. Above a measured margin
+the fast tier routes; below it, or when a sticky conversation disagrees,
+the model does. Embeddings unavailable means the model routes, as before.
+The trace records which tier decided and the margin.
+
+**Measured** (scripts/route-bench.mjs, 46 held-out prompts, six per
+specialist plus four written to be ambiguous; a test holds that none is a
+routing example):
+
+| tier | right | median latency |
+|---|---|---|
+| model alone | 40/46 | 451ms |
+| fast alone, prompt examples only | 24/46 | 4ms |
+| fast alone, with the tier-only exemplars | 36/46 | 4ms |
+| pair at margin 0.06 | 41/46 | ~228ms (23 of 46 never reach the model) |
+| pair at margin 0.04 | 41/46 | ~150ms (31 of 46) |
+
+Shipped at 0.06: the same accuracy as 0.04 with more headroom on a set of
+46. The idea is the same one the router already lives by — most agent
+steps are choices from a closed list, not writing — applied to the router
+itself, which had been making its choice by writing JSON.
+
+**Rejected:** scoring the options by the model's own log-probabilities
+(the served mlx_lm has no logprobs surface; it would remove the JSON path
+but not the model call); a centroid per specialist (the best example
+wins, so one odd example cannot drag a specialist's whole region);
+putting the tier's exemplars into the prompt (they are for the tier, and
+every one in the prompt is tokens on every turn); trusting a wide margin
+over a sticky conversation (continuing versus starting anew is a
+judgement, and the tier has none).
+
 ### Mined turns carry their model, and valid never holds them
 
 **What happened:** the coder's third run, the first with `--from-traces`,

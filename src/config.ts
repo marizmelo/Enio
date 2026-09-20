@@ -590,6 +590,19 @@ export const config = {
    * ENIO_ROUTING=0 to run as a single agent seeing every tool.
    */
   routingEnabled: (env("ROUTING") ?? "1") !== "0",
+  /**
+   * The router's fast tier (routing-fast.ts): nearest routing example by
+   * embedding, taken when the gap to the runner-up specialist is at least
+   * the margin, otherwise the model decides. Both numbers are measured
+   * (scripts/route-bench.mjs, 46 held-out prompts): the model alone routed
+   * 40/46 at 451ms median; the pair at margin 0.06 routed 41/46 with half
+   * the requests answered in ~4ms. Off with ENIO_FAST_ROUTE=0.
+   */
+  fastRoute: env("FAST_ROUTE") !== "0",
+  fastRouteMargin: (() => {
+    const n = Number(env("FAST_ROUTE_MARGIN") ?? "0.06");
+    return Number.isFinite(n) && n > 0 ? n : 0.06;
+  })(),
   /** Speculative decoding with a small draft model when one applies (see
    *  draftFor). Opt-in, not default: measured on the 4B with the 0.6B
    *  draft, four identical temperature-0 requests gave up to three

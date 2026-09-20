@@ -187,7 +187,12 @@ export async function serve(): Promise<void> {
     });
   });
 
-  server.listen(config.agentPort, config.agentHost, () => {
+  server.listen(config.agentPort, config.agentHost, async () => {
+    // The router's fast tier loads its embedding model on first use; do
+    // that now rather than inside the first turn.
+    const { warmFastRouter } = await import("./routing-fast.js");
+    const { allSpecialists } = await import("./specialists.js");
+    warmFastRouter(allSpecialists());
     const shown = config.agentHost === "0.0.0.0" ? "<this-machine>" : config.agentHost;
     console.log(`\nenio listening on http://${shown}:${config.agentPort}/v1`);
     console.log(`  ${registryRef.current.all.length} tools · upstream ${config.modelBaseUrl}`);

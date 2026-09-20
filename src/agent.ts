@@ -3,7 +3,7 @@ import { complete } from "./model.js";
 import { buildMemoryBlock, logMessage, retractLastAssistantMessage, saveFoldSummary } from "./memory/store.js";
 import { lastSpecialist, recordTurn, type StepRecord } from "./memory/traces.js";
 import { exemplarBlock, preferenceBlock } from "./memory/learning.js";
-import { getSpecialist, route, toolsFor } from "./specialists.js";
+import { getSpecialist, route, toolsFor, lastRouteDecision } from "./specialists.js";
 import { skillCatalogue } from "./skills.js";
 import { invokedSkillBlock } from "./mentions.js";
 import type { Skill } from "./skills.js";
@@ -939,6 +939,9 @@ export async function runTurn(
     readAttachments(overrides.files ?? [], attachmentNotes, overrides.canvasPath ?? null),
   ]);
   const specialistName = routed;
+  // How the route was decided rides in the trace: "fast tier at margin
+  // 0.07" is a fact about a wrong route that nothing else records.
+  const routeInfo = overrides.specialist ? null : lastRouteDecision();
 
   for (const note of new Set(attachmentNotes)) handlers.onNotice?.(note);
 
@@ -1953,6 +1956,18 @@ export async function runTurn(
       output: persona.block,
       error: null,
       durationMs: 0,
+    });
+  }
+
+  if (routeInfo) {
+    steps.push({
+      seq: steps.length,
+      kind: "harness",
+      name: "router",
+      args: JSON.stringify(routeInfo),
+      output: routeInfo.specialist,
+      error: null,
+      durationMs: routeInfo.ms,
     });
   }
 

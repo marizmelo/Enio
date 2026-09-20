@@ -64,6 +64,16 @@ answer. At the sampling temperature the *same* request measurably routed
 differently run to run, which also made every prompt tweak look better or worse
 than it was.
 
+It is also two tiers. A request is first matched against each agent's routing
+examples by meaning, on the CPU, in a few milliseconds; if the best agent
+clears the runner-up by a measured margin, that is the route, and the model is
+never asked. Only the ambiguous requests reach the model router. Measured on 46
+held-out prompts the model alone routed 40 right at 451ms median; the pair
+routed 41 right with half the requests decided in about 4ms. The trace of
+every turn records which tier decided and at what margin, so a wrong route
+can be read back rather than guessed at. `ENIO_FAST_ROUTE=0` turns the fast
+tier off.
+
 One-word inputs ("ok", "hi") skip the router and stay with the current agent —
 they carry no routing signal and are almost always acknowledgements. Anything
 longer is routed, with the conversation's current agent offered as context so
