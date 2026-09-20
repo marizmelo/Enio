@@ -1539,7 +1539,7 @@ ipcMain.handle("accessibility-status", () => {
   }
 });
 
-ipcMain.handle("request-accessibility", () => {
+ipcMain.handle("request-accessibility", async () => {
   if (process.platform !== "darwin") return null;
   let granted = false;
   try {
@@ -1549,14 +1549,25 @@ ipcMain.handle("request-accessibility", () => {
   } catch {
     granted = false;
   }
-  if (!granted) {
-    try {
-      shell.openExternal(ACCESSIBILITY_PANE);
-    } catch {
-      // Nothing to fall back to; the notice in the UI still says where to go.
-    }
+  // Open the pane whenever the button is pressed. The banner shows on the
+  // AGENT's answer (the process that runs the scripts), and Electron's own
+  // answer can be "trusted" while the agent's is not — which is exactly the
+  // case that made this button do nothing: it checked, saw granted, opened
+  // nothing, and the notice waited two minutes for a toggle nobody could
+  // reach. Two ways in, and an honest result when neither works.
+  let opened = false;
+  try {
+    await shell.openExternal(ACCESSIBILITY_PANE);
+    opened = true;
+  } catch {
+    opened = false;
   }
-  return granted;
+  if (!opened) {
+    opened = await new Promise((resolve) => {
+      require("node:child_process").execFile("open", [ACCESSIBILITY_PANE], (err) => resolve(!err));
+    });
+  }
+  return { granted, opened };
 });
 
 /**

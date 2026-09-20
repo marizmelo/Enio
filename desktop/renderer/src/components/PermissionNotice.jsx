@@ -26,6 +26,8 @@ export function PermissionNotice({ backendReady }) {
   const [granted, setGranted] = useState(null);
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISSED) === "1");
   const [waiting, setWaiting] = useState(false);
+  // Settings could not be opened for us: say where to go instead of waiting.
+  const [couldNotOpen, setCouldNotOpen] = useState(false);
   const polling = useRef(null);
 
   const check = useCallback(async () => {
@@ -66,7 +68,10 @@ export function PermissionNotice({ backendReady }) {
   useEffect(() => () => polling.current && clearInterval(polling.current), []);
 
   const grant = useCallback(async () => {
-    await window.maple?.requestAccessibility();
+    const result = await window.maple?.requestAccessibility();
+    // Older mains returned a boolean; the object form says whether the
+    // pane actually opened.
+    setCouldNotOpen(Boolean(result && typeof result === "object" && result.opened === false));
     startPolling();
   }, [startPolling]);
 
@@ -78,9 +83,11 @@ export function PermissionNotice({ backendReady }) {
       <div className="min-w-0 flex-1">
         <p className="text-foreground">Let Enio click buttons and menus for you</p>
         <p className="mt-0.5 text-muted-foreground">
-          {waiting
-            ? "Waiting for macOS… add Enio under Accessibility, then come back."
-            : "macOS needs to allow this under Privacy & Security → Accessibility."}
+          {couldNotOpen
+            ? "System Settings did not open. Open it yourself: Privacy & Security → Accessibility, add Enio, then come back."
+            : waiting
+              ? "Waiting for macOS… add Enio under Accessibility, then come back."
+              : "macOS needs to allow this under Privacy & Security → Accessibility."}
         </p>
       </div>
       <Button size="sm" variant="outline" className="shrink-0" disabled={waiting} onClick={grant}>
