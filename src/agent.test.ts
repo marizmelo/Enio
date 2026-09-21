@@ -759,3 +759,50 @@ describe("fresh facts asserted by an agent that cannot check", () => {
     assert.equal(admitsCannotCheck("I cannot verify anything released in 2026."), true);
   });
 });
+
+describe("names without evidence", () => {
+  test("bold and Title Case names absent from every tool output are the inventions; present ones are not", async () => {
+    const { namesWithoutEvidence } = await import("./agent.js");
+    const evidence = [
+      "1. Top 9 Architecture firms based in Recife, Brazil\n   https://example.org\n   The largest include Estúdio Verde Arquitetos and Casa Norte.",
+    ];
+    const reply =
+      "The best firm is **Arquitetura e Projeto Romulo (APR)**, followed by Von Buhler Arquitetos. " +
+      "Estúdio Verde Arquitetos is also respected, as is **Casa Norte**. Conclusion: none are large.";
+    const missing = namesWithoutEvidence(reply, evidence, "what is the best architecture firm in recife");
+    assert.ok(missing.some((n) => /Romulo/.test(n)), `Romulo invented: ${missing}`);
+    assert.ok(missing.some((n) => /Von Buhler/.test(n)), `Von Buhler invented: ${missing}`);
+    assert.ok(!missing.some((n) => /Verde/.test(n)), "present in the evidence");
+    assert.ok(!missing.some((n) => /Casa Norte/.test(n)), "present in the evidence, bold");
+    assert.ok(!missing.some((n) => /^Conclusion$/i.test(n)), "a label is not a name");
+  });
+
+  test("a name the user typed is theirs, and a lone sentence-start capital is not a name", async () => {
+    const { namesWithoutEvidence } = await import("./agent.js");
+    const out = namesWithoutEvidence(
+      "There is no firm called **ND Studio Arquitetura** in the results. Nothing else matches.",
+      ["No matches."],
+      "nd studio arquitetura",
+    );
+    assert.deepEqual(out, []);
+  });
+});
+
+describe("thread coverage is strict", () => {
+  test("a two-letter name makes a question new even when every longer word already appeared", async () => {
+    const { threadCovers } = await import("./memory/terms.js");
+    const earlier = ["The best architecture firm in Recife, Brazil is Estúdio Verde Arquitetos, a studio known for arquitetura sustentável."];
+    assert.equal(threadCovers("nd studio arquitetura", earlier), false, "'nd' never appeared");
+    assert.equal(threadCovers("which studio in recife does arquitetura", earlier), true);
+    assert.equal(threadCovers("ok", earlier), false, "nothing to cover");
+  });
+});
+
+describe("claimed lookups", () => {
+  test("'after checking' with nothing called is a fabricated action", async () => {
+    const { claimsUnperformedAction } = await import("./agent.js");
+    assert.equal(claimsUnperformedAction('After checking the availability of "ND Arquitetura" in Recife, there is no such firm.'), true);
+    assert.equal(claimsUnperformedAction("I searched the registry and verified the address."), true);
+    assert.equal(claimsUnperformedAction("You could check the registry after looking into the address."), false, "advice, not a report");
+  });
+});

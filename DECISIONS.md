@@ -3135,6 +3135,38 @@ what it measures, and a version that passes it can still be the one that
 rewrote a file it was asked to read. Choosing the previous version is
 one command; the numbers that justified each version stay in history.
 
+### The researcher names only what it read
+
+**What happened (19 Sep):** asked for the best architecture firm in
+Recife, the researcher searched, was handed 6,500 characters of results,
+and named three firms that appear in none of them, in bold, with
+specialities — sources sitting under the answer looking like support.
+Two follow-ups ("nd arquitetura no Recife", "nd studio arquitetura") then
+ran no search at all: the thread-coverage check dropped the two-letter
+"nd" as too short, found "arquitetura" and "recife" in the earlier reply,
+called the question covered, and the model declared the firm did not
+exist "after checking" — a lookup that never happened, which the
+unperformed-action guard also missed because "after" read as a
+hypothetical.
+
+**Chose:** three closed checks. Thread coverage is strict — every word of
+the question that is not a stopword, short ones included, must appear in
+an earlier reply — because a reply the model wrote a minute ago is not a
+kept fact and the short token is usually the name. A names-without-
+evidence guard on the researcher after a web tool ran: bold spans and
+Title Case runs in the reply that appear in no tool output and not in the
+question withdraw the reply, and the correction names them and says to
+answer only from the results or to point to them. And "after checking /
+searching / verifying" joins the fabricated-action grammar as its own
+form, so the temporal-clause filter cannot excuse it.
+
+**Rejected:** a judge model deciding whether claims are supported (the
+same small model grading itself, and prose cannot be checked by a closed
+list — names can); withholding the reply silently (the correction round
+is what produces the honest sentence); applying the names check to
+agents without web tools (there is no evidence to check against, and
+the coder's file names are read from tools it just ran).
+
 ### Accessibility belongs to the process tree, not the toggle
 
 **What happened:** the permission banner would not clear after the user

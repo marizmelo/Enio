@@ -24,6 +24,34 @@ export function distinctiveTerms(text: string): string[] {
   ];
 }
 
+/**
+ * Whether an earlier reply in this conversation already speaks to the
+ * question — the strict form, for the thread. Memory coverage matches on
+ * the distinctive terms (four letters and up), which is right for facts
+ * that were deliberately kept; a reply the model wrote a minute ago is not
+ * knowledge of that standing, so here EVERY word of the question that is
+ * not a stopword must appear in one earlier reply, short ones included.
+ * Watched happen: "nd studio arquitetura" was judged covered by a reply
+ * about architecture firms in Recife, because "nd" is two letters and was
+ * dropped — so no search ran, and the researcher declared the firm did
+ * not exist.
+ */
+export function threadCovers(question: string, replies: string[]): boolean {
+  const tokens = [
+    ...new Set(
+      question
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((w) => w.length >= 2 && !STOPWORDS.has(w)),
+    ),
+  ];
+  if (tokens.length === 0) return false;
+  return replies.some((r) => {
+    const words = new Set(r.toLowerCase().split(/[^a-z0-9]+/));
+    return tokens.every((t) => words.has(t));
+  });
+}
+
 /** The shape test the seed search uses: long enough to be about something,
  *  and not a greeting or a thank-you, which would search for nothing. */
 export function looksLikeQuestion(text: string): boolean {
