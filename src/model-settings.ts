@@ -50,11 +50,38 @@ export function currentModelId(): string {
   return DEFAULT_MODEL;
 }
 
+function readSetting(): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(readFileSync(join(config.machineStateDir, SETTING_FILE), "utf8")) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeSetting(next: Record<string, unknown>): void {
+  writeFileSync(join(config.machineStateDir, SETTING_FILE), JSON.stringify(next, null, 2) + "\n");
+}
+
+/** The model choice, kept beside whatever else the file holds (the moved
+ *  base URL): writing one setting must not forget the other. */
 export function setModelId(id: string): void {
-  writeFileSync(
-    join(config.machineStateDir, SETTING_FILE),
-    JSON.stringify({ model: id.trim() }, null, 2) + "\n",
-  );
+  writeSetting({ ...readSetting(), model: id.trim() });
+}
+
+/** Where our own server was moved to when its default port was held, or
+ *  null when it listens where the backend says. See machineBaseUrl in
+ *  config.ts for who reads it. */
+export function machineBaseUrl(): string | null {
+  const v = readSetting().baseUrl;
+  return typeof v === "string" && /^https?:\/\//.test(v) ? v : null;
+}
+
+export function setMachineBaseUrl(url: string | null): void {
+  const next = readSetting();
+  if (url) next.baseUrl = url;
+  else delete next.baseUrl;
+  writeSetting(next);
 }
 
 /**

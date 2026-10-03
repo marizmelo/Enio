@@ -181,8 +181,26 @@ function childPath() {
 // Follows ENIO_BASE_URL because the agent does. Hardcoding 8080 here while
 // the agent read the env meant a launch pointed at another model server
 // waited forever for a health check on a port nothing was asked to serve.
-const MODEL_BASE = (process.env.ENIO_BASE_URL ?? process.env.MAPLE_BASE_URL ?? "http://127.0.0.1:8080/v1").replace(/\/$/, "");
-const MODEL_HEALTH_URL = `${MODEL_BASE}/models`;
+/**
+ * Where the model server is. An explicit ENIO_BASE_URL wins; otherwise the
+ * machine file, which `enio up` writes when the default port was held by
+ * something else (Docker Desktop on 8080 was the live case) and it moved;
+ * otherwise the default. Read every time rather than once, because the move
+ * happens AFTER this launcher has spawned `up` and started polling.
+ */
+function modelBase() {
+  const explicit = process.env.ENIO_BASE_URL ?? process.env.MAPLE_BASE_URL;
+  if (explicit) return explicit.replace(/\/$/, "");
+  try {
+    const dir = process.env.ENIO_MACHINE_STATE_DIR || path.join(os.homedir(), ".enio");
+    const parsed = JSON.parse(fs.readFileSync(path.join(dir, "model.json"), "utf8"));
+    if (typeof parsed.baseUrl === "string" && /^https?:\/\//.test(parsed.baseUrl)) return parsed.baseUrl.replace(/\/$/, "");
+  } catch {
+    /* No file or no move recorded. */
+  }
+  return "http://127.0.0.1:8080/v1";
+}
+const modelHealthUrl = () => `${modelBase()}/models`;
 // /ping is unauthenticated and returns nothing but {ok:true}; /health needs the
 // API key. Liveness polling therefore uses /ping, because the token file may
 // not exist yet on a first run — the agent server creates it at startup.
@@ -260,7 +278,7 @@ function checkHealth(url, timeoutMs = 2000) {
   return new Promise((resolve) => {
     const req = http.get(url, { timeout: timeoutMs }, (res) => {
       const ok = res.statusCode != null && res.statusCode >= 200 && res.statusCode < 300;
-      if (url !== MODEL_HEALTH_URL) {
+      if (!/\/v1\/models$/.test(url)) {
         // Drain the response so the socket can be reused/closed cleanly.
         res.resume();
         resolve(ok);
@@ -286,9 +304,11 @@ function checkHealth(url, timeoutMs = 2000) {
 
 /** Poll a health URL until it responds OK or the deadline passes. */
 async function waitForHealth(url, timeoutMs) {
+  // `url` may be a function: the model address can move while we poll.
+  const target = () => (typeof url === "function" ? url() : url);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await checkHealth(url)) return true;
+    if (await checkHealth(target())) return true;
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }
   return false;
@@ -306,10 +326,10 @@ async function waitForHealth(url, timeoutMs) {
  */
 async function modelActuallyAnswers(timeoutMs) {
   try {
-    const listed = await fetch(`${MODEL_BASE}/models`, { signal: AbortSignal.timeout(5000) });
+    const listed = await fetch(`${modelBase()}/models`, { signal: AbortSignal.timeout(5000) });
     const modelId = (await listed.json())?.data?.[0]?.id;
     if (!modelId) return false;
-    const res = await fetch(`${MODEL_BASE}/chat/completions`, {
+    const res = await fetch(`${modelBase()}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -457,7 +477,7 @@ function warnIfBuildIsStale(repo) {
 async function startBackends() {
   sendStatus("starting", "Checking for a running model server…");
 
-  const modelAlreadyUp = await checkHealth(MODEL_HEALTH_URL);
+  const modelAlreadyUp = await checkHealth(modelHealthUrl());
   let modelStartedByUs = false;
 
   if (modelAlreadyUp) {
@@ -471,11 +491,11 @@ async function startBackends() {
     modelPid = modelProc.pid ?? null;
     modelStartedByUs = true;
 
-    const modelReady = await waitForHealth(MODEL_HEALTH_URL, MODEL_TIMEOUT_MS);
+    const modelReady = await waitForHealth(modelHealthUrl, MODEL_TIMEOUT_MS);
     if (!modelReady) {
       sendStatus(
         "failed",
-        "Model server did not respond in time. Check that the model runtime is installed (see install.sh) and that nothing else is using port 8080.",
+        "Model server did not respond in time. Check that the model runtime is installed (see install.sh); details are in ~/.enio/model-server.log.",
       );
       // Watched even though startup failed: a slow first load that finishes a
       // minute later, or a server started by hand afterwards, should clear
@@ -568,7 +588,7 @@ function watchBackends(toolCount) {
     if (shuttingDown || lastStatus.phase === "starting") return;
 
     const [model, agent] = await Promise.all([
-      checkHealth(MODEL_HEALTH_URL),
+      checkHealth(modelHealthUrl()),
       checkHealth(AGENT_PING_URL),
     ]);
     const healthy = model && agent;

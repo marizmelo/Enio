@@ -3135,6 +3135,30 @@ what it measures, and a version that passes it can still be the one that
 rewrote a file it was asked to read. Choosing the previous version is
 one command; the numbers that justified each version stay in history.
 
+### The model server moves off a held port, and says where
+
+**What happened:** Docker Desktop forwards a container port to
+127.0.0.1:8080, enio's default. For two weeks every launch of the desktop
+app needed `ENIO_BASE_URL` from a terminal, which is a reason not to open
+it. The first fix named the holder and stopped; this one moves.
+
+**Chose:** when the default port is held by something that is not a model
+server and no explicit address was given, `enio up` binds the next free
+port from +10 (8090, 8091, …), writes it as `baseUrl` beside the model
+choice in the machine file, and tells its own process. Config resolves
+the address as explicit env, then the machine file, then the backend
+default, through a getter so the choice can land mid-process. The
+launcher re-reads the file on every health tick, because the move happens
+after it has spawned `up` and begun polling. `setModelId` now preserves
+the other keys in that file.
+
+**Rejected:** an ephemeral OS-assigned port (it would change every launch,
+and the agent started from a terminal an hour later would not find it);
+moving when ENIO_BASE_URL is set (an explicit address is a decision — the
+error stays, naming the holder); passing the port between launcher and
+children as an environment variable (a terminal session is a child of
+nothing).
+
 ### The researcher names only what it read
 
 **What happened (19 Sep):** asked for the best architecture firm in

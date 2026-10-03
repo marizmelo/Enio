@@ -1,10 +1,10 @@
 import { spawn, spawnSync, execFileSync } from "node:child_process";
-import { createConnection } from "node:net";
+import { createConnection, createServer } from "node:net";
 import { existsSync, mkdirSync, openSync, statSync, symlinkSync } from "node:fs";
 import { release, totalmem } from "node:os";
 import { dirname, join } from "node:path";
 import { DRAFT_TOKENS, draftFor } from "./model-catalogue.js";
-import { config, projectRoot } from "./config.js";
+import { config, projectRoot, setModelBaseUrl } from "./config.js";
 import { serverIsUp } from "./model.js";
 import {
   otherModelClients,
@@ -19,6 +19,7 @@ import {
   currentModelPath,
   modelIsCached,
   setModelId,
+  setMachineBaseUrl,
 } from "./model-settings.js";
 
 /**
@@ -317,6 +318,20 @@ export async function ensureBackend(opts: EnsureOptions): Promise<RunningBackend
   }
 }
 
+/** The first port from `start` that nothing is listening on. Asks the OS
+ *  by binding, which is the only test that cannot be wrong about it. */
+export async function freePortFrom(start: number, tries = 20): Promise<number> {
+  for (let port = start; port < start + tries; port++) {
+    const free = await new Promise<boolean>((resolve) => {
+      const srv = createServer();
+      srv.once("error", () => resolve(false));
+      srv.listen(port, "127.0.0.1", () => srv.close(() => resolve(true)));
+    });
+    if (free) return port;
+  }
+  throw new Error(`No free port between ${start} and ${start + tries - 1}.`);
+}
+
 /** The program listening on a local port, or null when nothing is. A TCP
  *  connect says whether the port is held; lsof names the holder when it can,
  *  and "another program" is the honest fallback when it cannot. */
@@ -455,11 +470,24 @@ async function startMaple(opts: EnsureOptions): Promise<RunningBackend> {
   // and the only evidence would be a line in model-server.log. Say it here.
   const holder = await portHolder(Number(modelServerPort()));
   if (holder) {
-    throw new Error(
-      `Port ${modelServerPort()} is taken by ${holder}, which is not a model server.\n` +
-        `Free it, or point enio at another port:\n` +
-        `    ENIO_BASE_URL=http://127.0.0.1:8090/v1 enio start\n`,
-    );
+    if (process.env.ENIO_BASE_URL || process.env.MAPLE_BASE_URL) {
+      // An explicit address is a decision; moving off it silently would be
+      // starting a server nobody is pointed at.
+      throw new Error(
+        `Port ${modelServerPort()} is taken by ${holder}, which is not a model server, ` +
+          `and ENIO_BASE_URL names it. Free the port or set ENIO_BASE_URL to another one.\n`,
+      );
+    }
+    // Move, and remember the move in the machine file so the agent, the
+    // launcher and the next terminal all find the server here. Scanning up
+    // from +10 keeps the address stable across launches rather than a random
+    // ephemeral port that changes every time.
+    const held = Number(modelServerPort());
+    const port = await freePortFrom(held + 10);
+    const url = `http://127.0.0.1:${port}/v1`;
+    setMachineBaseUrl(url);
+    setModelBaseUrl(url);
+    opts.log(`Port ${held} is taken by ${holder} — serving on ${port} instead (remembered in model.json)`);
   }
 
   const child = spawn(

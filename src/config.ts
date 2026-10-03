@@ -1,6 +1,6 @@
 import { homedir, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { BACKENDS, resolveBackend, type Backend } from "./backends.js";
 import { defaultBackendId } from "./platform.js";
@@ -65,6 +65,32 @@ const dataDir = resolveDataDir();
  * how the bug happened.
  */
 export const machineStateDir = resolveMachineStateDir();
+
+/**
+ * Where our own model server was last told to listen, when that is not the
+ * backend's default port. Written by the server start when the default port
+ * is held by something else (Docker Desktop forwards container ports to
+ * 127.0.0.1:8080), read by every process that talks to the model, so the
+ * launcher, the agent and a terminal all agree without an environment
+ * variable travelling between them. Machine-wide next to the model choice,
+ * for the same reason: one model server per machine. ENIO_BASE_URL, when set,
+ * still wins -- an explicit address is a decision, not a default.
+ */
+function machineBaseUrl(): string | null {
+  try {
+    const parsed = JSON.parse(readFileSync(join(machineStateDir, "model.json"), "utf8")) as { baseUrl?: unknown };
+    return typeof parsed.baseUrl === "string" && /^https?:\/\//.test(parsed.baseUrl) ? parsed.baseUrl : null;
+  } catch {
+    return null;
+  }
+}
+
+let modelBaseUrlOverride: string | null = null;
+/** The process that just chose a new port tells its own config, so the
+ *  readiness probe and every later request go to the server it started. */
+export function setModelBaseUrl(url: string): void {
+  modelBaseUrlOverride = url;
+}
 
 function resolveMachineStateDir(): string {
   const explicit = env("MACHINE_STATE_DIR");
@@ -133,8 +159,21 @@ export const config = {
    */
   backendId: env("BACKEND") ?? defaultBackendId(),
 
-  /** Explicit overrides. When unset, the backend preset supplies these. */
-  modelBaseUrl: env("BASE_URL") ?? backendDefaults(env("BACKEND")).baseUrl,
+  /** Explicit overrides. When unset, the backend preset supplies these --
+   *  except our own server's address, which the machine file may have moved
+   *  off a held port (see machineBaseUrl). A getter: the port can be chosen
+   *  while this process runs. */
+  get modelBaseUrl(): string {
+    const explicit = env("BASE_URL");
+    if (explicit) return explicit;
+    if (modelBaseUrlOverride) return modelBaseUrlOverride;
+    const backend = env("BACKEND") ?? defaultBackendId();
+    if (backend === "maple") {
+      const moved = machineBaseUrl();
+      if (moved) return moved;
+    }
+    return backendDefaults(env("BACKEND")).baseUrl;
+  },
   modelName: env("MODEL") ?? backendDefaults(env("BACKEND")).model,
 
   /** The mlx-lm-deepgrove checkout and weights. See resolveRuntimeDir(). */

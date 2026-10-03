@@ -30,7 +30,7 @@ and old variables still work.
 | Variable | Default |
 |---|---|
 | `ENIO_BACKEND` | `maple` — or `apple` (Apple Intelligence, macOS 26+), `ollama`, `lmstudio`, `llamacpp` |
-| `ENIO_BASE_URL` | the backend's default endpoint |
+| `ENIO_BASE_URL` | the backend's default endpoint. When that port is held by another program, enio's own server moves to the next free one and remembers it in `~/.enio/model.json`; setting this variable pins the address instead |
 | `ENIO_MODEL` | overrides the saved model choice for one run |
 | `ENIO_MODEL_LABEL` | what the model is called in the prompt |
 | `ENIO_TEMP` | `1.0` — classifiers override this to 0 themselves |
