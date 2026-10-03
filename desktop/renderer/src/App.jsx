@@ -24,7 +24,7 @@ import { HistoryDialog } from "@/components/HistoryDialog";
 import { ProjectsDialog } from "@/components/ProjectsDialog";
 import { PipelinesDialog } from "@/components/PipelinesDialog";
 import { ConnectionsDialog } from "@/components/ConnectionsDialog";
-import { conversationAccount, listAccounts as listGoogleAccounts, setConversationAccount } from "@/lib/accounts";
+import { listAccounts as listGoogleAccounts } from "@/lib/accounts";
 import { CanvasPanel } from "@/components/CanvasPanel";
 import { BootScreen } from "@/components/BootScreen";
 import { startMeetingRecorder } from "@/lib/meeting-recorder";
@@ -119,15 +119,11 @@ export function App() {
   // the conversation changes, so restore and history switches carry them.
   const [convAttachments, setConvAttachments] = useState([]);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
-  // Connected Google accounts and which one this conversation uses. Fetched
-  // when the backend is ready and again when the Connections dialog closes,
-  // because that is where they change.
-  const [googleAccounts, setGoogleAccounts] = useState({ accounts: [], default: null });
-  const [convAccount, setConvAccount] = useState(null);
+  // Connected Google accounts, fetched when the backend is ready and again
+  // when the Connections dialog closes, for the first-run opening below.
   const refreshAccounts = useCallback(async () => {
     try {
       const next = await listGoogleAccounts();
-      setGoogleAccounts({ accounts: next.accounts ?? [], default: next.default ?? null });
       // First run: nothing connected yet. Open the Accounts section once, so
       // the agent-versus-yours question is asked before the first "check my
       // email" reads the wrong inbox. Once — a door that reopens every launch
@@ -234,13 +230,6 @@ export function App() {
   useEffect(() => {
     if (backendReady) refreshAccounts();
   }, [backendReady, refreshAccounts]);
-  useEffect(() => {
-    if (!backendReady || !conversationId) {
-      setConvAccount(null);
-      return;
-    }
-    conversationAccount(conversationId).then((r) => setConvAccount(r.account ?? null)).catch(() => setConvAccount(null));
-  }, [backendReady, conversationId]);
 
   // Polled, not pushed: a background command starts and dies outside the turn
   // stream, and the count is what puts it in front of the user at all. Cheap
@@ -887,19 +876,6 @@ export function App() {
         running={running}
         onCommands={() => setCommandsOpen(true)}
         onAgents={() => setAgentsOpen(true)}
-        accounts={googleAccounts.accounts}
-        account={convAccount}
-        defaultAccount={googleAccounts.default}
-        onManageAccounts={() => setConnectionsOpen(true)}
-        onPickAccount={async (id) => {
-          if (!conversationId) return;
-          try {
-            const r = await setConversationAccount(conversationId, id);
-            setConvAccount(r.account ?? null);
-          } catch {
-            /* The dialog reports its own errors; the chip just stays. */
-          }
-        }}
       />
 
       <AgentsDialog

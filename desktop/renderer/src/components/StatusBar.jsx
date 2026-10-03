@@ -1,13 +1,5 @@
 import { useEffect, useState } from "react";
-import { AtSign, BookOpen, Bot, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, TerminalSquare, Workflow, X } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { BookOpen, Bot, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, TerminalSquare, Workflow, X } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -53,21 +45,7 @@ export function StatusBar({
   running = 0,
   onCommands,
   onAgents,
-  // Connected accounts and which one this conversation means. The chip is
-  // the person's switch; the agent reads the choice and never makes it.
-  accounts = [],
-  account = null,
-  defaultAccount = null,
-  onPickAccount,
-  onManageAccounts,
 }) {
-  const ownerWord = (a) => (a.owner === "agent" ? "Enio's own" : a.owner === "user" ? "yours" : "owner not set");
-  const inUse = accounts.find((a) => a.id === account) ?? accounts.find((a) => a.id === defaultAccount) ?? null;
-  const accountTip = inUse
-    ? `Accounts — using ${inUse.label || inUse.email} (${ownerWord(inUse)})`
-    : accounts.length > 0
-      ? "Accounts — choose the one this conversation uses"
-      : "Accounts — none connected";
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
     // lights over the top-left of the page rather than in a title bar of its
@@ -146,52 +124,6 @@ export function StatusBar({
         <TipButton tip="Memory" className="size-7" onClick={onMemory}>
           <Brain className="size-4" />
         </TipButton>
-        {/* Which account "my mail" means in this conversation. An icon like
-            the sections beside it; the account in use is the tooltip and the
-            menu, not text in the bar. A plain button rather than TipButton:
-            the tooltip's root would swallow the menu trigger's slotted props
-            (see MessageActions). Amber when Enio's own account is in use,
-            because that is the case worth a glance. */}
-        {(onPickAccount || onManageAccounts) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                title={accountTip}
-                aria-label={accountTip}
-                className={cn(
-                  "inline-flex size-7 items-center justify-center rounded-md hover:bg-accent [-webkit-app-region:no-drag]",
-                  inUse?.owner === "agent" ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <AtSign className="size-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>{accounts.length > 0 ? "Accounts" : "No accounts connected"}</DropdownMenuLabel>
-              {accounts.map((a) => (
-                <DropdownMenuItem key={a.id} onSelect={() => onPickAccount(a.id)}>
-                  <span className="flex flex-col">
-                    <span>{a.label || a.email}{inUse?.id === a.id ? " · in use" : ""}</span>
-                    <span className="text-[10px] text-muted-foreground">{ownerWord(a)} · {a.email}{a.id === defaultAccount ? " · default" : ""}</span>
-                  </span>
-                </DropdownMenuItem>
-              ))}
-              {accounts.length > 0 && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => onPickAccount?.(null)}>Use the default</DropdownMenuItem>
-                </>
-              )}
-              {onManageAccounts && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={onManageAccounts}>Manage accounts…</DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
         {/* The managed note collection -- the first section that is an app
             rather than a door into the chat room. */}
         <TipButton tip="Notes" className="size-7" onClick={onNotes}>
