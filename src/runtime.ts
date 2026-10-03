@@ -318,6 +318,33 @@ export async function ensureBackend(opts: EnsureOptions): Promise<RunningBackend
   }
 }
 
+/**
+ * Before our own server binds: if something that is not a model server
+ * holds the port, move. Shared by the two paths that spawn the server --
+ * `enio up` (what the desktop launches) and `enio start` -- because the
+ * first version lived in only one of them and the desktop still failed to
+ * bind. The move is remembered in the machine file so the agent, the
+ * launcher and the next terminal all find the server; scanning up from +10
+ * keeps the address stable across launches rather than a random ephemeral
+ * port. An explicit ENIO_BASE_URL is a decision and is never moved off.
+ */
+export async function moveOffHeldPort(log: (m: string) => void): Promise<void> {
+  const held = Number(modelServerPort());
+  const holder = await portHolder(held);
+  if (!holder) return;
+  if (process.env.ENIO_BASE_URL || process.env.MAPLE_BASE_URL) {
+    throw new Error(
+      `Port ${held} is taken by ${holder}, which is not a model server, ` +
+        `and ENIO_BASE_URL names it. Free the port or set ENIO_BASE_URL to another one.\n`,
+    );
+  }
+  const port = await freePortFrom(held + 10);
+  const url = `http://127.0.0.1:${port}/v1`;
+  setMachineBaseUrl(url);
+  setModelBaseUrl(url);
+  log(`Port ${held} is taken by ${holder} — serving on ${port} instead (remembered in model.json)`);
+}
+
 /** The first port from `start` that nothing is listening on. Asks the OS
  *  by binding, which is the only test that cannot be wrong about it. */
 export async function freePortFrom(start: number, tries = 20): Promise<number> {
@@ -468,27 +495,7 @@ async function startMaple(opts: EnsureOptions): Promise<RunningBackend> {
   // probe above said so). Docker Desktop forwards container ports to
   // 127.0.0.1:8080; the server we are about to start would fail to bind
   // and the only evidence would be a line in model-server.log. Say it here.
-  const holder = await portHolder(Number(modelServerPort()));
-  if (holder) {
-    if (process.env.ENIO_BASE_URL || process.env.MAPLE_BASE_URL) {
-      // An explicit address is a decision; moving off it silently would be
-      // starting a server nobody is pointed at.
-      throw new Error(
-        `Port ${modelServerPort()} is taken by ${holder}, which is not a model server, ` +
-          `and ENIO_BASE_URL names it. Free the port or set ENIO_BASE_URL to another one.\n`,
-      );
-    }
-    // Move, and remember the move in the machine file so the agent, the
-    // launcher and the next terminal all find the server here. Scanning up
-    // from +10 keeps the address stable across launches rather than a random
-    // ephemeral port that changes every time.
-    const held = Number(modelServerPort());
-    const port = await freePortFrom(held + 10);
-    const url = `http://127.0.0.1:${port}/v1`;
-    setMachineBaseUrl(url);
-    setModelBaseUrl(url);
-    opts.log(`Port ${held} is taken by ${holder} — serving on ${port} instead (remembered in model.json)`);
-  }
+  await moveOffHeldPort(opts.log);
 
   const child = spawn(
     modelServerBinary(),

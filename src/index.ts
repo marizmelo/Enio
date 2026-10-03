@@ -35,6 +35,7 @@ import {
   venvPythonPath,
   WAIT_FOR_EXISTING_TICKS,
   type RunningBackend,
+  moveOffHeldPort,
 } from "./runtime.js";
 import {
   availableModels,
@@ -1657,6 +1658,9 @@ async function startModelServer(): Promise<void> {
   }
 
   const venvPython = requireRuntime();
+  // Docker Desktop on 8080 was the live case: the server would try to bind,
+  // exit 1, and the launcher waited on a port nothing would ever answer.
+  await moveOffHeldPort((m) => console.log(m));
   console.log(`Starting ${currentModelLabel()} on ${config.modelBaseUrl} ...`);
 
   // Inheriting is right in a terminal, where the whole point of `enio up` is
