@@ -168,11 +168,11 @@ export function StatusBar({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuLabel>{accounts.length > 0 ? "Account for this conversation" : "No accounts connected"}</DropdownMenuLabel>
+              <DropdownMenuLabel>{accounts.length > 0 ? "Accounts" : "No accounts connected"}</DropdownMenuLabel>
               {accounts.map((a) => (
                 <DropdownMenuItem key={a.id} onSelect={() => onPickAccount(a.id)}>
                   <span className="flex flex-col">
-                    <span>{a.label || a.email}{a.id === account ? " ✓" : ""}</span>
+                    <span>{a.label || a.email}{inUse?.id === a.id ? " · in use" : ""}</span>
                     <span className="text-[10px] text-muted-foreground">{ownerWord(a)} · {a.email}{a.id === defaultAccount ? " · default" : ""}</span>
                   </span>
                 </DropdownMenuItem>
