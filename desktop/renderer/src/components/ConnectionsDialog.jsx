@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plug, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Plug, Plus, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,10 @@ export function ConnectionsDialog({ open, onOpenChange, onChanged }) {
   const [name, setName] = useState("");
   const [command, setCommand] = useState("");
   const [tools, setTools] = useState("");
+  // "list" is the dialog as it was; "add-account" replaces it with the
+  // connect flow alone, under its own title, with Back. Adding an account
+  // is a task with steps, not a form under two lists.
+  const [view, setView] = useState("list");
 
   const refresh = useCallback(() => {
     listMcpServers().then(setServers).catch(() => setServers([]));
@@ -42,6 +46,7 @@ export function ConnectionsDialog({ open, onOpenChange, onChanged }) {
       refresh();
       setError("");
       setAdding(false);
+      setView("list");
     }
   }, [open, refresh]);
 
@@ -83,21 +88,53 @@ export function ConnectionsDialog({ open, onOpenChange, onChanged }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[80vh] flex-col gap-3 sm:max-w-lg">
         <DialogHeader className="shrink-0">
-          <DialogTitle>Connections</DialogTitle>
-          <DialogDescription>
-            Accounts and MCP servers — what Enio can reach beyond this machine. Changes take
-            effect immediately, with no restart.
-          </DialogDescription>
+          {view === "add-account" ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setView("list")}
+                className="mb-1 inline-flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="size-3.5" /> Connections
+              </button>
+              <DialogTitle>Connect a Google account</DialogTitle>
+              <DialogDescription>
+                Say whose account it is, then connect it. Enio's own account is its identity; yours is
+                access to your mail and calendar, in your name.
+              </DialogDescription>
+            </>
+          ) : (
+            <>
+              <DialogTitle>Connections</DialogTitle>
+              <DialogDescription>
+                Accounts and MCP servers — what Enio can reach beyond this machine. Changes take
+                effect immediately, with no restart.
+              </DialogDescription>
+            </>
+          )}
         </DialogHeader>
 
         {error && <p className="shrink-0 text-xs text-destructive">{error}</p>}
 
+        {view === "add-account" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <AccountsPanel
+              view="add"
+              onView={(v) => setView(v === "add" ? "add-account" : "list")}
+              onError={setError}
+            />
+          </div>
+        ) : (
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
           <section className="space-y-2">
             <h3 className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               Google accounts
             </h3>
-            <AccountsPanel onError={setError} />
+            <AccountsPanel
+              view="list"
+              onView={(v) => setView(v === "add" ? "add-account" : "list")}
+              onError={setError}
+            />
           </section>
 
           <section className="space-y-2">
@@ -199,6 +236,7 @@ export function ConnectionsDialog({ open, onOpenChange, onChanged }) {
         )}
           </section>
         </div>
+        )}
       </DialogContent>
     </Dialog>
   );

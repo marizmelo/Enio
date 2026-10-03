@@ -29,7 +29,7 @@ import {
  * access; saying otherwise would be the most dangerous lie the panel could
  * tell, so the link to Google's own permissions page sits next to Remove.
  */
-export function AccountsPanel({ onError }) {
+export function AccountsPanel({ onError, view = "list", onView }) {
   const [state, setState] = useState({ client: false, clientSource: null, accounts: [], grants: [] });
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
@@ -45,7 +45,10 @@ export function AccountsPanel({ onError }) {
   // client, which a script account never sets -- so "Connect" looked like it
   // did nothing and got pressed again, against a secret the success had
   // already consumed.
-  const [adding, setAdding] = useState(false);
+  // Owned by the parent dialog: "add" is its own screen there, with its own
+  // title and a Back button, not a form unfolding under two lists.
+  const adding = view === "add";
+  const setAdding = (v) => onView?.(v ? "add" : "list");
   // id -> { ok, error } | undefined while checking. Same honesty as the MCP
   // rows: the dot answers "does it currently work", not "was it once saved".
   const [status, setStatus] = useState({});
@@ -103,6 +106,7 @@ export function AccountsPanel({ onError }) {
           clearInterval(pollRef.current);
           setConnecting(false);
           if (status.status === "failed") onError?.(status.error);
+          else setAdding(false);
           refresh();
         } catch (err) {
           clearInterval(pollRef.current);
@@ -264,11 +268,19 @@ export function AccountsPanel({ onError }) {
   if (!state.client) {
     return (
       <div className="space-y-2">
-        {accountsList}
-        {state.accounts.length > 0 && !adding ? (
-          <Button size="sm" variant="outline" className="gap-1" onClick={() => setAdding(true)}>
-            <UserPlus className="size-3.5" /> Add another account
-          </Button>
+        {!adding && accountsList}
+        {!adding ? (
+          <>
+            {state.accounts.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Nothing connected yet. Connect a Google account for Enio itself first — its own address and
+                calendar — then your own, so "my inbox" means yours.
+              </p>
+            )}
+            <Button size="sm" variant="outline" className="gap-1" onClick={() => setAdding(true)}>
+              <UserPlus className="size-3.5" /> {state.accounts.length > 0 ? "Add another account" : "Connect a Google account"}
+            </Button>
+          </>
         ) : (
         <>
         <div className="flex gap-1">
@@ -385,55 +397,27 @@ export function AccountsPanel({ onError }) {
     );
   }
 
+  if (!adding) {
+    return (
+      <div className="space-y-2">
+        {accountsList}
+        {state.accounts.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Nothing connected yet. Connect a Google account for Enio itself first, then your own.
+          </p>
+        )}
+        <Button size="sm" variant="outline" className="gap-1" onClick={() => setAdding(true)}>
+          <UserPlus className="size-3.5" /> {state.accounts.length > 0 ? "Add another account" : "Connect a Google account"}
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
-      {state.accounts.length > 0 && (
-        <div className="rounded-md border">
-          {state.accounts.map((a) => (
-            <div key={a.id} className="flex items-start gap-2 border-b p-3 last:border-b-0">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{a.email}</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {a.grants.map((g) => GRANT_LABELS[g] ?? g).join(" · ") || "nothing granted"}
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 shrink-0 gap-1 px-2 text-xs"
-                onClick={async () => {
-                  try {
-                    await removeAccount(a.id);
-                    refresh();
-                  } catch (err) {
-                    onError?.(String(err.message ?? err));
-                  }
-                }}
-              >
-                <Trash2 className="size-3" /> Remove
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Said where it is read, not buried in docs: a local delete stops Enio
-          using the account, and only Google can end the grant itself. */}
-      {state.accounts.length > 0 && (
-        <p className="text-[11px] text-muted-foreground">
-          Remove stops Enio using the account. To end the grant itself,{" "}
-          <button
-            className="inline-flex items-center gap-0.5 underline hover:text-foreground"
-            onClick={() => window.maple?.openExternal?.("https://myaccount.google.com/permissions")}
-          >
-            revoke it at Google <ExternalLink className="size-2.5" />
-          </button>
-          .
-        </p>
-      )}
-
+      {whose}
       <div className="space-y-2 rounded-md border p-3">
-        <p className="text-sm font-medium">Add an account</p>
+        <p className="text-sm font-medium">What Enio may do with it</p>
         <div className="grid grid-cols-2 gap-1">
           {state.grants.map((g) => (
             <label key={g.id} className="flex items-center gap-1.5 text-xs">
