@@ -1,5 +1,12 @@
 import { config } from "../config.js";
-import { findAccountByName, listAccounts, ownerWord, scriptAccountById, scriptMailAccount } from "../accounts.js";
+import { agentOnlyMailAccount, findAccountByName, listAccounts, ownerWord, scriptAccountById, scriptMailAccount } from "../accounts.js";
+
+/** The honest answer when only Enio's own account can read mail: not the
+ *  person's inbox, so not read as if it were. Named so the person can ask
+ *  for it on purpose. */
+const onlyAgentMail = (agent: { described: string; label?: string; email: string }) =>
+  `No account of yours is connected. The only connected account is ${agent.described}, and that is Enio's mail, not yours. ` +
+  `Connect your account in Connections → Accounts, or ask for Enio's inbox by name (for example "check ${agent.label ?? agent.email}").`;
 import { callScript } from "../appsscript.js";
 import type { ToolDef } from "../types.js";
 
@@ -119,6 +126,10 @@ const searchTool: ToolDef = {
     }
     const account = named ? scriptAccountById(named.id, "mail.read") : scriptMailAccount("read");
     if (named && !account) return `${named.label ?? named.email} is connected without the read-mail grant.`;
+    if (!account && !named) {
+      const agentOnly = agentOnlyMailAccount();
+      if (agentOnly) return { text: onlyAgentMail(agentOnly), notice: `No account of yours is connected; Enio's own was not read.` };
+    }
     const preface =
       askedOwner && account
         ? `${askedOwner === "user" ? "No account of the user's is connected" : "Enio has no account of its own connected"} — this is ${account.described}.\n\n`
@@ -221,6 +232,10 @@ const readTool: ToolDef = {
   async run(args) {
     const named = args.account ? findAccountByName(String(args.account)) : null;
     const account = named ? scriptAccountById(named.id, "mail.read") : scriptMailAccount("read");
+    if (!account && !named) {
+      const agentOnly = agentOnlyMailAccount();
+      if (agentOnly) return onlyAgentMail(agentOnly);
+    }
     if (account) {
       const result = await callScript(account.url, account.secret, "mail.read", {
         id: String(args.id ?? ""),

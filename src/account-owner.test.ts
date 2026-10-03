@@ -41,6 +41,16 @@ describe("whose account it is", () => {
     assert.throws(() => acc.setAccountOwner(legacy.id, "robot" as never), /agent.*user/);
   });
 
+  test("with only the agent's account, reading 'my mail' finds nothing of yours and says which account exists", () => {
+    assert.equal(acc.scriptMailAccount("read"), null, "Enio's own is never the fallback for reading");
+    assert.equal(acc.agentOnlyMailAccount()!.email, "enio@example.com");
+    assert.equal(acc.scriptMailAccount("send")!.email, "enio@example.com", "sending as the agent is the default");
+    // Chosen on purpose, it reads.
+    acc.setActiveAccount(acc.listAccounts()[0]!.id);
+    assert.equal(acc.scriptMailAccount("read")!.email, "enio@example.com");
+    acc.setActiveAccount(null);
+  });
+
   test("reading prefers the person's account, sending prefers the agent's", () => {
     const mine = script("mariz@example.com", { owner: "user", label: "personal" });
     assert.equal(acc.scriptMailAccount("read")!.email, "mariz@example.com", "my inbox is mine");

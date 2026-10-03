@@ -812,6 +812,7 @@ describe("an email the mail agent never read", () => {
     const { looksLikeQuotedEmail } = await import("./agent.js");
     assert.equal(looksLikeQuotedEmail("Here is the full email from Google dated September 13:\nSubject: Update to Your Account Settings\nDear User, ..."), true);
     assert.equal(looksLikeQuotedEmail("Dear Mariz,\n\nWe noticed an issue with your account.\n\nBest regards,\nGoogle Support Team"), true);
+    assert.equal(looksLikeQuotedEmail("Here are the latest emails in your inbox:\n\n**Subject:** Google updated your settings\n**Sender:** Google"), true, "markdown field names count");
     assert.equal(looksLikeQuotedEmail("I found one email from Google about your account settings. Want me to read it?"), false);
     assert.equal(looksLikeQuotedEmail("No messages matched in the inbox."), false);
   });

@@ -531,8 +531,11 @@ export function trailingAnnouncement(text: string): boolean {
  * quoted back is exactly what this shape should look like.
  */
 export function looksLikeQuotedEmail(text: string): boolean {
-  if (/^\s*(subject|from|date)\s*:/im.test(text)) return true;
-  if (/\bhere(?:'s| is) the (?:full |complete |entire )?(?:e-?mail|message)\b/i.test(text)) return true;
+  // Field names, bare or wrapped in markdown ("**Subject:**", "**Sender**:").
+  // The first version matched only the bare form, and the invented inbox
+  // that slipped past it was written in bold.
+  if (/^\s*(?:[*_#>\-\s]*)(subject|from|sender|date)\s*\**\s*:/im.test(text)) return true;
+  if (/\bhere(?:'s| is| are) (?:the |your )?(?:full |complete |entire |latest |recent |new |unread )?(?:e-?mails?|messages?|inbox)\b/i.test(text)) return true;
   const salutation = /\b(?:dear|hi|hello)\s+[A-Z][\w ]{0,30},/i.test(text);
   const signoff = /\b(?:best regards|kind regards|regards|sincerely|thanks,|thank you,|cheers,)\b/i.test(text);
   return salutation && signoff;

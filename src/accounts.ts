@@ -418,7 +418,24 @@ const picked = (a: StoredAccount): PickedAccount => ({
 export function scriptMailAccount(kind: "read" | "send"): PickedAccount | null {
   const grant: Grant = kind === "read" ? "mail.read" : "mail.send";
   const account = pickAccount(grant, kind === "read" ? "user" : "agent");
-  return account ? picked(account) : null;
+  if (!account) return null;
+  // Reading falls back to anything but the agent's own account. "Check my
+  // email" against Enio's inbox, presented as the person's, was the live
+  // failure the owner model exists for; the agent's mail is read when the
+  // person chose it (conversation or default) or named it, never by
+  // fallback. Sending is the opposite: the agent's address IS the default.
+  if (kind === "read" && account.owner === "agent" && !activeAccountId && !defaultAccountId()) return null;
+  return picked(account);
+}
+
+/** When reading found nothing of the person's: the agent's own account, if
+ *  that is what is connected, so the tool can say so instead of reading it
+ *  or claiming nothing is connected. */
+export function agentOnlyMailAccount(): PickedAccount | null {
+  const a = read().accounts.find(
+    (x) => x.owner === "agent" && x.provider === "appsscript" && x.scriptUrl && x.scriptSecret && x.grants.includes("mail.read"),
+  );
+  return a ? picked(a) : null;
 }
 
 /**
