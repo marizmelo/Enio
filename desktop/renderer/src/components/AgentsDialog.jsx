@@ -34,6 +34,11 @@ export function AgentsDialog({ open, onOpenChange, onOpenSkills, onOpenPipelines
   const [pinning, setPinning] = useState(null);
   // null = list; {} = creating; {name...} = editing that custom agent.
   const [editing, setEditing] = useState(null);
+  // Which cards: all, Enio's built-ins, or the ones you made. The split is
+  // the one the cards already wear as a badge; the filter makes it a view.
+  const [filter, setFilter] = useState("all");
+  const shown = agents.filter((a) => (filter === "all" ? true : filter === "yours" ? a.custom : !a.custom));
+  const yoursCount = agents.filter((a) => a.custom).length;
 
   useEffect(() => {
     if (!open) return;
@@ -106,6 +111,27 @@ export function AgentsDialog({ open, onOpenChange, onOpenSkills, onOpenPipelines
 
         {error && <p className="shrink-0 text-xs text-destructive">{error}</p>}
 
+        {!editing && (
+          <nav className="flex shrink-0 gap-1 text-xs">
+            {[
+              ["all", `All (${agents.length})`],
+              ["enio", `Enio (${agents.length - yoursCount})`],
+              ["yours", `Yours (${yoursCount})`],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setFilter(id)}
+                className={`rounded px-2.5 py-1 ${
+                  filter === id ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
+
         {editing ? (
           <AgentEditor
             initial={editing}
@@ -119,7 +145,12 @@ export function AgentsDialog({ open, onOpenChange, onOpenSkills, onOpenPipelines
         ) : (
           <>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
-              {agents.map((a) => (
+              {shown.length === 0 && filter === "yours" && (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No agents of your own yet. Duplicate any of Enio's, or create one below.
+                </p>
+              )}
+              {shown.map((a) => (
                 <div key={a.name} className="rounded-md border p-3">
                   <div className="flex items-baseline gap-2">
                     <span className="font-mono text-sm font-medium">@{a.name}</span>
