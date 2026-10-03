@@ -430,6 +430,8 @@ EOF
 if [ "$ASSUME_YES" != "1" ] && [ "$MINIMAL" != "1" ]; then
   LAUNCH_CHOICE=""
   if [ "$DESKTOP_READY" = "1" ]; then
+    printf '\n%sAccounts:%s in the app, Connections → Accounts. Connect a Google account for Enio itself first\n' "$BOLD" "$OFF"
+    printf '          (its own address and calendar), then your own — so "my inbox" means yours.\n\n'
     printf '%s?%s Start it now? [d]esktop app / [t]erminal / [n]o: ' "$BOLD" "$OFF"
     read -r LAUNCH_CHOICE </dev/tty
   else

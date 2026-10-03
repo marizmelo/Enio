@@ -157,6 +157,31 @@ It does not revoke the grant at Google — only Google can do that, at
 and the panel links there next to the button. Do both if you are removing an
 account because something went wrong.
 
+## Whose account is it
+
+Two kinds of account can be connected, and they must never be confused:
+
+- **Enio's own account** is the agent's identity: the address it sends
+  from, the calendar it can be invited to, the Drive it can write to. Create
+  a Google account for it and connect that one first.
+- **Your accounts** are access to *your* mail, calendar and files, in your
+  name. "My inbox" always means one of these.
+
+Every account carries that choice, and a label ("work", "personal"). The
+Accounts panel asks when you connect one, and shows "whose account is
+this?" beside any connected before the question existed. Replies and
+notices name the account the way you did: "Searched your account work
+(…)" or "Sent from Enio's own account". From the terminal, `enio accounts`
+lists them and `enio accounts owner <id> agent|user [label]` sets it.
+
+Which account a conversation uses is yours to pick: the account chip in the
+top bar, or a phrase — "use my work email", "switch to Enio's account" —
+which is matched against the connected list and confirmed with a notice.
+A conversation keeps its choice. With no choice, the default account from
+the panel applies; with no default, reading uses your account and sending
+uses Enio's own. The agent can name an account in a tool call when you
+named one, but it never chooses one on its own.
+
 ## Email through the account
 
 Once an account with the mail grants is connected, the **Email** tile on the

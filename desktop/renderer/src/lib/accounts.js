@@ -49,8 +49,21 @@ export const scriptSource = () => call("/accounts/script");
 
 /** Hand back the deployment URL. The server calls it once before saving, so
  *  a URL that does not answer fails here rather than silently later. */
-export const saveScript = (url, grants) =>
-  call("/accounts/script", { method: "POST", body: JSON.stringify({ url, grants }) });
+export const saveScript = (url, grants, owner, label) =>
+  call("/accounts/script", { method: "POST", body: JSON.stringify({ url, grants, owner, label }) });
+
+/** Whose account it is — the agent's own, or the user's — and what the
+ *  person calls it. Two facts, both the person's to state. */
+export const setAccountOwner = (id, owner, label) =>
+  call(`/accounts/${id}`, { method: "PATCH", body: JSON.stringify({ owner, label }) });
+
+/** The account a conversation uses unless it chose one. */
+export const setDefaultAccount = (id) =>
+  call("/accounts/default", { method: "POST", body: JSON.stringify({ id }) });
+
+export const conversationAccount = (sessionId) => call(`/conversations/${sessionId}/account`);
+export const setConversationAccount = (sessionId, id) =>
+  call(`/conversations/${sessionId}/account`, { method: "POST", body: JSON.stringify({ id }) });
 
 /** What each grant is called, and whether it changes anything.
  *  The server owns the list; these are only the words for it. */

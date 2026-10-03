@@ -16,7 +16,7 @@ import { saveScript, scriptSource } from "@/lib/accounts";
  * avoids. So the code is handed over with its secret already in it, and the
  * deploying is six clicks the panel walks through.
  */
-export function ScriptSetup({ grants, onConnected, onError }) {
+export function ScriptSetup({ grants, owner, label, onConnected, onError }) {
   const [source, setSource] = useState("");
   const [upgrade, setUpgrade] = useState(false);
   const [url, setUrl] = useState("");
@@ -131,7 +131,7 @@ export function ScriptSetup({ grants, onConnected, onError }) {
           try {
             // The grants recorded are what the script can do, since with a
             // script the code IS the scope — there is no consent list.
-            const { account } = await saveScript(url.trim(), grants.map((g) => g.id));
+            const { account } = await saveScript(url.trim(), grants.map((g) => g.id), owner, label);
             setUrl("");
             onConnected?.(account);
           } catch (err) {

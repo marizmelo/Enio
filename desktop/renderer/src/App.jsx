@@ -24,6 +24,7 @@ import { HistoryDialog } from "@/components/HistoryDialog";
 import { ProjectsDialog } from "@/components/ProjectsDialog";
 import { PipelinesDialog } from "@/components/PipelinesDialog";
 import { ConnectionsDialog } from "@/components/ConnectionsDialog";
+import { conversationAccount, listAccounts as listGoogleAccounts, setConversationAccount } from "@/lib/accounts";
 import { CanvasPanel } from "@/components/CanvasPanel";
 import { BootScreen } from "@/components/BootScreen";
 import { startMeetingRecorder } from "@/lib/meeting-recorder";
@@ -118,6 +119,27 @@ export function App() {
   // the conversation changes, so restore and history switches carry them.
   const [convAttachments, setConvAttachments] = useState([]);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+  // Connected Google accounts and which one this conversation uses. Fetched
+  // when the backend is ready and again when the Connections dialog closes,
+  // because that is where they change.
+  const [googleAccounts, setGoogleAccounts] = useState({ accounts: [], default: null });
+  const [convAccount, setConvAccount] = useState(null);
+  const refreshAccounts = useCallback(async () => {
+    try {
+      const next = await listGoogleAccounts();
+      setGoogleAccounts({ accounts: next.accounts ?? [], default: next.default ?? null });
+      // First run: nothing connected yet. Open the Accounts section once, so
+      // the agent-versus-yours question is asked before the first "check my
+      // email" reads the wrong inbox. Once — a door that reopens every launch
+      // is an advert.
+      if ((next.accounts ?? []).length === 0 && !localStorage.getItem("enio.accounts-intro-shown")) {
+        localStorage.setItem("enio.accounts-intro-shown", "1");
+        setConnectionsOpen(true);
+      }
+    } catch {
+      /* The status bar already reports an unreachable agent. */
+    }
+  }, []);
   // Meeting capture: server-owned state, poll-shaped like the model
   // download (a meeting outlives any one request). The recorder handle
   // lives in a ref because it is imperative machinery, not render state.
@@ -209,6 +231,16 @@ export function App() {
   }, []);
 
   const backendReady = status.phase === "ready";
+  useEffect(() => {
+    if (backendReady) refreshAccounts();
+  }, [backendReady, refreshAccounts]);
+  useEffect(() => {
+    if (!backendReady || !conversationId) {
+      setConvAccount(null);
+      return;
+    }
+    conversationAccount(conversationId).then((r) => setConvAccount(r.account ?? null)).catch(() => setConvAccount(null));
+  }, [backendReady, conversationId]);
 
   // Polled, not pushed: a background command starts and dies outside the turn
   // stream, and the count is what puts it in front of the user at all. Cheap
@@ -855,6 +887,18 @@ export function App() {
         running={running}
         onCommands={() => setCommandsOpen(true)}
         onAgents={() => setAgentsOpen(true)}
+        accounts={googleAccounts.accounts}
+        account={convAccount}
+        defaultAccount={googleAccounts.default}
+        onPickAccount={async (id) => {
+          if (!conversationId) return;
+          try {
+            const r = await setConversationAccount(conversationId, id);
+            setConvAccount(r.account ?? null);
+          } catch {
+            /* The dialog reports its own errors; the chip just stays. */
+          }
+        }}
       />
 
       <AgentsDialog
@@ -902,6 +946,7 @@ export function App() {
         open={connectionsOpen}
         onOpenChange={(open) => {
           setConnectionsOpen(open);
+          if (!open) refreshAccounts();
           // Refetch on close, not only on in-app changes: the same file is
           // editable from the CLI and the API, and the mention menu reads
           // the cached capabilities.

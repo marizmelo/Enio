@@ -3135,6 +3135,33 @@ what it measures, and a version that passes it can still be the one that
 rewrote a file it was asked to read. Choosing the previous version is
 one command; the numbers that justified each version stay in history.
 
+### An account is the agent's own, or the user's — never just "the account"
+
+**What happened:** the one connected Google account was the agent's own
+(a Gmail created for enio), and "check my email" read it and said "your
+inbox": one old message, and the person, with newer mail elsewhere,
+doubted the email was real. Two different jobs had one word, and nothing
+on screen or in the model's view said whose account had been read.
+
+**Chose:** an `owner` on every account, agent or user, with a label.
+Replies and notices name accounts by owner ("Enio's own account …",
+"your account work (…)"); unset says so and the panel asks. The resolver
+prefers by the act — reading means the person's account, sending means
+the agent's identity — below a conversation's own choice and a machine
+default. The choice is the person's: an account chip in the status bar,
+or a phrase ("use my work email") matched against the connected list
+and confirmed with a notice; kept on the session. The tools take an
+account by label when the user named one; the mail agent's role lists
+every connected account with its owner. First run opens the Accounts
+section once and asks the question before the first "check my email".
+
+**Rejected:** inferring the owner (nothing in a token says whose life it
+is); letting the model pick an account (a credential-bearing choice the
+harness makes from the person's selection); defaulting legacy accounts
+to either owner (a guess would be wrong on someone's machine — the row
+says "owner not set" until a person answers); a separate "agent
+accounts" store (same plumbing, one flag).
+
 ### The mail agent quotes mail it read, names the inbox, or reads it
 
 **What happened:** asked "yes" to its own offer to read the full email,

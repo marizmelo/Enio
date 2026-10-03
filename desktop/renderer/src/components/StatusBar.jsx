@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Bot, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, TerminalSquare, Workflow, X } from "lucide-react";
+import { AtSign, BookOpen, Bot, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, TerminalSquare, Workflow, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -45,7 +53,16 @@ export function StatusBar({
   running = 0,
   onCommands,
   onAgents,
+  // Connected accounts and which one this conversation means. The chip is
+  // the person's switch; the agent reads the choice and never makes it.
+  accounts = [],
+  account = null,
+  defaultAccount = null,
+  onPickAccount,
 }) {
+  const ownerWord = (a) => (a.owner === "agent" ? "Enio's own" : a.owner === "user" ? "yours" : "owner not set");
+  const inUse = accounts.find((a) => a.id === account) ?? accounts.find((a) => a.id === defaultAccount) ?? null;
+  const chipText = inUse ? (inUse.label || inUse.email) : "account";
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
     // lights over the top-left of the page rather than in a title bar of its
@@ -124,6 +141,40 @@ export function StatusBar({
         <TipButton tip="Memory" className="size-7" onClick={onMemory}>
           <Brain className="size-4" />
         </TipButton>
+        {/* Which account "my mail" means in this conversation. Shown only when
+            something is connected, and named by owner, because with one
+            account connected the reply once said "your inbox" about Enio's
+            own. Picking here is the same act as saying "use my work email". */}
+        {accounts.length > 0 && onPickAccount && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                title={inUse ? `${ownerWord(inUse)} · ${inUse.email}` : "Choose the account this conversation uses"}
+                className={cn(
+                  "inline-flex h-7 max-w-40 items-center gap-1 rounded-md border px-2 text-[11px] [-webkit-app-region:no-drag]",
+                  inUse?.owner === "agent" ? "border-amber-500/50 text-amber-700 dark:text-amber-400" : "text-muted-foreground",
+                )}
+              >
+                <AtSign className="size-3 shrink-0" />
+                <span className="truncate">{chipText}</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel>Account for this conversation</DropdownMenuLabel>
+              {accounts.map((a) => (
+                <DropdownMenuItem key={a.id} onSelect={() => onPickAccount(a.id)}>
+                  <span className="flex flex-col">
+                    <span>{a.label || a.email}{a.id === account ? " ✓" : ""}</span>
+                    <span className="text-[10px] text-muted-foreground">{ownerWord(a)} · {a.email}{a.id === defaultAccount ? " · default" : ""}</span>
+                  </span>
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => onPickAccount(null)}>Use the default</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         {/* The managed note collection -- the first section that is an app
             rather than a door into the chat room. */}
         <TipButton tip="Notes" className="size-7" onClick={onNotes}>

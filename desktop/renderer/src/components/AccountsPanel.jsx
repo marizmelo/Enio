@@ -10,6 +10,8 @@ import {
   listAccounts,
   removeAccount,
   saveClient,
+  setAccountOwner,
+  setDefaultAccount,
   startConnect,
 } from "@/lib/accounts";
 
@@ -48,11 +50,20 @@ export function AccountsPanel({ onError }) {
   // rows: the dot answers "does it currently work", not "was it once saved".
   const [status, setStatus] = useState({});
   const pollRef = useRef(null);
+  // Whose account the one being connected is. Two kinds, never confused in a
+  // reply: Enio's OWN account is its identity (what it sends from, the
+  // calendar it can be invited to); YOUR account is delegated access to your
+  // mail in your name. The first account connected is offered as Enio's own,
+  // because that is the order that keeps "my inbox" meaning yours.
+  const [newOwner, setNewOwner] = useState("agent");
+  const [newLabel, setNewLabel] = useState("");
+  const [labelDraft, setLabelDraft] = useState({});
 
   const refresh = useCallback(async () => {
     try {
       const next = await listAccounts();
       setState(next);
+      setNewOwner(next.accounts.some((a) => a.owner === "agent") ? "user" : "agent");
       for (const a of next.accounts) {
         accountStatus(a.id)
           .then((s) => setStatus((prev) => ({ ...prev, [a.id]: s })))
@@ -105,6 +116,32 @@ export function AccountsPanel({ onError }) {
     }
   };
 
+  const setOwner = async (a, owner, label) => {
+    try {
+      await setAccountOwner(a.id, owner, label);
+      refresh();
+    } catch (err) {
+      onError?.(String(err.message ?? err));
+    }
+  };
+  const ownerChoice = (value, onChange) => (
+    <span className="inline-flex overflow-hidden rounded-md border text-[11px]">
+      {[
+        ["agent", "Enio's own"],
+        ["user", "Mine"],
+      ].map(([id, text]) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => onChange(id)}
+          className={`px-2 py-0.5 ${value === id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          {text}
+        </button>
+      ))}
+    </span>
+  );
+
   const accountsList = state.accounts.length > 0 && (
     <>
       <div className="rounded-md border">
@@ -134,6 +171,39 @@ export function AccountsPanel({ onError }) {
                 {a.provider === "appsscript" ? "script · " : ""}
                 {a.grants.map((g) => GRANT_LABELS[g] ?? g).join(" · ") || "nothing granted"}
               </p>
+              {/* Whose it is, and what you call it. Unset means it was
+                  connected before this existed; until it is set, replies
+                  say "owner not set" rather than guess. */}
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                {ownerChoice(a.owner, (owner) => setOwner(a, owner, undefined))}
+                {!a.owner && <span className="text-[11px] text-amber-700 dark:text-amber-400">whose account is this?</span>}
+                <input
+                  className="h-6 w-28 rounded border bg-background px-1.5 text-[11px]"
+                  placeholder="label (work, personal…)"
+                  value={labelDraft[a.id] ?? a.label ?? ""}
+                  onChange={(e) => setLabelDraft((d) => ({ ...d, [a.id]: e.target.value }))}
+                  onBlur={() => {
+                    const v = labelDraft[a.id];
+                    if (v !== undefined && v !== (a.label ?? "") && a.owner) setOwner(a, a.owner, v);
+                  }}
+                />
+                <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <input
+                    type="radio"
+                    name="default-account"
+                    checked={state.default === a.id}
+                    onChange={async () => {
+                      try {
+                        await setDefaultAccount(a.id);
+                        refresh();
+                      } catch (err) {
+                        onError?.(String(err.message ?? err));
+                      }
+                    }}
+                  />
+                  default
+                </label>
+              </div>
             </div>
             <Button
               size="sm"
@@ -169,6 +239,28 @@ export function AccountsPanel({ onError }) {
   // Nothing to set up when enio ships a verified client: the Console
   // walkthrough exists because the user has to register an app, and showing
   // it to someone who does not would be four steps of pure noise.
+  // What is being connected, before the how. Shown with the connect form
+  // only; the list above carries the same control per row.
+  const whose = (
+    <div className="space-y-1.5 rounded-md border border-dashed p-2.5">
+      <p className="text-xs font-medium">Whose account is this?</p>
+      <p className="text-[11px] text-muted-foreground">
+        Enio's own account is its identity: the address it sends from, the calendar it can be invited to.
+        Your account is access to your mail and calendar, in your name. Connect Enio's own first, then yours —
+        that is what keeps "my inbox" meaning yours.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {ownerChoice(newOwner, setNewOwner)}
+        <input
+          className="h-6 w-32 rounded border bg-background px-1.5 text-[11px]"
+          placeholder={newOwner === "agent" ? "label (Enio's)" : "label (work, personal…)"}
+          value={newLabel}
+          onChange={(e) => setNewLabel(e.target.value)}
+        />
+      </div>
+    </div>
+  );
+
   if (!state.client) {
     return (
       <div className="space-y-2">
@@ -195,12 +287,16 @@ export function AccountsPanel({ onError }) {
             </button>
           ))}
         </div>
+        {whose}
         {how === "script" ? (
           <ScriptSetup
             grants={state.grants}
+            owner={newOwner}
+            label={newLabel}
             onError={onError}
             onConnected={() => {
               setAdding(false);
+              setNewLabel("");
               refresh();
             }}
           />
