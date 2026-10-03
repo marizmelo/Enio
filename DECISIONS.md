@@ -3135,6 +3135,34 @@ what it measures, and a version that passes it can still be the one that
 rewrote a file it was asked to read. Choosing the previous version is
 one command; the numbers that justified each version stay in history.
 
+### The mail agent quotes mail it read, names the inbox, or reads it
+
+**What happened:** asked "yes" to its own offer to read the full email,
+the mail agent called nothing and wrote the email — subject, salutation,
+body, "Google Support Team" — a phishing-shaped text with no message
+behind it. The grounding notice listed its invented names underneath; a
+notice under an invented email is not enough. The search before it had
+read a secondary account (the enio Gmail) and found one message; the
+reply said "your inbox" and the person, who has newer mail elsewhere,
+doubted the email was real. Asked for a link, the agent explained that
+emails have no links; the connected account is Gmail, whose ids open in
+the browser.
+
+**Chose:** a reply shaped like an email's contents from the mail agent on
+a turn where no tool ran is withdrawn, and the correction says to call
+read_email with the id the search already printed and quote only what it
+returns. Every mail search and read emits a notice naming the account,
+the query and the count — the inbox in use is on screen whether or not
+the model repeats it. Each search row and each read carries the message's
+Gmail address.
+
+**Rejected:** seeding the read from the harness on an affirmative
+follow-up (choosing the id is a judgement when a search returned several;
+the guard makes the model make it with the tool); applying the
+email-shape check when a tool ran (a real read quoted back is exactly
+this shape); putting the account name only in the prompt (the model
+dropped it from the tool output already).
+
 ### The model server moves off a held port, and says where
 
 **What happened:** Docker Desktop forwards a container port to

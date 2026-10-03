@@ -80,8 +80,13 @@ describe("mail tools over a connected account", () => {
       ],
     });
     const search = mailTools.find((t) => t.name === "search_email")!;
-    const out = String(await search.run({ query: "draft", days: 7 }));
+    const result = await search.run({ query: "draft", days: 7 });
+    // The tool now also returns a notice naming the inbox; the text is what
+    // the model reads.
+    const out = typeof result === "string" ? result : result.text;
+    assert.match(String((result as { notice?: string }).notice ?? ""), /enio@example\.com/, "the inbox read is announced");
     assert.match(out, /\[18f2ab\]/);
+    assert.match(out, /open: https:\/\/mail\.google\.com\/mail\/u\/0\/#all\/18f2ab/, "a link the model can quote");
     assert.match(out, /Draft ready/);
     assert.match(out, /enio@example\.com/);
     assert.equal(calls[0]!.op, "mail.recent");
@@ -95,8 +100,10 @@ describe("mail tools over a connected account", () => {
       "mail.read": { id: "18f2ab", from: "Ana <ana@x.com>", to: "me", subject: "Draft ready", date: "2026-08-21T10:00:00Z", body: "It is done." },
     });
     const read = mailTools.find((t) => t.name === "read_email")!;
-    const out = String(await read.run({ id: "18f2ab" }));
+    const result = await read.run({ id: "18f2ab" });
+    const out = typeof result === "string" ? result : result.text;
     assert.match(out, /Subject: Draft ready/);
+    assert.match(out, /Open:    https:\/\/mail\.google\.com/);
     assert.match(out, /It is done\./);
   });
 

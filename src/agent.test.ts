@@ -806,3 +806,13 @@ describe("claimed lookups", () => {
     assert.equal(claimsUnperformedAction("You could check the registry after looking into the address."), false, "advice, not a report");
   });
 });
+
+describe("an email the mail agent never read", () => {
+  test("a Subject line, a salutation with a sign-off, or 'here is the full email' is an email shape", async () => {
+    const { looksLikeQuotedEmail } = await import("./agent.js");
+    assert.equal(looksLikeQuotedEmail("Here is the full email from Google dated September 13:\nSubject: Update to Your Account Settings\nDear User, ..."), true);
+    assert.equal(looksLikeQuotedEmail("Dear Mariz,\n\nWe noticed an issue with your account.\n\nBest regards,\nGoogle Support Team"), true);
+    assert.equal(looksLikeQuotedEmail("I found one email from Google about your account settings. Want me to read it?"), false);
+    assert.equal(looksLikeQuotedEmail("No messages matched in the inbox."), false);
+  });
+});

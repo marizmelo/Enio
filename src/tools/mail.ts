@@ -115,17 +115,28 @@ const searchTool: ToolDef = {
       });
       if (!result.ok) return `Mail search failed: ${result.error}`;
       const rows = (result.result as Array<Record<string, string>>) ?? [];
-      if (rows.length === 0) return `No messages matched in ${account.email}.`;
+      if (rows.length === 0) {
+        return { text: `No messages matched in ${account.email}.`, notice: `Searched ${account.email} (${parts.join(" ")}): nothing matched.` };
+      }
+      // The connected account is Gmail, whose message ids are addressable
+      // in the browser. The link rides with each row so "open this in my
+      // browser" is a fact the model can quote, not one it has to invent.
       const lines = rows.map(
         (m) =>
           `[${m.id}] ${String(m.date ?? "").slice(0, 10)}  ${m.from ?? "unknown"}\n` +
           `      ${m.subject || "(no subject)"}\n` +
-          `      ${String(m.snippet ?? "").replace(/\s+/g, " ").slice(0, 140)}`,
+          `      ${String(m.snippet ?? "").replace(/\s+/g, " ").slice(0, 140)}\n` +
+          `      open: ${gmailLink(String(m.id ?? ""))}`,
       );
-      return (
-        `${rows.length} matches in ${account.email}:\n\n${lines.join("\n\n")}\n\n` +
-        `Read one with read_email using its [id].`
-      );
+      // Which inbox was read is a fact the person must see whether or not
+      // the model repeats it: a search that returned one old message from
+      // a secondary account read as "my inbox has one email".
+      return {
+        text:
+          `${rows.length} matches in ${account.email}:\n\n${lines.join("\n\n")}\n\n` +
+          `Read one with read_email using its [id].`,
+        notice: `Searched ${account.email} (${parts.join(" ")}): ${rows.length} message${rows.length === 1 ? "" : "s"}.`,
+      };
     }
 
     let connection: Connection | null = null;
@@ -196,14 +207,18 @@ const readTool: ToolDef = {
       if (!result.ok) return `Could not read message: ${result.error}`;
       const m = result.result as Record<string, string>;
       const body = String(m.body ?? "");
-      return [
-        `From:    ${m.from ?? "unknown"}`,
-        `To:      ${m.to ?? ""}`,
-        `Date:    ${String(m.date ?? "").slice(0, 16).replace("T", " ")}`,
-        `Subject: ${m.subject ?? "(no subject)"}`,
-        "",
-        body.length > 12_000 ? body.slice(0, 12_000) + "\n[...truncated]" : body || "(empty message)",
-      ].join("\n");
+      return {
+        text: [
+          `From:    ${m.from ?? "unknown"}`,
+          `To:      ${m.to ?? ""}`,
+          `Date:    ${String(m.date ?? "").slice(0, 16).replace("T", " ")}`,
+          `Subject: ${m.subject ?? "(no subject)"}`,
+          `Open:    ${gmailLink(String(args.id ?? ""))}`,
+          "",
+          body.length > 12_000 ? body.slice(0, 12_000) + "\n[...truncated]" : body || "(empty message)",
+        ].join("\n"),
+        notice: `Read message ${String(args.id ?? "")} from ${account.email}.`,
+      };
     }
 
     const uid = Number(args.id);
@@ -260,5 +275,12 @@ const readTool: ToolDef = {
 // Offered when either backend can serve it: IMAP config, or a connected
 // account holding the read grant. Evaluated at load like every other
 // config gate -- connecting an account mid-session shows up on restart.
+/** A Gmail message id opens in the web client at this address; "#all"
+ *  finds it whatever label it carries. Only ever built from an id the
+ *  account itself returned. */
+export function gmailLink(id: string): string {
+  return `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(id)}`;
+}
+
 export const mailTools: ToolDef[] =
   mailConfigured() || scriptMailAccount("read") ? [searchTool, readTool] : [];
