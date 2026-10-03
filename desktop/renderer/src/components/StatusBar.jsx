@@ -63,7 +63,11 @@ export function StatusBar({
 }) {
   const ownerWord = (a) => (a.owner === "agent" ? "Enio's own" : a.owner === "user" ? "yours" : "owner not set");
   const inUse = accounts.find((a) => a.id === account) ?? accounts.find((a) => a.id === defaultAccount) ?? null;
-  const chipText = inUse ? (inUse.label || inUse.email) : accounts.length > 0 ? "account" : "no account";
+  const accountTip = inUse
+    ? `Accounts — using ${inUse.label || inUse.email} (${ownerWord(inUse)})`
+    : accounts.length > 0
+      ? "Accounts — choose the one this conversation uses"
+      : "Accounts — none connected";
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
     // lights over the top-left of the page rather than in a title bar of its
@@ -142,23 +146,25 @@ export function StatusBar({
         <TipButton tip="Memory" className="size-7" onClick={onMemory}>
           <Brain className="size-4" />
         </TipButton>
-        {/* Which account "my mail" means in this conversation. Shown only when
-            something is connected, and named by owner, because with one
-            account connected the reply once said "your inbox" about Enio's
-            own. Picking here is the same act as saying "use my work email". */}
+        {/* Which account "my mail" means in this conversation. An icon like
+            the sections beside it; the account in use is the tooltip and the
+            menu, not text in the bar. A plain button rather than TipButton:
+            the tooltip's root would swallow the menu trigger's slotted props
+            (see MessageActions). Amber when Enio's own account is in use,
+            because that is the case worth a glance. */}
         {(onPickAccount || onManageAccounts) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                title={inUse ? `${ownerWord(inUse)} · ${inUse.email}` : accounts.length > 0 ? "Choose the account this conversation uses" : "No account connected — connect one"}
+                title={accountTip}
+                aria-label={accountTip}
                 className={cn(
-                  "inline-flex h-7 max-w-40 items-center gap-1 rounded-md border px-2 text-[11px] [-webkit-app-region:no-drag]",
-                  inUse?.owner === "agent" ? "border-amber-500/50 text-amber-700 dark:text-amber-400" : "text-muted-foreground",
+                  "inline-flex size-7 items-center justify-center rounded-md hover:bg-accent [-webkit-app-region:no-drag]",
+                  inUse?.owner === "agent" ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <AtSign className="size-3 shrink-0" />
-                <span className="truncate">{chipText}</span>
+                <AtSign className="size-4" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
