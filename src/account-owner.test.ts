@@ -78,6 +78,11 @@ describe("whose account it is", () => {
     assert.equal(acc.accountSwitchRequest("switch to enio's account please"), "enio's");
     assert.equal(acc.accountSwitchRequest("Check my personal inbox for the invoice"), "personal");
     assert.equal(acc.accountSwitchRequest("what did Sam say about the invoice"), null);
+    assert.equal(acc.accountSwitchRequest("check my email"), null, "a request, not a switch");
+    assert.equal(acc.accountSwitchRequest("read the inbox"), null);
+    assert.equal(acc.ownerWord("user's"), "user");
+    assert.equal(acc.ownerWord("enio's"), "agent");
+    assert.equal(acc.ownerWord("work"), null);
     assert.equal(acc.accountSwitchRequest("yes"), null);
   });
 

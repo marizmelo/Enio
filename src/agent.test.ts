@@ -816,3 +816,13 @@ describe("an email the mail agent never read", () => {
     assert.equal(looksLikeQuotedEmail("No messages matched in the inbox."), false);
   });
 });
+
+describe("a lookup announced and never finished", () => {
+  test("'Searching…' or 'let me retrieve' as the last line is an unfinished lookup; a finding is not", async () => {
+    const { trailingAnnouncement } = await import("./agent.js");
+    assert.equal(trailingAnnouncement("I will check Enio's account.\n\nProceeding with the most recent 10 messages.\n\nSearching..."), true);
+    assert.equal(trailingAnnouncement("Let me retrieve the latest messages for you."), true);
+    assert.equal(trailingAnnouncement("I found one email from Google about your account settings."), false);
+    assert.equal(trailingAnnouncement("No messages matched in the inbox. Want me to search further back?"), false);
+  });
+});

@@ -239,8 +239,8 @@ export function findAccountByName(name: string): Account | null {
   const q = name.trim().toLowerCase();
   if (!q) return null;
   const all = listAccounts();
-  if (/^(enio'?s?|agent'?s?|its own|own)$/.test(q)) return all.find((a) => a.owner === "agent") ?? null;
-  if (/^(mine|my|me|personal|user'?s?)$/.test(q)) return all.find((a) => a.owner === "user") ?? null;
+  const owner = ownerWord(q);
+  if (owner) return all.find((a) => a.owner === owner) ?? null;
   const hits = all.filter(
     (a) => a.email.toLowerCase().includes(q) || (a.label ?? "").toLowerCase().includes(q) || a.id === q,
   );
@@ -463,7 +463,23 @@ export function setConversationAccount(sessionId: string, id: string | null): vo
  */
 export function accountSwitchRequest(text: string): string | null {
   const m = /^\s*(?:please\s+)?(?:use|switch to|check|read|open|look in)\s+(?:my\s+|the\s+)?(.+?)\s+(?:account|e-?mail|mail|inbox|gmail|calendar)\b/i.exec(text);
-  return m ? m[1]!.trim() : null;
+  if (!m) return null;
+  const name = m[1]!.trim();
+  // "check my email" is a request, not a switch: a bare possessive or
+  // article names nothing. The first version answered it with "no account
+  // called my".
+  if (/^(?:my|the|your|this|that|our|a|an|me|its|his|her|their|all|any)$/i.test(name)) return null;
+  return name;
+}
+
+/** Whether a name is an owner word rather than a label: "mine", "user's",
+ *  "enio's". Such a name with no matching account is a fact to report, not
+ *  a typo to refuse. */
+export function ownerWord(name: string): AccountOwner | null {
+  const q = name.trim().toLowerCase();
+  if (/^(enio'?s?|agent'?s?|its own|own)$/.test(q)) return "agent";
+  if (/^(mine|my|me|my own|personal|user'?s?|the user'?s?|user)$/.test(q)) return "user";
+  return null;
 }
 
 export function scriptAccountWith(grant: Grant | null): PickedAccount | null {

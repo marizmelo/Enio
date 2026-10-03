@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { findAccountByName, listAccounts, scriptAccountById, scriptMailAccount } from "../accounts.js";
+import { findAccountByName, listAccounts, ownerWord, scriptAccountById, scriptMailAccount } from "../accounts.js";
 import { callScript } from "../appsscript.js";
 import type { ToolDef } from "../types.js";
 
@@ -109,11 +109,20 @@ const searchTool: ToolDef = {
     // recently and deliberately. The credential is attached HERE, harness
     // side -- the model asked to search, and never sees a URL or secret.
     const named = args.account ? findAccountByName(String(args.account)) : null;
-    if (args.account && !named) {
+    // An owner word with no such account ("user's" when only Enio's own is
+    // connected) is a fact to state, then search what exists — refusing it
+    // left the model narrating "Searching…" over an error. A label that
+    // matches nothing is still refused with the list.
+    const askedOwner = args.account && !named ? ownerWord(String(args.account)) : null;
+    if (args.account && !named && !askedOwner) {
       return `No connected account matches "${String(args.account)}". Connected: ${listAccounts().map((a) => a.label ?? a.email).join(", ") || "none"}.`;
     }
     const account = named ? scriptAccountById(named.id, "mail.read") : scriptMailAccount("read");
     if (named && !account) return `${named.label ?? named.email} is connected without the read-mail grant.`;
+    const preface =
+      askedOwner && account
+        ? `${askedOwner === "user" ? "No account of the user's is connected" : "Enio has no account of its own connected"} — this is ${account.described}.\n\n`
+        : "";
     if (account) {
       const parts: string[] = [];
       if (args.query) parts.push(String(args.query));
@@ -126,7 +135,7 @@ const searchTool: ToolDef = {
       if (!result.ok) return `Mail search failed: ${result.error}`;
       const rows = (result.result as Array<Record<string, string>>) ?? [];
       if (rows.length === 0) {
-        return { text: `No messages matched in ${account.email}.`, notice: `Searched ${account.described} (${parts.join(" ")}): nothing matched.` };
+        return { text: `${preface}No messages matched in ${account.email}.`, notice: `Searched ${account.described} (${parts.join(" ")}): nothing matched.` };
       }
       // The connected account is Gmail, whose message ids are addressable
       // in the browser. The link rides with each row so "open this in my
@@ -143,7 +152,7 @@ const searchTool: ToolDef = {
       // a secondary account read as "my inbox has one email".
       return {
         text:
-          `${rows.length} matches in ${account.email}:\n\n${lines.join("\n\n")}\n\n` +
+          `${preface}${rows.length} matches in ${account.email}:\n\n${lines.join("\n\n")}\n\n` +
           `Read one with read_email using its [id].`,
         notice: `Searched ${account.described} (${parts.join(" ")}): ${rows.length} message${rows.length === 1 ? "" : "s"}.`,
       };

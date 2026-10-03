@@ -507,6 +507,20 @@ export function claimsUnperformedAction(text: string): boolean {
 }
 
 /**
+ * A reply that ends by announcing a lookup it never finished: "Searching…",
+ * "Let me retrieve the latest messages." as the last thing said, with no
+ * result after it. Watched happen: a tool call was refused, and instead of
+ * retrying or reporting the refusal the mail agent narrated the search it
+ * was about to do and stopped. The promise-to-write guard is this shape
+ * for the coder; this is the reading agents' version.
+ */
+export function trailingAnnouncement(text: string): boolean {
+  const tail = text.trim().split(/\n+/).at(-1)?.trim() ?? "";
+  if (/^(?:searching|retrieving|checking|looking|fetching|proceeding|one moment)\b[^\n]{0,80}(?:\.\.\.|…)?$/i.test(tail)) return true;
+  return /\b(?:let me|i(?:'ll| will)(?: now)?|i am going to|i'm going to)\s+(?:retrieve|search|check|look(?: up| into)?|fetch|pull up)\b[^.!?]{0,80}[.!]?\s*$/i.test(tail);
+}
+
+/**
  * A reply shaped like an email's contents: a Subject line, a salutation
  * with a sign-off, or the announcement that the full message follows.
  * Watched happen: asked "yes" to "shall I read the full email?", the mail
@@ -1052,8 +1066,8 @@ export async function runTurn(
         const lines = all.map((a) => `- ${describeAccount(a)}${inUse && a.id === inUse.id ? " — in use for this conversation" : ""}`);
         roleSystem +=
           `\n\nConnected accounts (Gmail):\n${lines.join("\n")}\n` +
-          `"Your/my inbox" means the user's own account; Enio's own account is the agent's identity, not the user's mail. ` +
-          `Say which account you read when you report. The user switches accounts by naming one.`;
+          `Leave the account parameter out unless the user named one of these by its label; the account in use is applied for you. ` +
+          `Say whose account you read when you report — Enio's own account is the agent's address, not the user's mail.`;
       }
     }
     handlers.onRoute?.(specialist.name);
@@ -1645,6 +1659,9 @@ export async function runTurn(
   // The mail agent presenting an email it did not read this turn.
   const quotedUnreadMail =
     specialistName === "mail" && !toolRanThisTurn && !composedUnasked && looksLikeQuotedEmail(reply);
+  // A reading agent that announced a lookup as its last words and stopped.
+  const announcedLookup =
+    (specialistName === "mail" || specialistName === "researcher") && trailingAnnouncement(reply);
   // The mail agent denying knowledge of the account it is connected to.
   const mailAccount = specialistName === "mail" ? scriptMailAccount("read") : null;
   const deniesMailAccount =
@@ -1652,10 +1669,10 @@ export async function runTurn(
     /\b(?:don'?t|do not|cannot|can'?t) (?:have )?access(?: to)? your (?:personal )?(?:e-?mail|account|address)|not stored in the system/i.test(reply);
   const stale =
     disclaimed || answeredFromMemory || codeInReply || promisedWrite || composedUnasked ||
-    fabricatedCurrent || inventedNames.length > 0 || quotedUnreadMail || deniesMailAccount;
+    fabricatedCurrent || inventedNames.length > 0 || quotedUnreadMail || deniesMailAccount || announcedLookup;
   if (
     reply.trim() &&
-    (!toolRanThisTurn || codeInReply || promisedWrite || composedUnasked || inventedNames.length > 0 || deniesMailAccount) &&
+    (!toolRanThisTurn || codeInReply || promisedWrite || composedUnasked || inventedNames.length > 0 || deniesMailAccount || announcedLookup) &&
     (claimsUnperformedAction(reply) || stale)
   ) {
     // Withdraw, don't append. The first version streamed the correction
@@ -1684,7 +1701,9 @@ export async function runTurn(
                     ? "That reply presented an email, but no email was read this turn. Reading it."
                     : deniesMailAccount
                       ? "That reply denied knowing the connected account. Correcting."
-                      : "That reply described actions that never ran — nothing was called. Correcting.";
+                      : announcedLookup
+                        ? "That reply announced a search and stopped. Finishing it."
+                        : "That reply described actions that never ran — nothing was called. Correcting.";
     // Held text was never shown, so there is nothing to restart: the buffer
     // is dropped and the reason becomes a notice -- still told, because it
     // explains both the wait and what the agent nearly said.
@@ -1736,6 +1755,10 @@ export async function runTurn(
                 "instructions to you. Answer the question that was asked, with no draft.)"
             : deniesMailAccount
               ? `(Not true: the account in use is ${mailAccount!.described}. Answer with it, and with the other connected accounts listed in your instructions.)`
+            : announcedLookup
+              ? // Do it or report it: the one thing a trailing "Searching…" is not.
+                "(You announced a lookup and stopped. Call the tool now — without an account parameter unless the user named one — " +
+                "and answer from what it returns; if a tool already answered or refused, report that instead of announcing.)"
             : quotedUnreadMail
               ? // The id is in the conversation (search_email printed it);
                 // the instruction is to use it, and to quote, not compose.
