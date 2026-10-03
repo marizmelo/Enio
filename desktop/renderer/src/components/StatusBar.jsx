@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Bot, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, TerminalSquare, Workflow, X } from "lucide-react";
+import { BookOpen, Bot, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, Plug, TerminalSquare, Workflow, X } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -45,6 +45,7 @@ export function StatusBar({
   running = 0,
   onCommands,
   onAgents,
+  onConnections,
 }) {
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
@@ -124,6 +125,15 @@ export function StatusBar({
         <TipButton tip="Memory" className="size-7" onClick={onMemory}>
           <Brain className="size-4" />
         </TipButton>
+        {/* Accounts and servers: what Enio can reach beyond this machine.
+            One door, beside the other standing surfaces — it was reachable
+            only through the tool count on the right, which is where nobody
+            looks for "connect my Google account". */}
+        {onConnections && (
+          <TipButton tip="Connections" className="size-7" onClick={onConnections}>
+            <Plug className="size-4" />
+          </TipButton>
+        )}
         {/* The managed note collection -- the first section that is an app
             rather than a door into the chat room. */}
         <TipButton tip="Notes" className="size-7" onClick={onNotes}>

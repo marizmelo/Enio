@@ -876,6 +876,7 @@ export function App() {
         running={running}
         onCommands={() => setCommandsOpen(true)}
         onAgents={() => setAgentsOpen(true)}
+        onConnections={() => setConnectionsOpen(true)}
       />
 
       <AgentsDialog
