@@ -890,6 +890,7 @@ export function App() {
         accounts={googleAccounts.accounts}
         account={convAccount}
         defaultAccount={googleAccounts.default}
+        onManageAccounts={() => setConnectionsOpen(true)}
         onPickAccount={async (id) => {
           if (!conversationId) return;
           try {

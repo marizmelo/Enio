@@ -59,10 +59,11 @@ export function StatusBar({
   account = null,
   defaultAccount = null,
   onPickAccount,
+  onManageAccounts,
 }) {
   const ownerWord = (a) => (a.owner === "agent" ? "Enio's own" : a.owner === "user" ? "yours" : "owner not set");
   const inUse = accounts.find((a) => a.id === account) ?? accounts.find((a) => a.id === defaultAccount) ?? null;
-  const chipText = inUse ? (inUse.label || inUse.email) : "account";
+  const chipText = inUse ? (inUse.label || inUse.email) : accounts.length > 0 ? "account" : "no account";
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
     // lights over the top-left of the page rather than in a title bar of its
@@ -145,12 +146,12 @@ export function StatusBar({
             something is connected, and named by owner, because with one
             account connected the reply once said "your inbox" about Enio's
             own. Picking here is the same act as saying "use my work email". */}
-        {accounts.length > 0 && onPickAccount && (
+        {(onPickAccount || onManageAccounts) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                title={inUse ? `${ownerWord(inUse)} · ${inUse.email}` : "Choose the account this conversation uses"}
+                title={inUse ? `${ownerWord(inUse)} · ${inUse.email}` : accounts.length > 0 ? "Choose the account this conversation uses" : "No account connected — connect one"}
                 className={cn(
                   "inline-flex h-7 max-w-40 items-center gap-1 rounded-md border px-2 text-[11px] [-webkit-app-region:no-drag]",
                   inUse?.owner === "agent" ? "border-amber-500/50 text-amber-700 dark:text-amber-400" : "text-muted-foreground",
@@ -161,7 +162,7 @@ export function StatusBar({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuLabel>Account for this conversation</DropdownMenuLabel>
+              <DropdownMenuLabel>{accounts.length > 0 ? "Account for this conversation" : "No accounts connected"}</DropdownMenuLabel>
               {accounts.map((a) => (
                 <DropdownMenuItem key={a.id} onSelect={() => onPickAccount(a.id)}>
                   <span className="flex flex-col">
@@ -170,8 +171,18 @@ export function StatusBar({
                   </span>
                 </DropdownMenuItem>
               ))}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => onPickAccount(null)}>Use the default</DropdownMenuItem>
+              {accounts.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => onPickAccount?.(null)}>Use the default</DropdownMenuItem>
+                </>
+              )}
+              {onManageAccounts && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={onManageAccounts}>Manage accounts…</DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
