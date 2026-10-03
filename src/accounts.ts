@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.js";
+import { getDb } from "./memory/db.js";
 
 /**
  * Accounts: what enio is allowed to reach on the user's behalf.
@@ -49,6 +50,17 @@ export type Grant = keyof typeof GRANTS;
  *  account, which is what the acting switch gates. */
 export const READ_GRANTS: Grant[] = ["mail.read", "calendar.read", "drive.read"];
 
+/**
+ * Whose account it is. Two different jobs that must never be confused in a
+ * reply: the agent's OWN account is its identity (the address it sends
+ * from, the calendar it can be invited to); a USER account is delegated
+ * access to the person's mail and calendar in their name. Watched happen:
+ * with only the agent's Gmail connected, "check my email" read it and the
+ * reply said "your inbox" — one old message, and the person doubted it
+ * was real. Unset means connected before this existed; the panel asks.
+ */
+export type AccountOwner = "agent" | "user";
+
 export interface Account {
   id: string;
   /** "google" is OAuth with a registered client; "appsscript" is a script
@@ -59,6 +71,9 @@ export interface Account {
   email: string;
   grants: Grant[];
   addedAt: number;
+  owner?: AccountOwner;
+  /** How the person refers to it: "work", "personal", "Enio's". */
+  label?: string;
 }
 
 interface StoredAccount extends Account {
@@ -79,6 +94,8 @@ interface AccountsFile {
   accounts: StoredAccount[];
   /** The secret baked into the next script the user deploys. */
   pendingScriptSecret?: string;
+  /** The account a conversation uses when it has not chosen one. */
+  defaultAccount?: string | null;
 }
 
 const FILE = () => join(config.dataDir, "accounts.json");
@@ -127,6 +144,7 @@ function read(): AccountsFile {
       client: parsed.client ?? null,
       accounts: parsed.accounts ?? [],
       pendingScriptSecret: parsed.pendingScriptSecret,
+      defaultAccount: parsed.defaultAccount ?? null,
     };
   } catch {
     return { client: null, accounts: [] };
@@ -143,15 +161,111 @@ function write(data: AccountsFile): void {
   }
 }
 
+const publicView = (a: StoredAccount): Account => ({
+  id: a.id,
+  provider: a.provider,
+  email: a.email,
+  grants: a.grants,
+  addedAt: a.addedAt,
+  ...(a.owner ? { owner: a.owner } : {}),
+  ...(a.label ? { label: a.label } : {}),
+});
+
 /** What a client can see: never a token, never the client secret. */
 export function listAccounts(): Account[] {
-  return read().accounts.map((a) => ({
-    id: a.id,
-    provider: a.provider,
-    email: a.email,
-    grants: a.grants,
-    addedAt: a.addedAt,
-  }));
+  return read().accounts.map(publicView);
+}
+
+/** How an account is named in a reply or a notice: who it belongs to, then
+ *  the label or address. The owner word is the whole point — "your inbox"
+ *  about the agent's own account is the sentence this exists to prevent. */
+export function describeAccount(a: Pick<Account, "email" | "owner" | "label">): string {
+  const name = a.label ? `${a.label} (${a.email})` : a.email;
+  if (a.owner === "agent") return `Enio's own account ${name}`;
+  if (a.owner === "user") return `your account ${name}`;
+  return `account ${name} (owner not set — mark it in Accounts)`;
+}
+
+export function setAccountOwner(id: string, owner: AccountOwner, label?: string): Account | null {
+  if (owner !== "agent" && owner !== "user") throw new Error('Owner is "agent" or "user".');
+  const data = read();
+  const account = data.accounts.find((a) => a.id === id);
+  if (!account) return null;
+  account.owner = owner;
+  if (label !== undefined) {
+    const clean = label.trim().slice(0, 40);
+    if (clean) account.label = clean;
+    else delete account.label;
+  }
+  write(data);
+  return publicView(account);
+}
+
+export function defaultAccountId(): string | null {
+  const data = read();
+  const id = data.defaultAccount ?? null;
+  return id && data.accounts.some((a) => a.id === id) ? id : null;
+}
+
+export function setDefaultAccount(id: string | null): void {
+  const data = read();
+  if (id && !data.accounts.some((a) => a.id === id)) throw new Error("No such account.");
+  data.defaultAccount = id;
+  write(data);
+}
+
+/**
+ * The account this turn means, set by the turn loop from the conversation's
+ * choice before any tool runs. Harness state, like the memory session: a
+ * tool asks for "the account" and gets the one the person picked, never
+ * one the model picked. Null means no choice — the resolver falls back to
+ * the machine default, then to owner preference.
+ */
+let activeAccountId: string | null = null;
+export function setActiveAccount(id: string | null): void {
+  activeAccountId = id;
+}
+export function activeAccount(): string | null {
+  return activeAccountId;
+}
+
+/**
+ * Find an account by what a person calls it: label, address, or the
+ * owner word ("mine", "yours", "enio's"). Closed list, case-insensitive,
+ * substring on label and address; the first unambiguous match wins. Used
+ * for the `account` tool parameter and for "use my work email" in chat.
+ */
+export function findAccountByName(name: string): Account | null {
+  const q = name.trim().toLowerCase();
+  if (!q) return null;
+  const all = listAccounts();
+  if (/^(enio'?s?|agent'?s?|its own|own)$/.test(q)) return all.find((a) => a.owner === "agent") ?? null;
+  if (/^(mine|my|me|personal|user'?s?)$/.test(q)) return all.find((a) => a.owner === "user") ?? null;
+  const hits = all.filter(
+    (a) => a.email.toLowerCase().includes(q) || (a.label ?? "").toLowerCase().includes(q) || a.id === q,
+  );
+  return hits.length === 1 ? hits[0]! : null;
+}
+
+/**
+ * Which account a tool should use. In order: the conversation's choice,
+ * the machine default, then by owner for the kind of act — reading means
+ * the person's own account, so a user account first; sending means the
+ * agent's identity, so the agent's first; accounts whose owner is not set
+ * sit between. Each step is skipped when that account lacks the grant.
+ */
+function pickAccount(grant: Grant | null, prefer: AccountOwner): StoredAccount | null {
+  const usable = read().accounts.filter(
+    (a) => a.provider === "appsscript" && a.scriptUrl && a.scriptSecret && (grant === null || a.grants.includes(grant)),
+  );
+  if (usable.length === 0) return null;
+  const chosen = activeAccountId ? usable.find((a) => a.id === activeAccountId) : undefined;
+  if (chosen) return chosen;
+  const dflt = defaultAccountId();
+  const byDefault = dflt ? usable.find((a) => a.id === dflt) : undefined;
+  if (byDefault) return byDefault;
+  const rank = (a: StoredAccount) => (a.owner === prefer ? 0 : a.owner === undefined ? 1 : 2);
+  return [...usable].sort((a, b) => rank(a) - rank(b))[0]!;
 }
 
 export function hasClient(): boolean {
@@ -183,6 +297,8 @@ export function addScriptAccount(input: {
   secret: string;
   version: number;
   grants: Grant[];
+  owner?: AccountOwner;
+  label?: string;
 }): Account {
   const data = read();
   const account: StoredAccount = {
@@ -194,18 +310,14 @@ export function addScriptAccount(input: {
     scriptUrl: input.url,
     scriptSecret: input.secret,
     scriptVersion: input.version,
+    ...(input.owner ? { owner: input.owner } : {}),
+    ...(input.label?.trim() ? { label: input.label.trim().slice(0, 40) } : {}),
   };
   // Re-deploying replaces rather than doubles: the same address behind a new
   // URL is the same account with a new door.
   data.accounts = [...data.accounts.filter((a) => a.email !== input.email), account];
   write(data);
-  return {
-    id: account.id,
-    provider: account.provider,
-    email: account.email,
-    grants: account.grants,
-    addedAt: account.addedAt,
-  };
+  return publicView(account);
 }
 
 /** The deployment behind a script account, for the harness only. No tool
@@ -282,16 +394,31 @@ export function updateScriptVersion(id: string, version: number): void {
  * must never be a send path, which is the recorded read/act line enforced at
  * the call site rather than in a prompt.
  */
-export function scriptMailAccount(
-  kind: "read" | "send",
-): { id: string; email: string; url: string; secret: string } | null {
+export interface PickedAccount {
+  id: string;
+  email: string;
+  url: string;
+  secret: string;
+  owner?: AccountOwner;
+  label?: string;
+  /** describeAccount(), ready for a notice or a reply. */
+  described: string;
+}
+
+const picked = (a: StoredAccount): PickedAccount => ({
+  id: a.id,
+  email: a.email,
+  url: a.scriptUrl!,
+  secret: a.scriptSecret!,
+  ...(a.owner ? { owner: a.owner } : {}),
+  ...(a.label ? { label: a.label } : {}),
+  described: describeAccount(a),
+});
+
+export function scriptMailAccount(kind: "read" | "send"): PickedAccount | null {
   const grant: Grant = kind === "read" ? "mail.read" : "mail.send";
-  const account = read().accounts.find(
-    (a) => a.provider === "appsscript" && a.scriptUrl && a.scriptSecret && a.grants.includes(grant),
-  );
-  return account
-    ? { id: account.id, email: account.email, url: account.scriptUrl!, secret: account.scriptSecret! }
-    : null;
+  const account = pickAccount(grant, kind === "read" ? "user" : "agent");
+  return account ? picked(account) : null;
 }
 
 /**
@@ -303,19 +430,47 @@ export function scriptMailAccount(
  * means the acting tool is WITHHELD rather than offered-and-refused, since a
  * dead-end tool burns the model's limited attention.
  */
-export function scriptAccountWith(
-  grant: Grant | null,
-): { id: string; email: string; url: string; secret: string } | null {
-  const account = read().accounts.find(
-    (a) =>
-      a.provider === "appsscript" &&
-      a.scriptUrl &&
-      a.scriptSecret &&
-      (grant === null || a.grants.includes(grant)),
+/** A specific account by id, when a tool was told which one — still only
+ *  with the grant the act needs. */
+export function scriptAccountById(id: string, grant: Grant | null): PickedAccount | null {
+  const a = read().accounts.find(
+    (x) => x.id === id && x.provider === "appsscript" && x.scriptUrl && x.scriptSecret && (grant === null || x.grants.includes(grant)),
   );
-  return account
-    ? { id: account.id, email: account.email, url: account.scriptUrl!, secret: account.scriptSecret! }
-    : null;
+  return a ? picked(a) : null;
+}
+
+/** The account a conversation chose, if any and if it still exists. */
+export function conversationAccount(sessionId: string): string | null {
+  try {
+    const row = getDb().prepare(`SELECT account_id AS id FROM sessions WHERE id = ?`).get(sessionId) as { id: string | null } | undefined;
+    const id = row?.id ?? null;
+    return id && read().accounts.some((a) => a.id === id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setConversationAccount(sessionId: string, id: string | null): void {
+  if (id && !read().accounts.some((a) => a.id === id)) throw new Error("No such account.");
+  getDb().prepare(`UPDATE sessions SET account_id = ? WHERE id = ?`).run(id, sessionId);
+}
+
+/**
+ * "use my work email", "switch to enio's account", "check my personal
+ * inbox": the name the person used, or null. A closed shape on purpose —
+ * the switch is the person's act, resolved against the connected list by
+ * findAccountByName, never a model decision.
+ */
+export function accountSwitchRequest(text: string): string | null {
+  const m = /^\s*(?:please\s+)?(?:use|switch to|check|read|open|look in)\s+(?:my\s+|the\s+)?(.+?)\s+(?:account|e-?mail|mail|inbox|gmail|calendar)\b/i.exec(text);
+  return m ? m[1]!.trim() : null;
+}
+
+export function scriptAccountWith(grant: Grant | null): PickedAccount | null {
+  // Calendar, todos, contacts and documents are the person's: a user
+  // account first, whatever the grant.
+  const account = pickAccount(grant, "user");
+  return account ? picked(account) : null;
 }
 
 export function removeAccount(id: string): boolean {

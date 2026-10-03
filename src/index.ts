@@ -454,6 +454,35 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "accounts": {
+      // Whose account is which, from the terminal: the same two facts the
+      // panel edits, because a headless install has no panel.
+      const acc = await import("./accounts.js");
+      const sub = rest[0];
+      if (sub === "owner" && rest[1] && rest[2]) {
+        const a = acc.setAccountOwner(rest[1], rest[2] as "agent" | "user", rest.slice(3).join(" ") || undefined);
+        console.log(a ? `${acc.describeAccount(a)}` : "No such account.");
+        if (!a) process.exit(1);
+        break;
+      }
+      if (sub === "default" && rest[1]) {
+        acc.setDefaultAccount(rest[1] === "none" ? null : rest[1]);
+        console.log(rest[1] === "none" ? "No default account." : `Default: ${rest[1]}`);
+        break;
+      }
+      const all = acc.listAccounts();
+      if (all.length === 0) {
+        console.log("No accounts connected. Open the app → Connections → Accounts, or see docs/accounts.md.");
+        break;
+      }
+      const dflt = acc.defaultAccountId();
+      for (const a of all) {
+        console.log(`${a.id === dflt ? "*" : " "} ${a.id}  ${acc.describeAccount(a)}\n      ${a.grants.join(", ")}`);
+      }
+      console.log(`\n  enio accounts owner <id> agent|user [label]   whose account it is\n  enio accounts default <id|none>              the account a conversation uses unless told otherwise`);
+      break;
+    }
+
     case "gaps": {
       // What was asked that nothing covered: the questions memory should
       // have had an answer to. Most asked first.
@@ -1792,6 +1821,7 @@ enio — a local agent with tools and persistent memory
   enio remember "..."     pin a fact by hand (--corrects closes what it replaces)
   enio forget "..."       remove a fact
   enio gaps               what was asked that memory did not have
+  enio accounts           connected accounts: whose each is, and the default
   enio sources            how each source of knowledge has fared (facts kept, superseded, good answers)
 
   enio prefs              list standing instructions

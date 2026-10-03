@@ -21,6 +21,11 @@ import {
   type Account,
   type Grant,
   type PendingConsent,
+  defaultAccountId,
+  setDefaultAccount,
+  conversationAccount,
+  setConversationAccount,
+  setAccountOwner,
 } from "../accounts.js";
 import { SCRIPT_VERSION, callScript, scriptSource } from "../appsscript.js";
 
@@ -73,6 +78,7 @@ export async function handle(
       // say Sign in with Google; "user" means they registered their own.
       clientSource: clientSource(),
       accounts: listAccounts(),
+      default: defaultAccountId(),
       // The vocabulary the picker is built from, so the client never has to
       // hold its own copy of the grant list and drift from this one.
       grants: Object.keys(GRANTS).map((id) => ({
@@ -149,7 +155,7 @@ export async function handle(
   }
 
   if (req.method === "POST" && url.pathname === "/accounts/script") {
-    const body = JSON.parse((await readBody(req)) || "{}") as { url?: string; grants?: string[] };
+    const body = JSON.parse((await readBody(req)) || "{}") as { url?: string; grants?: string[]; owner?: string; label?: string };
     const deployment = String(body.url ?? "").trim();
     if (!/^https:\/\/script\.google\.com\/.*\/exec$/.test(deployment)) {
       sendJson(res, 400, {
@@ -198,6 +204,8 @@ export async function handle(
       secret,
       version: SCRIPT_VERSION,
       grants: (body.grants ?? []) as Grant[],
+      owner: body.owner === "agent" || body.owner === "user" ? body.owner : undefined,
+      label: typeof body.label === "string" ? body.label : undefined,
     });
     clearPendingScriptSecret();
     sendJson(res, 200, { account });
@@ -255,7 +263,44 @@ export async function handle(
     return true;
   }
 
+  if (req.method === "POST" && url.pathname === "/accounts/default") {
+    const body = JSON.parse((await readBody(req)) || "{}") as { id?: string | null };
+    try {
+      setDefaultAccount(body.id ? String(body.id) : null);
+      sendJson(res, 200, { default: defaultAccountId() });
+    } catch (err) {
+      sendJson(res, 400, { error: { message: (err as Error).message } });
+    }
+    return true;
+  }
+  // Which account a conversation means: read by the chip, written by it.
+  const convo = url.pathname.match(/^\/conversations\/([A-Za-z0-9-]{8,64})\/account$/);
+  if (convo && req.method === "GET") {
+    sendJson(res, 200, { account: conversationAccount(convo[1]!) });
+    return true;
+  }
+  if (convo && req.method === "POST") {
+    const body = JSON.parse((await readBody(req)) || "{}") as { id?: string | null };
+    try {
+      setConversationAccount(convo[1]!, body.id ? String(body.id) : null);
+      sendJson(res, 200, { account: conversationAccount(convo[1]!) });
+    } catch (err) {
+      sendJson(res, 400, { error: { message: (err as Error).message } });
+    }
+    return true;
+  }
   const one = url.pathname.match(/^\/accounts\/([0-9a-f]{16})$/);
+  if (req.method === "PATCH" && one) {
+    const body = JSON.parse((await readBody(req)) || "{}") as { owner?: string; label?: string };
+    try {
+      const account = setAccountOwner(one[1]!, body.owner as "agent" | "user", body.label);
+      if (!account) sendJson(res, 404, { error: { message: "No such account." } });
+      else sendJson(res, 200, { account });
+    } catch (err) {
+      sendJson(res, 400, { error: { message: (err as Error).message } });
+    }
+    return true;
+  }
   if (req.method === "DELETE" && one) {
     // Local only, and the UI says so: revoking at Google is the part that
     // actually ends access, and pretending a local delete does that would be

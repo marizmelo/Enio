@@ -91,7 +91,7 @@ const emailTool: ToolDef = {
         body: args.cc ? `${body}\n\n(cc requested: ${args.cc})` : body,
       });
       return result.ok
-        ? `Sent to ${to} from ${account.email}.`
+        ? { text: `Sent to ${to} from ${account.email}.`, notice: `Sent from ${account.described}.` }
         : `Could not send: ${result.error}`;
     }
 

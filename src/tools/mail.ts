@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { scriptMailAccount } from "../accounts.js";
+import { findAccountByName, listAccounts, scriptAccountById, scriptMailAccount } from "../accounts.js";
 import { callScript } from "../appsscript.js";
 import type { ToolDef } from "../types.js";
 
@@ -92,6 +92,11 @@ const searchTool: ToolDef = {
       },
       folder: { type: "string", description: `Optional. Default ${config.imapFolders[0] ?? "INBOX"}.` },
       limit: { type: "number", description: "How many to return (1-25). Default 10." },
+      account: {
+        type: "string",
+        description:
+          "Which connected account to search, by its label or address, when the user named one (\"work\", \"enio's\"). Omit to use the conversation's account.",
+      },
     },
     required: [],
   },
@@ -103,7 +108,12 @@ const searchTool: ToolDef = {
     // A connected account outranks IMAP: it is the setup the user did most
     // recently and deliberately. The credential is attached HERE, harness
     // side -- the model asked to search, and never sees a URL or secret.
-    const account = scriptMailAccount("read");
+    const named = args.account ? findAccountByName(String(args.account)) : null;
+    if (args.account && !named) {
+      return `No connected account matches "${String(args.account)}". Connected: ${listAccounts().map((a) => a.label ?? a.email).join(", ") || "none"}.`;
+    }
+    const account = named ? scriptAccountById(named.id, "mail.read") : scriptMailAccount("read");
+    if (named && !account) return `${named.label ?? named.email} is connected without the read-mail grant.`;
     if (account) {
       const parts: string[] = [];
       if (args.query) parts.push(String(args.query));
@@ -116,7 +126,7 @@ const searchTool: ToolDef = {
       if (!result.ok) return `Mail search failed: ${result.error}`;
       const rows = (result.result as Array<Record<string, string>>) ?? [];
       if (rows.length === 0) {
-        return { text: `No messages matched in ${account.email}.`, notice: `Searched ${account.email} (${parts.join(" ")}): nothing matched.` };
+        return { text: `No messages matched in ${account.email}.`, notice: `Searched ${account.described} (${parts.join(" ")}): nothing matched.` };
       }
       // The connected account is Gmail, whose message ids are addressable
       // in the browser. The link rides with each row so "open this in my
@@ -135,7 +145,7 @@ const searchTool: ToolDef = {
         text:
           `${rows.length} matches in ${account.email}:\n\n${lines.join("\n\n")}\n\n` +
           `Read one with read_email using its [id].`,
-        notice: `Searched ${account.email} (${parts.join(" ")}): ${rows.length} message${rows.length === 1 ? "" : "s"}.`,
+        notice: `Searched ${account.described} (${parts.join(" ")}): ${rows.length} message${rows.length === 1 ? "" : "s"}.`,
       };
     }
 
@@ -195,11 +205,13 @@ const readTool: ToolDef = {
     properties: {
       id: { type: "string", description: "The [id] shown by search_email." },
       folder: { type: "string", description: `Optional. Default ${config.imapFolders[0] ?? "INBOX"}.` },
+      account: { type: "string", description: "The connected account the id came from, when the user named one. Omit to use the conversation's account." },
     },
     required: ["id"],
   },
   async run(args) {
-    const account = scriptMailAccount("read");
+    const named = args.account ? findAccountByName(String(args.account)) : null;
+    const account = named ? scriptAccountById(named.id, "mail.read") : scriptMailAccount("read");
     if (account) {
       const result = await callScript(account.url, account.secret, "mail.read", {
         id: String(args.id ?? ""),
@@ -217,7 +229,7 @@ const readTool: ToolDef = {
           "",
           body.length > 12_000 ? body.slice(0, 12_000) + "\n[...truncated]" : body || "(empty message)",
         ].join("\n"),
-        notice: `Read message ${String(args.id ?? "")} from ${account.email}.`,
+        notice: `Read message ${String(args.id ?? "")} from ${account.described}.`,
       };
     }
 

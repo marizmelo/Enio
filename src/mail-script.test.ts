@@ -126,8 +126,10 @@ describe("mail tools over a connected account", () => {
     try {
       const calls = stubScript({ "mail.send": { sent: true, to: "ana@x.com" } });
       const send = emailTools.find((t) => t.name === "send_email")!;
-      const out = String(await send.run({ to: "ana@x.com", subject: "hi", body: "there" }));
+      const result = await send.run({ to: "ana@x.com", subject: "hi", body: "there" });
+      const out = typeof result === "string" ? result : result.text;
       assert.match(out, /Sent to ana@x\.com from enio@example\.com/);
+      assert.match(String((result as { notice?: string }).notice ?? ""), /Sent from .*enio@example\.com/, "whose address it went from is announced");
       assert.equal(calls[0]!.op, "mail.send");
     } finally {
       (config as { emailSend: boolean }).emailSend = previous;

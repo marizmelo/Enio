@@ -285,6 +285,10 @@ function migrate(d: Database.Database): void {
   // ledger can credit the pages that turn read. Joining on question text
   // later would hit whichever repeat came last.
   addColumn(d, "exemplars", "turn_id", "INTEGER");
+  // Which connected account a conversation means by "my mail": chosen by
+  // the person (chip or phrase), never inferred, and kept so reopening the
+  // conversation keeps the choice.
+  addColumn(d, "sessions", "account_id", "TEXT");
 
   // The scheduler lease: which process may fire cron jobs. One row, taken and
   // refreshed by a guarded UPSERT, so desktop serve and a headless daemon can
