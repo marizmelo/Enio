@@ -2229,3 +2229,16 @@ describe("provenance handed between steps", () => {
     assert.equal(fact!.origin, "https://example.org/contracts/halvorsen", "the harness-provided page, the model supplied none");
   });
 });
+
+describe("the redirect examples never name the agent reading them", () => {
+  test("the mail agent's rules do not say to send @mail; the operator's do not say to send @operator", async () => {
+    const { sharedRulesFor, SHARED_RULES } = await import("./agent.js");
+    const mail = sharedRulesFor("mail");
+    assert.ok(!mail.includes('"@mail '), "the mail agent would repeat its own example");
+    assert.ok(mail.includes('"@operator set my alarm"'), "another agent's example stays");
+    const operator = sharedRulesFor("operator");
+    assert.ok(!operator.includes('"@operator '));
+    assert.ok(operator.includes('"@mail check my unread email"'));
+    assert.ok(SHARED_RULES.includes('"@mail check my unread email"'), "the generic form keeps both");
+  });
+});

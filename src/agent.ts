@@ -188,7 +188,30 @@ export function knowledgeCovers(question: string, known: string[]): boolean {
 // Exported for the adapter training pipeline (scripts/train-adapter.mjs):
 // training data must carry the same role material the specialist serves
 // under, or the trained form drifts from the served form.
-export const SHARED_RULES = `You can read images. Anything the user attached has already been read and its contents are included below; for any other image in the workspace, call read_image. So never tell the user you are unable to see or view an image — describing what an image contains is something you do, and the answer is either already in front of you or one tool call away.
+/**
+ * The redirect examples in the shared rules, chosen so that none names the
+ * agent reading them. Watched happen: the mail agent, asked "check my
+ * email", answered with the literal example 'send "@mail check my unread
+ * email"' — the rule about OTHER agents' abilities, illustrated with its own
+ * request, and a small model imitates the nearest example. Two examples,
+ * always from other agents; the generic form (for training data and
+ * single-agent mode) keeps the operator and mail ones.
+ */
+const REDIRECTS: Array<[agent: string, ask: string, send: string]> = [
+  ["operator", "set an alarm", "@operator set my alarm"],
+  ["mail", "check email", "@mail check my unread email"],
+  ["researcher", "what is in the news", "@researcher what is in the news today"],
+  ["coder", "fix a failing test", "@coder why is my test failing"],
+];
+function redirectExamples(exclude?: string): string {
+  const [a, b] = REDIRECTS.filter(([agent]) => agent !== exclude);
+  return (
+    `asked to ${a![1]} you reply: ${config.agentName} does that — send "${a![2]}" to do it here. ` +
+    `Asked to ${b![1]}: send "${b![2]}".`
+  );
+}
+
+const sharedRulesWith = (examples: string): string => `You can read images. Anything the user attached has already been read and its contents are included below; for any other image in the workspace, call read_image. So never tell the user you are unable to see or view an image — describing what an image contains is something you do, and the answer is either already in front of you or one tool call away.
 
 You can look up live information: the weather where the user is, and the exact current time. Check with a tool, then answer from what it returned. Today's date is stated above — use it.
 
@@ -196,7 +219,15 @@ Call one tool at a time and read the result before deciding what to do next.
 If a tool returns an error, read the error and adapt — do not call it again unchanged.
 When you have enough information, answer directly and concisely.
 
-${config.agentName} as a whole can: search and read the web (@researcher); find, read and edit files and run code (@coder); search and send email (@mail); use Mac apps — notes, calendar, reminders, alarms, screenshots (@operator); and remember things across conversations (@librarian). This turn you hold only the tools listed to you; the rest belong to other agents and are not yours to use or promise. When the request needs an ability you do not hold: do not do it, do not say you will do it, do not call any tool for it. Answer with one sentence that repeats the user's request after the right mention — asked to set an alarm you reply: ${config.agentName} does that — send "@operator set my alarm" to do it here. Asked to check email: send "@mail check my unread email". Never say ${config.agentName} cannot do something on that list.`;
+${config.agentName} as a whole can: search and read the web (@researcher); find, read and edit files and run code (@coder); search and send email (@mail); use Mac apps — notes, calendar, reminders, alarms, screenshots (@operator); and remember things across conversations (@librarian). This turn you hold only the tools listed to you; the rest belong to other agents and are not yours to use or promise. When the request needs an ability you do not hold: do not do it, do not say you will do it, do not call any tool for it. Answer with one sentence that repeats the user's request after the right mention — ${examples} Never say ${config.agentName} cannot do something on that list.`;
+
+export const SHARED_RULES = sharedRulesWith(redirectExamples());
+
+/** The shared rules for one agent: its own request never appears as a
+ *  redirect example. */
+export function sharedRulesFor(name: string): string {
+  return sharedRulesWith(redirectExamples(name));
+}
 
 /** Used when routing is disabled, so behaviour is unchanged from single-agent mode. */
 const BASE_SYSTEM = `You are a helpful local assistant running entirely on the user's own machine.
@@ -1057,7 +1088,7 @@ export async function runTurn(
       }
     }
 
-    roleSystem = `${specialist.systemPrompt}\n\n${SHARED_RULES}`;
+    roleSystem = `${specialist.systemPrompt}\n\n${sharedRulesFor(specialist.name)}`;
     // The mail agent's account is a fact the harness holds; stated in the
     // role so "which inbox is this" and "what is my address" are read, not
     // searched for in a tool result three turns back. Watched happen: asked
