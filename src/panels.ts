@@ -61,15 +61,21 @@ const ALIASES: Record<string, Panel> = {
   file: "files",
 };
 
+/** The panel's name as a link the desktop can act on again later — closing
+ *  a dialog by accident should cost a click, not a second request. A client
+ *  without a window shows it as text, beside the path in words. */
+const linkTo = (panel: Panel, view?: "add"): string =>
+  `[${PANELS[panel].label}](enio://panel/${panel}${view ? `/${view}` : ""})`;
+
 const reply = (panel: Panel, view?: "add"): string => {
   const p = PANELS[panel];
   if (panel === "accounts" && view === "add") {
-    return `Opening ${p.label} — say whose account it is (Enio's own, or yours), then connect it. In the app: ${p.path}.`;
+    return `Opening ${linkTo(panel, view)} — say whose account it is (Enio's own, or yours), then connect it. In the app: ${p.path}.`;
   }
   if (panel === "connections" && view === "add") {
-    return `Opening ${p.label} — add the server there. In the app: ${p.path}.`;
+    return `Opening ${linkTo(panel, view)} — add the server there. In the app: ${p.path}.`;
   }
-  return `Opening ${p.label}. In the app: ${p.path}.`;
+  return `Opening ${linkTo(panel)}. In the app: ${p.path}.`;
 };
 
 /** The request, or null. Short messages only: a panel name inside a

@@ -118,16 +118,25 @@ export function renderMarkdownish(raw) {
   );
 
   const park = (href, text) => {
-    // Only http(s) becomes clickable. Everything here has already been escaped,
-    // so a quote cannot close the attribute -- but "javascript:" would still be
-    // a working link, and this renders text a web page wrote.
+    // http(s) becomes a link to the real browser. enio://panel/<name>[/add]
+    // becomes a link that opens that part of the app — a closed list the
+    // renderer checks again on click, and the worst a page could do by
+    // writing one is open a settings panel when the person clicks it.
+    // Everything here has already been escaped, so a quote cannot close the
+    // attribute -- but "javascript:" would still be a working link, and this
+    // renders text a web page wrote.
+    if (/^enio:\/\/panel\/[a-z]+(?:\/[a-z]+)?$/i.test(href)) {
+      return parkHtml(
+        `<a href="${href}" data-link data-panel class="underline decoration-dotted underline-offset-2 hover:decoration-solid">${text}</a>`,
+      );
+    }
     if (!/^https?:\/\//i.test(href)) return null;
     return parkHtml(
       `<a href="${href}" data-link class="underline decoration-dotted underline-offset-2 hover:decoration-solid">${text}</a>`,
     );
   };
 
-  out = out.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, text, href) => {
+  out = out.replace(/\[([^\]\n]+)\]\(((?:https?:\/\/[^\s)]+)|(?:enio:\/\/panel\/[a-z/]+))\)/gi, (m, text, href) => {
     return park(href, text) ?? m;
   });
 

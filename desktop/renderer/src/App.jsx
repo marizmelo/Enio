@@ -230,6 +230,26 @@ export function App() {
   }, []);
 
   const backendReady = status.phase === "ready";
+  // Open a part of the app by its closed name: the harness asks for it over
+  // the stream ("open accounts" in chat), and a reply's enio://panel link asks
+  // for it again later. Unknown names do nothing — a newer agent must not
+  // break an older window.
+  const openPanel = useCallback((panel, view) => {
+    const open = {
+      accounts: () => { setConnectionsView(view === "add" ? "add-account" : "list"); setConnectionsOpen(true); },
+      connections: () => { setConnectionsView("list"); setConnectionsOpen(true); },
+      models: () => window.dispatchEvent(new CustomEvent("enio:browse-models", { detail: {} })),
+      memory: () => setMemoryOpen(true),
+      agents: () => setAgentsOpen(true),
+      skills: () => setSkillsOpen(true),
+      automations: () => setPipelinesOpen(true),
+      projects: () => setProjectsOpen(true),
+      notes: () => setNotesOpen(true),
+      history: () => setHistoryOpen(true),
+      files: () => setFilesOpen(true),
+    }[panel];
+    open?.();
+  }, []);
   useEffect(() => {
     if (backendReady) refreshAccounts();
   }, [backendReady, refreshAccounts]);
@@ -685,23 +705,7 @@ export function App() {
           } else if (event.type === "notice") {
             if (!notices.includes(event.text)) notices.push(event.text);
           } else if (event.type === "panel") {
-            // The harness decided a panel should open; which one is a closed
-            // name. Unknown names do nothing — a newer agent must not break
-            // an older window.
-            const open = {
-              accounts: () => { setConnectionsView(event.view === "add" ? "add-account" : "list"); setConnectionsOpen(true); },
-              connections: () => { setConnectionsView("list"); setConnectionsOpen(true); },
-              models: () => window.dispatchEvent(new CustomEvent("enio:browse-models", { detail: {} })),
-              memory: () => setMemoryOpen(true),
-              agents: () => setAgentsOpen(true),
-              skills: () => setSkillsOpen(true),
-              automations: () => setPipelinesOpen(true),
-              projects: () => setProjectsOpen(true),
-              notes: () => setNotesOpen(true),
-              history: () => setHistoryOpen(true),
-              files: () => setFilesOpen(true),
-            }[event.panel];
-            open?.();
+            openPanel(event.panel, event.view);
           } else if (event.type === "basis") {
             basis = event.basis;
           } else if (event.type === "restart") {
@@ -1072,6 +1076,7 @@ export function App() {
                     setViewing({ files: names.map((path) => ({ path })), index })
                   }
                   onOpenArtifact={(path) => setCanvas({ path, openedBy: "user", rev: 1 })}
+                  onOpenPanel={openPanel}
                   onAskBigger={askBigger}
                   upgrade={upgrade}
                   onTryUpgrade={tryUpgrade}

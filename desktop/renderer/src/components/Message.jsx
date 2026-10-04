@@ -55,6 +55,8 @@ export function Message({
   // Where the answer's substance came from: web | files | memory | model.
   // Stated by the harness from what ran, never by the reply.
   basis = null,
+  // Opens a part of the app named by an enio://panel link in the reply.
+  onOpenPanel = null,
 }) {
   const [remembering, setRemembering] = useState(false);
   // Which tool badge is open, if any. One at a time: the panel sits under the
@@ -247,7 +249,7 @@ export function Message({
             streaming &&
               "after:ml-0.5 after:inline-block after:h-4 after:w-1.5 after:translate-y-0.5 after:animate-pulse after:bg-current",
           )}
-          onClick={(e) => onBodyClick(e, onOpenArtifact)}
+          onClick={(e) => onBodyClick(e, onOpenArtifact, onOpenPanel)}
           dangerouslySetInnerHTML={{ __html: html }}
         />
       )}
@@ -364,7 +366,7 @@ export function Message({
  * browser through the main process: the renderer has no navigation of its own,
  * and a page loading inside the chat window would be a trap with no way back.
  */
-function onBodyClick(event, onOpenArtifact) {
+function onBodyClick(event, onOpenArtifact, onOpenPanel) {
   // A created file's name in the prose IS the reference -- clicking it pins
   // the file in the canvas, same as the chip it replaces.
   const canvasFile = event.target.closest("[data-canvas-file]");
@@ -376,7 +378,15 @@ function onBodyClick(event, onOpenArtifact) {
   const link = event.target.closest("a[data-link]");
   if (link) {
     event.preventDefault();
-    window.maple?.openExternal(link.getAttribute("href"));
+    const href = link.getAttribute("href") ?? "";
+    // enio://panel/<name>[/add]: the part of the app the reply offered to
+    // open, reopenable from the message after the dialog was closed.
+    const panel = /^enio:\/\/panel\/([a-z]+)(?:\/([a-z]+))?$/i.exec(href);
+    if (panel) {
+      onOpenPanel?.(panel[1].toLowerCase(), panel[2]?.toLowerCase() ?? null);
+      return;
+    }
+    window.maple?.openExternal(href);
     return;
   }
   copyCodeBlock(event);

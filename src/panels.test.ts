@@ -9,6 +9,7 @@ describe("requests to open a part of the app", () => {
       assert.equal(r?.panel, "accounts", t);
       assert.equal(r?.view, "add", t);
       assert.match(r!.reply, /whose account it is/);
+      assert.match(r!.reply, /\[Accounts\]\(enio:\/\/panel\/accounts\/add\)/, "a link that reopens the panel");
     }
   });
   test("open <panel> resolves aliases, settings and integrations mean Connections", () => {
