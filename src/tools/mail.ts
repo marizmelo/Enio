@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { agentOnlyMailAccount, findAccountByName, listAccounts, ownerWord, scriptAccountById, scriptMailAccount } from "../accounts.js";
+import { agentOnlyMailAccount, anyMailReadAccount, findAccountByName, listAccounts, ownerWord, scriptAccountById, scriptMailAccount } from "../accounts.js";
 
 /** The honest answer when only Enio's own account can read mail: not the
  *  person's inbox, so not read as if it were. Named so the person can ask
@@ -126,7 +126,9 @@ const searchTool: ToolDef = {
     }
     const account = named ? scriptAccountById(named.id, "mail.read") : scriptMailAccount("read");
     if (named && !account) return `${named.label ?? named.email} is connected without the read-mail grant.`;
-    if (!account && !named) {
+    // Every path that found no account of the person's, including an owner
+    // word like "user's" that matched nothing: say what exists, read nothing.
+    if (!account) {
       const agentOnly = agentOnlyMailAccount();
       if (agentOnly) return { text: onlyAgentMail(agentOnly), notice: `No account of yours is connected; Enio's own was not read.` };
     }
@@ -232,7 +234,7 @@ const readTool: ToolDef = {
   async run(args) {
     const named = args.account ? findAccountByName(String(args.account)) : null;
     const account = named ? scriptAccountById(named.id, "mail.read") : scriptMailAccount("read");
-    if (!account && !named) {
+    if (!account) {
       const agentOnly = agentOnlyMailAccount();
       if (agentOnly) return onlyAgentMail(agentOnly);
     }
@@ -319,4 +321,4 @@ export function gmailLink(id: string): string {
 }
 
 export const mailTools: ToolDef[] =
-  mailConfigured() || scriptMailAccount("read") ? [searchTool, readTool] : [];
+  mailConfigured() || anyMailReadAccount() ? [searchTool, readTool] : [];

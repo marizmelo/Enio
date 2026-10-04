@@ -428,6 +428,15 @@ export function scriptMailAccount(kind: "read" | "send"): PickedAccount | null {
   return picked(account);
 }
 
+/** Whether any connected account can read mail at all — the question the
+ *  tool registry asks. Whose it is decides what a call does, not whether
+ *  the tool exists: withholding search_email because only Enio's own
+ *  account was connected left the mail agent calling a tool it did not
+ *  hold. */
+export function anyMailReadAccount(): boolean {
+  return read().accounts.some((a) => a.provider === "appsscript" && a.scriptUrl && a.scriptSecret && a.grants.includes("mail.read"));
+}
+
 /** When reading found nothing of the person's: the agent's own account, if
  *  that is what is connected, so the tool can say so instead of reading it
  *  or claiming nothing is connected. */

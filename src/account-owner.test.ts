@@ -41,8 +41,20 @@ describe("whose account it is", () => {
     assert.throws(() => acc.setAccountOwner(legacy.id, "robot" as never), /agent.*user/);
   });
 
-  test("with only the agent's account, reading 'my mail' finds nothing of yours and says which account exists", () => {
+  test("with only the agent's account, reading 'my mail' finds nothing of yours and says which account exists", async () => {
     assert.equal(acc.scriptMailAccount("read"), null, "Enio's own is never the fallback for reading");
+    assert.equal(acc.anyMailReadAccount(), true, "but the tools exist — the answer is a sentence, not a missing tool");
+    const { mailTools } = await import("./tools/mail.js");
+    const search = mailTools.find((t) => t.name === "search_email")!;
+    for (const args of [{}, { account: "user's" }, { account: "my" }]) {
+      const r = await search.run(args);
+      const text = typeof r === "string" ? r : r.text;
+      assert.match(text, /No account of yours is connected/, JSON.stringify(args));
+      assert.match(text, /Enio's own account/);
+    }
+    const read = mailTools.find((t) => t.name === "read_email")!;
+    const rr = await read.run({ id: "abc" });
+    assert.match(typeof rr === "string" ? rr : rr.text, /No account of yours is connected/);
     assert.equal(acc.agentOnlyMailAccount()!.email, "enio@example.com");
     assert.equal(acc.scriptMailAccount("send")!.email, "enio@example.com", "sending as the agent is the default");
     // Chosen on purpose, it reads.
