@@ -24,7 +24,7 @@ import { AccountsPanel } from "@/components/AccountsPanel";
  * actually achieved, so a connection that failed shows its error string
  * where a lesser dialog would show a hopeful spinner.
  */
-export function ConnectionsDialog({ open, onOpenChange, onChanged }) {
+export function ConnectionsDialog({ open, onOpenChange, onChanged, initialView = "list" }) {
   const [servers, setServers] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -46,9 +46,9 @@ export function ConnectionsDialog({ open, onOpenChange, onChanged }) {
       refresh();
       setError("");
       setAdding(false);
-      setView("list");
+      setView(initialView);
     }
-  }, [open, refresh]);
+  }, [open, refresh, initialView]);
 
   /** Runs a mutation that returns the new list; connection changes also
    *  change what the agent can do, so the app refetches capabilities. */

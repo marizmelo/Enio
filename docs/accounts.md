@@ -159,6 +159,10 @@ account because something went wrong.
 
 ## Whose account is it
 
+Asking in chat works too: "let's set up a new email account", "connect my
+gmail" or "open accounts" opens the Accounts section directly — a harness
+act, not a tool the agent holds, so it is one sentence and the panel.
+
 Two kinds of account can be connected, and they must never be confused:
 
 - **Enio's own account** is the agent's identity: the address it sends

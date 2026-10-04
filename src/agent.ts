@@ -20,6 +20,7 @@ import { adapterPathFor, contextBudget, currentModelId, toolOutputChars } from "
 import { distinctiveTerms, looksLikeQuestion as questionShaped, threadCovers } from "./memory/terms.js";
 import { noteTurn as noteGap } from "./memory/gaps.js";
 import { personalityView } from "./personality.js";
+import { panelRequest } from "./panels.js";
 import {
   accountSwitchRequest,
   conversationAccount,
@@ -264,6 +265,9 @@ export interface TurnHandlers {
   /** Context carried after any folding, so a client can show how full it is. */
   onContext?(usage: { tokens: number; budget: number }): void;
   onRoute?(specialist: string): void;
+  /** A part of the app to open, by a closed name (panels.ts): a user act the
+   *  harness performs for the client, never a tool the model holds. */
+  onPanel?(panel: string, view?: string): void;
   /** Polled at the model/tool boundaries; true aborts the turn with a throw.
    *  Set by the pipeline executor so a user's stop lands mid-node instead of
    *  waiting out a step that can take minutes. */
@@ -987,6 +991,40 @@ export async function runTurn(
   const quickOpen = /^(?:open|launch|start)\s+(?:the\s+)?(.{1,40}?)(?:\s+app)?\s*$/i.exec(
     userInput.trim(),
   );
+  // "Open accounts", "let's set up a new email account": a part of the app
+  // to open, handled here like `open <app>` — no model, one sentence, and
+  // the client opens the panel. Only without an explicit @mention, which is
+  // the user saying who should handle it.
+  const panel = overrides.specialist ? null : panelRequest(userInput);
+  if (panel) {
+    handlers.onRoute?.("generalist");
+    handlers.onPanel?.(panel.panel, panel.view);
+    handlers.onContent?.(panel.reply);
+    logMessage(sessionId, "user", userInput);
+    logMessage(sessionId, "assistant", panel.reply);
+    history.push({ role: "user", content: userInput }, { role: "assistant", content: panel.reply });
+    try {
+      recordTurn({
+        sessionId,
+        question: userInput,
+        reply: panel.reply,
+        specialist: "generalist",
+        systemPrompt: "(direct command: open_panel)",
+        memoryBlock: "",
+        startedAt: Date.now(),
+        durationMs: 0,
+        iterations: 0,
+        model: currentModelId(),
+        steps: [
+          { seq: 0, kind: "harness", name: "open_panel", args: JSON.stringify({ panel: panel.panel, view: panel.view ?? null }), output: panel.reply, error: null, durationMs: 0 },
+        ],
+      });
+    } catch {
+      /* Tracing must never break a turn. */
+    }
+    return { reply: panel.reply, messages: history, toolsUsed: [], specialist: "generalist", question: userInput };
+  }
+
   const openTool = registry.byName.get("open_app");
   // An explicit @operator still gets the fast path -- it IS the operator's
   // behaviour; only a different explicit choice bypasses it.

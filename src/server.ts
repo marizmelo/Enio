@@ -1724,6 +1724,7 @@ async function handle(
           // Where the answer came from, stated by the harness. Same channel
           // as route: provenance the model cannot misattribute.
           onBasis: (basis) => res.write(`: basis ${basis}\n\n`),
+          onPanel: (panel, view) => res.write(`: panel ${panel}${view ? ` ${view}` : ""}\n\n`),
           // How full the window is after any folding. On the comment channel
           // like the rest, so a client that does not render it is unaffected
           // and the CLI needs no fallback.

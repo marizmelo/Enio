@@ -3135,6 +3135,28 @@ what it measures, and a version that passes it can still be the one that
 rewrote a file it was asked to read. Choosing the previous version is
 one command; the numbers that justified each version stay in history.
 
+### Opening a panel is a direct command, like opening an app
+
+**What happened:** asked to set up a new email account, the mail agent
+replied that it cannot create email accounts and offered to read Enio's.
+Right that it holds no such tool; wrong that nothing could be done.
+
+**Chose:** a closed list of panels (accounts, connections, models,
+memory, agents, skills, automations, projects, notes, history, files)
+and a short grammar over it — "open accounts", "set up a new email
+account", "add an mcp server" — resolved before routing, with no model
+call: the harness replies in one sentence, names where the thing lives
+for a client without a window, and the desktop opens the panel (Accounts
+straight into the connect flow). Short messages only; an explicit
+@mention bypasses it.
+
+**Rejected:** a tool the model holds for this (opening a panel is a user
+act and the model has no judgement to add; and a tool slot in every
+specialist for it would be six slots spent on one verb); fuzzy matching
+over the message (the grammar is closed for the same reason `open <app>`
+is — a panel name inside a paragraph about something else must not open
+it).
+
 ### An account is the agent's own, or the user's — never just "the account"
 
 **What happened:** the one connected Google account was the agent's own

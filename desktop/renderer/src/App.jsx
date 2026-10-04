@@ -119,6 +119,9 @@ export function App() {
   // the conversation changes, so restore and history switches carry them.
   const [convAttachments, setConvAttachments] = useState([]);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+  // Which view Connections opens on: the lists, or straight into connecting
+  // an account when chat asked for that.
+  const [connectionsView, setConnectionsView] = useState("list");
   // Connected Google accounts, fetched when the backend is ready and again
   // when the Connections dialog closes, for the first-run opening below.
   const refreshAccounts = useCallback(async () => {
@@ -681,6 +684,24 @@ export function App() {
             setContext({ tokens: event.tokens, budget: event.budget });
           } else if (event.type === "notice") {
             if (!notices.includes(event.text)) notices.push(event.text);
+          } else if (event.type === "panel") {
+            // The harness decided a panel should open; which one is a closed
+            // name. Unknown names do nothing — a newer agent must not break
+            // an older window.
+            const open = {
+              accounts: () => { setConnectionsView(event.view === "add" ? "add-account" : "list"); setConnectionsOpen(true); },
+              connections: () => { setConnectionsView("list"); setConnectionsOpen(true); },
+              models: () => window.dispatchEvent(new CustomEvent("enio:browse-models", { detail: {} })),
+              memory: () => setMemoryOpen(true),
+              agents: () => setAgentsOpen(true),
+              skills: () => setSkillsOpen(true),
+              automations: () => setPipelinesOpen(true),
+              projects: () => setProjectsOpen(true),
+              notes: () => setNotesOpen(true),
+              history: () => setHistoryOpen(true),
+              files: () => setFilesOpen(true),
+            }[event.panel];
+            open?.();
           } else if (event.type === "basis") {
             basis = event.basis;
           } else if (event.type === "restart") {
@@ -922,6 +943,7 @@ export function App() {
       />
       <ConnectionsDialog
         open={connectionsOpen}
+        initialView={connectionsView}
         onOpenChange={(open) => {
           setConnectionsOpen(open);
           if (!open) refreshAccounts();

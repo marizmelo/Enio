@@ -24,6 +24,7 @@ export function parseSseEvent(block) {
   let notice = null;
   let restart = null;
   let basis = null;
+  let panel = null;
   let context = null;
   let sources = null;
   let route = null;
@@ -44,6 +45,9 @@ export function parseSseEvent(block) {
       if (restartMatch) restart = restartMatch[1];
       const basisMatch = /^basis\s+(web|files|memory|conversation|model)$/.exec(comment);
       if (basisMatch) basis = basisMatch[1];
+      // A part of the app to open, asked for in chat and decided by the harness.
+      const panelMatch = /^panel\s+([a-z]+)(?:\s+([a-z]+))?$/.exec(comment);
+      if (panelMatch) panel = { panel: panelMatch[1], view: panelMatch[2] ?? null };
       const thinkMatch = /^think\s+(\d+)$/.exec(comment);
       if (thinkMatch) think = Number(thinkMatch[1]);
       const contextMatch = /^context\s+(\d+)\s+(\d+)$/.exec(comment);
@@ -95,7 +99,7 @@ export function parseSseEvent(block) {
       }
     }
   }
-  return { data, tool, widget, think, notice, restart, basis, context, sources, route, artifact, call };
+  return { data, tool, widget, think, notice, restart, basis, context, sources, route, artifact, call, panel };
 }
 
 /**
@@ -162,7 +166,7 @@ export async function* streamTurn(messages, signal, conversationId = null, canva
       const block = buffer.slice(0, split);
       buffer = buffer.slice(split + 2);
 
-      const { data, tool, widget, think, notice, restart, basis, context, sources, route, artifact, call } = parseSseEvent(block);
+      const { data, tool, widget, think, notice, restart, basis, context, sources, route, artifact, call, panel } = parseSseEvent(block);
       if (tool) yield { type: "tool", name: tool };
       if (sources) yield { type: "sources", ...sources };
       if (call) yield { type: "call", ...call };
@@ -171,6 +175,7 @@ export async function* streamTurn(messages, signal, conversationId = null, canva
       if (widget) yield { type: "widget", widget };
       if (think !== null) yield { type: "think", chars: think };
       if (notice) yield { type: "notice", text: notice };
+      if (panel) yield { type: "panel", ...panel };
       if (restart) yield { type: "restart", reason: restart };
       if (basis) yield { type: "basis", basis };
       if (context) yield { type: "context", ...context };
