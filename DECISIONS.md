@@ -1227,6 +1227,15 @@ the primary target.
 
 **Multi-user anything.** Single user, single machine, throughout.
 
+**A video face.** Audio-driven portrait video models exist and are
+remarkable -- LiveAvatar (ECCV 2026) is 14B parameters of diffusion and
+needs five H800s for 45 FPS; the keypoint models (LivePortrait) run in
+13 ms a frame on a desktop GPU and twenty times slower on Apple Silicon.
+The face here is a mesh with blend shapes instead (October 2026). Worth
+revisiting when a real-time talking-head model holds 25 FPS on an M-series
+GPU inside the app's power budget, with no server and no identity drift
+across sentences.
+
 ---
 
 ## Next: the coder specialist as a real code tool
@@ -2010,6 +2019,10 @@ missing does not read as broken, it reads as enio losing the account.
 
 ## Open questions
 
+- Is the mood label's margin right in use? 0.03 is the knee of a bench of
+  45 authored replies, not of real ones. Every turn records a `mood` harness
+  step with its margin; once traces hold a few hundred, re-measure from
+  those.
 - Does LoRA work at all on Maple's architecture? Still untested on Maple
   itself. The adjacent question — does LoRA work on this serving stack at
   all — was answered August 2026: yes, on Qwen3 4B 4-bit, trained and served
@@ -3593,3 +3606,77 @@ the user's own message style (an inference about a person, never a
 default); per-agent axes (v1 is global; custom-agent instructions are
 where per-agent behaviour lives, and the precedence is documented rather
 than engineered).
+
+### The face is a mesh with blend shapes, not a video model (October 2026)
+
+**Chose:** a realistic head as a GLB with the 52 ARKit blend shapes and
+the 15 Oculus visemes on a Mixamo rig, rendered in the renderer by
+`@met4citizen/talkinghead` (MIT, three.js 0.180 pinned), inside the chat
+window as a thumbnail or side panel. The asset is a download or the user's
+own file, never committed or bundled: the largest tracked file is 400 KB,
+there is no LFS, and an Avaturn export is non-commercial, which an
+Apache-2.0 repo cannot redistribute -- the default is authored with MPFB
+under CC0. Everything the face does is driven from the events the window
+already receives; the voice loop, the speech queue and the half-duplex
+rule did not change. Two existing pieces needed adjusting and are the
+whole cost: the speech player gained a sink seam, because the library
+plays audio on its own clock and the mouth must follow that clock; and
+the renderer's bundle patches one line of the library, whose module-scope
+`import.meta.url` would white-screen an IIFE build.
+
+**Rejected:** LiveAvatar-class video models (14B diffusion; 45 FPS on
+5× H800; a single 80 GB GPU is offline-only); LivePortrait-class keypoint
+models (~13 ms/frame on an RTX 4090, ~20× slower on Apple Silicon via MPS,
+minutes per clip); Live2D (2D, proprietary SDK); Unity, Unreal or Godot (a
+second runtime beside Electron); react-three-fiber (a React reconciler for
+one imperative canvas, and a React-version pairing to maintain); Ready
+Player Me (the library's original source; shut down 31 January 2026, GLBs
+still load); VRM with three-vrm (sound, and the simpler pipeline -- the
+anime style was the reason, not the engineering; it remains the
+alternative if the art direction changes); Rhubarb Lip Sync (an 86 MB
+offline binary that analyses whole clips, adding a pass before each
+sentence can play, when the voice model already knows its own durations);
+analyser-only visemes from the playing audio (cruder than text-driven
+shapes when the text is known); NVIDIA Audio2Face (open since September
+2025, but CUDA -- a lever for the Linux direction, not for a Mac).
+
+### Mood is a label the harness picks from four, not a feeling the model reports (October 2026)
+
+**Chose:** `neutral | happy | sorry | unsure`, decided per reply by rules
+first -- a failed tool call the reply owns up to is sorry, a reply the
+adapter gate's abstention grammar recognises is unsure -- then by the
+nearest authored example over the same embeddings and the same
+nearest-example maths as the router's fast tier (moved to `nearest.ts`),
+when its margin clears a measured threshold, else neutral. Sent as a
+comment frame once the first sentence exists, because speech starts there
+and a face that reacts after the voice has finished reacts late; narration
+before a tool call re-arms; a withdrawn reply forgets its label so the
+correction gets its own frame; at the end only the rules may change the
+classifier's mind. Recorded as a `mood` harness step and restored with the
+conversation like basis. A turn never starts the embedding model's load:
+boot warms it, and five test suites script every fetch with model replies
+-- the download would be answered with one.
+
+**Measured (4 Oct, `scripts/mood-bench.mjs`, 45 held-out replies disjoint
+from the examples, bge-small, median 5 ms):**
+
+| threshold | decided | right of decided | overall, undecided → neutral |
+|---|---|---|---|
+| 0.00 | 45/45 | 40/45 (89%) | 40/45 (89%) |
+| 0.02 | 41/45 | 39/41 (95%) | 42/45 (93%) |
+| **0.03** | 38/45 | 38/38 (100%) | **43/45 (96%)** |
+| 0.04 | 37/45 | 37/37 (100%) | 42/45 (93%) |
+| 0.06 | 35/45 | 35/35 (100%) | 41/45 (91%) |
+
+Per label at 0.00: happy 10/11, sorry 11/11, unsure 11/11, neutral 8/12 --
+the misses are neutral sentences pulled toward happy or sorry by a thin
+margin, which is exactly what the threshold removes. The rules alone fire
+on 10 of the 45 and are right on 9.
+
+**Rejected:** the model appending a mood tag (self-judgement, the reason
+the personality entry already rejects a model that describes itself, and
+a tag's worth of tokens on every turn that a 4B garbles); a fifth
+`thinking` mood (a harness *state* the window already has from the think
+frames); classifying at the end of the turn (the face reacts after the
+voice); averaging a label's examples rather than taking its best (a label
+with many examples would be diluted by its distant ones).

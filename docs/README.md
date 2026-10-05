@@ -39,6 +39,7 @@ No API keys. No account. Nothing leaves your computer.
 | [Accounts](accounts.md) | Google over OAuth — what Enio may read and change, and no passwords |
 | [Watches](watches.md) | Standing checks that speak up only when something changed |
 | [Meetings](meetings.md) | Record, transcribe and summarize locally — into memory |
+| [Avatar](avatar.md) | A face in the app: install the default, bring your own, what the moods mean |
 | [MCP servers](mcp.md) | Adding third-party tools |
 | [Configuration](configuration.md) | Every environment variable |
 | [Remote access](remote-access.md) | Reaching it from a phone or another network |

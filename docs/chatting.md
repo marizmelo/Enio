@@ -105,6 +105,10 @@ The mode needs both halves of the voice stack — speech recognition
 exists when both do. The macOS microphone indicator stays lit for the
 whole session: that is the honest signal the mode is on.
 
+With the [avatar](avatar.md) on, the reply is also shown being spoken:
+the face mouths the words as they play, looks at you while the mode
+listens, and wears the mood the harness gave the reply.
+
 ## What the context meter means
 
 The bar in the status bar is how full the model's *usable* window is — not its

@@ -48,6 +48,7 @@ and old variables still work.
 |---|---|
 | `ENIO_FAST_ROUTE` | `1` — route by nearest example first, in milliseconds; `0` sends every request to the model router |
 | `ENIO_FAST_ROUTE_MARGIN` | `0.06` — the confidence the fast tier needs before it decides; below it the model decides (see [Agents](agents.md)) |
+| `ENIO_MOOD_MARGIN` | `0.03` — the confidence the face's mood label needs before it decides; below it the face stays neutral (see [Avatar](avatar.md)) |
 
 | Variable | Default |
 |---|---|
@@ -84,6 +85,7 @@ and old variables still work.
 | `ENIO_VISION_KEEP_ALIVE` | `0` — unload immediately after answering |
 | `ENIO_VOICE` / `_MODEL` / `_MODEL_FAST` | dictation |
 | `ENIO_TTS` / `_MODEL` / `_VOICE` | speech |
+| `ENIO_AVATAR` | a GLB to use as the app's face, when it is not the default or the one you installed with `enio avatar use` (see [Avatar](avatar.md)) |
 | `SEARXNG_URL` | unset — falls back to DuckDuckGo |
 | `ENIO_BROWSER_TIMEOUT` | page load timeout |
 
