@@ -7,6 +7,7 @@
 #   bash scripts/addons.sh voice       mlx-whisper speech-in for the mic button
 #   bash scripts/addons.sh inspector   trace viewer + knowledge graph UI
 #   bash scripts/addons.sh maple       the Maple model (~5GB, Apple Silicon only)
+#   bash scripts/addons.sh avatar      the default Enio head for the app's 3D face
 #
 # Usually reached through `enio addons`, which lists what is installed.
 # These used to be interactive questions inside install.sh; they moved here
@@ -91,8 +92,35 @@ case "${1:-}" in
     printf '    select it from the model picker in the app, or: ENIO_MODEL=maple\n'
     ;;
 
+  avatar)
+    say "Avatar — the default Enio head for the app's face"
+    # Filled in when the release is published (docs/avatar.md). Until then
+    # the command says so rather than failing somewhere less legible, and a
+    # file of your own works the same: enio avatar use <file.glb>
+    AVATAR_URL=""
+    AVATAR_SHA256=""
+    AVATAR_BYTES="0"
+    [ -n "$AVATAR_URL" ] || die "The default avatar is not published yet. Bring your own meanwhile: enio avatar use <file.glb>"
+    mkdir -p "$DATA_DIR/avatar"
+    printf '    %s MB from %s\n' "$((AVATAR_BYTES / 1000000))" "$AVATAR_URL"
+    ( cd "$DATA_DIR/avatar" && curl -fL --retry 3 -C - -o default.glb.part "$AVATAR_URL" ) \
+      || die "Download failed — re-run to resume."
+    got="$(shasum -a 256 "$DATA_DIR/avatar/default.glb.part" | cut -d' ' -f1)"
+    if [ "$got" != "$AVATAR_SHA256" ]; then
+      rm -f "$DATA_DIR/avatar/default.glb.part"
+      die "Checksum mismatch — the download is not the published file."
+    fi
+    # Atomic: the route serves default.glb the moment it exists, so it must
+    # never exist half-written.
+    mv -f "$DATA_DIR/avatar/default.glb.part" "$DATA_DIR/avatar/default.glb"
+    # The body form steers idle poses; a body the user already set is kept.
+    [ -f "$DATA_DIR/avatar/avatar.json" ] \
+      || printf '{ "body": "M", "version": "v1", "sha256": "%s" }\n' "$AVATAR_SHA256" > "$DATA_DIR/avatar/avatar.json"
+    printf '    installed — open the face from the status bar in the app\n'
+    ;;
+
   *)
-    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
     exit 1
     ;;
 esac

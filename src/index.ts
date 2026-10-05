@@ -1245,6 +1245,7 @@ async function main(): Promise<void> {
       // Optional capabilities, moved out of the installer so a first install
       // asks nothing it does not need to. The work happens in
       // scripts/addons.sh; this command is the catalogue and the runner.
+      const { avatarInstalled } = await import("./avatar.js");
       const addons: Array<{ name: string; what: string; installed: () => boolean | null }> = [
         {
           name: "search",
@@ -1284,6 +1285,11 @@ async function main(): Promise<void> {
           what: "the Maple model, ternary 20B-A1B (~5GB, Apple Silicon)",
           installed: () => existsSync(join(config.runtimeDir, "maple-2bit-mlx", "config.json")),
         },
+        {
+          name: "avatar",
+          what: "a 3D face for the app: the default Enio head (or bring your own: enio avatar use <file.glb>)",
+          installed: () => avatarInstalled(),
+        },
       ];
 
       const sub = rest[0];
@@ -1304,6 +1310,36 @@ async function main(): Promise<void> {
         console.log(`${mark} ${a.name.padEnd(10)} ${a.what}`);
       }
       console.log(`\nInstall one with:  enio addons add <name>`);
+      break;
+    }
+
+    case "avatar": {
+      // The face's model file: what is installed, whose, and swapping it.
+      // Every rule lives in avatar.ts; this is a status line and three verbs.
+      const { avatarStatus, useAvatarFile, setAvatarBody, removeAvatar, BODIES } = await import("./avatar.js");
+      const sub = rest[0];
+      try {
+        if (sub === "use" && rest[1]) useAvatarFile(rest[1]);
+        else if (sub === "body" && rest[1]) setAvatarBody(rest[1].toUpperCase());
+        else if (sub === "remove") removeAvatar(rest[1] === "default" ? "default" : "custom");
+        else if (sub) {
+          console.error(`Usage: enio avatar [use <file.glb> | body ${BODIES.join("|")} | remove [custom|default]]`);
+          process.exit(1);
+        }
+      } catch (err) {
+        console.error((err as Error).message);
+        process.exit(1);
+      }
+      const a = avatarStatus();
+      if (!a.installed) {
+        console.log("No avatar installed.");
+        console.log("  enio addons add avatar        download the default Enio head");
+        console.log("  enio avatar use <file.glb>    use your own (ARKit + Oculus blend shapes, Mixamo rig)");
+      } else {
+        console.log(`${a.source} avatar · body ${a.body} · ${(a.bytes / 1_000_000).toFixed(1)} MB`);
+        console.log(`  ${a.path}`);
+        if (a.custom && a.default) console.log("  the custom file is in use; enio avatar remove falls back to the default");
+      }
       break;
     }
 
@@ -1865,7 +1901,8 @@ enio — a local agent with tools and persistent memory
   enio models use ID      select one — switches the running server, or takes effect next start
   enio models rm ID       delete a model's weights (the selected one is refused)
   enio addons             list optional add-ons and what is installed
-  enio addons add NAME    install one: search, browser, vision, voice, inspector, maple
+  enio addons add NAME    install one: search, browser, vision, voice, inspector, maple, avatar
+  enio avatar             the app's 3D face: status · use <file.glb> · body M|F · remove
   enio tools              list every tool, built-in and MCP
   enio mcp                list MCP connections
   enio mcp add NAME CMD [args...] [--tools a,b]

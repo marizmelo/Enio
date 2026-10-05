@@ -801,13 +801,33 @@ ipcMain.handle("get-status", () => lastStatus);
 // remote content loaded into it.
 ipcMain.handle("get-token", () => readToken());
 
-// The composer's mic in its not-yet-installed state: one click runs the
-// voice add-on through the same enio addons path the CLI uses, with the
-// launcher's resolved node and PATH. The renderer refetches capabilities on
-// success, which is what turns the setup button into the real controls.
-ipcMain.handle("install-voice", () => {
+/**
+ * Add-ons the app installs with one click: voice behind the composer's
+ * not-yet-installed mic, the avatar behind the face's setup card. Each runs
+ * the same `enio addons add <name>` the CLI runs, with the launcher's
+ * resolved node and PATH, and the renderer refetches capabilities on
+ * success -- which is what turns a setup button into the real controls.
+ * The name becomes a spawn argument, so it comes from this closed table and
+ * nowhere else.
+ */
+const INSTALLABLE_ADDONS = {
+  voice: {
+    title: "Voice",
+    ready:
+      "The microphone now dictates, and the voice button holds a spoken conversation. " +
+      "Your first dictation downloads the speech model (~500MB) — that one takes a while.",
+  },
+  avatar: {
+    title: "Avatar",
+    ready: "Enio has a face. Open it from the status bar; with Read replies aloud on, it speaks the replies.",
+  },
+};
+
+function installAddon(name) {
+  const addon = INSTALLABLE_ADDONS[name];
+  if (!addon) return Promise.resolve({ ok: false, output: `No installable add-on named ${name}.` });
   return new Promise((resolve) => {
-    const child = spawn(NODE_BIN, [AGENT_ENTRY, "addons", "add", "voice"], {
+    const child = spawn(NODE_BIN, [AGENT_ENTRY, "addons", "add", name], {
       cwd: PARENT_DIR,
       env: { ...installerEnv(), ...process.env, PATH: childPath() },
       stdio: ["ignore", "pipe", "pipe"],
@@ -815,40 +835,35 @@ ipcMain.handle("install-voice", () => {
     let output = "";
     child.stdout?.on("data", (c) => {
       output += c;
-      process.stdout.write(`[voice-install] ${c}`);
+      process.stdout.write(`[${name}-install] ${c}`);
     });
     child.stderr?.on("data", (c) => {
       output += c;
-      process.stderr.write(`[voice-install] ${c}`);
+      process.stderr.write(`[${name}-install] ${c}`);
     });
     // The verdict is spoken, not implied: a button quietly swapping states
-    // is easy to miss, and a hover-tip is no place for an error. Success
-    // also pre-answers the next surprise — the first dictation's silent
-    // model download.
+    // is easy to miss, and a hover-tip is no place for an error.
     child.on("exit", (code) => {
       if (code === 0) {
-        dialog.showMessageBox({
-          type: "info",
-          message: "Voice is ready",
-          detail:
-            "The microphone now dictates, and the voice button holds a spoken conversation. " +
-            "Your first dictation downloads the speech model (~500MB) — that one takes a while.",
-        });
+        dialog.showMessageBox({ type: "info", message: `${addon.title} is ready`, detail: addon.ready });
       } else {
         dialog.showErrorBox(
-          "Voice setup failed",
+          `${addon.title} setup failed`,
           `${output.trim().split("\n").slice(-8).join("\n")}\n\n` +
-            "Try it from a terminal to see everything: enio addons add voice",
+            `Try it from a terminal to see everything: enio addons add ${name}`,
         );
       }
       resolve({ ok: code === 0, output: output.slice(-2000) });
     });
     child.on("error", (err) => {
-      dialog.showErrorBox("Voice setup failed", `${String(err)}\n\nTry from a terminal: enio addons add voice`);
+      dialog.showErrorBox(`${addon.title} setup failed`, `${String(err)}\n\nTry from a terminal: enio addons add ${name}`);
       resolve({ ok: false, output: String(err) });
     });
   });
-});
+}
+ipcMain.handle("install-addon", (_event, name) => installAddon(String(name)));
+// The channel the composer's mic has always called; same path underneath.
+ipcMain.handle("install-voice", () => installAddon("voice"));
 
 /**
  * Where attachments have to end up.

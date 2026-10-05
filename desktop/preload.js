@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld("maple", {
   installVoice() {
     return ipcRenderer.invoke("install-voice");
   },
+  /** One-click install of a named add-on (voice, avatar); resolves {ok, output}. */
+  installAddon(name) {
+    return ipcRenderer.invoke("install-addon", name);
+  },
 
   /**
    * Native file picker. Returns names the agent can address: a file already
