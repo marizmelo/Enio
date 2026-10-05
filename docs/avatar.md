@@ -31,8 +31,9 @@ Enio ships no face in the app itself: the head is a file of tens of
 megabytes, downloaded once into `~/.enio/avatar/`.
 
 - **The default head** — `enio addons add avatar`, or the *Set up* button in
-  the empty thumbnail. Built with Blender and the MakeHuman MPFB extension,
-  licensed CC0. Until the first release is published the command says so.
+  the empty thumbnail. A 21 MB download: a male head built from MakeHuman's
+  CC0 assets with Blender and the MPFB extension, by a script in this repo
+  (see below), so it is yours to use and redistribute.
 - **Bring your own** — any GLB that meets the requirements below:
 
   ```bash
@@ -62,13 +63,23 @@ expects:
 
 ### Building a CC0 face yourself
 
-With Blender and MPFB 2.0.15 or later: install the *Visemes 02* and
-*Faceunits 01* asset packs, the TalkingHead add-on and its rig
-(`talkinghead.mpfbskel`), design the character, add the custom rig, make an
-*Export copy* with the meta-style and ARKit-style visemes loaded, and export
-it as glTF Binary with animation off. TalkingHead's own
+The default head comes out of one command, given Blender 4.2 or later with
+the MPFB extension installed:
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender -b -P scripts/avatar/build-enio-head.py -- ~/enio-head.glb
+```
+
+The script fetches TalkingHead's rig, weights and target files and the four
+MakeHuman asset packs it needs (about 330 MB, once), builds the human,
+rigs it, dresses it, bakes the Meta visemes and ARKit face units into every
+part, fixes the materials the glTF exporter would otherwise make
+transparent, re-orients the spine so the library's standing pose lands as
+a near-zero change, and writes the GLB. Body shape, skin, hair and outfit
+are variables at the top of the script; `HEAD_GENDER=0` builds a woman.
+TalkingHead's own
 [MPFB guide](https://github.com/met4citizen/TalkingHead/blob/main/blender/MPFB/MPFB.md)
-has every click. The result is yours to publish.
+documents the same steps by hand.
 
 ## What drives the face
 

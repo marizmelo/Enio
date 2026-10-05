@@ -78,7 +78,11 @@ export const AvatarPane = forwardRef(function AvatarPane(
     (async () => {
       try {
         const { url } = await loadAvatarModel();
-        await head.showAvatar({ url, body, avatarMood: "neutral", lipsyncLang: "en" });
+        // avatarIgnoreCamera: the library's "look at the camera" folds the
+        // camera's own rotation and the pose chain into a head turn, which in
+        // a small embedded canvas left the face yawed to one side. Looking
+        // straight out of the canvas is looking at the person.
+        await head.showAvatar({ url, body, avatarMood: "neutral", lipsyncLang: "en", avatarIgnoreCamera: true });
         if (cancelled) return;
         head.start();
         const sink = createAvatarSink(head);

@@ -3640,6 +3640,31 @@ analyser-only visemes from the playing audio (cruder than text-driven
 shapes when the text is known); NVIDIA Audio2Face (open since September
 2025, but CUDA -- a lever for the Linux direction, not for a Mac).
 
+**The default head is built, not borrowed.** TalkingHead ships example
+heads; the only CC0 one is a woman, and the male example (AvatarSDK) is
+non-commercial and wears the vendor's logo, so it served as a stand-in for
+one afternoon and nothing more. `scripts/avatar/build-enio-head.py` builds
+the default from MakeHuman's CC0 assets through MPFB in headless Blender,
+and three things it does are not in any guide. (1) Every MakeHuman material
+arrives with its texture's alpha wired into the shader, which the glTF
+exporter turns into alphaMode BLEND: a face you can see the teeth through.
+Skin, eyes, teeth, tongue and clothes lose the alpha link; hair, brows and
+lashes keep it behind a GREATER_THAN node, which exports as MASK. (2) The
+library poses a character by replacing the spine, neck and head rotations
+with absolute values tuned on near-default MakeHuman bodies, and MPFB fits
+the rig to the body: a male body fits a wavy chain (neck 19 degrees back,
+head 24 degrees forward) that those values then fight, and the head came
+out turned and tilted. Body proportions did not change it; the female base
+mesh did. glTF records only joint positions and orientations, so the
+script re-orients Hips through Head about their own heads to the library's
+standing pose, moving no joint and no vertex; the exported rest then equals
+the pose to three decimals and the modelled posture is what shows. (3) The
+library's default lights are set for baked commercial avatars and wash the
+MakeHuman skins out; the pane runs them at 1.2 and 14. Rejected: the
+library's `retarget` option (not in the pinned 1.7.0); per-head baseline
+tweaks in the app (the correction belongs in the file, where every client
+gets it); shipping the AvatarSDK head (licence).
+
 ### Mood is a label the harness picks from four, not a feeling the model reports (October 2026)
 
 **Chose:** `neutral | happy | sorry | unsure`, decided per reply by rules

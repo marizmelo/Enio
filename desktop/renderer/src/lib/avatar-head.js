@@ -24,6 +24,11 @@ export function createTalkingHead(node, { view = "head", rotate = false } = {}) 
     modelPixelRatio: Math.min(window.devicePixelRatio || 1, 2),
     avatarMood: "neutral",
     dracoEnabled: false,
+    // The library's defaults (ambient 2, key 30) are set for the baked-looking
+    // commercial avatars it grew up with; the MakeHuman skins wash out under
+    // them. Softer light, same colour.
+    lightAmbientIntensity: 1.2,
+    lightDirectIntensity: 14,
     // Mostly on you, idle or speaking: the library's defaults glance away
     // most of the time, which reads as a face that is not listening.
     avatarIdleEyeContact: 0.85,

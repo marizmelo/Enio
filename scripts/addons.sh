@@ -94,13 +94,12 @@ case "${1:-}" in
 
   avatar)
     say "Avatar — the default Enio head for the app's face"
-    # Filled in when the release is published (docs/avatar.md). Until then
-    # the command says so rather than failing somewhere less legible, and a
-    # file of your own works the same: enio avatar use <file.glb>
-    AVATAR_URL=""
-    AVATAR_SHA256=""
-    AVATAR_BYTES="0"
-    [ -n "$AVATAR_URL" ] || die "The default avatar is not published yet. Bring your own meanwhile: enio avatar use <file.glb>"
+    # The default head: CC0, built by scripts/avatar/build-enio-head.py and
+    # published as a release asset (docs/avatar.md). The checksum is the
+    # file's identity; a download that does not match is not installed.
+    AVATAR_URL="https://github.com/marizmelo/Enio/releases/download/avatar-v1/enio-avatar-v1.glb"
+    AVATAR_SHA256="180074b833a4a02a9ffa1bec86e35aad94659f8a6062e9dd8d716fb644ce0a8f"
+    AVATAR_BYTES="21406936"
     mkdir -p "$DATA_DIR/avatar"
     printf '    %s MB from %s\n' "$((AVATAR_BYTES / 1000000))" "$AVATAR_URL"
     ( cd "$DATA_DIR/avatar" && curl -fL --retry 3 -C - -o default.glb.part "$AVATAR_URL" ) \
