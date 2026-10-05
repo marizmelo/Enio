@@ -23,6 +23,7 @@ export const PANELS = {
   notes: { label: "Notes", path: "Notes" },
   history: { label: "History", path: "History" },
   files: { label: "Files", path: "Files" },
+  avatar: { label: "Avatar", path: "the face button in the status bar" },
 } as const;
 export type Panel = keyof typeof PANELS;
 
@@ -59,6 +60,8 @@ const ALIASES: Record<string, Panel> = {
   history: "history",
   files: "files",
   file: "files",
+  avatar: "avatar",
+  face: "avatar",
 };
 
 /** The panel's name as a link the desktop can act on again later — closing
@@ -83,7 +86,7 @@ const reply = (panel: Panel, view?: "add"): string => {
 export function panelRequest(text: string): PanelRequest | null {
   const t = text.trim();
   if (t.length === 0 || t.length > 120) return null;
-  const open = /^(?:please\s+)?(?:can you\s+|could you\s+)?(?:open|show|go to|take me to|bring up|launch)\s+(?:the\s+|my\s+)?([a-z]+)(?:\s+(?:panel|dialog|page|settings|section))?\s*[.!?]?$/i.exec(t);
+  const open = /^(?:please\s+)?(?:can you\s+|could you\s+)?(?:open|show|go to|take me to|bring up|launch)\s+(?:the\s+|my\s+|your\s+)?([a-z]+)(?:\s+(?:panel|dialog|page|settings|section))?\s*[.!?]?$/i.exec(t);
   if (open) {
     const panel = ALIASES[open[1]!.toLowerCase()];
     if (panel) return { panel, reply: reply(panel) };

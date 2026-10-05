@@ -21,6 +21,10 @@ describe("requests to open a part of the app", () => {
     assert.equal(panelRequest("open models")?.panel, "models");
     assert.equal(panelRequest("add an mcp server")?.panel, "connections");
     assert.equal(panelRequest("add an mcp server")?.view, "add");
+    assert.equal(panelRequest("open avatar")?.panel, "avatar");
+    assert.equal(panelRequest("show your face")?.panel, "avatar");
+    assert.match(panelRequest("show your face")!.reply, /\[Avatar\]\(enio:\/\/panel\/avatar\)/);
+    assert.equal(panelRequest("what does your face look like"), null);
   });
   test("a request about something else is not a panel", () => {
     assert.equal(panelRequest("check my email"), null);
