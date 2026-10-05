@@ -241,7 +241,7 @@ export function spokenText(raw) {
     // skin tones and variation selectors that compose them; keycap digits
     // keep their digit.
     .replace(/[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{1F1E6}-\u{1F1FF}]\uFE0F?(?:\u200D[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}]\uFE0F?)*/gu, " ")
-    .replace(/[\u200D\uFE0E\uFE0F\u20E3]/g, "")
+    .replace(/\u200D|\uFE0E|\uFE0F|\u20E3/g, "")
     .replace(/[ \t]+/g, " ")
     .trim();
 }
