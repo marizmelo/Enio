@@ -1,4 +1,4 @@
-import { agentOnlyAccount, scriptAccountWith, type PickedAccount } from "../accounts.js";
+import { agentOnlyAccount, anyAccountWith, scriptAccountWith, type PickedAccount } from "../accounts.js";
 import { callScript } from "../appsscript.js";
 import type { ToolDef } from "../types.js";
 
@@ -249,8 +249,8 @@ function shortType(mime: string | undefined): string {
  * the tail, where the cap silently eats whatever comes last.
  */
 export const googleTools: ToolDef[] = [
-  ...(scriptAccountWith("calendar.read") ? [readCalendarTool] : []),
-  ...(scriptAccountWith("calendar.write") ? [addEventTool, addTodoTool] : []),
-  ...(scriptAccountWith("drive.read") ? [searchDriveTool, readDriveTool] : []),
-  ...(scriptAccountWith(null) ? [listTodosTool, findContactTool] : []),
+  ...(anyAccountWith("calendar.read") ? [readCalendarTool] : []),
+  ...(anyAccountWith("calendar.write") ? [addEventTool, addTodoTool] : []),
+  ...(anyAccountWith("drive.read") ? [searchDriveTool, readDriveTool] : []),
+  ...(anyAccountWith(null) ? [listTodosTool, findContactTool] : []),
 ];

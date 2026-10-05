@@ -522,6 +522,17 @@ export function scriptAccountWith(grant: Grant | null): PickedAccount | null {
   return picked(account);
 }
 
+/** Whether any connected account holds the grant at all -- the question the
+ *  tool registry asks. Whose it is decides what a call does, not whether the
+ *  tool exists: gating registration on the owner-aware picker withheld
+ *  read_calendar when only Enio's own account was connected, and the planner
+ *  called a tool it did not hold. */
+export function anyAccountWith(grant: Grant | null): boolean {
+  return read().accounts.some(
+    (a) => a.provider === "appsscript" && a.scriptUrl && a.scriptSecret && (grant === null || a.grants.includes(grant)),
+  );
+}
+
 /** When nothing of the person's can do the act: Enio's own account, if that
  *  is what is connected, so a tool can name it rather than use it or claim
  *  nothing is connected. */
