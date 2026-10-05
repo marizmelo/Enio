@@ -110,6 +110,14 @@ describe("the avatar director", () => {
     const s = createAvatarDirector({ sleepAfterMs: 1000 });
     s.handle({ type: "turn-start" }, 0);
     assert.deepEqual(s.tick(5000), [], "no sleeping mid-answer");
+
+    // Seen live: the window idled for hours with no pane mounted, so no ticks
+    // ran; the pane then mounted, ticked once, and the face fell asleep.
+    const late = createAvatarDirector({ sleepAfterMs: 1000 });
+    late.handle({ type: "voice", state: null }, 0);
+    late.handle({ type: "shown" }, 50_000);
+    assert.deepEqual(late.tick(50_015), [], "being shown counts as activity");
+    assert.deepEqual(moods(late.tick(51_100)), ["sleep"], "and the clock runs from there");
   });
 
   test("snapshot reproduces the state for a pane that mounts late, and reset returns to defaults", () => {

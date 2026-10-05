@@ -9,7 +9,10 @@
  *
  * Pure: no timers, no DOM, a clock passed in. The director lives in the
  * window, not in the pane, because events flow whether or not a face is
- * visible; a pane that mounts mid-session catches up from snapshot().
+ * visible; a pane that mounts mid-session catches up from snapshot() and
+ * announces itself with a `shown` event, which counts as activity -- the
+ * idle clock otherwise still reads the last event before hours of absence,
+ * and the face would doze off fifteen seconds after being asked for.
  *
  * Outputs are emitted on CHANGE: forty "thinking" frames produce one glance
  * up, not forty. Gestures are the exception, since repeating one is the
@@ -143,7 +146,8 @@ export function createAvatarDirector({ sleepAfterMs = SLEEP_AFTER_MS, afterglowM
           setListening(false);
           break;
         default:
-          // route, notice, basis: known to the window, nothing for the face.
+          // shown, route, notice, basis: activity the window knows about,
+          // nothing for the face beyond the wake above.
           break;
       }
       return take();

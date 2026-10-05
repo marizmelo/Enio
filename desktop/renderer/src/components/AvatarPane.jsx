@@ -85,6 +85,9 @@ export const AvatarPane = forwardRef(function AvatarPane(
         sinkRef.current = sink;
         setSpeechSink(sink);
         for (const cmd of director?.snapshot?.() ?? []) apply(cmd);
+        // Being shown is activity: without this a face asked for after
+        // hours away would doze off on its first idle tick.
+        for (const cmd of director?.handle?.({ type: "shown" }, Date.now()) ?? []) apply(cmd);
         setPhase("ready");
       } catch (err) {
         if (cancelled) return;
