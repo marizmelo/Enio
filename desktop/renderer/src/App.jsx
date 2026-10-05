@@ -113,6 +113,23 @@ export function App() {
       // A window that cannot remember still works.
     }
   }, [avatarMode]);
+  // The face implies the voice: a head that mouths in silence is a mime.
+  // Turning the avatar on turns Read replies aloud on and warms the voice;
+  // turning it off restores the toggle only if the face was what set it.
+  // Keyed on the mode alone, so muting by hand while the face is on holds.
+  const speakBeforeAvatarRef = useRef(null);
+  useEffect(() => {
+    if (avatarMode !== "off") {
+      if (!speakReplies) {
+        speakBeforeAvatarRef.current = false;
+        setSpeakReplies(true);
+        warmVoice();
+      }
+    } else if (speakBeforeAvatarRef.current === false) {
+      speakBeforeAvatarRef.current = null;
+      setSpeakReplies(false);
+    }
+  }, [avatarMode]);
   const directorRef = useRef(null);
   if (!directorRef.current) directorRef.current = createAvatarDirector();
   const avatarRef = useRef(null);
