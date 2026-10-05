@@ -6,7 +6,7 @@ import { agentOnlyMailAccount, anyMailReadAccount, findAccountByName, listAccoun
  *  for it on purpose. */
 const onlyAgentMail = (agent: { described: string; label?: string; email: string }) =>
   `No account of yours is connected. The only connected account is ${agent.described}, and that is Enio's mail, not yours. ` +
-  `Connect your account in Connections → Accounts, or ask for Enio's inbox by name (for example "check ${agent.label ?? agent.email}").`;
+  `Connect your account in [Connections](enio://panel/accounts/add), or ask for Enio's inbox by name (for example "check ${agent.label ?? agent.email}").`;
 import { callScript } from "../appsscript.js";
 import type { ToolDef } from "../types.js";
 
@@ -130,7 +130,7 @@ const searchTool: ToolDef = {
     // word like "user's" that matched nothing: say what exists, read nothing.
     if (!account) {
       const agentOnly = agentOnlyMailAccount();
-      if (agentOnly) return { text: onlyAgentMail(agentOnly), notice: `No account of yours is connected; Enio's own was not read.` };
+      if (agentOnly) return { text: onlyAgentMail(agentOnly), notice: `No account of yours is connected; Enio's own was not read. Connect yours in [Connections](enio://panel/accounts/add).` };
     }
     const preface =
       askedOwner && account

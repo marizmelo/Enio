@@ -329,7 +329,7 @@ export function Message({
               className="flex items-start gap-2 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground"
             >
               <Info className="mt-0.5 size-3.5 shrink-0" />
-              <span className="[&>code]:rounded [&>code]:bg-muted [&>code]:px-1">{n}</span>
+              <span className="[&>code]:rounded [&>code]:bg-muted [&>code]:px-1">{noticeWithLinks(n, onOpenPanel)}</span>
             </div>
           ))}
         </div>
@@ -366,6 +366,38 @@ export function Message({
  * browser through the main process: the renderer has no navigation of its own,
  * and a page loading inside the chat window would be a trap with no way back.
  */
+/**
+ * A notice may offer a part of the app -- "Connect yours in [Connections]
+ * (enio://panel/accounts/add)" -- the same link the panel grammar's replies
+ * carry. Notices are plain text otherwise, so this is the one piece of
+ * markup they get: a tool's honest "not yours" is more useful when the
+ * remedy is a click away rather than a name to go looking for.
+ */
+function noticeWithLinks(text, onOpenPanel) {
+  const parts = [];
+  const re = /\[([^\]]+)\]\(enio:\/\/panel\/([a-z]+)(?:\/([a-z]+))?\)/gi;
+  let last = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    const [, label, panel, view] = m;
+    parts.push(
+      <button
+        key={m.index}
+        type="button"
+        className="underline underline-offset-2 hover:text-foreground"
+        onClick={() => onOpenPanel?.(panel.toLowerCase(), view ? view.toLowerCase() : null)}
+      >
+        {label}
+      </button>,
+    );
+    last = re.lastIndex;
+  }
+  if (parts.length === 0) return text;
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
 function onBodyClick(event, onOpenArtifact, onOpenPanel) {
   // A created file's name in the prose IS the reference -- clicking it pins
   // the file in the canvas, same as the chip it replaces.

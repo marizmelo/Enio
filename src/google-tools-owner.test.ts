@@ -59,4 +59,8 @@ test("the planner's tools register with only Enio's own account, and a read name
   assert.match(out.text, /No account of yours is connected/);
   assert.match(out.text, /Enio's own account enio \(enio@example\.com\)|Enio's own account/);
   assert.equal(calls, 0, "Enio's calendar was not read");
+  // The remedy is a link the window can open, in the notice the reader sees
+  // verbatim and in the text the model paraphrases.
+  assert.match(out.notice ?? "", /\[Connections\]\(enio:\/\/panel\/accounts\/add\)/);
+  assert.match(out.text, /enio:\/\/panel\/accounts\/add/);
 });

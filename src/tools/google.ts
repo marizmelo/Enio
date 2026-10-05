@@ -21,11 +21,16 @@ import type { ToolDef } from "../types.js";
  *  were. Named, so the person can ask for it on purpose. */
 const onlyAgent = (agent: PickedAccount, what: string) =>
   `No account of yours is connected. The only connected account is ${agent.described}, and that is Enio's ${what}, not yours. ` +
-  `Connect yours under Connections, or ask for Enio's by name (for example "check Enio's ${what}").`;
+  `Connect yours in [Connections](enio://panel/accounts/add), or ask for Enio's by name (for example "check Enio's ${what}").`;
 const noneOfYours = (grant: Parameters<typeof agentOnlyAccount>[0], what: string, otherwise: string) => {
   const agent = agentOnlyAccount(grant);
   return agent
-    ? { text: onlyAgent(agent, what), notice: `No account of yours is connected; Enio's own ${what} was not touched.` }
+    ? {
+        text: onlyAgent(agent, what),
+        // The remedy in the notice as a link, because the reply is the model's
+        // paraphrase and a 4B model drops links as often as it keeps them.
+        notice: `No account of yours is connected; Enio's own ${what} was not touched. Connect yours in [Connections](enio://panel/accounts/add).`,
+      }
     : otherwise;
 };
 
