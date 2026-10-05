@@ -97,7 +97,7 @@ documents the same steps by hand.
 | Brows up, eye contact | voice mode is listening, and the microphone hears you |
 | The mouth moving | a sentence is being spoken |
 | A reset to neutral | the harness withdrew the reply and is correcting it |
-| Eyes closing | nothing has happened for five minutes |
+| Eyes closing | nobody has touched the window — no pointer, key, turn or speech — for fifteen minutes |
 
 The **mood** is one of four labels — neutral, happy, sorry, unsure — chosen
 by the harness per reply:

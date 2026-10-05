@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { Loader2, Maximize2, Minimize2, ScanFace, X } from "lucide-react";
 import { TipButton } from "@/components/TipButton";
 import { cn } from "@/lib/utils";
-import { clearSpeechSink, setSpeechSink } from "@/lib/speech";
+import { clearSpeechSink, onSpeaking, setSpeechSink } from "@/lib/speech";
 import { createAvatarSink } from "@/lib/avatar-sink";
 import { createTalkingHead, disposeTalkingHead } from "@/lib/avatar-head";
 import { loadAvatarModel } from "@/lib/avatar-assets";
@@ -110,10 +110,34 @@ export const AvatarPane = forwardRef(function AvatarPane(
     const clock = setInterval(() => {
       for (const cmd of director?.tick?.(Date.now()) ?? []) apply(cmd);
     }, 15_000);
+    // The person being here is activity: a pointer moving over the window,
+    // a key, the window taking focus, the voice speaking. Without these the
+    // idle clock counted only turns, and the face fell asleep in front of
+    // someone who was reading its last answer. Pointer moves are frequent,
+    // so they report at most once a second.
+    let lastPresence = 0;
+    const presence = () => {
+      const now = Date.now();
+      if (now - lastPresence < 1000) return;
+      lastPresence = now;
+      for (const cmd of director?.handle?.({ type: "activity" }, now) ?? []) apply(cmd);
+    };
+    window.addEventListener("pointermove", presence);
+    window.addEventListener("pointerdown", presence);
+    window.addEventListener("keydown", presence);
+    window.addEventListener("focus", presence);
+    const offSpeaking = onSpeaking((on) => {
+      if (on) presence();
+    });
     return () => {
       cancelled = true;
       clearInterval(clock);
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pointermove", presence);
+      window.removeEventListener("pointerdown", presence);
+      window.removeEventListener("keydown", presence);
+      window.removeEventListener("focus", presence);
+      offSpeaking();
       if (sinkRef.current) {
         clearSpeechSink(sinkRef.current);
         sinkRef.current.dispose();

@@ -19,7 +19,13 @@
  * point of asking for it.
  */
 
-export const SLEEP_AFTER_MS = 5 * 60_000;
+// Fifteen minutes with nobody at the window, not five without a turn. The
+// face dozed off while the person sat reading it -- five minutes is a short
+// pause in a conversation -- and a sleeping face in front of someone reads
+// as broken, not restful. The pane now reports the person's presence
+// (pointer, keys, focus, speech) as `activity`, so the clock measures
+// absence, and absence is measured in the quarter hour.
+export const SLEEP_AFTER_MS = 15 * 60_000;
 export const AFTERGLOW_MS = 6_000;
 
 /** The harness's labels, mapped to the moods the face can show. */
@@ -148,8 +154,8 @@ export function createAvatarDirector({ sleepAfterMs = SLEEP_AFTER_MS, afterglowM
           setListening(false);
           break;
         default:
-          // shown, route, notice, basis: activity the window knows about,
-          // nothing for the face beyond the wake above.
+          // shown, activity, route, notice, basis: signs of life the window
+          // knows about, nothing for the face beyond the wake above.
           break;
       }
       return take();

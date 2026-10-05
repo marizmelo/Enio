@@ -99,6 +99,15 @@ describe("the avatar director", () => {
     assert.deepEqual(moods(woke), ["happy"], "waking restores the real mood, which was still glowing");
     assert.deepEqual(gazes(woke), [], "it never looked away");
 
+    // The person's presence counts, not only turns: a pointer over the
+    // window at 900ms pushes sleep out, and the same event wakes a sleeper.
+    const p = createAvatarDirector({ sleepAfterMs: 1000 });
+    p.handle({ type: "shown" }, 0);
+    p.handle({ type: "activity" }, 900);
+    assert.deepEqual(p.tick(1500), [], "presence reset the idle clock");
+    assert.deepEqual(moods(p.tick(2000)), ["sleep"]);
+    assert.deepEqual(moods(p.handle({ type: "activity" }, 2100)), ["neutral"], "presence wakes");
+
     const v = createAvatarDirector({ sleepAfterMs: 1000 });
     const listening = v.handle({ type: "voice", state: "listening" }, 0);
     assert.deepEqual(listening.filter((c) => c.cmd === "listening"), [{ cmd: "listening", on: true }]);
