@@ -133,6 +133,16 @@ describe("spokenText", () => {
     assert.match(spokenText("Run this:\n```js\nconst x = 1;\n```"), /code block/);
     assert.ok(!spokenText("```").includes("`"), "a stray fence is dropped");
   });
+
+  test("does not narrate emoji", async () => {
+    const { spokenText } = await import(SPEECH);
+    // Heard in voice mode: "Done rocket sparkles". Decoration again, read out.
+    assert.equal(spokenText("Done 🚀✨ the build is green ✅"), "Done the build is green");
+    // Composed sequences go whole: a flag, a skin-toned hand, a family.
+    assert.equal(spokenText("hello 👋🏽 from 🇵🇹 👨‍👩‍👧"), "hello from");
+    // A keycap keeps its digit; plain punctuation and currency are untouched.
+    assert.equal(spokenText("press 1️⃣ then pay €5 — ok?"), "press 1 then pay €5 — ok?");
+  });
 });
 
 describe("stopSpeaking settles the drain", () => {
