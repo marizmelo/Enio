@@ -162,23 +162,27 @@ account because something went wrong.
 ## Whose account is it
 
 Asking in chat works too: "let's set up a new email account", "connect my
-gmail" or "open accounts" opens the Accounts section directly — a harness
-act, not a tool the agent holds, so it is one sentence and the panel.
+gmail" or "open accounts" opens Connections directly, and "open settings"
+opens Settings — a harness act, not a tool the agent holds, so it is one
+sentence and the panel.
 
 Two kinds of account can be connected, and they must never be confused:
 
 - **Enio's own account** is the agent's identity: the address it sends
   from, the calendar it can be invited to, the Drive it can write to. Create
-  a Google account for it and connect that one first.
+  a Google account for it and connect it under **Settings**, first.
 - **Your accounts** are access to *your* mail, calendar and files, in your
-  name. "My inbox" always means one of these.
+  name, connected under **Connections**. "My inbox" always means one of
+  these.
 
-Every account carries that choice, and a label ("work", "personal"). The
-Accounts panel asks when you connect one, and shows "whose account is
-this?" beside any connected before the question existed. Replies and
-notices name the account the way you did: "Searched your account work
-(…)" or "Sent from Enio's own account". From the terminal, `enio accounts`
-lists them and `enio accounts owner <id> agent|user [label]` sets it.
+Which door you connect through is what records whose it is, so nothing
+asks; each account also takes a label ("work", "personal"). An account
+connected before the two doors existed shows under Connections with the
+question "whose account is this?", and either list lets you move an
+account to the other side. Replies and notices name the account the way
+you did: "Searched your account work (…)" or "Sent from Enio's own
+account". From the terminal, `enio accounts` lists them and
+`enio accounts owner <id> agent|user [label]` sets it.
 
 Which account a conversation uses is yours to pick: the account chip in the
 top bar, or a phrase — "use my work email", "switch to Enio's account" —

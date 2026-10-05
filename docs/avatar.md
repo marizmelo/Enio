@@ -22,8 +22,11 @@ expand it into a side panel, shrink it back, or hide it. Off by default,
 for the same reason replies are not read aloud until you ask: a face that
 appears unasked is startling. The window remembers your choice.
 
-With **Read replies aloud** on, the face speaks. Without it, the face still
-reacts and the thumbnail says how to hear it.
+Turning the face on turns **Read replies aloud** on with it, so the face
+speaks; mute the speaker and the face still reacts, silently. While
+anything is being read — a reply, or a message you asked for with the
+speaker button under it — the speaker in the composer becomes a stop
+button, and Escape stops it too.
 
 ## Installing a face
 

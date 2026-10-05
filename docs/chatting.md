@@ -83,6 +83,15 @@ the moment you scroll up — so you can read back through a long reply while it 
 still being written. A **Jump to latest** button appears while you are scrolled
 away; sending a message always returns you to the bottom.
 
+## Spoken replies
+
+The speaker toggle in the composer reads every reply aloud as it arrives,
+a sentence at a time, so the first sentence plays while the rest is still
+being written. The speaker button under any reply reads that one on its
+own. While anything is being read, the composer's speaker becomes a stop
+button and Escape stops it too; stopping does not switch spoken replies
+off. Needs a voice (`ENIO_TTS`); without one the buttons are not shown.
+
 ## Voice conversation
 
 Press the waveform button beside the speaker toggle and talk: Enio
