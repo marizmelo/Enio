@@ -1,5 +1,5 @@
-import { cosine } from "./memory/db.js";
-import { embed, embedBatch } from "./memory/embed.js";
+import { embed } from "./memory/embed.js";
+import { nearestLabel, embedMissing } from "./nearest.js";
 import { listCustomAgents } from "./custom-agents.js";
 import { config } from "./config.js";
 
@@ -17,8 +17,9 @@ import { config } from "./config.js";
  * to the model, which is the only judge of an ambiguous request.
  *
  * The margin threshold is a measured number (scripts/route-bench.mjs), not a
- * feeling, and the tier ships off until that measurement holds the model
- * router's accuracy on the held-out set.
+ * feeling: the tier ships on at the margin where the measurement held the
+ * model router's accuracy on the held-out set. The scoring itself is in
+ * nearest.ts, shared with the reply-mood label.
  */
 
 export interface RoutingExample {
@@ -204,20 +205,12 @@ export function decide(
   request: Float32Array,
   exemplars: Array<Exemplar & { vector: Float32Array }>,
 ): Omit<FastDecision, "ms"> | null {
-  const scores: Record<string, number> = {};
-  for (const e of exemplars) {
-    const s = cosine(request, e.vector);
-    if (!(e.specialist in scores) || s > scores[e.specialist]!) scores[e.specialist] = s;
-  }
-  const ranked = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-  if (ranked.length === 0) return null;
-  const [best, second] = ranked;
-  return {
-    specialist: best![0],
-    runnerUp: second?.[0] ?? null,
-    margin: best![1] - (second?.[1] ?? 0),
-    scores,
-  };
+  const n = nearestLabel(
+    request,
+    exemplars.map((e) => ({ text: e.text, label: e.specialist, vector: e.vector })),
+  );
+  if (!n) return null;
+  return { specialist: n.label, runnerUp: n.runnerUp, margin: n.margin, scores: n.scores };
 }
 
 /** Load the embedding model and the exemplar vectors ahead of the first
@@ -238,14 +231,7 @@ export async function fastRoute(
 ): Promise<FastDecision | null> {
   const started = Date.now();
   const exemplars = routingExemplars(specialists);
-  const missing = exemplars.filter((e) => !vectorCache.has(e.text));
-  if (missing.length > 0) {
-    const vecs = await embedBatch(missing.map((e) => e.text));
-    missing.forEach((e, i) => {
-      const v = vecs[i];
-      if (v) vectorCache.set(e.text, v);
-    });
-  }
+  await embedMissing(vectorCache, exemplars.map((e) => e.text));
   const ready = exemplars
     .filter((e) => vectorCache.has(e.text))
     .map((e) => ({ ...e, vector: vectorCache.get(e.text)! }));
