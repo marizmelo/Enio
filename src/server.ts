@@ -125,6 +125,7 @@ import { saveCustomAgent, deleteCustomAgent, setAgentSkills } from "./custom-age
 import { callDetail, callStatus } from "./tool-detail.js";
 import { loadSkills } from "./skills.js";
 import { synthesize, transcribeWav, warmVoice, whisperInstalled } from "./voice.js";
+import { avatarStatus } from "./avatar.js";
 import type { Message } from "./types.js";
 
 /**
@@ -443,7 +444,15 @@ async function handle(
       attachments: ctx.files.filter((f) => f.startsWith(`${ATTACH_DIR}/`)),
       // So a client can decide whether to offer a microphone at all, rather
       // than offering one that returns 503 when pressed.
-      voice: { transcription: whisperInstalled(), speech: config.ttsEngine !== "off" },
+      // timings says whether the speech route can also hand back per-phoneme
+      // timing; false until it can, so the face knows it is estimating.
+      voice: { transcription: whisperInstalled(), speech: config.ttsEngine !== "off", timings: false },
+      // Whether there is a face to show, and whose body form it has. Absent
+      // on older servers, which is how a newer window knows not to offer it.
+      avatar: (() => {
+        const a = avatarStatus();
+        return { installed: a.installed, source: a.source, body: a.body };
+      })(),
       // The active project, so the chip and the file menu can reflect it
       // without a second request. Null is a real answer: nothing open.
       project: projectSummary(activeProject()),

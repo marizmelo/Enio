@@ -347,6 +347,13 @@ export const config = {
   kokoroModel: env("TTS_MODEL") ?? "onnx-community/Kokoro-82M-v1.0-ONNX",
 
   /**
+   * The desktop's avatar file, when it is not one of the two the data dir
+   * knows (avatar.ts). A path to a GLB with the ARKit and Oculus blend
+   * shapes the face needs; unset means custom.glb, then default.glb.
+   */
+  avatarPath: env("AVATAR") ?? "",
+
+  /**
    * How many messages stay verbatim before older ones are folded into a
    * summary. Roughly twenty exchanges, which is longer than most sessions and
    * short enough that the prompt does not crowd out the answer.
@@ -641,6 +648,16 @@ export const config = {
   fastRouteMargin: (() => {
     const n = Number(env("FAST_ROUTE_MARGIN") ?? "0.06");
     return Number.isFinite(n) && n > 0 ? n : 0.06;
+  })(),
+  /**
+   * The reply-mood label (mood.ts): nearest authored example by embedding,
+   * taken when the gap to the runner-up mood is at least this margin,
+   * otherwise neutral. Measured by scripts/mood-bench.mjs; the default is
+   * the knee of that bench, not a guess.
+   */
+  moodMargin: (() => {
+    const n = Number(env("MOOD_MARGIN") ?? "0.03");
+    return Number.isFinite(n) && n > 0 ? n : 0.03;
   })(),
   /** Speculative decoding with a small draft model when one applies (see
    *  draftFor). Opt-in, not default: measured on the 4B with the 0.6B
