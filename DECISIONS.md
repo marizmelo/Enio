@@ -3645,11 +3645,15 @@ heads; the only CC0 one is a woman, and the male example (AvatarSDK) is
 non-commercial and wears the vendor's logo, so it served as a stand-in for
 one afternoon and nothing more. `scripts/avatar/build-enio-head.py` builds
 the default from MakeHuman's CC0 assets through MPFB in headless Blender,
-and three things it does are not in any guide. (1) Every MakeHuman material
+and four things it does are not in any guide. (1) Every MakeHuman material
 arrives with its texture's alpha wired into the shader, which the glTF
 exporter turns into alphaMode BLEND: a face you can see the teeth through.
-Skin, eyes, teeth, tongue and clothes lose the alpha link; hair, brows and
-lashes keep it behind a GREATER_THAN node, which exports as MASK. (2) The
+Skin, teeth, tongue and clothes lose the alpha link; the eyes clip at 0.5
+(the texture's alpha is the cornea); hair, brows and lashes keep it behind
+a GREATER_THAN node, which exports as MASK -- brows and lashes with their
+texture alpha first multiplied up, since nine tenths of those textures sit
+below 0.2, and a clip at any threshold ate the strands while a blend sorted
+them behind the skin. (2) The
 library poses a character by replacing the spine, neck and head rotations
 with absolute values tuned on near-default MakeHuman bodies, and MPFB fits
 the rig to the body: a male body fits a wavy chain (neck 19 degrees back,
@@ -3660,10 +3664,24 @@ script re-orients Hips through Head about their own heads to the library's
 standing pose, moving no joint and no vertex; the exported rest then equals
 the pose to three decimals and the modelled posture is what shows. (3) The
 library's default lights are set for baked commercial avatars and wash the
-MakeHuman skins out; the pane runs them at 1.2 and 14. Rejected: the
-library's `retarget` option (not in the pinned 1.7.0); per-head baseline
-tweaks in the app (the correction belongs in the file, where every client
-gets it); shipping the AvatarSDK head (licence).
+MakeHuman skins out; the pane runs them at 1.2 and 14. (4) The library
+adds the eyelid-follow itself -- eyeBlink is at least (eyesLookDown +
+browDown) / 2 -- because it was tuned on Ready Player Me heads, whose
+eyeLookDown turns the eyeball and leaves the lids alone; MakeHuman's face
+units move the lid with the eye as well, and the library's idle gaze sits
+about 0.35 down by its own eye-contact rule (derived from the head's pitch,
+not the camera), so the lid dropped twice and the eye closed to a slit.
+Found in a harness that loads a head through the library and freezes the
+morphs: at eyesLookDown 0.35 and blink 0.2 the library's example head keeps
+the pupil clear and the built head did not, its resting opening being two
+millimetres shorter. The script keeps a third of the lid motion in the four
+look shapes, scales the blink's lower-lid rise to a third (the current
+face-unit pack lifts it 8 mm; the pack the example was built with did not),
+and opens the resting eye with MakeHuman's eye-height target at 0.6 --
+knobs, because they are taste. Rejected: the library's `retarget` option
+(not in the pinned 1.7.0); per-head baseline tweaks or a cap on
+eyesLookDown in the app (the correction belongs in the file, where every
+client gets it); shipping the AvatarSDK head (licence).
 
 ### Mood is a label the harness picks from four, not a feeling the model reports (October 2026)
 

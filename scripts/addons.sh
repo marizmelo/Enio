@@ -98,8 +98,8 @@ case "${1:-}" in
     # published as a release asset (docs/avatar.md). The checksum is the
     # file's identity; a download that does not match is not installed.
     AVATAR_URL="https://github.com/marizmelo/Enio/releases/download/avatar-v1/enio-avatar-v1.glb"
-    AVATAR_SHA256="180074b833a4a02a9ffa1bec86e35aad94659f8a6062e9dd8d716fb644ce0a8f"
-    AVATAR_BYTES="21406936"
+    AVATAR_SHA256="71cda14dd0dc534d4a6ad12477e11c87158c33c27d94bba092f820f2e5bbff0a"
+    AVATAR_BYTES="21424108"
     mkdir -p "$DATA_DIR/avatar"
     printf '    %s MB from %s\n' "$((AVATAR_BYTES / 1000000))" "$AVATAR_URL"
     ( cd "$DATA_DIR/avatar" && curl -fL --retry 3 -C - -o default.glb.part "$AVATAR_URL" ) \

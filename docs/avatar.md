@@ -77,6 +77,12 @@ part, fixes the materials the glTF exporter would otherwise make
 transparent, re-orients the spine so the library's standing pose lands as
 a near-zero change, and writes the GLB. Body shape, skin, hair and outfit
 are variables at the top of the script; `HEAD_GENDER=0` builds a woman.
+Three knobs tune the eyes for the library's idle gaze, which sits a little
+below the camera: HEAD_EYE_OPEN makes the resting opening taller than
+MakeHuman's default (0.6), HEAD_LID_FOLLOW is how much of the eyelid motion
+the look-down and look-up shapes keep (0.3 — the library adds its own
+lid-follow on top), and HEAD_BLINK_LOWER is how far the lower lid joins a
+blink (0.3).
 TalkingHead's own
 [MPFB guide](https://github.com/met4citizen/TalkingHead/blob/main/blender/MPFB/MPFB.md)
 documents the same steps by hand.

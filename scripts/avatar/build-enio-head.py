@@ -81,13 +81,26 @@ macro = {
     "race": {"asian": 0.2, "caucasian": 0.5, "african": 0.3},
 }
 # Knobs: HEAD_GENDER=0 builds a woman, HEAD_AGE, HEAD_MUSCLE, HEAD_WEIGHT,
-# HEAD_PROPORTIONS and HEAD_HEIGHT take 0..1 like MakeHuman's sliders.
+# HEAD_PROPORTIONS and HEAD_HEIGHT take 0..1 like MakeHuman's sliders;
+# HEAD_EYE_OPEN, HEAD_LID_FOLLOW and HEAD_BLINK_LOWER are the eye tuning below.
 for key in ("gender", "age", "muscle", "weight", "proportions", "height"):
     if os.environ.get("HEAD_" + key.upper()):
         macro[key] = float(os.environ["HEAD_" + key.upper()])
 basemesh = HumanService.create_human(mask_helpers=True, detailed_helpers=True, extra_vertex_groups=True,
                                      feet_on_ground=True, scale=0.1, macro_detail_dict=macro)
 basemesh.name = "Enio"
+
+# TalkingHead parks the idle gaze a little below the camera (its eye-contact
+# rule derives it from the head's pitch, about 0.35 down in its own pose) and
+# rides its blink on top of that, so a face spends its idle life with the lids
+# a quarter down. MakeHuman's default male opening is two millimetres shorter
+# than the example head the library was tuned on, and at that operating point
+# it read as asleep. The eye-height target lifts the upper margin and lowers
+# the lower one; 0.6 puts the resting opening where the example's is.
+EYE_OPEN = float(os.environ.get("HEAD_EYE_OPEN", "0.6"))
+if EYE_OPEN:
+    for side in ("l", "r"):
+        TargetService.load_target(basemesh, TargetService.target_full_path(f"{side}-eye-height2-incr"), weight=EYE_OPEN)
 
 step("rig")
 rig = Rig.from_json_file_and_basemesh(os.path.join(HERE, "talkinghead.mpfbskel"), basemesh)
@@ -125,6 +138,40 @@ copy_root = ExportService.create_character_copy(basemesh, name_suffix="_export")
 new_basemesh = ObjectService.find_object_of_type_amongst_nearest_relatives(copy_root)
 TargetService.bake_targets(new_basemesh)
 FaceService.load_targets(new_basemesh, load_microsoft_visemes=False, load_meta_visemes=True, load_arkit_faceunits=True)
+
+# TalkingHead was tuned on Ready Player Me heads, whose eyeLookDown turns the
+# eyeball and leaves the lids alone: the library adds the lid-follow itself
+# (eyeBlink = max(anim, (eyesLookDown + browDown) / 2)). MakeHuman's face
+# units move the lid with the eye as well, so the lid dropped twice, and the
+# library's idle gaze closed the eye to a slit. Keep a third of the lid motion
+# for a hint of follow; the rest is the library's job. The same pack's blink
+# lifts the lower lid 8 mm, which the permanent coupled blink turned into a
+# squint: blink from the top, as the library assumes. Only body vertices are
+# touched -- the face units also move the eye helpers, which is where the
+# eyeball's own rotation is interpolated from, and that must stay whole. This
+# runs before the interpolation so lashes and brows follow the scaled lids.
+def scale_shape_key(obj, name, factor, only, select=None):
+    kb = obj.data.shape_keys.key_blocks.get(name) if obj.data.shape_keys else None
+    if kb is None:
+        return 0
+    ref, n = kb.relative_key, 0
+    for i in only:
+        d = kb.data[i].co - ref.data[i].co
+        if d.length_squared < 1e-14 or (select and not select(d)):
+            continue
+        kb.data[i].co = ref.data[i].co + d * factor
+        n += 1
+    return n
+body_group = new_basemesh.vertex_groups.get("body")
+if body_group is None:
+    raise SystemExit("basemesh has no 'body' vertex group; cannot tell lids from eye helpers")
+body_verts = [v.index for v in new_basemesh.data.vertices if any(g.group == body_group.index for g in v.groups)]
+LID_FOLLOW = float(os.environ.get("HEAD_LID_FOLLOW", "0.3"))
+BLINK_LOWER = float(os.environ.get("HEAD_BLINK_LOWER", "0.3"))
+for name in ("eyeLookDownLeft", "eyeLookDownRight", "eyeLookUpLeft", "eyeLookUpRight"):
+    print("LID", name, scale_shape_key(new_basemesh, name, LID_FOLLOW, body_verts), flush=True)
+for name in ("eyeBlinkLeft", "eyeBlinkRight"):
+    print("BLINK", name, scale_shape_key(new_basemesh, name, BLINK_LOWER, body_verts, select=lambda d: d.z > 0), flush=True)
 FaceService.interpolate_targets(new_basemesh)
 ExportService.bake_modifiers_remove_helpers(new_basemesh, bake_masks=True, bake_subdiv=True, remove_helpers=True)
 
@@ -205,14 +252,80 @@ if new_arm:
 step("materials")
 # Every MakeHuman material arrives with its texture's alpha wired into the
 # shader, which the glTF exporter turns into alphaMode BLEND -- a face you can
-# see the teeth through. Skin, eyes, teeth, tongue and clothes are opaque;
-# hair, brows and lashes are cut-outs, which the exporter emits as MASK when
-# the alpha passes through a GREATER_THAN node.
-CUTOUT = ("eyebrow", "eyelash", "short02", "hair")
+# see the teeth through. So each part gets the alpha mode its texture means:
+# skin, teeth, tongue and clothes are opaque; the eye texture's alpha is the
+# cornea, so the eyes clip like TalkingHead's own example (MASK, two-sided);
+# hair clips at a low threshold so strands survive; brows and lashes have
+# their texture alpha multiplied up first (nine tenths of those textures sit
+# below 0.2, so a clip at any threshold ate the strands and a blend sorted
+# them behind the skin) and then clip at the same low threshold. Hair, brows
+# and lashes are also darkened through a multiply node, which the exporter
+# writes as the base colour factor: a black-haired head, one texture.
+from mathutils import Matrix, Vector  # noqa: F811 (already imported above)
+HAIR_COLOR = tuple(float(x) for x in os.environ.get("HEAD_HAIR_RGB", "0.07,0.06,0.06").split(","))
+def kind_of(obj):
+    n = obj.name.lower()
+    if "eyebrow" in n or "eyelash" in n:
+        return "fine"
+    if "high-poly" in n or "low-poly" in n or ".eyes" in n:
+        return "eyes"
+    if any(k in n for k in ("hair", "short0", "bob0", "long0", "ponytail", "braid", "afro")):
+        return "hair"
+    return "opaque"
+def darken(tree, bsdf, rgb):
+    base = bsdf.inputs["Base Color"]
+    if not base.links:
+        base.default_value = (*rgb, 1.0)
+        return
+    from_socket = base.links[0].from_socket
+    tree.links.remove(base.links[0])
+    mix = tree.nodes.new("ShaderNodeMix")
+    mix.data_type = "RGBA"
+    mix.blend_type = "MULTIPLY"
+    mix.inputs["Factor"].default_value = 1.0
+    mix.inputs[7].default_value = (*rgb, 1.0)  # B: the constant colour
+    tree.links.new(from_socket, mix.inputs[6])  # A: the texture
+    tree.links.new(mix.outputs[2], base)
+def boost_alpha(tree, bsdf, gain):
+    """Bake an alpha gain into the texture itself. MakeHuman's brow and lash
+    textures are over 85% transparent with faint strands; at any clip
+    threshold they vanish and blended they read as pencil lines. A Math node
+    between the texture and the Alpha socket would hide the texture from the
+    glTF exporter, so the gain is applied to the pixels and saved beside the
+    cache, and the material points at the new image."""
+    base = bsdf.inputs["Base Color"]
+    src = base.links[0].from_node if base.links else None
+    while src is not None and src.type != "TEX_IMAGE":
+        src = src.inputs[6].links[0].from_node if src.type == "MIX" and src.inputs[6].links else None
+    if src is None or src.image is None:
+        return
+    img = src.image
+    boosted = img.copy()
+    px = list(img.pixels)
+    for i in range(3, len(px), 4):
+        px[i] = min(1.0, px[i] * gain)
+    boosted.pixels = px
+    boosted.name = f"{img.name}-alpha{gain:g}"
+    boosted.filepath_raw = os.path.join(CACHE, f"{boosted.name}.png")
+    boosted.file_format = "PNG"
+    boosted.save()
+    src.image = boosted
+
+def clip(tree, bsdf, threshold):
+    alpha = bsdf.inputs["Alpha"]
+    if not alpha.links or alpha.links[0].from_node.type == "MATH":
+        return
+    from_socket = alpha.links[0].from_socket
+    tree.links.remove(alpha.links[0])
+    node = tree.nodes.new("ShaderNodeMath")
+    node.operation = "GREATER_THAN"
+    node.inputs[1].default_value = threshold
+    tree.links.new(from_socket, node.inputs[0])
+    tree.links.new(node.outputs[0], alpha)
 for o in keep:
     if o.type != "MESH":
         continue
-    cutout = any(k in o.name.lower() for k in CUTOUT)
+    kind = kind_of(o)
     for slot in o.material_slots:
         mat = slot.material
         if not mat or not mat.use_nodes:
@@ -222,21 +335,24 @@ for o in keep:
         if bsdf is None:
             continue
         alpha = bsdf.inputs["Alpha"]
-        if not cutout:
+        if kind == "opaque":
             for link in list(alpha.links):
                 tree.links.remove(link)
             alpha.default_value = 1.0
             mat.use_backface_culling = True
-        elif alpha.links and alpha.links[0].from_node.type != "MATH":
-            # Read the source socket before the link object is freed.
-            from_socket = alpha.links[0].from_socket
-            tree.links.remove(alpha.links[0])
-            clip = tree.nodes.new("ShaderNodeMath")
-            clip.operation = "GREATER_THAN"
-            clip.inputs[1].default_value = 0.5
-            tree.links.new(from_socket, clip.inputs[0])
-            tree.links.new(clip.outputs[0], alpha)
-        print(f"MAT {o.name}: {mat.name} {'cutout' if cutout else 'opaque'}")
+        elif kind == "eyes":
+            clip(tree, bsdf, 0.5)
+            mat.use_backface_culling = False
+        elif kind == "hair":
+            clip(tree, bsdf, 0.3)
+            mat.use_backface_culling = False
+            darken(tree, bsdf, HAIR_COLOR)
+        else:  # fine: brows and lashes, strands made to show, then clipped
+            boost_alpha(tree, bsdf, 3.0 if "eyebrow" in o.name.lower() else 2.0)
+            clip(tree, bsdf, 0.3)
+            mat.use_backface_culling = False
+            darken(tree, bsdf, HAIR_COLOR)
+        print(f"MAT {o.name}: {mat.name} {kind}")
 
 step("export")
 bpy.ops.object.select_all(action="DESELECT")
