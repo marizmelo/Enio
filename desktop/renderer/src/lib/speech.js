@@ -28,10 +28,65 @@
  */
 const LOOKAHEAD = 2;
 
-let current = null;
 let queue = [];
 let draining = false;
 let generation = 0;
+
+/**
+ * Where a synthesised sentence goes to be played.
+ *
+ * The plain path is an audio element. While the avatar is on screen the
+ * sentences go through it instead, because its library plays audio on its
+ * own clock and times the mouth off that clock -- lips and sound must share
+ * one source. The queue, the lookahead, the generation bump and the drain
+ * promise all stay here, so the voice loop and the read-aloud button see no
+ * difference. A sink may reject only BEFORE it has queued anything; the
+ * element then says the sentence instead, and nothing plays twice.
+ */
+const htmlAudioSink = {
+  current: null,
+  play(blob) {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    this.current = audio;
+    return new Promise((resolve) => {
+      audio.addEventListener("ended", resolve, { once: true });
+      audio.addEventListener("error", resolve, { once: true });
+      // stopSpeaking() PAUSES the element, and a paused element never fires
+      // "ended" — without this listener the drain promise hangs forever
+      // after a stop. Invisible while nothing awaited speak() past a stop;
+      // fatal to the voice loop, which does. Natural end fires "ended", not
+      // "pause", so this cannot double-resolve the normal path.
+      audio.addEventListener("pause", resolve, { once: true });
+      audio.play().catch(resolve);
+    }).then(() => {
+      if (this.current === audio) {
+        // Revoked as well as released: each utterance is a fresh object URL,
+        // and leaving them attached leaks the conversation's audio into memory.
+        URL.revokeObjectURL(url);
+        this.current = null;
+      }
+    });
+  },
+  stop() {
+    if (!this.current) return;
+    this.current.pause();
+    URL.revokeObjectURL(this.current.src);
+    this.current = null;
+  },
+};
+let sink = null;
+
+/** Route playback through `next` ({play(blob, text), stop()}); null restores the element. */
+export function setSpeechSink(next) {
+  sink = next;
+}
+
+/** Unregister, but only if `which` is still the one registered: a pane
+ *  unmounting must not evict a newer pane's sink. */
+export function clearSpeechSink(which) {
+  if (sink === which) sink = null;
+}
 
 /**
  * Ask the agent to load the voice model now.
@@ -62,13 +117,8 @@ export function stopSpeaking() {
   generation += 1;
   queue = [];
   draining = false;
-
-  if (!current) return;
-  current.pause();
-  // Revoked as well as paused: each utterance is a fresh object URL, and
-  // leaving them attached leaks the whole conversation's audio into memory.
-  URL.revokeObjectURL(current.src);
-  current = null;
+  sink?.stop();
+  htmlAudioSink.stop();
 }
 
 async function synthesise(text) {
@@ -129,26 +179,17 @@ async function drain(mine) {
     const blob = await item.blob;
     if (!blob || mine !== generation) continue;
 
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    current = audio;
-
-    await new Promise((resolve) => {
-      audio.addEventListener("ended", resolve, { once: true });
-      audio.addEventListener("error", resolve, { once: true });
-      // stopSpeaking() PAUSES the element, and a paused element never fires
-      // "ended" — without this listener the drain promise hangs forever
-      // after a stop. Invisible while nothing awaited speak() past a stop;
-      // fatal to the voice loop, which does. Natural end fires "ended", not
-      // "pause", so this cannot double-resolve the normal path.
-      audio.addEventListener("pause", resolve, { once: true });
-      audio.play().catch(resolve);
-    });
-
-    if (current === audio) {
-      URL.revokeObjectURL(url);
-      current = null;
+    const target = sink;
+    let played = false;
+    if (target) {
+      try {
+        await target.play(blob, item.text);
+        played = true;
+      } catch {
+        // Rejected before queuing: the sentence is still owed, the plain way.
+      }
     }
+    if (!played && mine === generation) await htmlAudioSink.play(blob);
   }
 
   draining = false;

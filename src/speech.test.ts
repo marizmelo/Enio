@@ -158,3 +158,80 @@ describe("stopSpeaking settles the drain", () => {
     assert.equal(settled, true, "drain settled after stopSpeaking()");
   });
 });
+
+/**
+ * The sink seam: while the face is on screen, sentences go through it
+ * instead of the element, with the queue and the stop semantics unchanged.
+ */
+describe("a speech sink", () => {
+  test("receives each sentence in order while registered, and the element stays silent", async () => {
+    const marks: Mark[] = [];
+    let start = 0;
+    installBrowserStubs(marks, () => start);
+    const { speak, setSpeechSink } = (await import(SPEECH)) as any;
+    const got: string[] = [];
+    setSpeechSink({
+      play: async (_blob: unknown, text: string) => {
+        got.push(text);
+        await new Promise((r) => setTimeout(r, 10));
+      },
+      stop() {},
+    });
+    try {
+      start = Date.now();
+      speak("One.");
+      await speak("Two.");
+      assert.deepEqual(got, ["One.", "Two."]);
+      assert.equal(marks.filter((m) => m.kind === "ended").length, 0, "the element did not play");
+    } finally {
+      setSpeechSink(null);
+    }
+  });
+
+  test("stopSpeaking stops the sink and the speak() promise still settles", async () => {
+    const marks: Mark[] = [];
+    let start = 0;
+    installBrowserStubs(marks, () => start);
+    const { speak, stopSpeaking, setSpeechSink } = (await import(SPEECH)) as any;
+    let release: (() => void) | null = null;
+    let stops = 0;
+    // Like the real sink: the clip's promise settles only when stop() says so.
+    setSpeechSink({
+      play: () => new Promise<void>((r) => (release = r)),
+      stop() {
+        stops++;
+        release?.();
+      },
+    });
+    try {
+      start = Date.now();
+      const done = speak("One.");
+      await new Promise((r) => setTimeout(r, SYNTH_MS + 30));
+      stopSpeaking();
+      await Promise.race([done, new Promise((_, rej) => setTimeout(() => rej(new Error("drain hung after stop")), 500))]);
+      assert.equal(stops, 1);
+    } finally {
+      setSpeechSink(null);
+    }
+  });
+
+  test("a sink that rejects before queuing falls back to the element", async () => {
+    const marks: Mark[] = [];
+    let start = 0;
+    installBrowserStubs(marks, () => start);
+    const { speak, setSpeechSink } = (await import(SPEECH)) as any;
+    setSpeechSink({
+      play: async () => {
+        throw new Error("cannot decode");
+      },
+      stop() {},
+    });
+    try {
+      start = Date.now();
+      await speak("One.");
+      assert.equal(marks.filter((m) => m.kind === "ended").length, 1, "the element said it instead");
+    } finally {
+      setSpeechSink(null);
+    }
+  });
+});
