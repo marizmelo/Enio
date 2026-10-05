@@ -52,6 +52,9 @@ import { speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
 import { transcribe as transcribeAudio } from "@/lib/dictation";
 import { startUtteranceRecorder } from "@/lib/utterance-recorder";
 import { createVoiceLoop } from "@/lib/voice-loop";
+import { AvatarPane } from "@/components/AvatarPane";
+import { createAvatarDirector } from "@/lib/avatar-director";
+import { avatarCapability, invalidateAvatarModel } from "@/lib/avatar-assets";
 
 /** "2h ago", for the divider under restored history. */
 function ago(ts) {
@@ -92,6 +95,30 @@ export function App() {
   const speakPromiseRef = useRef(Promise.resolve());
   const loopTurnRef = useRef(false);
   const prevSpeakRepliesRef = useRef(false);
+  // The face: off, a thumbnail over the thread, or a side panel -- remembered
+  // per window, off by default for the reason speech is. Its director turns
+  // the events below into commands; both live in refs, never render state,
+  // so a token arriving does not re-render a WebGL scene.
+  const [avatarMode, setAvatarMode] = useState(() => {
+    try {
+      return localStorage.getItem("enio.avatar-mode") ?? "off";
+    } catch {
+      return "off";
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("enio.avatar-mode", avatarMode);
+    } catch {
+      // A window that cannot remember still works.
+    }
+  }, [avatarMode]);
+  const directorRef = useRef(null);
+  if (!directorRef.current) directorRef.current = createAvatarDirector();
+  const avatarRef = useRef(null);
+  const direct = useCallback((event) => {
+    for (const cmd of directorRef.current.handle(event, Date.now())) avatarRef.current?.apply(cmd);
+  }, []);
 
   // Defined early and over refs only, so the conversation-switch callbacks
   // below (stable useCallbacks) can capture their first-render instance and
@@ -247,6 +274,7 @@ export function App() {
       notes: () => setNotesOpen(true),
       history: () => setHistoryOpen(true),
       files: () => setFilesOpen(true),
+      avatar: () => setAvatarMode((m) => (m === "off" ? "pip" : m)),
     }[panel];
     open?.();
   }, []);
@@ -437,6 +465,10 @@ export function App() {
       agent: m.agent ?? null,
       sources: m.sources ?? [],
       artifacts: m.artifacts ?? [],
+      // Provenance and the face's label, as the server restored them. The
+      // basis chip used to vanish on reopen for want of this line.
+      basis: m.basis ?? null,
+      mood: m.mood ?? null,
       restored: true,
     }));
     const lastTs = transcript.length > 0 ? transcript[transcript.length - 1].ts : null;
@@ -526,6 +558,7 @@ export function App() {
   // the wrong files and nothing visibly wrong.
   const openConversation = useCallback(async (conv) => {
     stopSpeaking();
+    direct({ type: "reset" });
     teardownVoiceRef.current();
     followRef.current = true;
     setShowJump(false);
@@ -551,6 +584,7 @@ export function App() {
     setProjectsOpen(false);
     if (active?.latestConversation) {
       stopSpeaking();
+      direct({ type: "reset" });
     teardownVoiceRef.current();
       const msgs = await restoreThread(active.latestConversation).catch(() => []);
       setConversationId(active.latestConversation);
@@ -575,6 +609,7 @@ export function App() {
     }
     setProjectsOpen(false);
     stopSpeaking();
+    direct({ type: "reset" });
     teardownVoiceRef.current();
     followRef.current = true;
     setShowJump(false);
@@ -586,6 +621,7 @@ export function App() {
 
   const newChat = useCallback(async () => {
     stopSpeaking();
+    direct({ type: "reset" });
     teardownVoiceRef.current();
     followRef.current = true;
     setShowJump(false);
@@ -627,6 +663,7 @@ export function App() {
       const history = [...messages, { role: "user", content: trimmed, files }];
       setMessages([...history, { role: "assistant", content: "", tools: [] }]);
       setStreaming(true);
+      direct({ type: "turn-start" });
 
       // First message of a fresh boot with nothing to resume: create the
       // conversation now so this turn is stored from the start.
@@ -650,6 +687,10 @@ export function App() {
       const notices = [];
       let withdrawn = null;
       let basis = null;
+      // The harness's label for the reply's mood; the face wears it.
+      let mood = null;
+      let announced = false;
+      let failed = false;
       // Pages the tools read, in the order they were read. Deduped at render
       // time rather than here, so the search hit that carried a snippet is the
       // one kept when the same page is later fetched in full.
@@ -667,8 +708,10 @@ export function App() {
         )) {
           if (event.type === "tool") {
             tools.push(event.name);
+            direct({ type: "tool-start", name: event.name });
           } else if (event.type === "route") {
             agent = event.route;
+            direct({ type: "route", agent: event.route });
           } else if (event.type === "artifact") {
             for (const item of event.items ?? []) {
               if (!item.path) continue;
@@ -696,10 +739,12 @@ export function App() {
             sources.push({ tool: event.tool, items: event.items });
           } else if (event.type === "call") {
             calls.push({ name: event.name, detail: event.detail, status: event.status });
+            direct({ type: "call-end", status: event.status });
           } else if (event.type === "widget") {
             widgets.push(event.widget);
           } else if (event.type === "think") {
             thinking = event.chars;
+            direct({ type: "think" });
           } else if (event.type === "context") {
             setContext({ tokens: event.tokens, budget: event.budget });
           } else if (event.type === "notice") {
@@ -708,6 +753,10 @@ export function App() {
             openPanel(event.panel, event.view);
           } else if (event.type === "basis") {
             basis = event.basis;
+            direct({ type: "basis", basis: event.basis });
+          } else if (event.type === "mood") {
+            mood = event.mood;
+            direct({ type: "mood", mood: event.mood });
           } else if (event.type === "restart") {
             // The server withdrew the reply so far — a guard caught it
             // answering from memory, fabricating an action, or disclaiming a
@@ -719,12 +768,22 @@ export function App() {
             assistant = "";
             unspoken = "";
             withdrawn = event.reason;
+            // Including what is already queued or playing: the comment above
+            // promised it, and a face mouthing withdrawn words made the gap
+            // visible. The corrected text re-announces itself.
+            stopSpeaking();
+            announced = false;
+            direct({ type: "restart" });
           } else {
             // The model opens with a blank line or two once its <think> block
             // is stripped. Trimmed at the front only, and on the accumulated
             // text rather than per delta, because a delta is often a bare
             // space between words and trimming those runs them together.
             assistant = (assistant + event.text).replace(/^\s+/, "");
+            if (!announced && assistant) {
+              announced = true;
+              direct({ type: "first-text" });
+            }
 
             // Spoken sentence by sentence as it arrives, so the first words are
             // audible about a second after they appear rather than after the
@@ -754,6 +813,7 @@ export function App() {
               notices: [...notices],
               withdrawn,
               basis,
+              mood,
               startedAt,
             },
           ]);
@@ -773,6 +833,7 @@ export function App() {
             ]);
           }
         } else {
+          failed = true;
           setMessages([
             ...history,
             { role: "assistant", content: String(err?.message ?? err), tools, error: true },
@@ -781,9 +842,10 @@ export function App() {
       } finally {
         setStreaming(false);
         abortRef.current = null;
+        direct({ type: "turn-end", error: failed });
       }
     },
-    [backendReady, canvas, capabilities, conversationId, messages, sessionFiles, speakReplies, streaming],
+    [backendReady, canvas, capabilities, conversationId, direct, messages, sessionFiles, speakReplies, streaming],
   );
 
   // Only when the handoff skill is actually installed: a button that sends
@@ -831,6 +893,9 @@ export function App() {
   useEffect(() => {
     voiceLoopRef.current?.setHeld(streaming && !loopTurnRef.current);
   }, [streaming]);
+  useEffect(() => {
+    direct({ type: "voice", state: voiceState });
+  }, [voiceState, direct]);
 
   const enterVoiceMode = useCallback(async () => {
     if (voiceLoopRef.current) return;
@@ -838,7 +903,11 @@ export function App() {
     prevSpeakRepliesRef.current = speakReplies;
     setSpeakReplies(true);
     const loop = createVoiceLoop({
-      startRecorder: startUtteranceRecorder,
+      // The recorder's level hook, unused until the face existed: it looks at
+      // you while you speak. Wrapped here rather than changed in the loop,
+      // whose contract passes only onUtterance.
+      startRecorder: (opts) =>
+        startUtteranceRecorder({ ...opts, onLevel: (on) => direct({ type: "user-level", speaking: on }) }),
       transcribe: (wav) => transcribeAudio(wav), // accurate pass, never fast
       sendTurn: async (text) => {
         loopTurnRef.current = true;
@@ -872,6 +941,17 @@ export function App() {
     }
   }, [speakReplies]);
 
+  // Null when the agent predates the face: no button, no card.
+  const avatarCap = avatarCapability(capabilities);
+  const installAvatar = useCallback(async () => {
+    const result = await window.maple?.installAddon?.("avatar");
+    if (result?.ok) {
+      invalidateAvatarModel();
+      fetchCapabilities().then(setCapabilities);
+    }
+    return !!result?.ok;
+  }, []);
+
   return (
     <TooltipProvider delayDuration={300}>
     <div className="flex h-screen flex-col bg-background">
@@ -902,6 +982,8 @@ export function App() {
         onCommands={() => setCommandsOpen(true)}
         onAgents={() => setAgentsOpen(true)}
         onConnections={() => setConnectionsOpen(true)}
+        avatarOn={avatarMode !== "off"}
+        onToggleAvatar={avatarCap ? () => setAvatarMode((m) => (m === "off" ? "pip" : "off")) : undefined}
       />
 
       <AgentsDialog
@@ -1029,7 +1111,7 @@ export function App() {
         className="min-h-0 flex-1"
       >
       {!canvas?.full && (
-      <ResizablePanel defaultSize={58} minSize={35} className="flex min-w-0 flex-col">
+      <ResizablePanel id="chat" order={1} defaultSize={58} minSize={35} className="flex min-w-0 flex-col">
       <div className="relative flex min-h-0 flex-1 flex-col">
       <main ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
         {!backendReady ? (
@@ -1107,6 +1189,25 @@ export function App() {
         >
           Jump to latest ↓
         </button>
+      )}
+
+      {/* The face, as a thumbnail over the thread. Absolute like the jump
+          button: it watches the conversation without taking a column from
+          it, and the same component becomes the side panel on expand. */}
+      {avatarMode === "pip" && avatarCap && (
+        <div className="absolute right-3 top-3 z-10 h-56 w-40">
+          <AvatarPane
+            ref={avatarRef}
+            mode="pip"
+            capability={avatarCap}
+            director={directorRef.current}
+            speakReplies={speakReplies}
+            onExpand={() => setAvatarMode("panel")}
+            onClose={() => setAvatarMode("off")}
+            onInstall={installAvatar}
+            className="h-full w-full"
+          />
+        </div>
       )}
       </div>
 
@@ -1195,6 +1296,8 @@ export function App() {
         <>
           {!canvas.full && <ResizableHandle withHandle />}
           <ResizablePanel
+            id="canvas"
+            order={2}
             defaultSize={canvas.full ? 100 : 42}
             minSize={canvas.full ? 100 : 22}
             maxSize={canvas.full ? 100 : 60}
@@ -1210,6 +1313,25 @@ export function App() {
               // The Skills dialog mounts an editor of its own on top; one
               // ⌘S must not save two different files.
               hotkeys={!skillsOpen}
+            />
+          </ResizablePanel>
+        </>
+      )}
+
+      {avatarMode === "panel" && avatarCap && !canvas?.full && (
+        <>
+          <ResizableHandle withHandle />
+          <ResizablePanel id="avatar" order={3} defaultSize={24} minSize={16} maxSize={40}>
+            <AvatarPane
+              ref={avatarRef}
+              mode="panel"
+              capability={avatarCap}
+              director={directorRef.current}
+              speakReplies={speakReplies}
+              onCollapse={() => setAvatarMode("pip")}
+              onClose={() => setAvatarMode("off")}
+              onInstall={installAvatar}
+              className="h-full w-full rounded-none border-0 border-l shadow-none"
             />
           </ResizablePanel>
         </>

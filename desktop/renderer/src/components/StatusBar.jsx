@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Bot, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, Plug, TerminalSquare, Workflow, X } from "lucide-react";
+import { BookOpen, Bot, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, Plug, ScanFace, TerminalSquare, Workflow, X } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -46,6 +46,8 @@ export function StatusBar({
   onCommands,
   onAgents,
   onConnections,
+  avatarOn = false,
+  onToggleAvatar,
 }) {
   return (
     // The window uses titleBarStyle "hiddenInset", so macOS draws its traffic
@@ -163,6 +165,18 @@ export function StatusBar({
         <TipButton tip="Files" className="size-7" onClick={onFiles}>
           <FolderOpen className="size-3.5" />
         </TipButton>
+        {/* The face. Shown only when the agent reports one can exist (the
+            same rule as the meeting button), but kept while it is not yet
+            installed: the card it opens is where setup lives. */}
+        {onToggleAvatar && (
+          <TipButton
+            tip={avatarOn ? "Hide avatar" : "Avatar"}
+            className={cn("size-7", avatarOn && "text-foreground")}
+            onClick={onToggleAvatar}
+          >
+            <ScanFace className="size-4" />
+          </TipButton>
+        )}
         {/* Only when something is actually running. A process an agent started
             outlives its turn, so the one thing this bar must never do is let
             it run unseen -- but an always-present icon for the empty case
