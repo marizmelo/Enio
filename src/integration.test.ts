@@ -2242,3 +2242,70 @@ describe("the redirect examples never name the agent reading them", () => {
     assert.ok(SHARED_RULES.includes('"@mail check my unread email"'), "the generic form keeps both");
   });
 });
+
+/**
+ * The mood label rides the turn like basis: stated by the harness, once
+ * per reply, restored with the conversation. These turns run with no
+ * embedder loaded, so the classifier is gated off and the rules and the
+ * neutral floor are what is under test.
+ */
+describe("the mood label", () => {
+  test("a plain reply is labelled once, neutral, and the label is restored with the thread", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "The function returns a promise that resolves to the parsed JSON. Nothing else changes." }]);
+    const moods: string[] = [];
+    const result = await runTurn("what does it return", [], registry, sessionId, {
+      onMood: (m) => moods.push(m),
+    }, { specialist: "generalist" });
+    assert.deepEqual(moods, ["neutral"]);
+    assert.equal(result.mood, "neutral");
+    const step = getDb()
+      .prepare(`SELECT args FROM turn_steps WHERE name = 'mood' AND turn_id = (SELECT MAX(id) FROM turns)`)
+      .get() as { args: string } | undefined;
+    assert.ok(step, "a harness step records the label");
+    assert.equal(JSON.parse(step!.args).mood, "neutral");
+    const restored = store.conversationMessages(sessionId).filter((m) => m.role === "assistant");
+    assert.equal(restored.at(-1)?.mood, "neutral", "a reopened conversation shows the face it had");
+  });
+
+  test("an abstention is unsure, by the grammar the adapter gate uses", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "I don't have anything on that in memory. Nothing was saved about it." }]);
+    const moods: string[] = [];
+    await runTurn("when is the Halvorsen renewal", [], registry, sessionId, { onMood: (m) => moods.push(m) }, { specialist: "generalist" });
+    assert.deepEqual(moods, ["unsure"]);
+  });
+
+  test("a failed call the reply owns up to is sorry", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { toolCall: { name: "read_file", args: { path: "missing/nowhere.txt" } } },
+      { content: "I couldn't read that file; it does not exist in the workspace. Check the path." },
+    ]);
+    const moods: string[] = [];
+    await runTurn("read missing/nowhere.txt", [], registry, sessionId, { onMood: (m) => moods.push(m) }, { specialist: "coder" });
+    assert.deepEqual(moods, ["sorry"]);
+  });
+
+  test("a withdrawn reply's label is forgotten, so the correction gets its own frame", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    // Two sentences, so the first is labelled while it streams -- a label
+    // the restart must then forget, or the correction would send nothing.
+    scriptModel([
+      { content: "Done — I have opened Calculator for you. The display is cleared too." },
+      { content: "I cannot open apps from here — that is the operator's job." },
+    ]);
+    const moods: string[] = [];
+    let restarts = 0;
+    await runTurn("please open calculator and clear it for me now", [], registry, sessionId, {
+      onMood: (m) => moods.push(m),
+      onRestart: () => restarts++,
+    }, { specialist: "generalist" });
+    assert.equal(restarts, 1);
+    assert.equal(moods.length, 2, `one frame per shown reply, got ${moods.join(",")}`);
+  });
+});

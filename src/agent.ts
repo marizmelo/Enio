@@ -21,6 +21,7 @@ import { distinctiveTerms, looksLikeQuestion as questionShaped, threadCovers } f
 import { noteTurn as noteGap } from "./memory/gaps.js";
 import { personalityView } from "./personality.js";
 import { panelRequest } from "./panels.js";
+import { createMoodTrack, type Mood } from "./mood.js";
 import {
   accountSwitchRequest,
   conversationAccount,
@@ -262,6 +263,11 @@ export interface TurnHandlers {
    *  `conversation`: no tool ran and an earlier reply in this thread did.
    *  `model`: no tool ran and nothing covered it -- the weights alone. */
   onBasis?(basis: "web" | "files" | "memory" | "conversation" | "model"): void;
+  /** The reply's mood, a label the harness picks from four (mood.ts): the
+   *  rules on what ran, then the nearest authored example. Sent once the
+   *  first sentence exists, and again only when a corrected or settled
+   *  reply differs. */
+  onMood?(mood: Mood): void;
   /** Context carried after any folding, so a client can show how full it is. */
   onContext?(usage: { tokens: number; budget: number }): void;
   onRoute?(specialist: string): void;
@@ -301,6 +307,8 @@ export interface TurnResult {
   /** Set when the harness saved the reply as a handoff file (see below):
    *  the workspace-relative path a client can offer to send. */
   handoffFile?: string;
+  /** The mood label the turn settled on, when it labelled one. */
+  mood?: Mood;
 }
 
 /**
@@ -1255,6 +1263,8 @@ export async function runTurn(
         content: output,
       });
     }
+    // What streamed before a tool call was narration; the answer comes after.
+    moods.rearm();
   }
   // Verify after a write: the harness runs the project's test or build once
   // per turn, the first time a coder turn writes code, and the model sees
@@ -1319,6 +1329,9 @@ export async function runTurn(
   // path -- a failed trace write must never break a working conversation.
   const turnStartedAt = Date.now();
   const steps: StepRecord[] = [];
+  // The reply's mood label, driven from the same sites that stream the
+  // text (mood.ts explains the timing). Reads `steps` for what ran.
+  const moods = createMoodTrack(steps, (m) => handlers.onMood?.(m));
   // Web pages read this turn, in order. The memory tool stamps the latest on
   // any fact remembered mid-turn (see setMemorySources). Reset here so a
   // fact remembered in a turn that read nothing carries no stale origin.
@@ -1412,7 +1425,10 @@ export async function runTurn(
   let held: string[] | null = holdReply ? [] : null;
   const emitContent = (delta: string) => {
     if (held) held.push(delta);
-    else handlers.onContent?.(delta);
+    else {
+      handlers.onContent?.(delta);
+      moods.streamed(delta);
+    }
   };
   if (
     specialistName === "researcher" &&
@@ -1784,6 +1800,8 @@ export async function runTurn(
       handlers.onNotice?.(reason);
     } else if (handlers.onRestart) handlers.onRestart(reason);
     else handlers.onNotice?.(reason);
+    // The face resets with the restart; the correction gets its own label.
+    moods.reset();
     // The withdrawn reply is already in the log and in history[]. The log
     // row goes now, so a reload never shows it. History keeps it for the
     // corrective rounds -- the model has to see what it said to be told it
@@ -2031,7 +2049,11 @@ export async function runTurn(
   // the log and the transcript hold, so the bubble and the record agree.
   if (held) {
     held = null;
-    if (reply.trim()) handlers.onContent?.(reply);
+    if (reply.trim()) {
+      // Labelled before the text lands, so the face reacts as the words appear.
+      await moods.label(reply);
+      handlers.onContent?.(reply);
+    }
   }
 
   // The grounding check, on turns that read source material. Sources are
@@ -2178,6 +2200,21 @@ export async function runTurn(
     error: null,
     durationMs: 0,
   });
+  // The mood, settled: rules may still upgrade the classifier's label, and a
+  // reply that never completed a sentence gets labelled now. Recorded as a
+  // harness step, so a restored conversation carries it like basis.
+  const moodStep = await moods.settle(reply);
+  if (moodStep) {
+    steps.push({
+      seq: steps.length,
+      kind: "harness",
+      name: "mood",
+      args: JSON.stringify({ mood: moodStep.mood, how: moodStep.how, margin: moodStep.margin }),
+      output: "",
+      error: null,
+      durationMs: moodStep.ms,
+    });
+  }
   // The "model" case, kept: what was asked that nothing covered is the gap
   // ledger's whole content. Every input is a fact this turn established;
   // the predicate is in one place so reindex replays it identically.
@@ -2260,6 +2297,7 @@ export async function runTurn(
     reply,
     messages: history,
     toolsUsed,
+    mood: moods.sent ?? undefined,
     specialist: specialistName || "single",
     question: userInput,
     ...(handoffFile ? { handoffFile } : {}),

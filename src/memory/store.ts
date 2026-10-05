@@ -897,6 +897,8 @@ export interface StoredMessage {
   agent?: string;
   /** Where the answer's substance came from, as the harness recorded it. */
   basis?: "web" | "files" | "memory" | "conversation" | "model";
+  /** The mood label the harness gave the reply, for a client with a face. */
+  mood?: "neutral" | "happy" | "sorry" | "unsure";
   /** Files this reply created, recovered from its tools' own output — the
    *  same extraction that opens the canvas live. */
   artifacts?: Array<{ type: string; path: string }>;
@@ -979,6 +981,15 @@ export function conversationMessages(sessionId: string): StoredMessage[] {
         }
       } catch {
         /* an unreadable basis leaves the reply unlabelled, never mislabelled */
+      }
+    }
+    // Same for the mood: the face a restored reply shows is the one it had.
+    if (step.kind === "harness" && step.name === "mood") {
+      try {
+        const m = (JSON.parse(step.args || "{}") as { mood?: string }).mood;
+        if (m === "neutral" || m === "happy" || m === "sorry" || m === "unsure") target.mood = m;
+      } catch {
+        /* an unreadable label leaves the face neutral, never wrong */
       }
     }
     if (step.kind !== "harness") {

@@ -194,6 +194,11 @@ export async function serve(): Promise<void> {
     const { warmFastRouter } = await import("./routing-fast.js");
     const { allSpecialists } = await import("./specialists.js");
     warmFastRouter(allSpecialists());
+    // The reply-mood label embeds its examples with the same model. Warmed
+    // here because boot is the one place allowed to start that load: a
+    // turn only ever reuses an embedder something else already loaded.
+    const { warmMood } = await import("./mood.js");
+    warmMood();
     const shown = config.agentHost === "0.0.0.0" ? "<this-machine>" : config.agentHost;
     console.log(`\nenio listening on http://${shown}:${config.agentPort}/v1`);
     console.log(`  ${registryRef.current.all.length} tools · upstream ${config.modelBaseUrl}`);
@@ -1733,6 +1738,10 @@ async function handle(
           // Where the answer came from, stated by the harness. Same channel
           // as route: provenance the model cannot misattribute.
           onBasis: (basis) => res.write(`: basis ${basis}\n\n`),
+          // The reply's mood label, for a client with a face to make. Same
+          // channel and same contract as basis: the harness states it, the
+          // model never names it, and a client without a face ignores it.
+          onMood: (mood) => res.write(`: mood ${mood}\n\n`),
           onPanel: (panel, view) => res.write(`: panel ${panel}${view ? ` ${view}` : ""}\n\n`),
           // How full the window is after any folding. On the comment channel
           // like the rest, so a client that does not render it is unaffected
@@ -1783,6 +1792,7 @@ async function handle(
     // Not part of the OpenAI schema, but useful and ignored by clients that
     // don't look for it.
     x_tools_used: result.toolsUsed,
+    x_mood: result.mood ?? null,
   });
 }
 
