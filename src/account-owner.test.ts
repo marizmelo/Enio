@@ -32,7 +32,9 @@ const script = (email: string, extra: Partial<Parameters<typeof acc.addScriptAcc
 
 describe("whose account it is", () => {
   test("an account connected before the field existed is listed with no owner, and says so", () => {
+    assert.match(acc.nothingOfYoursNotice() ?? "", /No account is connected.*enio:\/\/panel\/accounts\/add/, "nothing connected: the notice points at Connections");
     const legacy = script("enio@example.com");
+    assert.equal(acc.nothingOfYoursNotice(), null, "an account with no owner may be the person's");
     assert.equal(legacy.owner, undefined);
     assert.match(acc.describeAccount(legacy), /owner not set/);
     const marked = acc.setAccountOwner(legacy.id, "agent", "Enio's")!;
@@ -43,6 +45,7 @@ describe("whose account it is", () => {
 
   test("with only the agent's account, reading 'my mail' finds nothing of yours and says which account exists", async () => {
     assert.equal(acc.scriptMailAccount("read"), null, "Enio's own is never the fallback for reading");
+    assert.match(acc.nothingOfYoursNotice() ?? "", /only Enio's own.*\[Connections\]\(enio:\/\/panel\/accounts\/add\)/);
     assert.equal(acc.anyMailReadAccount(), true, "but the tools exist — the answer is a sentence, not a missing tool");
     const { mailTools } = await import("./tools/mail.js");
     const search = mailTools.find((t) => t.name === "search_email")!;
@@ -65,6 +68,7 @@ describe("whose account it is", () => {
 
   test("reading prefers the person's account, sending prefers the agent's", () => {
     const mine = script("mariz@example.com", { owner: "user", label: "personal" });
+    assert.equal(acc.nothingOfYoursNotice(), null, "with an account of the person's there is nothing to say");
     assert.equal(acc.scriptMailAccount("read")!.email, "mariz@example.com", "my inbox is mine");
     assert.equal(acc.scriptMailAccount("send")!.email, "enio@example.com", "mail goes out as the agent");
     assert.equal(acc.scriptAccountWith("calendar.read")!.email, "mariz@example.com", "my calendar is mine");

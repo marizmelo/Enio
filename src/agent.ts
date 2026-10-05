@@ -31,6 +31,7 @@ import {
   scriptMailAccount,
   setActiveAccount,
   setConversationAccount,
+  nothingOfYoursNotice,
 } from "./accounts.js";
 import { extractSources, isWebTool } from "./sources.js";
 import { setMemorySources } from "./tools/memory.js";
@@ -2191,6 +2192,13 @@ export async function runTurn(
           ? "conversation"
           : "model";
   handlers.onBasis?.(basis);
+  // The remedy for an account that is not there, from the harness: see
+  // nothingOfYoursNotice. Only when no tool ran -- a tool that ran has
+  // already said whose account it used, or refused with the same link.
+  if ((specialistName === "planner" || specialistName === "mail") && toolNames.length === 0) {
+    const missing = nothingOfYoursNotice();
+    if (missing) handlers.onNotice?.(missing);
+  }
   steps.push({
     seq: steps.length,
     kind: "harness",

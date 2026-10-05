@@ -533,6 +533,23 @@ export function anyAccountWith(grant: Grant | null): boolean {
   );
 }
 
+/**
+ * The notice when nothing of the person's is connected, with the remedy as
+ * a link the window opens. Said by the harness at the end of a planner or
+ * mail turn that called no tool: with only Enio's own account connected the
+ * model answers "no account is connected" from the thread as often as from
+ * a tool, and only a tool result carried the link. A closed condition the
+ * harness holds, so it is stated either way; a tool that ran already said
+ * whose account it used or why it refused. An account whose owner was never
+ * set counts as possibly the person's, as it does for the tools.
+ */
+export function nothingOfYoursNotice(): string | null {
+  const all = read().accounts;
+  if (all.length === 0) return "No account is connected. Connect one in [Connections](enio://panel/accounts/add).";
+  if (all.some((a) => a.owner !== "agent")) return null;
+  return "No account of yours is connected — only Enio's own. Connect yours in [Connections](enio://panel/accounts/add).";
+}
+
 /** When nothing of the person's can do the act: Enio's own account, if that
  *  is what is connected, so a tool can name it rather than use it or claim
  *  nothing is connected. */
