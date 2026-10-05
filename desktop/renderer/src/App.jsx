@@ -48,7 +48,7 @@ import { currentModel } from "@/lib/recipes";
 import { MemoryDialog } from "@/components/MemoryDialog";
 import { NotesDialog } from "@/components/NotesDialog";
 import { SkillsDialog } from "@/components/SkillsDialog";
-import { speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
+import { onSpeaking, speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
 import { transcribe as transcribeAudio } from "@/lib/dictation";
 import { startUtteranceRecorder } from "@/lib/utterance-recorder";
 import { createVoiceLoop } from "@/lib/voice-loop";
@@ -84,6 +84,19 @@ export function App() {
   // Off by default, deliberately. An assistant that starts talking without
   // being asked is startling in a way a silent one never is.
   const [speakReplies, setSpeakReplies] = useState(false);
+  // Whether the speaker is busy, from the player itself: read-aloud under a
+  // message, spoken replies and the voice loop all go through it, so this is
+  // the one truth a stop control can trust.
+  const [speaking, setSpeaking] = useState(false);
+  useEffect(() => onSpeaking(setSpeaking), []);
+  useEffect(() => {
+    if (!speaking) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") stopSpeaking();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [speaking]);
   // Voice conversation mode: the loop object lives in a ref (it is not
   // render state), the pill shows voiceState, and sendRef/streamingRef let
   // the loop call the CURRENT send — a useCallback over messages — without

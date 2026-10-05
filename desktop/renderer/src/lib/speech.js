@@ -119,6 +119,7 @@ export function stopSpeaking() {
   draining = false;
   sink?.stop();
   htmlAudioSink.stop();
+  announce(false);
 }
 
 async function synthesise(text) {
@@ -159,6 +160,32 @@ function pump(mine) {
 /** Resolves when the current run of the queue has finished, not before. */
 let drained = Promise.resolve();
 
+/**
+ * Whether anything is being read right now, for a stop control that lives
+ * somewhere other than under the message it came from. A read-aloud of a long
+ * answer outlives the hover that showed its own button, and the only other
+ * way to silence it was to find that message again.
+ */
+const speakingListeners = new Set();
+let speakingNow = false;
+function announce(on) {
+  if (speakingNow === on) return;
+  speakingNow = on;
+  for (const listener of speakingListeners) {
+    try {
+      listener(on);
+    } catch {
+      // A listener's problem is not the player's.
+    }
+  }
+}
+/** Subscribe to speaking on/off; called at once with the current state. Returns unsubscribe. */
+export function onSpeaking(listener) {
+  speakingListeners.add(listener);
+  listener(speakingNow);
+  return () => speakingListeners.delete(listener);
+}
+
 async function drain(mine) {
   // Joining an existing run rather than returning immediately: a caller that
   // awaits speak() is asking to know when the words have been said, and
@@ -167,6 +194,7 @@ async function drain(mine) {
   if (draining) return drained;
 
   draining = true;
+  announce(true);
   let release;
   drained = new Promise((r) => (release = r));
 
@@ -192,7 +220,12 @@ async function drain(mine) {
     if (!played && mine === generation) await htmlAudioSink.play(blob);
   }
 
-  draining = false;
+  // Only the current run may declare the player idle: a run cut short by
+  // stopSpeaking() finishes its last await after a newer run has started.
+  if (mine === generation) {
+    draining = false;
+    announce(false);
+  }
   release();
 }
 

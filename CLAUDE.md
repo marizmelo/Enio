@@ -411,3 +411,11 @@ MCP server. People reach for MCP when they needed a skill.
 - The lexical fallback needs stemming: people rephrase when they repeat
   themselves, so `summarise`/`summarize`/`summary` and `work`/`worked` must
   collapse or clustering finds nothing.
+- kokoro-js synthesises on the thread that calls it (its phonemiser and ONNX
+  run are synchronous JS and WebAssembly), so a sentence held the agent's
+  event loop for the length of the clip — 8.5 s measured for two long
+  sentences at once — and nothing answered meanwhile: not `/ping`, not chat,
+  not transcription. The launcher's two-second probe took that for a crash
+  and the window flipped to "Could not start" until the next poll. Synthesis
+  runs in `src/voice-worker.ts`, a worker thread, for that reason, and the
+  launcher wants two missed probes before it reports a backend gone.

@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { Worker } from "node:worker_threads";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { config, projectRoot } from "./config.js";
@@ -165,88 +166,161 @@ export async function transcribeWav(
 }
 
 /**
- * Kokoro, loaded once and kept.
+ * Kokoro, loaded once and kept -- on its own thread.
  *
  * ~90MB at q8 and it stays resident, unlike the vision and dictation models
  * which are spawned per use. Speech is the one that would be noticed: a reply
  * arriving three seconds before it can be spoken is worse than the memory it
  * saves, and 90MB next to Maple's 6.9GB is not the thing worth reclaiming.
+ *
+ * A worker thread rather than this thread, because kokoro-js synthesises
+ * synchronously and a sentence held the server's event loop for the length
+ * of the clip: nothing answered while a reply was being read aloud, and the
+ * launcher's health probe took the silence for a crash (see voice-worker.ts).
+ * A thread rather than a child process: kokoro is JavaScript already in this
+ * process's dependency tree, and a thread hands the WAV back by transfer.
+ *
+ * Replies are matched to requests by id, and a worker that dies settles every
+ * caller still waiting -- the transcription worker's rule, for the same
+ * reason: a promise nobody will ever resolve is a button stuck on "speaking".
  */
-let kokoro: Promise<any> | null = null;
-
-async function loadKokoro(): Promise<any> {
-  if (!kokoro) {
-    kokoro = (async () => {
-      const { KokoroTTS } = await import("kokoro-js");
-      return KokoroTTS.from_pretrained(config.kokoroModel, {
-        dtype: "q8",
-        device: "cpu",
-      });
-    })();
-  }
-  return kokoro;
+export interface VoiceWorkerLike {
+  postMessage(msg: unknown): void;
+  on(event: string, fn: (...args: any[]) => void): unknown;
+  ref(): void;
+  unref(): void;
+  terminate(): unknown;
 }
 
-/**
- * Load the voice model without speaking anything.
- *
- * Kokoro loads on first use, which put roughly four and a half seconds in
- * front of the first spoken sentence of a session -- heard as the assistant
- * sitting silent after the answer was already on screen. The desktop calls
- * this when speech is switched on, so the wait happens while the user is
- * reading rather than while they are waiting to be read to.
- *
- * Safe to call repeatedly: loadKokoro caches its promise, so every call after
- * the first joins the same load rather than starting another.
- */
-export async function warmVoice(): Promise<boolean> {
-  if (config.ttsEngine !== "kokoro") return false;
-  try {
-    await loadKokoro();
-    return true;
-  } catch {
-    // Warming is an optimisation. Failing it changes nothing the user can see
-    // -- synthesis will try again and fall back on its own terms.
-    return false;
-  }
+interface VoiceReply {
+  id: number;
+  ok: boolean;
+  wav?: ArrayBuffer;
+  voices?: string[];
+  error?: string;
 }
 
-/**
- * Text to a WAV buffer, or null if synthesis is unavailable.
- *
- * Null rather than throwing: a reply that cannot be spoken has still been
- * read, and the caller's job is to fall back quietly, not to surface a failure
- * about a feature that is decoration.
- */
-export async function synthesize(text: string): Promise<Buffer | null> {
-  const trimmed = text.trim();
-  if (!trimmed || config.ttsEngine === "off") return null;
+export interface VoiceClient {
+  warm(): Promise<boolean>;
+  synthesize(text: string): Promise<Buffer | null>;
+  voices(): Promise<string[]>;
+  stop(): void;
+}
 
-  try {
-    const tts = await loadKokoro();
-    // Capped because the first sentence is what anyone actually listens to,
-    // and synthesising four paragraphs nobody waits for costs real seconds.
-    const audio = await tts.generate(trimmed.slice(0, 1200), {
-      voice: config.kokoroVoice,
+export function createVoiceClient(deps: {
+  spawn: () => VoiceWorkerLike;
+  engine: () => string;
+  voice: () => string;
+  model: () => string;
+}): VoiceClient {
+  let worker: VoiceWorkerLike | null = null;
+  let nextId = 1;
+  const pending = new Map<number, (reply: VoiceReply) => void>();
+
+  const settleAll = (error: string): void => {
+    for (const [id, resolve] of pending) resolve({ id, ok: false, error });
+    pending.clear();
+  };
+  // Referenced only while something is owed: an idle worker must not hold a
+  // one-shot CLI (enio voice --voices) open after it has printed.
+  const idle = (): void => {
+    if (pending.size === 0) worker?.unref();
+  };
+
+  const ensure = (): VoiceWorkerLike => {
+    if (worker) return worker;
+    const w = deps.spawn();
+    worker = w;
+    w.on("message", (reply: VoiceReply) => {
+      const resolve = pending.get(reply.id);
+      if (!resolve) return;
+      pending.delete(reply.id);
+      resolve(reply);
+      idle();
     });
-    return Buffer.from(audio.toWav());
-  } catch {
-    // No model, no network on first run, or an unknown voice name. The system
-    // voice still works and needs nothing.
-    kokoro = null;
-    return null;
-  }
+    const gone = (why: string): void => {
+      if (worker === w) worker = null;
+      settleAll(why);
+    };
+    w.on("error", (err: Error) => gone(err?.message ?? "voice worker failed"));
+    w.on("exit", (code: number) => gone(`voice worker stopped (code ${code})`));
+    return w;
+  };
+
+  const request = (msg: { op: "warm" | "voices" | "speak"; text?: string; voice?: string }): Promise<VoiceReply> =>
+    new Promise((resolve) => {
+      const id = nextId++;
+      try {
+        const w = ensure();
+        pending.set(id, resolve);
+        w.ref();
+        w.postMessage({ id, model: deps.model(), ...msg });
+      } catch (err) {
+        pending.delete(id);
+        resolve({ id, ok: false, error: err instanceof Error ? err.message : String(err) });
+      }
+    });
+
+  return {
+    /**
+     * Load the voice model without speaking anything.
+     *
+     * Kokoro loads on first use, which put roughly four and a half seconds in
+     * front of the first spoken sentence of a session -- heard as the
+     * assistant sitting silent after the answer was already on screen. The
+     * desktop calls this when speech is switched on, so the wait happens while
+     * the user is reading rather than while they are waiting to be read to.
+     * Safe to call repeatedly: the worker loads once and answers every call
+     * after the first from the same load.
+     */
+    async warm(): Promise<boolean> {
+      if (deps.engine() !== "kokoro") return false;
+      return (await request({ op: "warm" })).ok;
+    },
+    /**
+     * Text to a WAV buffer, or null if synthesis is unavailable.
+     *
+     * Null rather than throwing: a reply that cannot be spoken has still been
+     * read, and the caller's job is to fall back quietly, not to surface a
+     * failure about a feature that is decoration.
+     */
+    async synthesize(text: string): Promise<Buffer | null> {
+      const trimmed = text.trim();
+      if (!trimmed || deps.engine() === "off") return null;
+      // Capped because the first sentence is what anyone actually listens to,
+      // and synthesising four paragraphs nobody waits for costs real seconds.
+      const reply = await request({ op: "speak", text: trimmed.slice(0, 1200), voice: deps.voice() });
+      return reply.ok && reply.wav ? Buffer.from(reply.wav) : null;
+    },
+    /** Which voices this build can speak in. */
+    async voices(): Promise<string[]> {
+      const reply = await request({ op: "voices" });
+      return reply.ok ? (reply.voices ?? []) : [];
+    },
+    stop(): void {
+      const w = worker;
+      worker = null;
+      settleAll("voice worker stopped");
+      try {
+        void w?.terminate();
+      } catch {
+        // Already gone.
+      }
+    },
+  };
 }
 
-/** Which voices this build can speak in. */
-export async function kokoroVoices(): Promise<string[]> {
-  try {
-    const tts = await loadKokoro();
-    return Object.keys(tts.voices);
-  } catch {
-    return [];
-  }
-}
+const voiceClient = createVoiceClient({
+  // Next to this file in dist/, which is what runs; tests inject a fake.
+  spawn: () => new Worker(new URL("./voice-worker.js", import.meta.url)),
+  engine: () => config.ttsEngine,
+  voice: () => config.kokoroVoice,
+  model: () => config.kokoroModel,
+});
+
+export const warmVoice = (): Promise<boolean> => voiceClient.warm();
+export const synthesize = (text: string): Promise<Buffer | null> => voiceClient.synthesize(text);
+export const kokoroVoices = (): Promise<string[]> => voiceClient.voices();
 
 /**
  * Speak text aloud through the system voice.

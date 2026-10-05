@@ -2259,6 +2259,26 @@ of growing the god-file. The older routes (chat, plans, models,
 projects, conversations) stay put until touching them has a second
 reason -- moving code that works, purely for symmetry, is churn.
 
+**Speech synthesis runs on a worker thread, and the launcher needs two
+missed probes before it calls a backend dead (October 2026).** Reading a
+long answer aloud flipped the window to the boot screen's "Could not
+start" for five seconds at a time. kokoro-js synthesises on the thread
+that calls it -- phonemiser and ONNX run are synchronous JS and
+WebAssembly -- and the agent's event loop was held for the length of the
+clip: 8.5 s measured for two sentences at once, during which `/ping`,
+chat and transcription all went unanswered, so the launcher's two-second
+probe reported a crash and the next poll reported recovery. Chose a
+`worker_threads` worker (`voice-worker.ts`) over a child process: kokoro
+is JavaScript already in the process's dependency tree, a thread hands
+the WAV back by transfer rather than through a pipe, and the client
+reuses the transcription worker's rules (replies matched by id, a dead
+worker settles every caller). Rejected: only lengthening the probe
+timeout, which would have hidden an agent that was deaf while it spoke.
+The probe change stayed anyway -- two misses in a row, recovery at once
+-- because anything that holds a Node loop for two seconds would repeat
+the symptom, and a flicker to "Could not start" is a worse report than a
+five-second delay in a true one.
+
 **Voice conversation is half-duplex, and says so.** The hands-free loop
 -- talk, transcribe, answer aloud, listen again -- ships with the mic
 OFF while enio thinks or speaks, structurally. Kokoro through speakers

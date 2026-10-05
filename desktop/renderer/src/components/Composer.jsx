@@ -47,6 +47,8 @@ export const Composer = forwardRef(function Composer({
   onManageConnections = () => {},
   speakReplies = false,
   onToggleSpeak = () => {},
+  speaking = false,
+  onStopSpeaking = () => {},
   voiceState = null,
   onToggleVoice = () => {},
   onVoiceInterrupt = () => {},
@@ -400,19 +402,31 @@ export const Composer = forwardRef(function Composer({
         }}
       />
 
+      {/* While something is being read this is the stop button, wherever the
+          reading started: the one under a message disappears with the hover
+          that showed it, and a long answer outlives that hover. Stopping does
+          not switch read-aloud off; the next reply still speaks. */}
       <TipButton
         tip={
           voiceState
             ? "Voice conversation is using the speaker"
-            : speakReplies
-              ? "Stop reading replies aloud"
-              : "Read replies aloud"
+            : speaking
+              ? "Stop reading (Esc)"
+              : speakReplies
+                ? "Stop reading replies aloud"
+                : "Read replies aloud"
         }
-        onClick={onToggleSpeak}
+        onClick={speaking && !voiceState ? onStopSpeaking : onToggleSpeak}
         disabled={!!voiceState}
-        className={speakReplies ? "text-foreground" : "text-muted-foreground"}
+        className={speaking || speakReplies ? "text-foreground" : "text-muted-foreground"}
       >
-        {speakReplies ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+        {speaking && !voiceState ? (
+          <Square className="size-4" />
+        ) : speakReplies ? (
+          <Volume2 className="size-4" />
+        ) : (
+          <VolumeX className="size-4" />
+        )}
       </TipButton>
 
       {/* Voice conversation: one control, two meanings, disambiguated by the

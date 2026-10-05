@@ -582,6 +582,14 @@ async function startBackends() {
  */
 function watchBackends(toolCount) {
   if (healthTimer) clearInterval(healthTimer);
+  // One missed probe is not a dead backend. The agent used to hold its whole
+  // thread for the length of a sentence while synthesising speech (8.5 s for
+  // two long sentences at once): the two-second probe timed out, the window
+  // flipped to "Could not start" mid-sentence, and flipped back five seconds
+  // later. Synthesis has moved off the server's thread, but anything that
+  // keeps a Node loop busy for two seconds would do the same, so a report
+  // takes two misses in a row; a recovery still clears it at once.
+  let misses = 0;
   healthTimer = setInterval(async () => {
     // "starting" is someone else's business — a check landing mid-boot would
     // fight whatever is reporting progress.
@@ -592,10 +600,11 @@ function watchBackends(toolCount) {
       checkHealth(AGENT_PING_URL),
     ]);
     const healthy = model && agent;
+    misses = healthy ? 0 : misses + 1;
 
     if (healthy && lastStatus.phase !== "ready") {
       sendStatus("ready", "", { tools: toolCount ?? null });
-    } else if (!healthy && lastStatus.phase === "ready") {
+    } else if (!healthy && misses >= 2 && lastStatus.phase === "ready") {
       sendStatus(
         "failed",
         `${!model ? "Model" : "Agent"} server is not responding.`,

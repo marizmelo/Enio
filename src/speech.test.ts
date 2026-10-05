@@ -167,6 +167,30 @@ describe("stopSpeaking settles the drain", () => {
     ]);
     assert.equal(settled, true, "drain settled after stopSpeaking()");
   });
+
+  test("onSpeaking reports busy for exactly the life of a run, and a stop ends it at once", async () => {
+    const marks: Mark[] = [];
+    let start = 0;
+    installBrowserStubs(marks, () => start);
+    const { speak, stopSpeaking, onSpeaking } = (await import(SPEECH)) as any;
+
+    const seen: boolean[] = [];
+    const off = onSpeaking((on: boolean) => seen.push(on));
+    assert.deepEqual(seen, [false], "a new subscriber hears the current state first");
+
+    start = Date.now();
+    await speak("One.");
+    assert.deepEqual(seen, [false, true, false]);
+
+    const cut = speak("A very long sentence that will be stopped.");
+    await new Promise((r) => setTimeout(r, 90));
+    assert.equal(seen.at(-1), true);
+    stopSpeaking();
+    assert.equal(seen.at(-1), false, "stopping is idle immediately, not when the cut clip settles");
+    await cut;
+    assert.deepEqual(seen.filter((x) => x).length, 2, "the interrupted run does not announce idle twice");
+    off();
+  });
 });
 
 /**
