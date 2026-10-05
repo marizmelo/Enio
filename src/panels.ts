@@ -93,7 +93,11 @@ export function panelRequest(text: string): PanelRequest | null {
     if (panel) return { panel, reply: reply(panel) };
   }
   if (/\b(?:set\s?up|setup|connect|add|link|configure)\b.{0,30}\b(?:e-?mail|mail|gmail|google|work|personal|new)?\s*(?:account|inbox)\b/i.test(t) ||
-      /\bconnect\s+(?:my\s+|a\s+|another\s+)?(?:gmail|google|e-?mail|mail|calendar)\b/i.test(t)) {
+      // "set up my calendar" is a request to connect one, not to read it:
+      // with nothing of the person's connected, the planner read Enio's own
+      // calendar and called it "yours". Anchored to the end, so "set up my
+      // calendar with a 3pm meeting" still reaches the planner.
+      /\b(?:set\s?up|setup|connect|link|configure)\s+(?:my\s+|a\s+|another\s+)?(?:gmail|google|e-?mail|mail|calendar|drive)(?:\s+account)?\s*[.!?]?$/i.test(t)) {
     return { panel: "accounts", view: "add", reply: reply("accounts", "add") };
   }
   if (/\b(?:add|set\s?up|setup|connect|configure)\s+(?:a\s+|an\s+|another\s+)?(?:new\s+)?(?:mcp\s+)?(?:server|connection|integration)\b/i.test(t)) {

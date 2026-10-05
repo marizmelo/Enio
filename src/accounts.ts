@@ -183,7 +183,7 @@ export function describeAccount(a: Pick<Account, "email" | "owner" | "label">): 
   const name = a.label ? `${a.label} (${a.email})` : a.email;
   if (a.owner === "agent") return `Enio's own account ${name}`;
   if (a.owner === "user") return `your account ${name}`;
-  return `account ${name} (owner not set — mark it in Accounts)`;
+  return `account ${name} (owner not set — mark it in Connections)`;
 }
 
 export function setAccountOwner(id: string, owner: AccountOwner, label?: string): Account | null {
@@ -512,7 +512,24 @@ export function scriptAccountWith(grant: Grant | null): PickedAccount | null {
   // Calendar, todos, contacts and documents are the person's: a user
   // account first, whatever the grant.
   const account = pickAccount(grant, "user");
-  return account ? picked(account) : null;
+  if (!account) return null;
+  // And never Enio's own by fallback, the mail rule again: with only Enio's
+  // account connected, "let's set up my calendar" read Enio's calendar and
+  // the reply called it "your calendar". Enio's own is used when the person
+  // chose it (conversation or default) or named it; agentOnlyAccount lets
+  // the tool say so instead.
+  if (account.owner === "agent" && !activeAccountId && !defaultAccountId()) return null;
+  return picked(account);
+}
+
+/** When nothing of the person's can do the act: Enio's own account, if that
+ *  is what is connected, so a tool can name it rather than use it or claim
+ *  nothing is connected. */
+export function agentOnlyAccount(grant: Grant | null): PickedAccount | null {
+  const a = read().accounts.find(
+    (x) => x.owner === "agent" && x.provider === "appsscript" && x.scriptUrl && x.scriptSecret && (grant === null || x.grants.includes(grant)),
+  );
+  return a ? picked(a) : null;
 }
 
 export function removeAccount(id: string): boolean {

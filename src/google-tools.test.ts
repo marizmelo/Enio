@@ -1,6 +1,6 @@
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -76,10 +76,49 @@ describe("the planner", () => {
       ],
     });
     const read = googleTools.find((t) => t.name === "read_calendar")!;
-    const out = String(await read.run({ days: 7 }));
+    const r = await read.run({ days: 7 });
+    const out = typeof r === "string" ? r : r.text;
     assert.match(out, /Standup/);
     assert.match(out, /enio@example\.com/);
     assert.ok(!out.includes("s3cret") && !out.includes("script.google.com"), "credential leaked into output");
+  });
+
+  test("with only Enio's own account connected, the calendar is named, not read as yours", async () => {
+    const path = join(process.env.ENIO_DATA_DIR!, "accounts.json");
+    const before = JSON.parse(String(readFileSync(path)));
+    const own = { ...before, accounts: [{ ...before.accounts[0], owner: "agent", label: "enio" }] };
+    writeFileSync(path, JSON.stringify(own));
+    try {
+      const calls = stubScript({ "calendar.upcoming": [] });
+      const read = googleTools.find((t) => t.name === "read_calendar")!;
+      const out = (await read.run({ days: 7 })) as { text: string; notice?: string };
+      assert.match(out.text, /No account of yours is connected/);
+      assert.match(out.text, /Enio's own account/);
+      assert.match(out.text, /not yours/);
+      assert.equal(calls.length, 0, "Enio's calendar was not read");
+      assert.match(out.notice ?? "", /was not touched/);
+      const add = googleTools.find((t) => t.name === "add_event")!;
+      const added = (await add.run({ title: "Lunch", start: "2026-08-22 12:00", end: "2026-08-22 13:00" })) as { text: string };
+      assert.match(added.text, /not yours/);
+      assert.equal(calls.length, 0, "nothing was added to Enio's calendar either");
+    } finally {
+      writeFileSync(path, JSON.stringify(before));
+    }
+  });
+
+  test("a read names whose calendar it was, in the result and the notice", async () => {
+    const path = join(process.env.ENIO_DATA_DIR!, "accounts.json");
+    const before = JSON.parse(String(readFileSync(path)));
+    writeFileSync(path, JSON.stringify({ ...before, accounts: [{ ...before.accounts[0], owner: "user", label: "work" }] }));
+    try {
+      stubScript({ "calendar.upcoming": [] });
+      const read = googleTools.find((t) => t.name === "read_calendar")!;
+      const out = (await read.run({ days: 7 })) as { text: string; notice?: string };
+      assert.match(out.text, /your account work/);
+      assert.match(out.notice ?? "", /Read the calendar of your account work/);
+    } finally {
+      writeFileSync(path, JSON.stringify(before));
+    }
   });
 
   test("add_event passes the meet flag through and reports the link", async () => {

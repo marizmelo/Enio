@@ -4,7 +4,7 @@ import { panelRequest } from "./panels.js";
 
 describe("requests to open a part of the app", () => {
   test("setting up an account opens Accounts on the connect flow", () => {
-    for (const t of ["lets setup a new email account", "set up a new email account", "connect my gmail", "add another google account", "I want to connect my email account"]) {
+    for (const t of ["lets setup a new email account", "set up a new email account", "connect my gmail", "add another google account", "I want to connect my email account", "lets setup my calendar", "set up my email"]) {
       const r = panelRequest(t);
       assert.equal(r?.panel, "accounts", t);
       assert.equal(r?.view, "add", t);
@@ -29,6 +29,7 @@ describe("requests to open a part of the app", () => {
   });
   test("a request about something else is not a panel", () => {
     assert.equal(panelRequest("check my email"), null);
+    assert.equal(panelRequest("set up my calendar with a 3pm meeting tomorrow"), null, "a calendar entry, not a connection");
     assert.equal(panelRequest("open the readme"), null, "a file, not a panel");
     assert.equal(panelRequest("what projects am I working on"), null);
     assert.equal(panelRequest("my accountant sent the files, open them and summarise the account statements in detail please, all of them from last year"), null, "too long to be a command");
