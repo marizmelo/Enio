@@ -13,7 +13,9 @@ interface Sink {
   stop(): void;
   dispose(): void;
 }
-const { createAvatarSink } = (await import(LIB)) as { createAvatarSink: (head: unknown) => Sink };
+const { createAvatarSink } = (await import(LIB)) as {
+  createAvatarSink: (head: unknown, opts?: { graceMs?: number }) => Sink;
+};
 
 function fakeHead() {
   const markers: Array<() => void> = [];
@@ -106,5 +108,33 @@ describe("the avatar speech sink", () => {
     sink.dispose();
     assert.equal(await settled(p), true);
     assert.equal(head.stops, 0);
+  });
+
+  test("a decode still in flight when the sink is disposed does not hang the play", async () => {
+    const head = fakeHead();
+    // Chromium can leave decodeAudioData unsettled once its context closes.
+    head.audioCtx.decodeAudioData = () => new Promise(() => {});
+    const sink = createAvatarSink(head);
+    const p = sink.play(blob, "Stuck.");
+    await tick();
+    sink.dispose();
+    assert.equal(await settled(p), true);
+    assert.equal(head.spoken.length, 0, "nothing was queued on a dead head");
+  });
+
+  test("a marker the head never fires is covered by the clip-length watchdog", async () => {
+    const head = fakeHead();
+    const sink = createAvatarSink(head, { graceMs: 20 });
+    const warned: string[] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => void warned.push(String(args[0]));
+    try {
+      const p = sink.play(blob, "Lost marker.");
+      await new Promise((r) => setTimeout(r, 1200 + 20 + 60));
+      assert.equal(await settled(p), true);
+      assert.match(warned.join("\n"), /without the head's marker/);
+    } finally {
+      console.warn = original;
+    }
   });
 });

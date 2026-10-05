@@ -17,17 +17,23 @@ import { estimateWordTimes } from "./word-timing.js";
  * library's stopSpeaking() drops queued markers along with the audio and a
  * promise waiting on one would hang forever.
  */
-export function createAvatarSink(head, { estimate = estimateWordTimes } = {}) {
+export function createAvatarSink(head, { estimate = estimateWordTimes, graceMs = 2000 } = {}) {
   const pending = new Set();
   let disposed = false;
+  let endDisposal;
+  const disposal = new Promise((r) => (endDisposal = r));
   const settleAll = () => {
     for (const resolve of pending) resolve();
     pending.clear();
   };
   return {
     async play(blob, text, timing = null) {
-      const buffer = await head.audioCtx.decodeAudioData(await blob.arrayBuffer());
-      if (disposed) return;
+      const bytes = await blob.arrayBuffer();
+      // Decoding on a context that gets closed mid-way (the pane unmounted
+      // between the thumbnail and the panel) can leave the promise unsettled
+      // for good; disposal must win that race, or the drain hangs with it.
+      const buffer = await Promise.race([head.audioCtx.decodeAudioData(bytes), disposal.then(() => null)]);
+      if (!buffer || disposed) return;
       const words = timing?.words ? timing : estimate(text, buffer.duration * 1000);
       const utterance = {
         audio: buffer,
@@ -44,16 +50,27 @@ export function createAvatarSink(head, { estimate = estimateWordTimes } = {}) {
       }
       await new Promise((resolve) => {
         pending.add(resolve);
+        let watchdog = null;
         const done = () => {
+          clearTimeout(watchdog);
           pending.delete(resolve);
           resolve();
         };
+        // The clip's own length bounds the wait. A marker the library drops
+        // for any reason -- a context it could not resume, an exception in
+        // its own chain -- must not leave the voice loop in "speaking".
+        watchdog = setTimeout(() => {
+          if (!pending.has(resolve)) return;
+          console.warn("[avatar] the clip ended without the head's marker; carrying on without it");
+          done();
+        }, buffer.duration * 1000 + graceMs);
         try {
           // isRaw: no 300ms break queued after the clip and no scripted glance
           // at the camera -- the player paces sentences, the director the eyes.
           head.speakAudio(utterance, { lipsyncLang: "en", isRaw: true });
           head.speakMarker(done);
-        } catch {
+        } catch (err) {
+          console.warn("[avatar] the head refused the clip", err);
           done();
         }
       });
@@ -68,6 +85,7 @@ export function createAvatarSink(head, { estimate = estimateWordTimes } = {}) {
     },
     dispose() {
       disposed = true;
+      endDisposal();
       settleAll();
     },
   };
