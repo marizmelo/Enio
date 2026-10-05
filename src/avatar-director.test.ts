@@ -30,7 +30,8 @@ describe("the avatar director", () => {
   test("a turn: eyes on the user, one glance up while thinking, down once while working, back at the first words", () => {
     const d = createAvatarDirector();
     const t = 1000;
-    assert.deepEqual(gazes(d.handle({ type: "turn-start" }, t)), ["camera"]);
+    assert.deepEqual(d.snapshot()[1], { cmd: "gaze", target: "camera" }, "eye contact is the resting state");
+    assert.deepEqual(gazes(d.handle({ type: "turn-start" }, t)), [], "already looking at the user");
     const thinking = [...d.handle({ type: "think" }, t + 1), ...d.handle({ type: "think" }, t + 2), ...d.handle({ type: "think" }, t + 3)];
     assert.deepEqual(gazes(thinking), ["up"], "forty think frames are one glance");
     const working = [
@@ -40,7 +41,7 @@ describe("the avatar director", () => {
     ];
     assert.deepEqual(gazes(working), ["down"], "one look down per stretch of work");
     assert.deepEqual(gazes(d.handle({ type: "first-text" }, t + 7)), ["camera"]);
-    assert.deepEqual(gazes(d.handle({ type: "turn-end", error: false }, t + 8)), ["ahead"]);
+    assert.deepEqual(gazes(d.handle({ type: "turn-end", error: false }, t + 8)), [], "and stays on the user afterwards");
   });
 
   test("a failed call is a glance up from the work, and the next tool looks down again", () => {
@@ -71,7 +72,7 @@ describe("the avatar director", () => {
     d.handle({ type: "tool-start", name: "x" }, 2);
     const r = d.handle({ type: "restart" }, 3);
     assert.deepEqual(moods(r), ["neutral"]);
-    assert.deepEqual(gazes(r), ["camera"]);
+    assert.deepEqual(gazes(r), ["camera"], "back from the work to the user");
   });
 
   test("a mood lingers after the turn, then fades; a failed turn is sad", () => {
@@ -96,12 +97,11 @@ describe("the avatar director", () => {
     assert.deepEqual(d.snapshot()[0], { cmd: "mood", mood: "sleep" });
     const woke = d.handle({ type: "user-level", speaking: true }, 1200);
     assert.deepEqual(moods(woke), ["happy"], "waking restores the real mood, which was still glowing");
-    assert.deepEqual(gazes(woke), ["camera"]);
+    assert.deepEqual(gazes(woke), [], "it never looked away");
 
     const v = createAvatarDirector({ sleepAfterMs: 1000 });
     const listening = v.handle({ type: "voice", state: "listening" }, 0);
     assert.deepEqual(listening.filter((c) => c.cmd === "listening"), [{ cmd: "listening", on: true }]);
-    assert.deepEqual(gazes(listening), ["camera"]);
     assert.deepEqual(v.tick(5000), [], "no sleeping while in voice mode");
     assert.deepEqual(v.handle({ type: "voice", state: "thinking" }, 5001).filter((c) => c.cmd === "listening"), [{ cmd: "listening", on: false }]);
     v.handle({ type: "voice", state: null }, 5002);
@@ -130,9 +130,10 @@ describe("the avatar director", () => {
       { cmd: "gaze", target: "camera" },
       { cmd: "listening", on: true },
     ]);
-    const r = d.handle({ type: "reset" }, 3);
+    d.handle({ type: "tool-start", name: "x" }, 3);
+    const r = d.handle({ type: "reset" }, 4);
     assert.deepEqual(moods(r), ["neutral"]);
-    assert.deepEqual(gazes(r), ["ahead"]);
+    assert.deepEqual(gazes(r), ["camera"]);
     assert.deepEqual(r.filter((c) => c.cmd === "listening"), [{ cmd: "listening", on: false }]);
   });
 });

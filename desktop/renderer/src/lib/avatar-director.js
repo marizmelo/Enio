@@ -26,9 +26,11 @@ export const AFTERGLOW_MS = 6_000;
 const FACE = { neutral: "neutral", happy: "happy", sorry: "sad", unsure: "neutral" };
 
 export function createAvatarDirector({ sleepAfterMs = SLEEP_AFTER_MS, afterglowMs = AFTERGLOW_MS } = {}) {
+  // Eye contact is the resting state: a face that looks away while you read
+  // its answer reads as absent. "ahead" is for the moments it is busy.
   const s = {
     mood: "neutral",
-    gaze: "ahead",
+    gaze: "camera",
     listening: false,
     asleep: false,
     streaming: false,
@@ -121,7 +123,7 @@ export function createAvatarDirector({ sleepAfterMs = SLEEP_AFTER_MS, afterglowM
           s.working = false;
           s.glancedUp = false;
           if (event.error) setMood("sad");
-          setGaze("ahead");
+          setGaze("camera");
           s.afterglowUntil = s.mood === "neutral" ? null : now + afterglowMs;
           break;
         case "voice":
@@ -142,7 +144,7 @@ export function createAvatarDirector({ sleepAfterMs = SLEEP_AFTER_MS, afterglowM
           s.glancedUp = false;
           s.afterglowUntil = null;
           setMood("neutral");
-          setGaze("ahead");
+          setGaze("camera");
           setListening(false);
           break;
         default:

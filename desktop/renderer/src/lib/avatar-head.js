@@ -24,8 +24,10 @@ export function createTalkingHead(node, { view = "head", rotate = false } = {}) 
     modelPixelRatio: Math.min(window.devicePixelRatio || 1, 2),
     avatarMood: "neutral",
     dracoEnabled: false,
-    avatarIdleEyeContact: 0.3,
-    avatarSpeakingEyeContact: 0.6,
+    // Mostly on you, idle or speaking: the library's defaults glance away
+    // most of the time, which reads as a face that is not listening.
+    avatarIdleEyeContact: 0.85,
+    avatarSpeakingEyeContact: 0.85,
   });
   head.lipsync.en = new LipsyncEn();
   return head;
