@@ -24,6 +24,7 @@ export const PANELS = {
   history: { label: "History", path: "History" },
   files: { label: "Files", path: "Files" },
   avatar: { label: "Avatar", path: "the face button in the status bar" },
+  settings: { label: "Settings", path: "the gear in the toolbar" },
 } as const;
 export type Panel = keyof typeof PANELS;
 
@@ -36,8 +37,8 @@ export interface PanelRequest {
 }
 
 const ALIASES: Record<string, Panel> = {
-  settings: "connections",
-  setting: "connections",
+  settings: "settings",
+  setting: "settings",
   integrations: "connections",
   integration: "connections",
   connections: "connections",
@@ -73,7 +74,7 @@ const linkTo = (panel: Panel, view?: "add"): string =>
 const reply = (panel: Panel, view?: "add"): string => {
   const p = PANELS[panel];
   if (panel === "accounts" && view === "add") {
-    return `Opening ${linkTo(panel, view)} — say whose account it is (Enio's own, or yours), then connect it. In the app: ${p.path}.`;
+    return `Opening ${linkTo(panel, view)} — your own account connects there; Enio's own account lives under Settings. In the app: ${p.path}.`;
   }
   if (panel === "connections" && view === "add") {
     return `Opening ${linkTo(panel, view)} — add the server there. In the app: ${p.path}.`;

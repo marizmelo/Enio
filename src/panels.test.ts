@@ -8,13 +8,14 @@ describe("requests to open a part of the app", () => {
       const r = panelRequest(t);
       assert.equal(r?.panel, "accounts", t);
       assert.equal(r?.view, "add", t);
-      assert.match(r!.reply, /whose account it is/);
+      assert.match(r!.reply, /Enio's own account lives under Settings/);
       assert.match(r!.reply, /\[Accounts\]\(enio:\/\/panel\/accounts\/add\)/, "a link that reopens the panel");
     }
   });
-  test("open <panel> resolves aliases, settings and integrations mean Connections", () => {
+  test("open <panel> resolves aliases: integrations mean Connections, settings is its own door", () => {
     assert.equal(panelRequest("open accounts")?.panel, "accounts");
-    assert.equal(panelRequest("open settings")?.panel, "connections");
+    assert.equal(panelRequest("open settings")?.panel, "settings");
+    assert.match(panelRequest("open settings")!.reply, /\[Settings\]\(enio:\/\/panel\/settings\)/);
     assert.equal(panelRequest("show my integrations")?.panel, "connections");
     assert.equal(panelRequest("take me to automations.")?.panel, "automations");
     assert.equal(panelRequest("open the memory panel")?.panel, "memory");

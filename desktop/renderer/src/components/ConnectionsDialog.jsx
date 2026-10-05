@@ -97,18 +97,18 @@ export function ConnectionsDialog({ open, onOpenChange, onChanged, initialView =
               >
                 <ArrowLeft className="size-3.5" /> Connections
               </button>
-              <DialogTitle>Connect a Google account</DialogTitle>
+              <DialogTitle>Connect your Google account</DialogTitle>
               <DialogDescription>
-                Say whose account it is, then connect it. Enio's own account is its identity; yours is
-                access to your mail and calendar, in your name.
+                Access to your mail and calendar, in your name. Enio's own account — the address it
+                sends from — connects under Settings.
               </DialogDescription>
             </>
           ) : (
             <>
               <DialogTitle>Connections</DialogTitle>
               <DialogDescription>
-                Accounts and MCP servers — what Enio can reach beyond this machine. Changes take
-                effect immediately, with no restart.
+                Your accounts and MCP servers — what you let Enio reach beyond this machine. Changes
+                take effect immediately, with no restart. Enio's own account lives under Settings.
               </DialogDescription>
             </>
           )}
@@ -119,6 +119,7 @@ export function ConnectionsDialog({ open, onOpenChange, onChanged, initialView =
         {view === "add-account" ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
             <AccountsPanel
+              owner="user"
               view="add"
               onView={(v) => setView(v === "add" ? "add-account" : "list")}
               onError={setError}
@@ -128,9 +129,10 @@ export function ConnectionsDialog({ open, onOpenChange, onChanged, initialView =
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
           <section className="space-y-2">
             <h3 className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Google accounts
+              Your Google accounts
             </h3>
             <AccountsPanel
+              owner="user"
               view="list"
               onView={(v) => setView(v === "add" ? "add-account" : "list")}
               onError={setError}

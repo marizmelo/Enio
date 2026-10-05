@@ -9,8 +9,10 @@ nav_order: 15
 An account lets Enio reach something of yours that lives online — your Gmail,
 your Calendar, your Drive — rather than only what is on this machine.
 
-It is set up in **Connections** (the **+** in the composer → Connection →
-Manage connections). Google is the first provider.
+Your own accounts are set up in **Connections** (the plug in the toolbar).
+Enio's own account — the address it sends from, the calendar it can be
+invited to — is set up in **Settings** (the gear). Which door you connect
+through is what says whose it is. Google is the first provider.
 
 ## No passwords, ever
 
@@ -149,7 +151,7 @@ it.
 
 ## Removing an account
 
-**Remove** in Connections deletes the tokens from this machine, so Enio stops
+**Remove** in Connections or Settings deletes the tokens from this machine, so Enio stops
 using the account immediately.
 
 It does not revoke the grant at Google — only Google can do that, at

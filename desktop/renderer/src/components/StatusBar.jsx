@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Bot, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, Plug, ScanFace, TerminalSquare, Workflow, X } from "lucide-react";
+import { BookOpen, Bot, Brain, Briefcase, CircleHelp, Disc, FolderOpen, History, MessageSquarePlus, NotebookPen, Plug, ScanFace, Settings, TerminalSquare, Workflow, X } from "lucide-react";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TipButton } from "@/components/TipButton";
@@ -46,6 +46,7 @@ export function StatusBar({
   onCommands,
   onAgents,
   onConnections,
+  onSettings,
   avatarOn = false,
   onToggleAvatar,
 }) {
@@ -134,6 +135,13 @@ export function StatusBar({
         {onConnections && (
           <TipButton tip="Connections" className="size-7" onClick={onConnections}>
             <Plug className="size-4" />
+          </TipButton>
+        )}
+        {/* Enio's own setup, apart from what the user connects: its own
+            account today, whatever else is its own as it appears. */}
+        {onSettings && (
+          <TipButton tip="Settings" className="size-7" onClick={onSettings}>
+            <Settings className="size-4" />
           </TipButton>
         )}
         {/* The managed note collection -- the first section that is an app

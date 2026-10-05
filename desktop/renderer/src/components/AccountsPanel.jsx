@@ -29,7 +29,7 @@ import {
  * access; saying otherwise would be the most dangerous lie the panel could
  * tell, so the link to Google's own permissions page sits next to Remove.
  */
-export function AccountsPanel({ onError, view = "list", onView }) {
+export function AccountsPanel({ onError, view = "list", onView, owner = null }) {
   const [state, setState] = useState({ client: false, clientSource: null, accounts: [], grants: [] });
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
@@ -58,7 +58,8 @@ export function AccountsPanel({ onError, view = "list", onView }) {
   // calendar it can be invited to); YOUR account is delegated access to your
   // mail in your name. The first account connected is offered as Enio's own,
   // because that is the order that keeps "my inbox" meaning yours.
-  const [newOwner, setNewOwner] = useState("agent");
+  // Fixed when the panel shows one side of the split: the door answers it.
+  const [newOwner, setNewOwner] = useState(owner ?? "agent");
   const [newLabel, setNewLabel] = useState("");
   const [labelDraft, setLabelDraft] = useState({});
 
@@ -66,7 +67,7 @@ export function AccountsPanel({ onError, view = "list", onView }) {
     try {
       const next = await listAccounts();
       setState(next);
-      setNewOwner(next.accounts.some((a) => a.owner === "agent") ? "user" : "agent");
+      setNewOwner(owner ?? (next.accounts.some((a) => a.owner === "agent") ? "user" : "agent"));
       for (const a of next.accounts) {
         accountStatus(a.id)
           .then((s) => setStatus((prev) => ({ ...prev, [a.id]: s })))
@@ -146,10 +147,29 @@ export function AccountsPanel({ onError, view = "list", onView }) {
     </span>
   );
 
-  const accountsList = state.accounts.length > 0 && (
+  // One side when `owner` is given: Settings shows Enio's own account,
+  // Connections shows yours. An account whose owner was never set shows
+  // under Connections with the question, because that is where a person
+  // looks for their own, and it is theirs more often than not.
+  const shown =
+    owner === "agent"
+      ? state.accounts.filter((a) => a.owner === "agent")
+      : owner === "user"
+        ? state.accounts.filter((a) => a.owner !== "agent")
+        : state.accounts;
+  const emptyText =
+    owner === "agent"
+      ? "Enio has no account of its own yet. Its own address is what it sends from, and the calendar it can be invited to."
+      : owner === "user"
+        ? "None of your accounts are connected yet. Yours is access to your mail and calendar, in your name."
+        : 'Nothing connected yet. Connect a Google account for Enio itself first — its own address and calendar — then your own, so "my inbox" means yours.';
+  const addText =
+    shown.length > 0 ? "Add another account" : owner === "agent" ? "Connect Enio's account" : "Connect a Google account";
+
+  const accountsList = shown.length > 0 && (
     <>
       <div className="rounded-md border">
-        {state.accounts.map((a) => (
+        {shown.map((a) => (
           <div key={a.id} className="flex items-start gap-2 border-b p-3 last:border-b-0">
             <span
               className={`mt-1.5 size-2 shrink-0 rounded-full ${
@@ -245,7 +265,22 @@ export function AccountsPanel({ onError, view = "list", onView }) {
   // it to someone who does not would be four steps of pure noise.
   // What is being connected, before the how. Shown with the connect form
   // only; the list above carries the same control per row.
-  const whose = (
+  const whose = owner ? (
+    <div className="space-y-1.5 rounded-md border border-dashed p-2.5">
+      <p className="text-xs font-medium">{owner === "agent" ? "Enio's own account" : "Your account"}</p>
+      <p className="text-[11px] text-muted-foreground">
+        {owner === "agent"
+          ? "Its identity: the address it sends from, the calendar it can be invited to."
+          : "Access to your mail and calendar, in your name. Enio's own account lives under Settings."}
+      </p>
+      <input
+        className="h-6 w-32 rounded border bg-background px-1.5 text-[11px]"
+        placeholder={owner === "agent" ? "label (Enio's)" : "label (work, personal…)"}
+        value={newLabel}
+        onChange={(e) => setNewLabel(e.target.value)}
+      />
+    </div>
+  ) : (
     <div className="space-y-1.5 rounded-md border border-dashed p-2.5">
       <p className="text-xs font-medium">Whose account is this?</p>
       <p className="text-[11px] text-muted-foreground">
@@ -271,14 +306,9 @@ export function AccountsPanel({ onError, view = "list", onView }) {
         {!adding && accountsList}
         {!adding ? (
           <>
-            {state.accounts.length === 0 && (
-              <p className="text-xs text-muted-foreground">
-                Nothing connected yet. Connect a Google account for Enio itself first — its own address and
-                calendar — then your own, so "my inbox" means yours.
-              </p>
-            )}
+            {shown.length === 0 && <p className="text-xs text-muted-foreground">{emptyText}</p>}
             <Button size="sm" variant="outline" className="gap-1" onClick={() => setAdding(true)}>
-              <UserPlus className="size-3.5" /> {state.accounts.length > 0 ? "Add another account" : "Connect a Google account"}
+              <UserPlus className="size-3.5" /> {addText}
             </Button>
           </>
         ) : (
@@ -401,13 +431,9 @@ export function AccountsPanel({ onError, view = "list", onView }) {
     return (
       <div className="space-y-2">
         {accountsList}
-        {state.accounts.length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            Nothing connected yet. Connect a Google account for Enio itself first, then your own.
-          </p>
-        )}
+        {shown.length === 0 && <p className="text-xs text-muted-foreground">{emptyText}</p>}
         <Button size="sm" variant="outline" className="gap-1" onClick={() => setAdding(true)}>
-          <UserPlus className="size-3.5" /> {state.accounts.length > 0 ? "Add another account" : "Connect a Google account"}
+          <UserPlus className="size-3.5" /> {addText}
         </Button>
       </div>
     );

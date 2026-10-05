@@ -24,6 +24,7 @@ import { HistoryDialog } from "@/components/HistoryDialog";
 import { ProjectsDialog } from "@/components/ProjectsDialog";
 import { PipelinesDialog } from "@/components/PipelinesDialog";
 import { ConnectionsDialog } from "@/components/ConnectionsDialog";
+import { SettingsDialog } from "@/components/SettingsDialog";
 import { listAccounts as listGoogleAccounts } from "@/lib/accounts";
 import { CanvasPanel } from "@/components/CanvasPanel";
 import { BootScreen } from "@/components/BootScreen";
@@ -179,6 +180,9 @@ export function App() {
   // Which view Connections opens on: the lists, or straight into connecting
   // an account when chat asked for that.
   const [connectionsView, setConnectionsView] = useState("list");
+  // Enio's own setup, split from what the user connects: see SettingsDialog.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsView, setSettingsView] = useState("list");
   // Connected Google accounts, fetched when the backend is ready and again
   // when the Connections dialog closes, for the first-run opening below.
   const refreshAccounts = useCallback(async () => {
@@ -295,6 +299,7 @@ export function App() {
     const open = {
       accounts: () => { setConnectionsView(view === "add" ? "add-account" : "list"); setConnectionsOpen(true); },
       connections: () => { setConnectionsView("list"); setConnectionsOpen(true); },
+      settings: () => { setSettingsView(view === "add" ? "add-account" : "list"); setSettingsOpen(true); },
       models: () => window.dispatchEvent(new CustomEvent("enio:browse-models", { detail: {} })),
       memory: () => setMemoryOpen(true),
       agents: () => setAgentsOpen(true),
@@ -1012,6 +1017,7 @@ export function App() {
         onCommands={() => setCommandsOpen(true)}
         onAgents={() => setAgentsOpen(true)}
         onConnections={() => setConnectionsOpen(true)}
+        onSettings={() => setSettingsOpen(true)}
         avatarOn={avatarMode !== "off"}
         onToggleAvatar={avatarCap ? () => setAvatarMode((m) => (m === "off" ? "pip" : "off")) : undefined}
       />
@@ -1056,6 +1062,14 @@ export function App() {
           // back. The dialog passes full relative paths, .notes/ included.
           setCanvas({ path, openedBy: "user", rev: Date.now(), full: true })
         }
+      />
+      <SettingsDialog
+        open={settingsOpen}
+        initialView={settingsView}
+        onOpenChange={(open) => {
+          setSettingsOpen(open);
+          if (!open) refreshAccounts();
+        }}
       />
       <ConnectionsDialog
         open={connectionsOpen}

@@ -3217,6 +3217,17 @@ to either owner (a guess would be wrong on someone's machine — the row
 says "owner not set" until a person answers); a separate "agent
 accounts" store (same plumbing, one flag).
 
+**Then split by door (October 2026):** Enio's own account is connected
+under Settings and the person's under Connections, and the owner is which
+door the account came through rather than a switch in the connect form.
+The switch asked the question on every connect and could be answered
+wrong, and wrong once means mail sent under the wrong name -- once too
+many for a credential. The flag and the resolver are unchanged, a row can
+still be moved to the other side, and an account that predates owners
+shows under Connections with the question. Settings is also where
+whatever else is Enio's own goes as it appears; Connections stays what
+the person lets it reach.
+
 ### The mail agent quotes mail it read, names the inbox, or reads it
 
 **What happened:** asked "yes" to its own offer to read the full email,
