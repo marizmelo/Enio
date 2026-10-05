@@ -8,6 +8,7 @@
 import { build } from "esbuild";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, copyFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -47,6 +48,29 @@ function runTailwind() {
   }
 }
 
+// @met4citizen/talkinghead resolves a Web Audio worklet URL at module scope
+// with import.meta.url, which an IIFE bundle has no value for: the line
+// throws at evaluation and the whole renderer comes up as a white window.
+// The worklet only serves the library's streaming API, which the face does
+// not use, so the line is replaced for that one file. Patched at bundle time
+// rather than vendored -- five thousand lines copied into renderer/src would
+// be linted, drift from upstream, and hide that one line is the only change.
+// The build FAILS when the needle is gone, so an upgrade that moves it cannot
+// reintroduce the white window quietly.
+const talkingheadPatch = {
+  name: "talkinghead-no-worklet",
+  setup(build) {
+    build.onLoad({ filter: /@met4citizen[\\/]talkinghead[\\/]modules[\\/]talkinghead\.mjs$/ }, async (args) => {
+      const needle = "const workletUrl = new URL('./playback-worklet.js', import.meta.url);";
+      const source = await readFile(args.path, "utf8");
+      if (!source.includes(needle)) {
+        throw new Error(`talkinghead: worklet line not found in ${args.path} — re-check the pinned version`);
+      }
+      return { contents: source.replace(needle, "const workletUrl = null;"), loader: "js" };
+    });
+  },
+};
+
 async function run() {
   runLint();
   runTailwind();
@@ -74,6 +98,7 @@ async function run() {
     // so editors agree with the bundler.
     alias: { "@": src },
     define: { "process.env.NODE_ENV": '"production"' },
+    plugins: [talkingheadPatch],
     metafile: true,
     logLevel: "info",
   });
