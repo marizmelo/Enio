@@ -417,5 +417,13 @@ MCP server. People reach for MCP when they needed a skill.
   sentences at once — and nothing answered meanwhile: not `/ping`, not chat,
   not transcription. The launcher's two-second probe took that for a crash
   and the window flipped to "Could not start" until the next poll. Synthesis
-  runs in `src/voice-worker.ts`, a worker thread, for that reason, and the
-  launcher wants two missed probes before it reports a backend gone.
+  runs in `src/voice-worker.ts` for that reason, and the launcher wants two
+  missed probes before it reports a backend gone.
+- onnxruntime-node cannot be loaded by two isolates of one process. The
+  embedding model loads it on the main thread; when speech synthesis ran in a
+  worker thread that loaded it too, the addon's per-process statics (its class
+  constructors) ended up owned by the second isolate, and the first aborted
+  the next time it built a tensor — SIGABRT inside OrtValueToNapiValue, seven
+  minutes into a session, with no JavaScript error to catch. Speech therefore
+  runs in a forked child process, never a worker thread, and anything else
+  that wants onnxruntime off the main thread must do the same.

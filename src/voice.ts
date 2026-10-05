@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { Worker } from "node:worker_threads";
+import { fork } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { config, projectRoot } from "./config.js";
@@ -166,19 +166,20 @@ export async function transcribeWav(
 }
 
 /**
- * Kokoro, loaded once and kept -- on its own thread.
+ * Kokoro, loaded once and kept -- in its own process.
  *
  * ~90MB at q8 and it stays resident, unlike the vision and dictation models
  * which are spawned per use. Speech is the one that would be noticed: a reply
  * arriving three seconds before it can be spoken is worse than the memory it
  * saves, and 90MB next to Maple's 6.9GB is not the thing worth reclaiming.
  *
- * A worker thread rather than this thread, because kokoro-js synthesises
+ * Its own process rather than this thread, because kokoro-js synthesises
  * synchronously and a sentence held the server's event loop for the length
  * of the clip: nothing answered while a reply was being read aloud, and the
- * launcher's health probe took the silence for a crash (see voice-worker.ts).
- * A thread rather than a child process: kokoro is JavaScript already in this
- * process's dependency tree, and a thread hands the WAV back by transfer.
+ * launcher's health probe took the silence for a crash. A process rather
+ * than a worker thread, because onnxruntime-node cannot be loaded by two
+ * isolates of one process -- the embedding model loads it here, and the
+ * worker version took the agent down with a SIGABRT (see voice-worker.ts).
  *
  * Replies are matched to requests by id, and a worker that dies settles every
  * caller still waiting -- the transcription worker's rule, for the same
@@ -195,7 +196,7 @@ export interface VoiceWorkerLike {
 interface VoiceReply {
   id: number;
   ok: boolean;
-  wav?: ArrayBuffer;
+  wav?: Uint8Array | ArrayBuffer;
   voices?: string[];
   error?: string;
 }
@@ -290,7 +291,9 @@ export function createVoiceClient(deps: {
       // Capped because the first sentence is what anyone actually listens to,
       // and synthesising four paragraphs nobody waits for costs real seconds.
       const reply = await request({ op: "speak", text: trimmed.slice(0, 1200), voice: deps.voice() });
-      return reply.ok && reply.wav ? Buffer.from(reply.wav) : null;
+      if (!reply.ok || !reply.wav) return null;
+      const wav = reply.wav;
+      return Buffer.from(wav instanceof ArrayBuffer ? new Uint8Array(wav) : wav);
     },
     /** Which voices this build can speak in. */
     async voices(): Promise<string[]> {
@@ -310,9 +313,34 @@ export function createVoiceClient(deps: {
   };
 }
 
+/** A forked child behind the same shape a worker thread had; tests inject a fake. */
+function forkVoiceWorker(): VoiceWorkerLike {
+  // Next to this file in dist/, which is what runs. Advanced serialisation
+  // carries the WAV as bytes; stderr stays attached so a failing load says why.
+  const child = fork(new URL("./voice-worker.js", import.meta.url), [], {
+    serialization: "advanced",
+    stdio: ["ignore", "ignore", "inherit", "ipc"],
+  });
+  return {
+    postMessage: (msg) => {
+      child.send(msg as object);
+    },
+    on: (event, fn) => child.on(event, fn),
+    // The IPC channel holds the parent open on its own account; both must let go.
+    ref: () => {
+      child.ref();
+      child.channel?.ref();
+    },
+    unref: () => {
+      child.unref();
+      child.channel?.unref();
+    },
+    terminate: () => child.kill(),
+  };
+}
+
 const voiceClient = createVoiceClient({
-  // Next to this file in dist/, which is what runs; tests inject a fake.
-  spawn: () => new Worker(new URL("./voice-worker.js", import.meta.url)),
+  spawn: forkVoiceWorker,
   engine: () => config.ttsEngine,
   voice: () => config.kokoroVoice,
   model: () => config.kokoroModel,
