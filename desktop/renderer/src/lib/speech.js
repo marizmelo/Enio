@@ -330,7 +330,13 @@ export function speakAll(text) {
   const { ready, rest } = takeSentences(String(text ?? ""));
   // takeSentences leaves the final sentence in `rest`, since it only splits on
   // a terminator followed by whitespace and the last one ends the string.
-  const parts = [...ready, rest].map((part) => part.trim()).filter(Boolean);
+  // Cleaned here as well as in speak(), so an unspeakable tail -- a reply
+  // that ends in an emoji leaves " 😊" as its last part -- is dropped before
+  // the loop, not handed to speak() to answer with an already-settled
+  // promise. The last promise is the one returned, and a settled one made
+  // the read-aloud button flip back before the first word while the
+  // sentences played on with nothing to stop them.
+  const parts = [...ready, rest].map((part) => spokenText(part)).filter(Boolean);
   if (parts.length === 0) return Promise.resolve();
 
   let done = Promise.resolve();

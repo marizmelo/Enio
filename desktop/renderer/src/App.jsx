@@ -1306,6 +1306,8 @@ export function App() {
           setSessionFiles((prev) => [...new Set([...prev, ...names])])
         }
         speakReplies={speakReplies}
+        speaking={speaking}
+        onStopSpeaking={stopSpeaking}
         onToggleSpeak={() => {
           if (speakReplies) stopSpeaking();
           // Switching it on is the earliest moment we know speech will be

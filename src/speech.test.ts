@@ -168,6 +168,21 @@ describe("stopSpeaking settles the drain", () => {
     assert.equal(settled, true, "drain settled after stopSpeaking()");
   });
 
+  test("speakAll settles when the last spoken sentence has played, even when the text ends in an emoji", async () => {
+    const marks: Mark[] = [];
+    let start = 0;
+    installBrowserStubs(marks, () => start);
+    const { speakAll } = (await import(SPEECH)) as any;
+
+    start = Date.now();
+    // The emoji is stripped, which leaves an empty last part; the promise
+    // returned must still be the one for "Two!", not an already-settled one
+    // for nothing -- that flipped the read-aloud button back at once.
+    await speakAll("One. Two! 😊");
+    const ended = marks.filter((m) => m.kind === "ended");
+    assert.equal(ended.length, 2, "both sentences had played when speakAll settled");
+  });
+
   test("onSpeaking reports busy for exactly the life of a run, and a stop ends it at once", async () => {
     const marks: Mark[] = [];
     let start = 0;
