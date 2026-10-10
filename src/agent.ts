@@ -651,6 +651,11 @@ function asksAboutCalendar(text: string): boolean {
   return /\b(?:calendar|schedule|agenda|appointment|meeting|event|todo|to-do|task)s?\b/i.test(text);
 }
 
+/** A reply handing Enio's own things to the user: "your calendar", "your inbox". */
+function claimsUsersOwn(reply: string): boolean {
+  return /\byour (?:own )?(?:calendar|events?|schedule|agenda|to-?dos?|tasks?|inbox|e-?mail|mail|account|drive|contacts?)\b/i.test(reply);
+}
+
 /** The closed shapes of a calendar answer: something is on it, or nothing is. */
 function statesCalendarContent(reply: string): boolean {
   return /\b(?:no events|nothing (?:on|scheduled|planned)|calendar is (?:clear|empty|free)|you have (?:an?|no|\d+) (?:events?|meetings?|appointments?)|scheduled for|on (?:your|the|my) calendar|upcoming events?)\b/i.test(reply);
@@ -1800,12 +1805,20 @@ export async function runTurn(
       ? (scriptAccountWith("calendar.read") ?? agentOnlyAccount("calendar.read"))
       : null;
   const deniesCalendar = Boolean(calendarAccount) && (deniesCalendarAccess(reply) || statesCalendarContent(reply));
+  // The reverse error: Enio's own account read (the tool says "my own
+  // account"), and the reply calls it "your calendar". Watched in a fresh
+  // conversation at 4B: "There are no events scheduled in your calendar"
+  // about Enio's. That sentence is the one the owner model exists to
+  // prevent, so it is withdrawn like the mail agent's.
+  const ownAccountStep = steps.find((st) => st.kind === "tool" && /\bmy own account\b/.test(st.output ?? ""));
+  const misownedAccount =
+    (specialistName === "planner" || specialistName === "mail") && Boolean(ownAccountStep) && claimsUsersOwn(reply);
   const stale =
     disclaimed || answeredFromMemory || codeInReply || promisedWrite || composedUnasked ||
-    fabricatedCurrent || inventedNames.length > 0 || quotedUnreadMail || deniesMailAccount || deniesCalendar || announcedLookup;
+    fabricatedCurrent || inventedNames.length > 0 || quotedUnreadMail || deniesMailAccount || deniesCalendar || misownedAccount || announcedLookup;
   if (
     reply.trim() &&
-    (!toolRanThisTurn || codeInReply || promisedWrite || composedUnasked || inventedNames.length > 0 || deniesMailAccount || announcedLookup) &&
+    (!toolRanThisTurn || codeInReply || promisedWrite || composedUnasked || inventedNames.length > 0 || deniesMailAccount || misownedAccount || announcedLookup) &&
     (claimsUnperformedAction(reply) || stale)
   ) {
     // Withdraw, don't append. The first version streamed the correction
@@ -1838,6 +1851,8 @@ export async function runTurn(
                         ? deniesCalendarAccess(reply)
                           ? "That reply said no calendar is connected, but one is. Reading it."
                           : "That answer came without reading the calendar. Reading it."
+                      : misownedAccount
+                        ? "That reply called Enio's own account yours. Correcting."
                       : announcedLookup
                         ? "That reply announced a search and stopped. Finishing it."
                         : "That reply described actions that never ran — nothing was called. Correcting.";
@@ -1903,6 +1918,13 @@ export async function runTurn(
                 `(Not true: ${calendarAccount!.described} is connected and can read a calendar. ` +
                 "Its calendar has been read for you — the read_calendar result follows. Answer only " +
                 "from that result, saying whose calendar it is, and call nothing else.)"
+            : misownedAccount
+              ? // The owner, stated the way the model has to say it. The
+                // result is already in the transcript; the correction is a
+                // pure re-answer, so it asks for no call.
+                "(Wrong owner: that result came from your own account — you are Enio — not the user's. " +
+                'Say "my own calendar" or "my own account", give the result, and add that nothing of the ' +
+                "user's is connected. Call nothing.)"
             : announcedLookup
               ? // Do it or report it: the one thing a trailing "Searching…" is not.
                 "(You announced a lookup and stopped. Call the tool now — without an account parameter unless the user named one — " +
@@ -2051,6 +2073,8 @@ export async function runTurn(
       ? !wroteAfterCorrection
       : composedUnasked
         ? looksLikeMailDraft(reply)
+        : misownedAccount
+          ? claimsUsersOwn(reply)
         : fabricatedCurrent
           ? // The correction asks for an admission; the floor fires only if
             // the retry is still asserting instead. "Did a tool run" would
@@ -2080,6 +2104,10 @@ export async function runTurn(
             // a tool the turn never held.
             "I said I would write that and then did not — the file is unchanged. " +
             "Ask again, and if it is a large file ask for one part at a time."
+          : misownedAccount
+            ? // The tool's own sentence, which already says "my own account",
+              // with the owner made explicit once more.
+              `${(ownAccountStep!.output ?? "").trim()} That is my own account's, not yours — nothing of yours is connected.`
           : deniesCalendar
             ? // The planner's own floor: the account by name, so the next
               // question is asked knowing the calendar is there.

@@ -45,6 +45,12 @@ function scriptModel(
 ) {
   const queue = [...turns];
   globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+    // An Apps Script call is not a model call: it answers with an empty
+    // result and leaves the scripted replies to the model.
+    if (/script\.google\.com/.test(String(_url))) {
+      // The bridge's shape: the result rides under `ok`.
+      return new Response(JSON.stringify({ ok: [] }), { status: 200 });
+    }
     if (onRequest) {
       try {
         onRequest(JSON.parse(String(init?.body ?? "{}")));
@@ -1994,15 +2000,11 @@ describe("the planner denying a calendar that is connected", () => {
       const registry = await buildRegistry();
       const sessionId = store.startSession();
       const corrections: string[] = [];
-      // The harness seeds the read itself; its script call is answered from
-      // the same queue (every fetch is), so the second item is what the
-      // "script" returns -- a non-result, which is fine: a result is a
-      // result -- and the third is the model answering from it.
+      // The harness seeds the read itself; the model then answers from it.
       scriptModel(
         [
           { content: "I can't see your calendar because no account is connected. Connect one under Connections." },
-          { content: "(the script's reply)" },
-          { content: "Enio's own calendar (enio@example.com) is clear this week — nothing of yours is connected." },
+          { content: "My own calendar (enio@example.com) is clear this week — nothing of yours is connected." },
         ],
         // The whole transcript the model saw: the correction is no longer
         // the last message once the seeded read's result follows it.
@@ -2015,12 +2017,79 @@ describe("the planner denying a calendar that is connected", () => {
       assert.ok(notices.some((n) => /said no calendar is connected, but one is/.test(n)), notices.join(" | "));
       assert.ok(result.toolsUsed.includes("read_calendar"), "the harness made the call the model would not");
       assert.ok(result.messages.some((m) => m.role === "tool" && /calendar/i.test(String(m.content))), "the result is in the transcript");
-      assert.match(result.reply, /Enio's own calendar/);
+      assert.match(result.reply, /My own calendar/);
       assert.ok(!/no account is connected/.test(result.reply), "the denial is gone");
       assert.ok(
         corrections.some((c) => /Enio's own account enio \(enio@example\.com\) is connected and can read a calendar/.test(c)),
         "the correction names the account",
       );
+    } finally {
+      acc.removeAccount(own.id);
+    }
+  });
+});
+
+describe("the planner calling Enio's own calendar yours", () => {
+  test("the reply is withdrawn and the correction puts the owner right", async () => {
+    // Watched in a fresh conversation: the tool said "my own account", the
+    // reply said "your calendar" -- the sentence the owner model exists to
+    // prevent, from the other direction.
+    const acc = await import("./accounts.js");
+    const { config } = await import("./config.js");
+    mkdirSync(config.dataDir, { recursive: true });
+    const own = acc.addScriptAccount({
+      email: "enio@example.com",
+      url: "https://script.google.com/macros/s/live/exec",
+      secret: "s",
+      version: 5,
+      grants: ["calendar.read"],
+      owner: "agent",
+      label: "enio",
+    });
+    try {
+      const registry = await buildRegistry();
+      const sessionId = store.startSession();
+      scriptModel([
+        { toolCall: { name: "read_calendar", args: { days: 7 } } },
+        { content: "There are no events scheduled in your calendar for this week." },
+        { content: "My own calendar (enio@example.com) has nothing this week; nothing of yours is connected." },
+      ]);
+      const notices: string[] = [];
+      const result = await runTurn("do you have any events this week?", [], registry, sessionId, {
+        onNotice: (n) => notices.push(n),
+      }, { specialist: "planner" });
+      assert.ok(notices.some((n) => /called Enio's own account yours/.test(n)), notices.join(" | "));
+      assert.match(result.reply, /My own calendar/);
+      assert.ok(!/your calendar/.test(result.reply), "the misowned sentence is gone");
+    } finally {
+      acc.removeAccount(own.id);
+    }
+  });
+
+  test("when the correction still says yours, the floor speaks in the tool's words", async () => {
+    const acc = await import("./accounts.js");
+    const { config } = await import("./config.js");
+    mkdirSync(config.dataDir, { recursive: true });
+    const own = acc.addScriptAccount({
+      email: "enio@example.com",
+      url: "https://script.google.com/macros/s/live/exec",
+      secret: "s",
+      version: 5,
+      grants: ["calendar.read"],
+      owner: "agent",
+      label: "enio",
+    });
+    try {
+      const registry = await buildRegistry();
+      const sessionId = store.startSession();
+      scriptModel([
+        { toolCall: { name: "read_calendar", args: { days: 7 } } },
+        { content: "There are no events scheduled in your calendar for this week." },
+        { content: "Your calendar is clear this week." },
+      ]);
+      const result = await runTurn("do you have any events this week?", [], registry, sessionId, {}, { specialist: "planner" });
+      assert.match(result.reply, /my own account enio \(enio@example\.com\)/);
+      assert.match(result.reply, /not yours/);
     } finally {
       acc.removeAccount(own.id);
     }
