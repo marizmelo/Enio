@@ -16,23 +16,24 @@ import type { ToolDef } from "../types.js";
  * withheld, not offered-and-refused.
  */
 
-/** The honest answer when only Enio's own account is connected: its
- *  calendar is not the person's, so it is neither read nor written as if it
- *  were. Named, so the person can ask for it on purpose. */
-const onlyAgent = (agent: PickedAccount, what: string) =>
-  `No account of yours is connected. The only connected account is ${agent.described}, and that is Enio's ${what}, not yours. ` +
-  `Connect yours in [Connections](enio://panel/accounts/add), or ask for Enio's by name (for example "check Enio's ${what}").`;
-const noneOfYours = (grant: Parameters<typeof agentOnlyAccount>[0], what: string, otherwise: string) => {
+/**
+ * Whose account a call uses: the person's when one is connected, else Enio's
+ * own, named as such. Unlike mail, where reading Enio's inbox as "your
+ * mail" was the live confusion and the tool refuses, a calendar grant given
+ * to Enio's account in Settings is something the person set up on purpose,
+ * and a grant the panel shows that nothing honours reads as broken -- which
+ * is how it was reported. So the fallback reads, every result says whose it
+ * was, and the notice carries the way to connect one of the person's.
+ */
+function accountFor(grant: Parameters<typeof agentOnlyAccount>[0]): { account: PickedAccount; fallback: boolean } | null {
+  const own = scriptAccountWith(grant);
+  if (own) return { account: own, fallback: false };
   const agent = agentOnlyAccount(grant);
-  return agent
-    ? {
-        text: onlyAgent(agent, what),
-        // The remedy in the notice as a link, because the reply is the model's
-        // paraphrase and a 4B model drops links as often as it keeps them.
-        notice: `No account of yours is connected; Enio's own ${what} was not touched. Connect yours in [Connections](enio://panel/accounts/add).`,
-      }
-    : otherwise;
-};
+  return agent ? { account: agent, fallback: true } : null;
+}
+/** The notice's tail when Enio's own account stood in for the person's. */
+const standIn = (fallback: boolean) =>
+  fallback ? " Nothing of yours is connected; connect yours in [Connections](enio://panel/accounts/add)." : "";
 
 const readCalendarTool: ToolDef = {
   name: "read_calendar",
@@ -47,8 +48,9 @@ const readCalendarTool: ToolDef = {
     required: [],
   },
   async run(args) {
-    const account = scriptAccountWith("calendar.read");
-    if (!account) return noneOfYours("calendar.read", "calendar", "No connected account can read a calendar.");
+    const pick = accountFor("calendar.read");
+    if (!pick) return "No connected account can read a calendar.";
+    const { account, fallback } = pick;
     const result = await callScript(account.url, account.secret, "calendar.upcoming", {
       days: Math.min(60, Math.max(1, Number(args.days ?? 7) || 7)),
     });
@@ -56,7 +58,7 @@ const readCalendarTool: ToolDef = {
     const events = (result.result as Array<Record<string, string>>) ?? [];
     // Whose calendar, in the result and the notice: the reply has nowhere
     // else to learn it, and "your calendar" about Enio's was the failure.
-    const notice = `Read the calendar of ${account.described}: ${events.length} event${events.length === 1 ? "" : "s"}.`;
+    const notice = `Read the calendar of ${account.described}: ${events.length} event${events.length === 1 ? "" : "s"}.${standIn(fallback)}`;
     if (events.length === 0) return { text: `Nothing on the calendar of ${account.described} in that window.`, notice };
     const lines = events.map((e) => {
       const start = String(e.start ?? "").slice(0, 16).replace("T", " ");
@@ -85,8 +87,9 @@ const addEventTool: ToolDef = {
     required: ["title", "start", "end"],
   },
   async run(args) {
-    const account = scriptAccountWith("calendar.write");
-    if (!account) return noneOfYours("calendar.write", "calendar", "The connected account was not granted calendar changes.");
+    const pick = accountFor("calendar.write");
+    if (!pick) return "The connected account was not granted calendar changes.";
+    const { account, fallback } = pick;
     const result = await callScript(account.url, account.secret, "calendar.add", {
       title: String(args.title ?? ""),
       start: String(args.start ?? ""),
@@ -97,7 +100,10 @@ const addEventTool: ToolDef = {
     });
     if (!result.ok) return `Could not add the event: ${result.error}`;
     const made = result.result as Record<string, string>;
-    return `Added "${made.title}" to the calendar of ${account.described}${made.meet ? ` — Meet link: ${made.meet}` : ""}.`;
+    return {
+      text: `Added "${made.title}" to the calendar of ${account.described}${made.meet ? ` — Meet link: ${made.meet}` : ""}.`,
+      notice: `Added an event to the calendar of ${account.described}.${standIn(fallback)}`,
+    };
   },
 };
 
@@ -107,13 +113,14 @@ const listTodosTool: ToolDef = {
   origin: "builtin",
   parameters: { type: "object", properties: {}, required: [] },
   async run() {
-    const account = scriptAccountWith(null);
-    if (!account) return noneOfYours(null, "todo list", "No account is connected.");
+    const pick = accountFor(null);
+    if (!pick) return "No account is connected.";
+    const { account, fallback } = pick;
     const result = await callScript(account.url, account.secret, "tasks.list", {});
     if (!result.ok) return `Could not read todos: ${result.error}`;
     const lists = (result.result as Array<{ list: string; tasks: Array<Record<string, string>> }>) ?? [];
     const total = lists.reduce((n, l) => n + l.tasks.length, 0);
-    const notice = `Read the todos of ${account.described}: ${total} open.`;
+    const notice = `Read the todos of ${account.described}: ${total} open.${standIn(fallback)}`;
     if (total === 0) return { text: `No open todos for ${account.described}.`, notice };
     const text = lists
       .filter((l) => l.tasks.length > 0)
@@ -144,15 +151,19 @@ const addTodoTool: ToolDef = {
     // calendar.write is the "may change your day" grant: todos have no scope
     // of their own in the grant list, and an account connected read-only must
     // not gain a write path through the side door.
-    const account = scriptAccountWith("calendar.write");
-    if (!account) return noneOfYours("calendar.write", "todo list", "The connected account was not granted changes.");
+    const pick = accountFor("calendar.write");
+    if (!pick) return "The connected account was not granted changes.";
+    const { account, fallback } = pick;
     const result = await callScript(account.url, account.secret, "tasks.add", {
       title: String(args.title ?? ""),
       due: args.due ? new Date(String(args.due)).toISOString() : undefined,
       notes: args.notes ? String(args.notes) : "",
     });
     if (!result.ok) return `Could not add the todo: ${result.error}`;
-    return `Added "${(result.result as Record<string, string>).title}" to the todos of ${account.described}.`;
+    return {
+      text: `Added "${(result.result as Record<string, string>).title}" to the todos of ${account.described}.`,
+      notice: `Added a todo for ${account.described}.${standIn(fallback)}`,
+    };
   },
 };
 
@@ -169,8 +180,9 @@ const findContactTool: ToolDef = {
     required: ["query"],
   },
   async run(args) {
-    const account = scriptAccountWith(null);
-    if (!account) return noneOfYours(null, "contacts", "No account is connected.");
+    const pick = accountFor(null);
+    if (!pick) return "No account is connected.";
+    const { account } = pick;
     const result = await callScript(account.url, account.secret, "contacts.find", {
       query: String(args.query ?? ""),
     });
@@ -196,8 +208,9 @@ const searchDriveTool: ToolDef = {
     required: ["query"],
   },
   async run(args) {
-    const account = scriptAccountWith("drive.read");
-    if (!account) return noneOfYours("drive.read", "Drive", "The connected account was not granted Drive reading.");
+    const pick = accountFor("drive.read");
+    if (!pick) return "The connected account was not granted Drive reading.";
+    const { account } = pick;
     const result = await callScript(account.url, account.secret, "drive.find", {
       query: String(args.query ?? ""),
     });

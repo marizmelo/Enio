@@ -3233,6 +3233,16 @@ shows under Connections with the question. Settings is also where
 whatever else is Enio's own goes as it appears; Connections stays what
 the person lets it reach.
 
+**And the fallback differs by what is read (October 2026):** mail never
+falls back to Enio's own inbox -- that was the live confusion. Calendar,
+todos, contacts and Drive do, when Enio's is the only account: a calendar
+grant given to Enio's account in Settings is something the person set
+up, and a grant the panel shows that nothing honours was reported as the
+agent refusing to comply. Every result names whose account it was
+("the calendar of Enio's own account …"), the notice says it stood in and
+links Connections, and the planner's role says to repeat the owner. A
+first version refused like mail; it lasted a day.
+
 ### The mail agent quotes mail it read, names the inbox, or reads it
 
 **What happened:** asked "yes" to its own offer to read the full email,

@@ -44,7 +44,7 @@ after(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-test("the planner's tools register with only Enio's own account, and a read names it instead of using it", async () => {
+test("the planner's tools register with only Enio's own account, and a read uses it by name", async () => {
   assert.deepEqual(
     googleTools.map((t) => t.name).sort(),
     ["add_event", "add_todo", "find_contact", "list_todos", "read_calendar", "read_drive", "search_drive"],
@@ -56,11 +56,9 @@ test("the planner's tools register with only Enio's own account, and a read name
   }) as typeof fetch;
   const read = googleTools.find((t) => t.name === "read_calendar")!;
   const out = (await read.run({ days: 7 })) as { text: string; notice?: string };
-  assert.match(out.text, /No account of yours is connected/);
-  assert.match(out.text, /Enio's own account enio \(enio@example\.com\)|Enio's own account/);
-  assert.equal(calls, 0, "Enio's calendar was not read");
-  // The remedy is a link the window can open, in the notice the reader sees
-  // verbatim and in the text the model paraphrases.
-  assert.match(out.notice ?? "", /\[Connections\]\(enio:\/\/panel\/accounts\/add\)/);
-  assert.match(out.text, /enio:\/\/panel\/accounts\/add/);
+  assert.equal(calls, 1, "Enio's own calendar is read when it is the only one -- the grant was given on purpose");
+  assert.match(out.text, /calendar of Enio's own account enio \(enio@example\.com\)/, "and named as Enio's, never as yours");
+  // The notice says it stood in, with the remedy as a link the window opens.
+  assert.match(out.notice ?? "", /Read the calendar of Enio's own account/);
+  assert.match(out.notice ?? "", /Nothing of yours is connected; connect yours in \[Connections\]\(enio:\/\/panel\/accounts\/add\)/);
 });

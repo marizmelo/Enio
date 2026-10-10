@@ -83,24 +83,22 @@ describe("the planner", () => {
     assert.ok(!out.includes("s3cret") && !out.includes("script.google.com"), "credential leaked into output");
   });
 
-  test("with only Enio's own account connected, the calendar is named, not read as yours", async () => {
+  test("with only Enio's own account connected, the calendar is read and named as Enio's, with the remedy", async () => {
     const path = join(process.env.ENIO_DATA_DIR!, "accounts.json");
     const before = JSON.parse(String(readFileSync(path)));
     const own = { ...before, accounts: [{ ...before.accounts[0], owner: "agent", label: "enio" }] };
     writeFileSync(path, JSON.stringify(own));
     try {
-      const calls = stubScript({ "calendar.upcoming": [] });
+      const calls = stubScript({ "calendar.upcoming": [], "calendar.add": { id: "e1", title: "Lunch" } });
       const read = googleTools.find((t) => t.name === "read_calendar")!;
       const out = (await read.run({ days: 7 })) as { text: string; notice?: string };
-      assert.match(out.text, /No account of yours is connected/);
-      assert.match(out.text, /Enio's own account/);
-      assert.match(out.text, /not yours/);
-      assert.equal(calls.length, 0, "Enio's calendar was not read");
-      assert.match(out.notice ?? "", /was not touched/);
+      assert.equal(calls.length, 1, "read, since it is the only calendar there is");
+      assert.match(out.text, /Nothing on the calendar of Enio's own account enio/);
+      assert.match(out.notice ?? "", /Nothing of yours is connected; connect yours in \[Connections\]/);
       const add = googleTools.find((t) => t.name === "add_event")!;
-      const added = (await add.run({ title: "Lunch", start: "2026-08-22 12:00", end: "2026-08-22 13:00" })) as { text: string };
-      assert.match(added.text, /not yours/);
-      assert.equal(calls.length, 0, "nothing was added to Enio's calendar either");
+      const added = (await add.run({ title: "Lunch", start: "2026-08-22 12:00", end: "2026-08-22 13:00" })) as { text: string; notice?: string };
+      assert.match(added.text, /to the calendar of Enio's own account/, "a write says whose calendar it went to");
+      assert.match(added.notice ?? "", /Nothing of yours is connected/);
     } finally {
       writeFileSync(path, JSON.stringify(before));
     }
@@ -126,7 +124,8 @@ describe("the planner", () => {
       "calendar.add": { id: "e1", title: "Lunch", meet: "https://meet.google.com/abc" },
     });
     const add = googleTools.find((t) => t.name === "add_event")!;
-    const out = String(await add.run({ title: "Lunch", start: "2026-08-22 12:00", end: "2026-08-22 13:00", meet: true }));
+    const r = await add.run({ title: "Lunch", start: "2026-08-22 12:00", end: "2026-08-22 13:00", meet: true });
+    const out = typeof r === "string" ? r : r.text;
     assert.equal(calls[0]!.args.meet, true);
     assert.match(out, /meet\.google\.com\/abc/);
   });

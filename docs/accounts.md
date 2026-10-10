@@ -175,6 +175,11 @@ Two kinds of account can be connected, and they must never be confused:
   name, connected under **Connections**. "My inbox" always means one of
   these.
 
+With only Enio's own account connected, "my inbox" reads nothing — Enio's
+mail is never presented as yours — but calendar, todo and contact questions
+use Enio's account and say so, since a calendar grant on it is something
+you set up; a notice under the reply carries the link to connect yours.
+
 Which door you connect through is what records whose it is, so nothing
 asks; each account also takes a label ("work", "personal"). An account
 connected before the two doors existed shows under Connections with the
