@@ -2088,7 +2088,7 @@ describe("the planner calling Enio's own calendar yours", () => {
         { content: "Your calendar is clear this week." },
       ]);
       const result = await runTurn("do you have any events this week?", [], registry, sessionId, {}, { specialist: "planner" });
-      assert.match(result.reply, /my own account enio \(enio@example\.com\)/);
+      assert.match(result.reply, /my own account \(enio@example\.com\)/);
       assert.match(result.reply, /not yours/);
     } finally {
       acc.removeAccount(own.id);

@@ -93,7 +93,7 @@ describe("the planner", () => {
       const read = googleTools.find((t) => t.name === "read_calendar")!;
       const out = (await read.run({ days: 7 })) as { text: string; notice?: string };
       assert.equal(calls.length, 1, "read, since it is the only calendar there is");
-      assert.match(out.text, /Nothing on the calendar of my own account enio/);
+      assert.match(out.text, /Nothing on the calendar of my own account \(enio@example\.com\)/);
       assert.match(out.notice ?? "", /Nothing of yours is connected; connect yours in \[Connections\]/);
       const add = googleTools.find((t) => t.name === "add_event")!;
       const added = (await add.run({ title: "Lunch", start: "2026-08-22 12:00", end: "2026-08-22 13:00" })) as { text: string; notice?: string };

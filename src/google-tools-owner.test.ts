@@ -57,7 +57,7 @@ test("the planner's tools register with only Enio's own account, and a read uses
   const read = googleTools.find((t) => t.name === "read_calendar")!;
   const out = (await read.run({ days: 7 })) as { text: string; notice?: string };
   assert.equal(calls, 1, "Enio's own calendar is read when it is the only one -- the grant was given on purpose");
-  assert.match(out.text, /calendar of my own account enio \(enio@example\.com\)/, "named in Enio's own voice, never as yours");
+  assert.match(out.text, /calendar of my own account \(enio@example\.com\)/, "named in Enio's own voice, never as yours");
   // The notice says it stood in, with the remedy as a link the window opens.
   assert.match(out.notice ?? "", /Read the calendar of Enio's own account/);
   assert.match(out.notice ?? "", /Nothing of yours is connected; connect yours in \[Connections\]\(enio:\/\/panel\/accounts\/add\)/);

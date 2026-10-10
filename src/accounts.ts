@@ -193,7 +193,9 @@ export function describeAccount(a: Pick<Account, "email" | "owner" | "label">): 
  *  keep describeAccount: they are the window speaking about Enio. */
 export function spokenAccount(a: Pick<Account, "email" | "owner" | "label">): string {
   const name = a.label ? `${a.label} (${a.email})` : a.email;
-  if (a.owner === "agent") return `my own account ${name}`;
+  // No label on the agent's own: it is usually "Enio's", and "my own account
+  // Enio's" is the third person creeping back in.
+  if (a.owner === "agent") return `my own account (${a.email})`;
   if (a.owner === "user") return `your account ${name}`;
   return `account ${name} (owner not set)`;
 }
