@@ -53,7 +53,7 @@ describe("whose account it is", () => {
       const r = await search.run(args);
       const text = typeof r === "string" ? r : r.text;
       assert.match(text, /No account of yours is connected/, JSON.stringify(args));
-      assert.match(text, /Enio's own account/);
+      assert.match(text, /my own account/, "the agent speaks of its own account in the first person");
     }
     const read = mailTools.find((t) => t.name === "read_email")!;
     const rr = await read.run({ id: "abc" });

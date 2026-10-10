@@ -1170,7 +1170,7 @@ export async function runTurn(
         roleSystem +=
           `\n\nConnected accounts (Gmail):\n${lines.join("\n")}\n` +
           `Leave the account parameter out unless the user named one of these by its label; the account in use is applied for you. ` +
-          `Say whose account you read when you report — Enio's own account is the agent's address, not the user's mail.`;
+          `Say whose account you read when you report, in your own voice: you are Enio, so Enio's own account is "my account", never "Enio's"; the user's is "your account".`;
       }
     }
     handlers.onRoute?.(specialist.name);
@@ -2083,7 +2083,7 @@ export async function runTurn(
           : deniesCalendar
             ? // The planner's own floor: the account by name, so the next
               // question is asked knowing the calendar is there.
-              `I said no calendar was connected, but ${calendarAccount!.described} is. ` +
+              `I said no calendar was connected, but ${calendarAccount!.spoken} is. ` +
               "Ask again and I will read it with read_calendar."
           : stale
             ? `I should have looked that up with ${heldLiveTools[0] ?? "web_search"} and did not. ` +

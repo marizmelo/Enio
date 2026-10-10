@@ -59,13 +59,13 @@ const readCalendarTool: ToolDef = {
     // Whose calendar, in the result and the notice: the reply has nowhere
     // else to learn it, and "your calendar" about Enio's was the failure.
     const notice = `Read the calendar of ${account.described}: ${events.length} event${events.length === 1 ? "" : "s"}.${standIn(fallback)}`;
-    if (events.length === 0) return { text: `Nothing on the calendar of ${account.described} in that window.`, notice };
+    if (events.length === 0) return { text: `Nothing on the calendar of ${account.spoken} in that window.`, notice };
     const lines = events.map((e) => {
       const start = String(e.start ?? "").slice(0, 16).replace("T", " ");
       const end = String(e.end ?? "").slice(11, 16);
       return `${start}–${end}  ${e.title || "(untitled)"}${e.location ? ` — ${e.location}` : ""}`;
     });
-    return { text: `${events.length} event(s) on the calendar of ${account.described}:\n${lines.join("\n")}`, notice };
+    return { text: `${events.length} event(s) on the calendar of ${account.spoken}:\n${lines.join("\n")}`, notice };
   },
 };
 
@@ -101,7 +101,7 @@ const addEventTool: ToolDef = {
     if (!result.ok) return `Could not add the event: ${result.error}`;
     const made = result.result as Record<string, string>;
     return {
-      text: `Added "${made.title}" to the calendar of ${account.described}${made.meet ? ` — Meet link: ${made.meet}` : ""}.`,
+      text: `Added "${made.title}" to the calendar of ${account.spoken}${made.meet ? ` — Meet link: ${made.meet}` : ""}.`,
       notice: `Added an event to the calendar of ${account.described}.${standIn(fallback)}`,
     };
   },
@@ -121,7 +121,7 @@ const listTodosTool: ToolDef = {
     const lists = (result.result as Array<{ list: string; tasks: Array<Record<string, string>> }>) ?? [];
     const total = lists.reduce((n, l) => n + l.tasks.length, 0);
     const notice = `Read the todos of ${account.described}: ${total} open.${standIn(fallback)}`;
-    if (total === 0) return { text: `No open todos for ${account.described}.`, notice };
+    if (total === 0) return { text: `No open todos for ${account.spoken}.`, notice };
     const text = lists
       .filter((l) => l.tasks.length > 0)
       .map(
@@ -130,7 +130,7 @@ const listTodosTool: ToolDef = {
           l.tasks.map((t) => `  • ${t.title}${t.due ? ` (due ${String(t.due).slice(0, 10)})` : ""}`).join("\n"),
       )
       .join("\n\n");
-    return { text: `Open todos of ${account.described}:\n${text}`, notice };
+    return { text: `Open todos of ${account.spoken}:\n${text}`, notice };
   },
 };
 
@@ -161,7 +161,7 @@ const addTodoTool: ToolDef = {
     });
     if (!result.ok) return `Could not add the todo: ${result.error}`;
     return {
-      text: `Added "${(result.result as Record<string, string>).title}" to the todos of ${account.described}.`,
+      text: `Added "${(result.result as Record<string, string>).title}" to the todos of ${account.spoken}.`,
       notice: `Added a todo for ${account.described}.${standIn(fallback)}`,
     };
   },
@@ -188,7 +188,7 @@ const findContactTool: ToolDef = {
     });
     if (!result.ok) return `Could not search contacts: ${result.error}`;
     const people = (result.result as Array<{ name: string; emails: string[]; phones: string[] }>) ?? [];
-    if (people.length === 0) return `Nobody matching "${args.query}" in the contacts of ${account.described}.`;
+    if (people.length === 0) return `Nobody matching "${args.query}" in the contacts of ${account.spoken}.`;
     return people
       .map((p) => `${p.name || "(no name)"}  ${p.emails.join(", ")}${p.phones.length ? `  ${p.phones.join(", ")}` : ""}`)
       .join("\n");
@@ -216,7 +216,7 @@ const searchDriveTool: ToolDef = {
     });
     if (!result.ok) return `Could not search Drive: ${result.error}`;
     const files = (result.result as Array<Record<string, string>>) ?? [];
-    if (files.length === 0) return `Nothing named like "${args.query}" in the Drive of ${account.described}.`;
+    if (files.length === 0) return `Nothing named like "${args.query}" in the Drive of ${account.spoken}.`;
     return (
       files.map((f) => `[${f.id}] ${f.name}  (${shortType(f.type)})`).join("\n") +
       "\n\nRead one with read_drive using its [id]."

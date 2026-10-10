@@ -4,8 +4,8 @@ import { agentOnlyMailAccount, anyMailReadAccount, findAccountByName, listAccoun
 /** The honest answer when only Enio's own account can read mail: not the
  *  person's inbox, so not read as if it were. Named so the person can ask
  *  for it on purpose. */
-const onlyAgentMail = (agent: { described: string; label?: string; email: string }) =>
-  `No account of yours is connected. The only connected account is ${agent.described}, and that is Enio's mail, not yours. ` +
+const onlyAgentMail = (agent: { spoken: string; label?: string; email: string }) =>
+  `No account of yours is connected. The only connected account is ${agent.spoken}, and that is my mail, not yours. ` +
   `Connect your account in [Connections](enio://panel/accounts/add), or ask for Enio's inbox by name (for example "check ${agent.label ?? agent.email}").`;
 import { callScript } from "../appsscript.js";
 import type { ToolDef } from "../types.js";
@@ -134,7 +134,7 @@ const searchTool: ToolDef = {
     }
     const preface =
       askedOwner && account
-        ? `${askedOwner === "user" ? "No account of the user's is connected" : "Enio has no account of its own connected"} — this is ${account.described}.\n\n`
+        ? `${askedOwner === "user" ? "No account of yours is connected" : "I have no account of my own connected"} — this is ${account.spoken}.\n\n`
         : "";
     if (account) {
       const parts: string[] = [];

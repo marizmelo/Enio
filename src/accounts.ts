@@ -186,6 +186,18 @@ export function describeAccount(a: Pick<Account, "email" | "owner" | "label">): 
   return `account ${name} (owner not set — mark it in Connections)`;
 }
 
+/** The same, in the agent's own voice: what a tool result says to the model,
+ *  which IS Enio. "Enio's own calendar has no events" in a reply treats Enio
+ *  as someone else; the model repeats the tool's wording, so the tool says
+ *  "my own account" and the reply comes out in the first person. Notices
+ *  keep describeAccount: they are the window speaking about Enio. */
+export function spokenAccount(a: Pick<Account, "email" | "owner" | "label">): string {
+  const name = a.label ? `${a.label} (${a.email})` : a.email;
+  if (a.owner === "agent") return `my own account ${name}`;
+  if (a.owner === "user") return `your account ${name}`;
+  return `account ${name} (owner not set)`;
+}
+
 export function setAccountOwner(id: string, owner: AccountOwner, label?: string): Account | null {
   if (owner !== "agent" && owner !== "user") throw new Error('Owner is "agent" or "user".');
   const data = read();
@@ -401,8 +413,10 @@ export interface PickedAccount {
   secret: string;
   owner?: AccountOwner;
   label?: string;
-  /** describeAccount(), ready for a notice or a reply. */
+  /** describeAccount(): the window's voice, for notices. */
   described: string;
+  /** spokenAccount(): the agent's own voice, for tool results the model repeats. */
+  spoken: string;
 }
 
 const picked = (a: StoredAccount): PickedAccount => ({
@@ -413,6 +427,7 @@ const picked = (a: StoredAccount): PickedAccount => ({
   ...(a.owner ? { owner: a.owner } : {}),
   ...(a.label ? { label: a.label } : {}),
   described: describeAccount(a),
+  spoken: spokenAccount(a),
 });
 
 export function scriptMailAccount(kind: "read" | "send"): PickedAccount | null {
