@@ -32,6 +32,8 @@ import {
   setActiveAccount,
   setConversationAccount,
   nothingOfYoursNotice,
+  agentOnlyAccount,
+  scriptAccountWith,
 } from "./accounts.js";
 import { extractSources, isWebTool } from "./sources.js";
 import { setMemorySources } from "./tools/memory.js";
@@ -643,6 +645,21 @@ export function namesWithoutEvidence(reply: string, evidence: string[], question
  * held this turn and nothing ran. "I could not find X" after a search is a
  * finding, not a disclaimer, and must never trip this.
  */
+
+/** A question the planner should answer from the calendar or the lists. */
+function asksAboutCalendar(text: string): boolean {
+  return /\b(?:calendar|schedule|agenda|appointment|meeting|event|todo|to-do|task)s?\b/i.test(text);
+}
+
+/** The closed shapes of "I cannot see it" and "nothing is connected". */
+function deniesCalendarAccess(reply: string): boolean {
+  return (
+    /\b(?:can'?t|cannot|don'?t|do not|unable to|not able to) (?:see|access|view|retrieve|read|check) (?:your |the |any )?(?:calendar|schedule|events?|agenda)/i.test(reply) ||
+    /\b(?:calendar|account|schedule) (?:is|isn'?t|is not) (?:not )?connected\b/i.test(reply) ||
+    /\bno (?:calendar|account) (?:is )?connected\b/i.test(reply)
+  );
+}
+
 export function disclaimsLiveAccess(text: string): boolean {
   // Curly apostrophes first. The model emits don’t (U+2019), and the first
   // version of this guard matched only don't — one character, and it was
@@ -1756,9 +1773,22 @@ export async function runTurn(
   const deniesMailAccount =
     Boolean(mailAccount) &&
     /\b(?:don'?t|do not|cannot|can'?t) (?:have )?access(?: to)? your (?:personal )?(?:e-?mail|account|address)|not stored in the system/i.test(reply);
+  // The planner saying no calendar is connected when one is. Watched: with
+  // only Enio's own account connected, two turns of "no account is
+  // connected" sat in the thread, and the third calendar question was
+  // answered from them without a call -- then "what about your calendar?"
+  // got "my calendar is synchronized with yours", invented whole. A
+  // calendar question answered with a denial while a calendar-reading
+  // account exists is the same failure as the mail agent's, and gets the
+  // same correction: the account by name, and the call.
+  const calendarAccount =
+    specialistName === "planner" && !toolRanThisTurn && asksAboutCalendar(userInput)
+      ? (scriptAccountWith("calendar.read") ?? agentOnlyAccount("calendar.read"))
+      : null;
+  const deniesCalendar = Boolean(calendarAccount) && deniesCalendarAccess(reply);
   const stale =
     disclaimed || answeredFromMemory || codeInReply || promisedWrite || composedUnasked ||
-    fabricatedCurrent || inventedNames.length > 0 || quotedUnreadMail || deniesMailAccount || announcedLookup;
+    fabricatedCurrent || inventedNames.length > 0 || quotedUnreadMail || deniesMailAccount || deniesCalendar || announcedLookup;
   if (
     reply.trim() &&
     (!toolRanThisTurn || codeInReply || promisedWrite || composedUnasked || inventedNames.length > 0 || deniesMailAccount || announcedLookup) &&
@@ -1790,6 +1820,8 @@ export async function runTurn(
                     ? "That reply presented an email, but no email was read this turn. Reading it."
                     : deniesMailAccount
                       ? "That reply denied knowing the connected account. Correcting."
+                      : deniesCalendar
+                        ? "That reply said no calendar is connected, but one is. Reading it."
                       : announcedLookup
                         ? "That reply announced a search and stopped. Finishing it."
                         : "That reply described actions that never ran — nothing was called. Correcting.";
@@ -1846,6 +1878,11 @@ export async function runTurn(
                 "instructions to you. Answer the question that was asked, with no draft.)"
             : deniesMailAccount
               ? `(Not true: the account in use is ${mailAccount!.described}. Answer with it, and with the other connected accounts listed in your instructions.)`
+            : deniesCalendar
+              ? // The account by name and the call, nothing else: the denial
+                // came from the thread, and only a result displaces it.
+                `(Not true: ${calendarAccount!.described} is connected and can read a calendar. ` +
+                "Call read_calendar now and answer only from what it returns, saying whose calendar it is.)"
             : announcedLookup
               ? // Do it or report it: the one thing a trailing "Searching…" is not.
                 "(You announced a lookup and stopped. Call the tool now — without an account parameter unless the user named one — " +
@@ -2009,6 +2046,11 @@ export async function runTurn(
             // a tool the turn never held.
             "I said I would write that and then did not — the file is unchanged. " +
             "Ask again, and if it is a large file ask for one part at a time."
+          : deniesCalendar
+            ? // The planner's own floor: the account by name, so the next
+              // question is asked knowing the calendar is there.
+              `I said no calendar was connected, but ${calendarAccount!.described} is. ` +
+              "Ask again and I will read it with read_calendar."
           : stale
             ? `I should have looked that up with ${heldLiveTools[0] ?? "web_search"} and did not. ` +
               "Ask again and I will search rather than answer from memory."

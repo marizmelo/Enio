@@ -1968,6 +1968,60 @@ describe("the file open in the canvas", () => {
   });
 });
 
+describe("the planner denying a calendar that is connected", () => {
+  test("the denial is withdrawn and the corrective round names the account", async () => {
+    // Watched: with only Enio's own account connected, two "no account is
+    // connected" replies sat in the thread and the next calendar question
+    // was answered from them, no call made. A calendar question answered
+    // with a denial while a calendar-reading account exists is withdrawn
+    // like the mail agent's denial, and the correction names the account.
+    // Through the accounts module, which knows where its file lives --
+    // this suite moves the data dir around, so a path built here may not
+    // be the one the harness reads.
+    const acc = await import("./accounts.js");
+    const { config } = await import("./config.js");
+    mkdirSync(config.dataDir, { recursive: true });
+    const own = acc.addScriptAccount({
+      email: "enio@example.com",
+      url: "https://script.google.com/macros/s/live/exec",
+      secret: "s",
+      version: 5,
+      grants: ["calendar.read"],
+      owner: "agent",
+      label: "enio",
+    });
+    try {
+      const registry = await buildRegistry();
+      const sessionId = store.startSession();
+      const corrections: string[] = [];
+      // The corrective round calls the tool (whose script call fails against
+      // the stub, which is fine: a result is a result), then answers from it.
+      scriptModel(
+        [
+          { content: "I can't see your calendar because no account is connected. Connect one under Connections." },
+          { toolCall: { name: "read_calendar", args: { days: 7 } } },
+          { content: "Enio's own calendar (enio@example.com) is clear this week — nothing of yours is connected." },
+        ],
+        (body) => corrections.push(String(body.messages.at(-1)?.content ?? "")),
+      );
+      const notices: string[] = [];
+      const result = await runTurn("anything on my calendar this week?", [], registry, sessionId, {
+        onNotice: (n) => notices.push(n),
+      }, { specialist: "planner" });
+      assert.ok(notices.some((n) => /said no calendar is connected, but one is/.test(n)), notices.join(" | "));
+      assert.ok(result.toolsUsed.includes("read_calendar"), "the correction made the call");
+      assert.match(result.reply, /Enio's own calendar/);
+      assert.ok(!/no account is connected/.test(result.reply), "the denial is gone");
+      assert.ok(
+        corrections.some((c) => /Enio's own account enio \(enio@example\.com\) is connected and can read a calendar/.test(c)),
+        "the correction names the account",
+      );
+    } finally {
+      acc.removeAccount(own.id);
+    }
+  });
+});
+
 describe("the mail agent answering a read with a draft", () => {
   test("the draft is withdrawn and the corrective round answers the question", async () => {
     // The live failure: "check my email" read a security alert and produced
