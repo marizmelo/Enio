@@ -266,9 +266,19 @@ function shortType(mime: string | undefined): string {
  * registry cap, so they are registered near the mail tools rather than at
  * the tail, where the cap silently eats whatever comes last.
  */
-export const googleTools: ToolDef[] = [
-  ...(anyAccountWith("calendar.read") ? [readCalendarTool] : []),
-  ...(anyAccountWith("calendar.write") ? [addEventTool, addTodoTool] : []),
-  ...(anyAccountWith("drive.read") ? [searchDriveTool, readDriveTool] : []),
-  ...(anyAccountWith(null) ? [listTodosTool, findContactTool] : []),
-];
+export const googleTools: ToolDef[] = [];
+/** Recomputed whenever the registry is built, so an account connected while
+ *  the agent runs shows its tools at the next build rather than the next
+ *  restart. The array itself is kept, since callers hold it. */
+export function refreshGoogleTools(): ToolDef[] {
+  googleTools.splice(
+    0,
+    googleTools.length,
+    ...(anyAccountWith("calendar.read") ? [readCalendarTool] : []),
+    ...(anyAccountWith("calendar.write") ? [addEventTool, addTodoTool] : []),
+    ...(anyAccountWith("drive.read") ? [searchDriveTool, readDriveTool] : []),
+    ...(anyAccountWith(null) ? [listTodosTool, findContactTool] : []),
+  );
+  return googleTools;
+}
+refreshGoogleTools();

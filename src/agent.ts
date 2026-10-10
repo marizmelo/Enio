@@ -651,6 +651,11 @@ function asksAboutCalendar(text: string): boolean {
   return /\b(?:calendar|schedule|agenda|appointment|meeting|event|todo|to-do|task)s?\b/i.test(text);
 }
 
+/** The closed shapes of a calendar answer: something is on it, or nothing is. */
+function statesCalendarContent(reply: string): boolean {
+  return /\b(?:no events|nothing (?:on|scheduled|planned)|calendar is (?:clear|empty|free)|you have (?:an?|no|\d+) (?:events?|meetings?|appointments?)|scheduled for|on (?:your|the|my) calendar|upcoming events?)\b/i.test(reply);
+}
+
 /** The closed shapes of "I cannot see it" and "nothing is connected". */
 function deniesCalendarAccess(reply: string): boolean {
   return (
@@ -1742,9 +1747,14 @@ export async function runTurn(
   // when memory did not already cover it -- answering from what is known is
   // the right behaviour then -- and never when the reply already admits it
   // cannot check, which is the exact answer the correction asks for.
+  // "Do you have any events this week?" is a calendar question, not a
+  // news question: the planner was told to defer to @researcher about its
+  // own calendar. A calendar question goes to the calendar check below.
+  const calendarQuestion = specialistName === "planner" && asksAboutCalendar(userInput);
   const fabricatedCurrent =
     !toolRanThisTurn &&
     !alreadyKnown &&
+    !calendarQuestion &&
     !activeTools.some((t) => WEB_TOOL_NAMES.has(t.name)) &&
     asksAboutCurrentWorld(userInput) &&
     assertsFreshFact(reply) &&
@@ -1781,11 +1791,15 @@ export async function runTurn(
   // calendar question answered with a denial while a calendar-reading
   // account exists is the same failure as the mail agent's, and gets the
   // same correction: the account by name, and the call.
+  // Also an answer that states what is on the calendar without having read
+  // it ("a Team Meeting on 11 October") -- the thread or memory, not the
+  // calendar, which changes without the model. Both shapes get the same
+  // correction: the read, made by the harness.
   const calendarAccount =
-    specialistName === "planner" && !toolRanThisTurn && asksAboutCalendar(userInput)
+    calendarQuestion && !toolRanThisTurn
       ? (scriptAccountWith("calendar.read") ?? agentOnlyAccount("calendar.read"))
       : null;
-  const deniesCalendar = Boolean(calendarAccount) && deniesCalendarAccess(reply);
+  const deniesCalendar = Boolean(calendarAccount) && (deniesCalendarAccess(reply) || statesCalendarContent(reply));
   const stale =
     disclaimed || answeredFromMemory || codeInReply || promisedWrite || composedUnasked ||
     fabricatedCurrent || inventedNames.length > 0 || quotedUnreadMail || deniesMailAccount || deniesCalendar || announcedLookup;
@@ -1821,7 +1835,9 @@ export async function runTurn(
                     : deniesMailAccount
                       ? "That reply denied knowing the connected account. Correcting."
                       : deniesCalendar
-                        ? "That reply said no calendar is connected, but one is. Reading it."
+                        ? deniesCalendarAccess(reply)
+                          ? "That reply said no calendar is connected, but one is. Reading it."
+                          : "That answer came without reading the calendar. Reading it."
                       : announcedLookup
                         ? "That reply announced a search and stopped. Finishing it."
                         : "That reply described actions that never ran — nothing was called. Correcting.";
@@ -1879,10 +1895,14 @@ export async function runTurn(
             : deniesMailAccount
               ? `(Not true: the account in use is ${mailAccount!.described}. Answer with it, and with the other connected accounts listed in your instructions.)`
             : deniesCalendar
-              ? // The account by name and the call, nothing else: the denial
-                // came from the thread, and only a result displaces it.
+              ? // The account by name, and the result it refused to fetch:
+                // the denial came from the thread, and only a result
+                // displaces it. The harness makes the call (below) -- told
+                // to call read_calendar, the model narrated "Reading your
+                // calendar…" and invented an empty week.
                 `(Not true: ${calendarAccount!.described} is connected and can read a calendar. ` +
-                "Call read_calendar now and answer only from what it returns, saying whose calendar it is.)"
+                "Its calendar has been read for you — the read_calendar result follows. Answer only " +
+                "from that result, saying whose calendar it is, and call nothing else.)"
             : announcedLookup
               ? // Do it or report it: the one thing a trailing "Searching…" is not.
                 "(You announced a lookup and stopped. Call the tool now — without an account parameter unless the user named one — " +
@@ -1940,6 +1960,20 @@ export async function runTurn(
       // A client that could not restart still needs the seam between the
       // withdrawn text and the retry; one that did restart starts clean.
       if (!handlers.onRestart) emitContent("\n\n");
+      // The planner's denial is corrected with the result in hand, the way
+      // the coder's writes are verified: the harness seeds the call. Asked to
+      // make it, the model at this size narrates the call instead. A closed
+      // choice of window -- today, tomorrow, else the week -- not a parse.
+      if (deniesCalendar && allowedToolNames.has("read_calendar")) {
+        const days = /\btoday\b/i.test(userInput) ? 1 : /\btomorrow\b/i.test(userInput) ? 2 : 7;
+        const seeded: ToolCall = {
+          id: "seed_calendar",
+          type: "function",
+          function: { name: "read_calendar", arguments: JSON.stringify({ days }) },
+        };
+        history.push({ role: "assistant", content: null, tool_calls: [seeded] });
+        await runToolCalls([seeded]);
+      }
       for (let round = 0; round < 2; round++) {
         const startedAt = Date.now();
         const fix = await complete(

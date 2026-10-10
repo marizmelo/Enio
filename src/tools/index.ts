@@ -12,7 +12,7 @@ import { skillTools } from "./skills.js";
 import { visionTools } from "./vision.js";
 import { emailTools } from "./email.js";
 import { mailTools } from "./mail.js";
-import { googleTools } from "./google.js";
+import { refreshGoogleTools } from "./google.js";
 import { buildDesktopTools, recipesEnabled } from "./desktop.js";
 import { buildPipelineTools } from "../pipelines.js";
 import { probeAssistiveAccess, probeAxBridge } from "./ax.js";
@@ -89,7 +89,7 @@ export async function buildRegistry(
     // Beside mail, not at the tail: in single-agent mode the 16-tool registry
     // cap eats the END of this list, and these must not push the web tools
     // off it -- nor be eaten themselves.
-    ...googleTools,
+    ...refreshGoogleTools(),
     ...buildDesktopTools(),
     // The tool needs the registry the TURN will run with; a getter defers
     // the reference until run() time, sidestepping the chicken-and-egg of

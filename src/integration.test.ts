@@ -1994,22 +1994,27 @@ describe("the planner denying a calendar that is connected", () => {
       const registry = await buildRegistry();
       const sessionId = store.startSession();
       const corrections: string[] = [];
-      // The corrective round calls the tool (whose script call fails against
-      // the stub, which is fine: a result is a result), then answers from it.
+      // The harness seeds the read itself; its script call is answered from
+      // the same queue (every fetch is), so the second item is what the
+      // "script" returns -- a non-result, which is fine: a result is a
+      // result -- and the third is the model answering from it.
       scriptModel(
         [
           { content: "I can't see your calendar because no account is connected. Connect one under Connections." },
-          { toolCall: { name: "read_calendar", args: { days: 7 } } },
+          { content: "(the script's reply)" },
           { content: "Enio's own calendar (enio@example.com) is clear this week — nothing of yours is connected." },
         ],
-        (body) => corrections.push(String(body.messages.at(-1)?.content ?? "")),
+        // The whole transcript the model saw: the correction is no longer
+        // the last message once the seeded read's result follows it.
+        (body) => corrections.push(JSON.stringify(body.messages)),
       );
       const notices: string[] = [];
       const result = await runTurn("anything on my calendar this week?", [], registry, sessionId, {
         onNotice: (n) => notices.push(n),
       }, { specialist: "planner" });
       assert.ok(notices.some((n) => /said no calendar is connected, but one is/.test(n)), notices.join(" | "));
-      assert.ok(result.toolsUsed.includes("read_calendar"), "the correction made the call");
+      assert.ok(result.toolsUsed.includes("read_calendar"), "the harness made the call the model would not");
+      assert.ok(result.messages.some((m) => m.role === "tool" && /calendar/i.test(String(m.content))), "the result is in the transcript");
       assert.match(result.reply, /Enio's own calendar/);
       assert.ok(!/no account is connected/.test(result.reply), "the denial is gone");
       assert.ok(
