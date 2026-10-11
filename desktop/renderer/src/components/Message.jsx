@@ -10,6 +10,7 @@ import { saveExemplar } from "@/lib/conversations";
 import { FileText, Info, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { escapeHtml, renderMarkdownish } from "@/lib/markdown";
+import { openInEditor } from "@/lib/apps";
 import { RememberPopover } from "@/components/RememberPopover";
 
 /**
@@ -375,19 +376,24 @@ export function Message({
  */
 function noticeWithLinks(text, onOpenPanel) {
   const parts = [];
-  const re = /\[([^\]]+)\]\(enio:\/\/panel\/([a-z]+)(?:\/([a-z]+))?\)/gi;
+  // Two link kinds: a part of the app, and a path to hand to the editor
+  // (the coder's "Open in Cursor: a.js · b.js").
+  const re = /\[([^\]]+)\]\(enio:\/\/(panel|editor)\/([^)]+)\)/gi;
   let last = 0;
   let m;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) parts.push(text.slice(last, m.index));
-    const [, label, panel, view] = m;
+    const [, label, kind, rest] = m;
+    const open = () => {
+      if (kind === "editor") {
+        openInEditor(decodeURIComponent(rest)).catch(() => {});
+        return;
+      }
+      const [panel, view] = rest.split("/");
+      onOpenPanel?.(panel.toLowerCase(), view ? view.toLowerCase() : null);
+    };
     parts.push(
-      <button
-        key={m.index}
-        type="button"
-        className="underline underline-offset-2 hover:text-foreground"
-        onClick={() => onOpenPanel?.(panel.toLowerCase(), view ? view.toLowerCase() : null)}
-      >
+      <button key={m.index} type="button" className="underline underline-offset-2 hover:text-foreground" onClick={open}>
         {label}
       </button>,
     );
@@ -416,6 +422,12 @@ function onBodyClick(event, onOpenArtifact, onOpenPanel) {
     const panel = /^enio:\/\/panel\/([a-z]+)(?:\/([a-z]+))?$/i.exec(href);
     if (panel) {
       onOpenPanel?.(panel[1].toLowerCase(), panel[2]?.toLowerCase() ?? null);
+      return;
+    }
+    // enio://editor/<path>: a file the reply offers to open in the editor.
+    const editor = /^enio:\/\/editor\/(.+)$/i.exec(href);
+    if (editor) {
+      openInEditor(decodeURIComponent(editor[1])).catch(() => {});
       return;
     }
     window.maple?.openExternal(href);

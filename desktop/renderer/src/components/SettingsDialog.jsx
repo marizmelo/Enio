@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AccountsPanel } from "@/components/AccountsPanel";
+import { getApps, invalidateApps, setEditor } from "@/lib/apps";
 
 /**
  * Enio's own setup, as distinct from what the user connects for themselves.
@@ -22,13 +23,27 @@ import { AccountsPanel } from "@/components/AccountsPanel";
 export function SettingsDialog({ open, onOpenChange, initialView = "list" }) {
   const [error, setError] = useState("");
   const [view, setView] = useState("list");
+  // Which code editor Enio hands code to. Detected from what is installed;
+  // one found is used as is, several is a choice made here or at the first
+  // "Edit in…", none says what Enio looked for.
+  const [apps, setApps] = useState(null);
 
   useEffect(() => {
     if (open) {
       setError("");
       setView(initialView);
+      invalidateApps();
+      getApps().then(setApps);
     }
   }, [open, initialView]);
+
+  const chooseEditor = async (id) => {
+    try {
+      setApps(await setEditor(id || null));
+    } catch (err) {
+      setError(String(err?.message ?? err));
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -74,6 +89,47 @@ export function SettingsDialog({ open, onOpenChange, initialView = "list" }) {
             onView={(v) => setView(v === "add" ? "add-account" : "list")}
             onError={setError}
           />
+
+          {view !== "add-account" && apps && (
+            <section className="space-y-2">
+              <h3 className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Your apps
+              </h3>
+              <div className="space-y-2 rounded-md border p-3">
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium" htmlFor="code-editor">
+                    Code editor
+                  </label>
+                  <select
+                    id="code-editor"
+                    className="h-7 rounded-md border bg-background px-2 text-xs"
+                    value={apps.choice === "set" ? apps.editor?.id ?? "" : ""}
+                    onChange={(e) => chooseEditor(e.target.value)}
+                  >
+                    <option value="">
+                      {apps.choice === "detected" && apps.editor
+                        ? `${apps.editor.name} (the one found)`
+                        : apps.choice === "ambiguous"
+                          ? "Not chosen yet"
+                          : "None"}
+                    </option>
+                    {apps.editors
+                      .filter((e) => e.installed)
+                      .map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {apps.editors.some((e) => e.installed)
+                    ? `Enio hands code to this editor: Edit in it from a file, Open in it from a project folder, or say "open the project in ${apps.editor?.name ?? "my editor"}". Found: ${apps.editors.filter((e) => e.installed).map((e) => e.name).join(", ")}.`
+                    : "No code editor was found. Enio looks for Cursor, Visual Studio Code, VSCodium, Zed, Sublime Text, Nova and BBEdit; files still open with the system's default app."}
+                </p>
+              </div>
+            </section>
+          )}
         </div>
       </DialogContent>
     </Dialog>

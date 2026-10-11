@@ -40,6 +40,7 @@ import { setMemorySources } from "./tools/memory.js";
 import { coverageBlock } from "./memory/coverage.js";
 import { extractPdfText, looksLikePdf } from "./pdf.js";
 import { activeProject } from "./project.js";
+import { editorRequest, effectiveEditor, openInEditor, type EditorRequest } from "./apps.js";
 import { conversationMounts } from "./conversation-attachments.js";
 import { neutralizeControlTokens } from "./sanitize.js";
 import { unsupportedSpecifics } from "./grounding.js";
@@ -646,6 +647,32 @@ export function namesWithoutEvidence(reply: string, evidence: string[], question
  * finding, not a disclaimer, and must never trip this.
  */
 
+/** "open the project in cursor": the folder that is the project, or a path
+ *  in the tools' own grammar, handed to the editor. Refusals say what to do
+ *  instead, with the Settings door as a link when the editor is the gap. */
+function openForEditorRequest(ask: EditorRequest): string {
+  let abs: string;
+  let shown: string;
+  if (ask.target === "project") {
+    const active = activeProject();
+    if (!active) return "No project is open. Open one first, or name the file or folder to open.";
+    const folder = active.attachments.find((a) => a.kind === "folder");
+    if (!folder) return `${active.name} has no folder attached. Attach one in Projects, or name a file to open.`;
+    abs = folder.path;
+    shown = `${folder.alias}/`;
+  } else {
+    try {
+      abs = safePath(ask.target);
+    } catch (err) {
+      return `Could not open ${ask.target}: ${(err as Error).message}`;
+    }
+    shown = ask.target;
+  }
+  const result = openInEditor(abs, { editorId: ask.editor });
+  if (!result.ok) return `${result.reason} Choose one under [Settings](enio://panel/settings).`;
+  return `Opened ${shown} in ${result.editor.name}.`;
+}
+
 /** A question the planner should answer from the calendar or the lists. */
 function asksAboutCalendar(text: string): boolean {
   return /\b(?:calendar|schedule|agenda|appointment|meeting|event|todo|to-do|task)s?\b/i.test(text);
@@ -1016,6 +1043,38 @@ export async function runTurn(
   handlers: TurnHandlers = {},
   overrides: TurnOverrides = {},
 ): Promise<TurnResult> {
+  // "open the project in cursor", "open src/app.js in my editor": a path to
+  // the user's editor, resolved by grammar (apps.ts) before the model is
+  // consulted, the same species as `open <app>` below. The model never picks
+  // an app or a path: the person's words and the saved choice do.
+  const editorAsk = overrides.specialist ? null : editorRequest(userInput);
+  if (editorAsk) {
+    const reply = openForEditorRequest(editorAsk);
+    handlers.onRoute?.("generalist");
+    handlers.onContent?.(reply);
+    logMessage(sessionId, "user", userInput);
+    logMessage(sessionId, "assistant", reply);
+    history.push({ role: "user", content: userInput }, { role: "assistant", content: reply });
+    try {
+      recordTurn({
+        sessionId,
+        question: userInput,
+        reply,
+        specialist: "generalist",
+        systemPrompt: "(direct command: open_editor)",
+        memoryBlock: "",
+        startedAt: Date.now(),
+        durationMs: 0,
+        iterations: 0,
+        model: currentModelId(),
+        steps: [{ seq: 0, kind: "harness", name: "open_editor", args: JSON.stringify(editorAsk), output: reply, error: null, durationMs: 0 }],
+      });
+    } catch {
+      /* Tracing must never break a turn. */
+    }
+    return { reply, messages: history, toolsUsed: [], specialist: "generalist", question: userInput };
+  }
+
   // "open <app>" runs before the model is consulted at all. The user's own
   // words select from a closed list -- the installed-apps scan -- which is
   // grammar, not judgement, the same species as @mention parsing. It exists
@@ -2296,6 +2355,31 @@ export async function runTurn(
           ? "conversation"
           : "model";
   handlers.onBasis?.(basis);
+  // What the coder wrote, handed to the editor: the paths as links the window
+  // opens there. Only when an editor is in effect, and only for files written
+  // this turn -- the notice is the hand-off, not a file list.
+  if (specialistName === "coder") {
+    const written = [...new Set(
+      steps
+        .filter((st) => st.kind === "tool" && (st.name === "write_file" || st.name === "edit_file") && !st.error)
+        .map((st) => {
+          try {
+            return String((JSON.parse(st.args ?? "{}") as { path?: unknown }).path ?? "");
+          } catch {
+            return "";
+          }
+        })
+        .filter(Boolean),
+    )];
+    if (written.length > 0) {
+      const { editor } = effectiveEditor();
+      if (editor) {
+        handlers.onNotice?.(
+          `Open in ${editor.name}: ${written.slice(0, 3).map((p) => `[${p}](enio://editor/${encodeURIComponent(p)})`).join(" · ")}`,
+        );
+      }
+    }
+  }
   // The remedy for an account that is not there, from the harness: see
   // nothingOfYoursNotice. Only when no tool ran -- a tool that ran has
   // already said whose account it used, or refused with the same link.

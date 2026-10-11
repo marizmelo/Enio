@@ -131,6 +131,31 @@ the same 120-character note cap — refused, never truncated. When a project is
 open, its aliases win a name collision: the project is the context you
 deliberately opened, so a conversation attachment can never shadow it.
 
+## Your editor
+
+Enio works beside your editor rather than replacing it. The canvas previews
+a file and takes small edits; code is edited where you edit code.
+
+- **Detection.** Enio looks for Cursor, Visual Studio Code, VSCodium, Zed,
+  Sublime Text, Nova and BBEdit. One found is used without asking; with
+  several, the first **Edit in…** asks once and remembers; **Settings →
+  Your apps** shows and changes the choice. With none, files still open in
+  the system's default app.
+- **From a file.** Open a file in the canvas and press **Edit in Cursor**
+  (or whichever). Open with… and Show in Finder stay for everything else.
+- **From a folder.** Each attached folder in the project editor has **Open
+  in Cursor**, which opens the folder as the editor's workspace.
+- **From chat.** *"open the project in cursor"*, *"open src/app.js in my
+  editor"*, *"open todos/index.html with vs code"* — handled by Enio
+  directly, no agent involved; only paths you attached or Enio wrote can
+  be opened.
+- **After the coder writes.** The notice under the reply offers the written
+  files as links that open them in your editor.
+
+The disk is the shared state: your editor, the canvas and the agent all
+read and write the same files, so an edit in either place shows in the
+other.
+
 ## Search
 
 The coder has a `search_code` tool: query in, ranked `path:line` locations

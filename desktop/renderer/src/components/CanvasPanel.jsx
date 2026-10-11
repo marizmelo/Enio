@@ -26,6 +26,7 @@ import { renderMarkdownish } from "@/lib/markdown";
 import { NoteComments } from "@/components/NoteComments";
 import { createThread, transformSelection } from "@/lib/notes";
 import { readSkillSource, saveSkillSource } from "@/lib/skills";
+import { getApps, openInEditor, setEditor } from "@/lib/apps";
 
 /**
  * The canvas: a generated file, pinned beside the conversation.
@@ -54,6 +55,24 @@ const MARKDOWN = /\.(md|markdown)$/i;
 
 export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarded, className, hotkeys = true }) {
   const [kind, setKind] = useState("loading"); // loading|text|media|blocked
+  // The user's code editor, for the primary verb on text: the canvas
+  // previews and takes small edits, the editor is where code is worked on.
+  const [apps, setApps] = useState(null);
+  useEffect(() => {
+    let live = true;
+    getApps().then((a) => live && setApps(a));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const editIn = async (editorId) => {
+    try {
+      if (editorId) await setEditor(editorId);
+      await openInEditor(path, undefined, editorId ?? undefined);
+    } catch (err) {
+      setError(String(err?.message ?? err));
+    }
+  };
   const [buffer, setBuffer] = useState("");
   const [dirty, setDirty] = useState(false);
   const [mediaUrl, setMediaUrl] = useState(null);
@@ -706,6 +725,33 @@ export function CanvasPanel({ path, rev, full, onToggleFull, onClose, onDiscarde
             skills because every entry here takes a workspace path, and a
             skill is not in the workspace -- the header's Finder link is the
             one that resolves. */}
+        {/* Edit where code is edited. One editor in effect: one button.
+            Several installed and none chosen: the first press asks, and the
+            answer is kept -- that is the whole of first-run setup. */}
+        {!isNote && !isSkill && kind === "text" && apps?.editor && (
+          <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={() => editIn(null)}>
+            <Pencil className="size-3.5" /> Edit in {apps.editor.name}
+          </Button>
+        )}
+        {!isNote && !isSkill && kind === "text" && !apps?.editor && apps?.choice === "ambiguous" && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs">
+                <Pencil className="size-3.5" /> Edit in…
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="top" className="w-56">
+              <DropdownMenuLabel className="text-[10px] font-normal text-muted-foreground">
+                Which editor? Remembered; change it under Settings.
+              </DropdownMenuLabel>
+              {apps.editors.filter((e) => e.installed).map((e) => (
+                <DropdownMenuItem key={e.id} onSelect={() => editIn(e.id)}>
+                  {e.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         {!isNote && !isSkill && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

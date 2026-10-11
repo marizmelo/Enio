@@ -1205,7 +1205,45 @@ Recorded because each cost real time and could recur.
 
 ---
 
+### Enio works beside your apps: an editor mapping, not a navigator (October 2026)
+
+**What was asked:** a file navigator sidebar for projects (files, folders,
+assets), because the canvas shows one file and the Files dialog closes on
+every pick. Rethought the same day: Enio should open the user's own apps
+for the work -- the editor for code -- and keep the canvas as a preview.
+
+**Chose:** one explicit mapping, the code editor. Files already have an OS
+default handler, so the OS mapping stays theirs; a folder has only Finder,
+and the folder is the unit of code work, so that one choice is Enio's to
+hold. `apps.ts` knows a closed list of editors, finds which are installed
+(bundle on disk, or a launcher on PATH or inside the bundle -- the VS Code
+family ships its CLI inside the app, never installed on PATH by most
+people), and keeps the choice in `apps.json`. First run is the detection:
+one editor means that one, with no question; several means the first "Edit
+in…" asks once and keeps the answer; none means the buttons stay away and
+Settings says what it looked for. Opening is a user act or a harness act:
+the canvas's Edit in …, the project row's Open in …, the chat phrase "open
+the project in cursor" resolved by grammar like `open <app>`, and the
+coder's notice offering the written files as links. The path always goes
+through `safePath`, so only what the person attached or Enio wrote can be
+opened, and the model never names an app or a path -- the person's words
+and the saved choice do.
+
+**Rejected:** the sidebar navigator (the editor has a better one, and a
+tree that cannot rename, move or drag would have grown toward one); an
+embedded editor (Monaco: the start of an IDE, which is what this decision
+is not); a per-file-type preference table (duplicates LaunchServices for
+no gain); editor extensions or LSP (integration debt for a hand-off that
+the disk already provides); terminal editors in this round (vim needs a
+terminal app in the loop, a different mechanism, worth adding when
+someone asks for it by name).
+
 ## Deliberately not built
+
+**A file navigator sidebar or an embedded editor.** See "Enio works
+beside your apps" above. Worth revisiting only if a workflow appears
+that no external editor serves -- none has.
+
 
 **Pixel-level desktop automation.** See above. Would need a VLM that can ground
 coordinates.

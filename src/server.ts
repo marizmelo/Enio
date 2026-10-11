@@ -125,6 +125,7 @@ import { saveCustomAgent, deleteCustomAgent, setAgentSkills } from "./custom-age
 import { callDetail, callStatus } from "./tool-detail.js";
 import { loadSkills } from "./skills.js";
 import { synthesize, transcribeWav, warmVoice, whisperInstalled } from "./voice.js";
+import { appsStatus } from "./apps.js";
 import { avatarStatus } from "./avatar.js";
 import type { Message } from "./types.js";
 
@@ -461,6 +462,9 @@ async function handle(
       // The active project, so the chip and the file menu can reflect it
       // without a second request. Null is a real answer: nothing open.
       project: projectSummary(activeProject()),
+      // The user's code editor, so the canvas and the project rows can offer
+      // "Edit in Cursor" rather than a generic open. Absent on older servers.
+      apps: appsStatus(),
       // semanticRecall false means memory search is running keyword-only --
       // a degradation the user would otherwise diagnose as "worse answers".
       // Null means nothing has tried to embed yet this session.

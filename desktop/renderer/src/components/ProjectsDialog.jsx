@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, FolderPlus, MessageSquarePlus, Plus, SquareArrowOutUpRight, Trash2, X } from "lucide-react";
+import { ChevronRight, FolderPlus, MessageSquarePlus, Plus, SquareArrowOutUpRight, Trash2, X, Pencil } from "lucide-react";
+import { getApps, openInEditor } from "@/lib/apps";
 import {
   Dialog,
   DialogContent,
@@ -45,6 +46,12 @@ export function ProjectsDialog({ open, onOpenChange, activeId, onOpened, onClose
   const [projects, setProjects] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [detail, setDetail] = useState(null); // fields being edited
+  // The user's editor, so an attached folder can open there in one click:
+  // the folder is the unit of code work, and Finder is not where it happens.
+  const [apps, setApps] = useState(null);
+  useEffect(() => {
+    if (open) getApps().then(setApps);
+  }, [open]);
   const [creating, setCreating] = useState(false);
   // Paths picked but not yet attached: each gets its note written first,
   // because the note is the whole point — "what is this for" is what the
@@ -227,6 +234,15 @@ export function ProjectsDialog({ open, onOpenChange, activeId, onOpened, onClose
             <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
               {a.note || a.path}
             </span>
+            {a.kind === "folder" && apps?.editor && (
+              <button
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+                title={`Open in ${apps.editor.name}`}
+                onClick={() => openInEditor(a.alias).catch(() => {})}
+              >
+                <Pencil className="size-3.5" />
+              </button>
+            )}
             <button
               className="shrink-0 text-muted-foreground hover:text-foreground"
               title="Show in Finder"
