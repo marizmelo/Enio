@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, CornerLeftUp, File, FilePlus, Folder, Search } from "lucide-react";
+import { ChevronRight, CornerLeftUp, File, FilePlus, Folder, Pencil, Search } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { getApps, openInEditor, setEditor } from "@/lib/apps";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +47,20 @@ export function FileTree({ project, files = [], generated = [], onPick, pickLabe
   // The New file affordance (open mode only): null closed, "" typing.
   const [newName, setNewName] = useState(null);
   const [createError, setCreateError] = useState("");
+  // The user's editor, so the folder being browsed can open there whole:
+  // a folder is the unit of code work, and this tree is a preview of it.
+  const [apps, setApps] = useState(null);
+  useEffect(() => {
+    if (pickLabel === "open") getApps().then(setApps);
+  }, [pickLabel]);
+  const openFolderIn = async (editorId) => {
+    try {
+      if (editorId) await setEditor(editorId);
+      await openInEditor(currentPath, undefined, editorId ?? undefined);
+    } catch {
+      /* The agent said why; the tree has nowhere to show it beyond the button not working. */
+    }
+  };
 
   const aliases = useMemo(
     () => new Set((project?.attachments ?? []).map((a) => a.alias)),
@@ -201,6 +223,34 @@ export function FileTree({ project, files = [], generated = [], onPick, pickLabe
         <Button variant="outline" size="sm" className="self-start" onClick={() => onPick?.(currentPath)}>
           <Folder className="size-3.5" /> Attach “{path[path.length - 1]}” as a folder
         </Button>
+      )}
+
+      {/* The folder, whole, in the editor -- the same hand-off the project
+          row offers, from where you are standing. Several editors and no
+          choice yet: ask once, keep the answer. */}
+      {pickLabel === "open" && !results && path.length > 0 && apps?.editor && (
+        <Button variant="outline" size="sm" className="self-start" onClick={() => openFolderIn(null)}>
+          <Pencil className="size-3.5" /> Open {path[path.length - 1]} in {apps.editor.name}
+        </Button>
+      )}
+      {pickLabel === "open" && !results && path.length > 0 && !apps?.editor && apps?.choice === "ambiguous" && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="self-start">
+              <Pencil className="size-3.5" /> Open {path[path.length - 1]} in…
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuLabel className="text-[10px] font-normal text-muted-foreground">
+              Which editor? Remembered; change it under Settings.
+            </DropdownMenuLabel>
+            {apps.editors.filter((e) => e.installed).map((e) => (
+              <DropdownMenuItem key={e.id} onSelect={() => openFolderIn(e.id)}>
+                {e.name}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
 
       {/* New file, in open mode: created empty by an explicit user act (the
