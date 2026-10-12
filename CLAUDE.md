@@ -427,3 +427,10 @@ MCP server. People reach for MCP when they needed a skill.
   minutes into a session, with no JavaScript error to catch. Speech therefore
   runs in a forked child process, never a worker thread, and anything else
   that wants onnxruntime off the main thread must do the same.
+- Electron and Chromium apps (VSCodium, Slack, Figma, Discord) expose no
+  accessibility tree until a client sets `AXManualAccessibility` on the
+  application element — no focused field, an empty front window — so a
+  `type_text` step into VSCodium's go-to-line box failed with "no focused
+  field" while the box sat open. `scripts/ax_bridge.py` sets the switch on
+  every call and waits for the tree to appear; native apps report the
+  attribute unsupported and are unaffected.

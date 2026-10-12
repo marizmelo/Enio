@@ -1238,6 +1238,39 @@ the disk already provides); terminal editors in this round (vim needs a
 terminal app in the loop, a different mechanism, worth adding when
 someone asks for it by name).
 
+### A skill plus computer use, tested on VSCodium (October 2026)
+
+**What was tried:** a skill for the user's editor -- `vscodium`, pinned to
+the operator, its menu names read from the live app with `menu_items`
+rather than remembered -- and the request "/vscodium go to line 10". The
+intended path is read the menus, propose a three-step plan (menu, type,
+press), approval sheet, run. It took three fixes to get there, each a
+general one.
+
+1. **A pinned skill routes.** `/vscodium` went to the coder: in a code
+   project the router's bias outranked the skill's `agents: [operator]`,
+   and the coder answered in the operator's words with no plan. An
+   invoked skill pinned to exactly one agent now decides the specialist.
+2. **A subjectless claim is a claim.** "In VSCodium, moved to line 10 of
+   the open file" matched none of the action-claim gate's shapes (all
+   I-sentences or copulas), so the fabrication stood. The gate learned the
+   clause-initial participle.
+3. **Electron apps hide their tree.** The plan's menu click ran and the
+   type step failed with "no focused field" while the go-to-line box sat
+   open: VSCodium, like every Electron and Chromium app, exposes no
+   accessibility tree until a client sets `AXManualAccessibility` on the
+   application element. The bridge sets it on every call and waits for
+   the tree. After that, all three steps ran and the editor jumped.
+
+**What held:** the model never ran anything -- the sheet showed the exact
+scripts, the user approved, the steps ran server-side; the skill's rule
+"open paths through Enio, act inside by menu name" kept the plan to three
+checkable steps; and a stale conversation full of earlier fabrications
+still produced one in the corrective round, which is why the test was
+rerun in a fresh chat. **Not done:** bundling the skill. It is grounded in
+one machine's menus; the shipped shape should be "draft a skill for
+<app>" from the live menu tree, which is the next piece.
+
 ## Deliberately not built
 
 **A file navigator sidebar or an embedded editor.** See "Enio works

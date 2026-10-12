@@ -195,4 +195,5 @@ them: one acts, the other advises.
 | "is not installed" / "is not running" | The app name did not resolve; the real list is in the message |
 | "no control named X" | The name is not in the current window — read `window_controls` again |
 | "needs desktop mode" | Start with `ENIO_DESKTOP=1` |
+| An Electron app (VSCodium, Slack, Figma…) says it has no focused field or no controls | Those apps build their accessibility tree only when asked; Enio asks on every step, and the first action after the app launches can take a second to see it. Retry the step. |
 | "no window is visible to scripting" | The app hides its window from System Events; keystrokes still reach it |

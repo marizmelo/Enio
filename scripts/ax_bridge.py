@@ -37,6 +37,7 @@ Usage:
 """
 
 import json
+import time
 import re
 import sys
 
@@ -345,6 +346,30 @@ def do_settext(app, resolved, text, field, depth, budget):
     print(json.dumps({"ok": True, "app": resolved, "typed_into": target_name}))
 
 
+def enable_manual_accessibility(app):
+    """Ask an Electron or Chromium app to build its accessibility tree.
+
+    VSCodium, Slack, Figma, Discord and the rest expose nothing -- no focused
+    element, an empty window -- until a client sets AXManualAccessibility
+    on the application element; VoiceOver flips the equivalent switch, this
+    bridge did not, so a type step into VSCodium's go-to-line box failed with
+    "no focused field" while the box sat open on screen. The tree takes a
+    moment to appear after the switch, so this waits for the front window
+    to grow children, briefly. Native apps report the attribute unsupported
+    and lose nothing.
+    """
+    err = AS.AXUIElementSetAttributeValue(app, "AXManualAccessibility", True)
+    if err != 0:
+        return
+    for _ in range(10):
+        _, window = AS.AXUIElementCopyAttributeValue(app, AS.kAXFocusedWindowAttribute, None)
+        if window is not None:
+            _, kids = AS.AXUIElementCopyAttributeValue(window, AS.kAXChildrenAttribute, None)
+            if kids:
+                return
+        time.sleep(0.25)
+
+
 def main(argv):
     if len(argv) < 3:
         fail("usage: ax_bridge.py tree|press|settext <app> [value] [--field name]")
@@ -369,6 +394,7 @@ def main(argv):
     AS.AXUIElementSetMessagingTimeout(AS.AXUIElementCreateSystemWide(), 5.0)
 
     app = AS.AXUIElementCreateApplication(pid)
+    enable_manual_accessibility(app)
 
     if command == "settext":
         if len(argv) < 4:
