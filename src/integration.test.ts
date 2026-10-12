@@ -1177,6 +1177,31 @@ describe("skill invocation trace", () => {
     assert.ok(row, "the invocation must leave a trace");
     assert.deepEqual(JSON.parse(row!.args).names, ["style-guide"]);
   });
+
+  test("a skill pinned to one agent routes the turn to that agent", async () => {
+    // Watched: /vscodium, pinned to the operator, went to the coder in a
+    // code project (the router's bias), who answered in the operator's
+    // words with no plan behind them. The pin is the person's instruction.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "Say which app and I will propose the steps." }]);
+    const result = await runTurn("/vscodium go to line 10", [], registry, sessionId, {}, {
+      skills: [
+        {
+          name: "vscodium",
+          description: "driving the editor",
+          dir: join(scratch, "vscodium"),
+          body: "Act by menu name.",
+          allowedTools: null,
+          agents: ["operator"],
+          manualOnly: false,
+          origin: "global" as const,
+          overridesBuiltin: false,
+        },
+      ],
+    });
+    assert.equal(result.specialist, "operator");
+  });
 });
 
 describe("the current date reaches the model", () => {

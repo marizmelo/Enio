@@ -495,6 +495,10 @@ describe("fabricated action claims", () => {
       "The note has been created.",
       "Notes is now open.",
       "The calculator values are now cleared.",
+      // The subject left out: the operator's reply with a skill loaded and
+      // no plan proposed.
+      "In VSCodium, moved to line 10 of the open file.",
+      "Opened the command palette and typed the command.",
     ]) {
       assert.ok(claimsUnperformedAction(line), `should flag: ${line}`);
     }

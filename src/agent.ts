@@ -524,8 +524,13 @@ export function claimsUnperformedAction(text: string): boolean {
   // fabrication in a participle: a lookup reported that never happened.
   // Matched as its own form because the hypothetical filter below would
   // otherwise read the leading "after" as a temporal clause and excuse it.
+  // The subjectless form too: "In VSCodium, moved to line 10 of the open
+  // file." -- a claim with the "I" left out, which the forms above never
+  // saw. Watched from the operator with a skill loaded and no plan proposed.
+  // Anchored to a sentence or clause start and followed by an object word,
+  // so "saved copies live in…" mid-sentence is not read as a claim.
   const claim = new RegExp(
-    `\\b(?:I(?:'ve| have| just)? (?:now )?(?:${verbs})|(?:has|have|is|are)(?: been| now)? (?:${verbs})|is now open|I (?:will|'ll) now\\b|after (?:checking|searching|verifying|reviewing|looking (?:up|into)))`,
+    `\\b(?:I(?:'ve| have| just)? (?:now )?(?:${verbs})|(?:has|have|is|are)(?: been| now)? (?:${verbs})|is now open|I (?:will|'ll) now\\b|after (?:checking|searching|verifying|reviewing|looking (?:up|into)))|(?:^|[,;:.!?]\\s*)(?:now )?(?:${verbs}) (?:to|the|a|an|it|your|into|on)\\b`,
     "gi",
   );
 
@@ -1169,9 +1174,25 @@ export async function runTurn(
   // exemplars and the graph, or set by hand. Read once here so the block
   // the prompt carries and the step the trace records are the same text.
   const persona = personalityView();
+  // A /skill pinned to one agent is also a routing instruction: the know-how
+  // belongs to that agent, so "/vscodium go to line 10" goes to the operator
+  // even in a code project, where the router's bias sent it to the coder --
+  // who answered in the operator's words with no plan behind them. Only an
+  // unambiguous pin decides; a skill shared by several agents, or two
+  // invoked skills pinned to different ones, leaves the router to choose.
+  const skillAgent = (() => {
+    if (overrides.specialist) return null;
+    const pins = (overrides.skills ?? [])
+      .map((s) => s.agents)
+      .filter((a): a is string[] => Array.isArray(a) && a.length === 1)
+      .map((a) => a[0]!);
+    return pins.length > 0 && pins.every((p) => p === pins[0]) ? pins[0]! : null;
+  })();
   const [routed, memoryBlock, exemplars, attachments] = await Promise.all([
     overrides.specialist
       ? Promise.resolve(overrides.specialist)
+      : skillAgent
+        ? Promise.resolve(skillAgent)
       : config.routingEnabled
         // The conversation's last specialist rides along so a short follow-up
         // ("try again") continues where it was, instead of resetting to the
