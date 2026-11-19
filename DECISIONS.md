@@ -1238,6 +1238,49 @@ the disk already provides); terminal editors in this round (vim needs a
 terminal app in the loop, a different mechanism, worth adding when
 someone asks for it by name).
 
+### colibri as the engine: measured, not adopted on this machine (November 2026)
+
+**What was asked:** whether colibri (JustVugg/colibri, Apache-2.0, C; it
+keeps a mixture-of-experts model's dense part in RAM and streams the
+routed experts from disk) could replace or supplement MLX as what runs
+Enio's models. Its README promises a 35B model in 10 to 20 GB of RAM.
+
+**Measured (19 Nov, Mac mini M4, 24 GB, about 7 GB of apps open; colibri
+2.1.0 built from source with OpenMP, CPU only; Qwen3.6-35B-A3B int4 on a
+USB SSD reading about 1 GB/s; `scripts/engine-bench.mjs`, which sends
+Enio's own coder prompt, tools and the adapter gate's golden tasks):**
+
+| | MLX, Qwen3 4B (today) | colibri, Qwen3.6 35B-A3B |
+|---|---|---|
+| short chat, first token | 0.2 s warm, 1.3 s cold | 9 to 13 s |
+| short chat, decode | 36 tok/s | 2.2 to 3.0 tok/s |
+| coder turn (1,627-token prompt), first token | 0.15 s warm, 4.4 s cold | none within 250 s, twice |
+| coder golden tasks | tool choice 27/37, JSON 22/22, abstains 12/12, 175 s | not completable |
+| router, one decision | 41/46 right, median 0.4 s | 25 s (scored, 0.98 on a case the 4B misses) |
+
+Three causes, none a tuning miss. The engine for this model family has no
+usable GPU path on a Mac: Metal covers the giant engines, and qwen36's
+Metal build wants a different container. Prompt processing on a CPU is
+the slow part by the project's own account (about two minutes per 500
+tokens cold on an 8-core desktop), and every Enio turn carries a
+specialist prompt and tool definitions. And 24 GB does not hold the model
+beside a working desktop: at its default it sized the cache from the
+6 GB macOS called free and read every expert from disk; given 16 GB it
+drove the machine to 9.4 GB of swap. ExFAT also needed its `._` sidecar
+files deleted before the planner would read the model folder.
+
+**Chose:** MLX stays the engine on Apple Silicon. Kept from the trial:
+`scripts/engine-bench.mjs`, so the next engine is measured with Enio's
+material rather than judged from its README; and the idea of scored
+closed-list decisions (`/v1/systemone`: a probability per option, nothing
+generated), which is Enio's central move done at the engine level --
+worth trying on the current server through logprobs before any engine
+change. **Not measured, so not concluded:** colibri on Linux with a
+discrete GPU, where the project reports 30 tok/s for the same model on an
+8 GB NVIDIA card; that is the configuration the Linux direction would
+use, and the bench is the way to find out. Condition to revisit on a Mac:
+a Metal path for the small-model engines, or a machine with 48 GB or more.
+
 ### A skill plus computer use, tested on VSCodium (October 2026)
 
 **What was tried:** a skill for the user's editor -- `vscodium`, pinned to
