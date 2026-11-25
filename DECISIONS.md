@@ -3883,3 +3883,85 @@ a tag's worth of tokens on every turn that a 4B garbles); a fifth
 frames); classifying at the end of the turn (the face reacts after the
 voice); averaging a label's examples rather than taking its best (a label
 with many examples would be diluted by its distant ones).
+
+### The router's own confidence: measured, and not acted on (November 2026)
+
+**Chose:** nothing in `src/` reads token probabilities. The router keeps
+deciding as it does -- fast tier above its margin, else the model's greedy
+answer -- and `scripts/route-score.mjs` stays, so the question can be asked
+again when the model or the router prompt changes.
+
+**Why it was worth asking.** The colibri trial ended with one result in its
+favour: its scored-decision endpoint put 0.98 on the planner for "move the
+standup to 10", a request this router sends to the operator. The router is
+already a choice from a closed list, so the same score is available here
+for free -- `logprobs` and `top_logprobs` on the request the router already
+makes, read at the token where it writes a name, costing no second call
+(the scored call measured 356 ms against roughly 410 for the streamed
+one). A score per option could do two things a bare answer cannot: say when
+the router is unsure, and name a runner-up to fall back to.
+
+**Measured (25 Nov, `scripts/route-score.mjs`, the 46 held-out routing
+cases, Qwen3 4B Instruct on mlx-lm, this machine's agent list including two
+custom agents):**
+
+| | right | note |
+|---|---|---|
+| model tier alone, as it is | 40/46 | |
+| combined router, as it ships | 41/46 | fast tier takes 23 of 46 |
+| same scores minus a content-free baseline | 37/46 | |
+| runner-up when unsure and the fast tier names it | 41 or 42/46 | one case, at any threshold |
+| plain question with no worked examples | 35/46 | 261 ms |
+
+- **The probability is saturated.** On its six misses the model put 1.000,
+  0.989, 1.000, 0.963, 1.000 and 1.000 on the wrong answer; its least sure
+  *right* answer got 0.991. As a probability there is nothing to threshold.
+- **In log-odds there is a signal, and it is thin.** The gap to the
+  runner-up has a median of 20.5 nats when right and sits at 3.3, 4.5,
+  11.3, 11.5, 13.1 and 14.5 when wrong. A cut at 12 catches four of six
+  misses and flags three of forty right answers. Six misses is not enough
+  to place a threshold that will hold.
+- **The runner-up is right in five of six misses.** The model does rank the
+  correct agent second. What is missing is a trigger that is not also
+  fitted to these 46 cases: the only principled one tried -- the fast tier,
+  below its own bar, naming the same runner-up -- moves one case.
+- **Subtracting a content-free baseline makes it worse.** A request with no
+  content routes to the generalist with all of the mass, so the correction
+  mostly penalises the generalist: 37 right.
+- **The worked examples are what saturate it, and they are worth more than
+  the calibration.** Asked plainly for one word, with the same menu, the
+  model's wrong answers do sit at small gaps (eight of eleven under 8 nats)
+  -- but it is right only 35 times. The two formats agreeing is right 33 of
+  35; where they differ the current router is right 7 times, the plain
+  question twice. A second call to buy that disagreement signal would flag
+  more right answers than wrong ones.
+
+**Rejected:** a confidence threshold on the model tier (no threshold
+separates on this evidence, and one tuned on 46 cases is fitted to them);
+falling back to the runner-up when unsure (right in five of six misses,
+but nothing measured says when to do it); contextual calibration (measured
+worse); replacing the few-shot router with the plain scored question
+(better calibrated, five fewer right); running both and treating
+disagreement as doubt (doubles the router's cost to flag seven right
+answers alongside four wrong ones).
+
+**What the misses say instead.** Four of the six went to the operator, and
+all four are requests that *do* something to a calendar, a todo, a mail or
+a file -- "move", "add", "reply", "rename". That is a fact about the
+operator's description and examples, and the place to work on it is the
+routing examples table, measured on this same bench, not a new mechanism.
+One of the five the combined router still gets wrong is the fast tier's
+own: "remember that my landlord's name is Teresa" goes to mail at margin
+0.106 while the model, never asked, has the librarian 25 nats clear.
+
+**Open:** whether the gap separates on real traffic. Forty-six cases
+cannot say. Recording the model tier's gap and runner-up on the route
+step of each trace would answer it from use rather than from a bench, at
+the price of parsing scores out of the stream and a degraded path for
+servers that do not send them -- not built, because nothing yet reads it.
+
+**For whoever tries next.** mlx-lm reports the winning token at exactly 0
+and the others in steps of an eighth of a nat, so its numbers are log-odds
+against the top and must be normalised before being called probabilities.
+It documents `top_logprobs` up to 11 and closes the connection on 11, with
+no status code; 10 works.
