@@ -78,6 +78,15 @@ fail a turn.
 `run_command` runs in the sole attached folder when there is exactly one, and
 takes an `in` parameter naming an alias when there are several.
 
+**When an attached folder goes missing.** An attachment remembers where it was
+attached from. Move, rename or delete that folder — or unplug the drive it
+lives on — and Enio says so rather than treating it as empty: the Files tree
+marks it *missing* and shows where it used to be, the project editor shows
+the same on its row, and the agent is told it cannot read or write there
+until you attach it again. Nothing is created at the old location in the
+meantime. Reconnecting the drive is enough on its own; for a moved folder,
+detach it in **Projects** and attach it from where it is now.
+
 A command that never exits — a web server, a watch build — is started in the
 background instead of being waited on, so the turn can carry on and check it.
 Those keep running until you quit Enio, at most three at a time, and the

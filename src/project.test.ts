@@ -375,6 +375,14 @@ test("the overlay reaches the system prompt for any specialist, capped and user-
     assert.match(systemSeen, /Instructions: Prefer small diffs\./);
     assert.match(systemSeen, /api\/ — the backend/);
 
+    // The line the model copies path segments from marks what is no longer
+    // on disk; an alias listed bare is an invitation to read it and guess.
+    rmSync(dir, { recursive: true });
+    systemSeen = "";
+    await runTurn("hello once more", [], registry, store.startSession());
+    assert.match(systemSeen, /api\/ \(missing, cannot be read until the user attaches it again\) — the backend/);
+    mkdirSync(dir, { recursive: true });
+
     project.closeProject();
     systemSeen = "";
     await runTurn("hello there again", [], registry, store.startSession());
@@ -538,6 +546,63 @@ test("attached PDFs are searchable through the project index", async () => {
   } finally {
     project.closeProject();
     index.closeIndex(p.id);
+  }
+});
+
+test("a missing attached folder is named as missing: never empty, never rebuilt", async () => {
+  // The reported shape: a folder attached, then moved (or its drive
+  // unplugged). Nothing threw anywhere -- the tree said "empty", list_dir
+  // named it as present, and write_file made the old path again with one
+  // file in it and reported success.
+  const { fsTools, listFolder, safePath } = await import("./tools/fs.js");
+  const { shellTools } = await import("./tools/shell.js");
+  // What the model is shown either way: a file tool refuses by throwing
+  // (executeCall turns that into the result), the shell tool by returning.
+  const tool = (name: string) => async (args: Record<string, unknown>) => {
+    try {
+      return String(await fsTools.find((t) => t.name === name)!.run(args));
+    } catch (err) {
+      return (err as Error).message;
+    }
+  };
+  const run = shellTools[0]!.run;
+
+  const p = project.createProject({ name: "moved", type: "code" });
+  const repo = join(scratch, "moved", "app");
+  mkdirSync(repo, { recursive: true });
+  writeFileSync(join(repo, "main.js"), "console.log(1)\n");
+  const attached = project.attachPath(p.id, repo, "the app");
+  project.openProject(p.id);
+  try {
+    assert.equal(project.attachmentMissing(attached), false);
+    rmSync(repo, { recursive: true });
+    assert.equal(project.attachmentMissing(attached), true);
+
+    assert.throws(() => safePath("app/main.js"), /attached folder "app" is missing/);
+    assert.throws(() => safePath("app"), /attached folder "app" is missing/);
+    assert.match(String(await tool("read_file")({ path: "app/main.js" })), /is missing.*Do not retry/s);
+
+    // The write is the one that mattered: by alias, and by the plain path a
+    // sole code folder claims. Neither may bring the old location back.
+    assert.match(String(await tool("write_file")({ path: "app/new.js", content: "x" })), /is missing/);
+    assert.match(String(await tool("write_file")({ path: "src/new.js", content: "x" })), /is missing/);
+    assert.ok(!existsSync(repo), "a refused write must not rebuild the old path");
+    assert.ok(!existsSync(join(p.outDir, "src", "new.js")), "nor divert code into the hidden out dir");
+    // Documents with plain paths were never bound for that folder.
+    assert.doesNotMatch(String(await tool("write_file")({ path: "notes.md", content: "x" })), /is missing/);
+
+    // The project's own root is where the model copies aliases from.
+    assert.match(await listFolder(p.outDir), /app\/ \(missing\) — the app/);
+    // Not `spawn /bin/sh ENOENT`, which blames the shell.
+    assert.match(String(await run({ command: "pwd" })), /attached folder "app" is missing/);
+
+    // Asked at the moment of use, never remembered: the drive comes back.
+    mkdirSync(repo, { recursive: true });
+    assert.equal(project.attachmentMissing(attached), false);
+    assert.doesNotMatch(String(await tool("write_file")({ path: "app/new.js", content: "x" })), /is missing/);
+    assert.ok(existsSync(join(repo, "new.js")));
+  } finally {
+    project.closeProject();
   }
 });
 

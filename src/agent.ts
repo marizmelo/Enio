@@ -39,7 +39,7 @@ import { extractSources, isWebTool } from "./sources.js";
 import { setMemorySources } from "./tools/memory.js";
 import { coverageBlock } from "./memory/coverage.js";
 import { extractPdfText, looksLikePdf } from "./pdf.js";
-import { activeProject } from "./project.js";
+import { activeProject, attachmentMissing } from "./project.js";
 import { editorRequest, effectiveEditor, openInEditor, type EditorRequest } from "./apps.js";
 import { conversationMounts } from "./conversation-attachments.js";
 import { neutralizeControlTokens } from "./sanitize.js";
@@ -996,15 +996,27 @@ function projectBlock(): string {
   if (project.instructions) lines.push(`Instructions: ${project.instructions}`);
   if (project.attachments.length > 0) {
     const maxListed = Math.min(48, Math.max(12, Math.round(contextBudget() / 160)));
+    // Marked where it is named, because this line is what the model copies
+    // path segments from: an alias listed without the mark is an invitation
+    // to read it, fail, and guess. A handful of stat calls per turn, on a
+    // list already capped, buys not offering a dead end.
     const listed = project.attachments
       .slice(0, maxListed)
-      .map((a) => `${a.alias}${a.kind === "folder" ? "/" : ""}${a.note ? ` — ${a.note}` : ""}`);
+      .map(
+        (a) =>
+          `${a.alias}${a.kind === "folder" ? "/" : ""}${attachmentMissing(a) ? " (missing, cannot be read until the user attaches it again)" : ""}${a.note ? ` — ${a.note}` : ""}`,
+      );
     const more = project.attachments.length - listed.length;
     lines.push(`Attached: ${listed.join("; ")}${more > 0 ? `; and ${more} more` : ""}`);
     const folders = project.attachments.filter((a) => a.kind === "folder");
     const sole = project.type === "code" && folders.length === 1 ? folders[0]! : null;
     lines.push(
-      sole
+      sole && attachmentMissing(sole)
+        ? // The path grammar must agree with what safePath does, and safePath
+          // refuses a plain code path here rather than diverting it to out/
+          // -- the hidden-files failure the sole-folder rule exists to stop.
+          `"${sole.alias}/" is the project's code folder and it is missing, so code files cannot be read or created until the user attaches it again. Say so instead of trying. Documents (.md, .txt) with plain paths are stored with the project.`
+        : sole
         ? // One folder, code project: that folder is the project. Saying so
           // is what sends new files there rather than to the hidden out/
           // dir -- the model writes what the path grammar tells it to.

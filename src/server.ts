@@ -103,6 +103,7 @@ import { ensureToken, isAuthorized } from "./auth.js";
 import {
   activeProject,
   attachPath,
+  attachmentMissing,
   closeProject,
   createProject,
   deleteProject,
@@ -237,6 +238,9 @@ function projectSummary(project: Project | null) {
       kind: a.kind,
       note: a.note,
       path: a.path,
+      // Asked per request, never stored: a flag in project.json would be a
+      // second truth about the disk, wrong the moment a drive is plugged in.
+      missing: attachmentMissing(a),
     })),
     // Where plain-path generated files live, so the desktop's canvas can
     // open and save them -- they are addressed unprefixed, same as
@@ -257,7 +261,7 @@ function projectDetail(project: Project) {
     description: project.description,
     instructions: project.instructions,
     verifyCommand: project.verifyCommand,
-    attachments: project.attachments,
+    attachments: project.attachments.map((a) => ({ ...a, missing: attachmentMissing(a) })),
     createdAt: project.createdAt,
     lastOpenedAt: project.lastOpenedAt,
   };

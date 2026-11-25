@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { config } from "../config.js";
 import { shellFor } from "../platform.js";
 import { baseAllowedCommands, checkCommandAgainst, invokedExecutables } from "./allowlist.js";
-import { activeProject } from "../project.js";
+import { activeProject, attachmentMissing, missingAttachmentMessage, type Attachment } from "../project.js";
 import { DESKTOP_COMMANDS, desktopEnabled } from "./desktop.js";
 import type { ToolDef } from "../types.js";
 
@@ -48,6 +48,13 @@ export function checkCommand(command: string): { ok: true } | { ok: false; reaso
  * parameter), else the project's out dir. Never a path -- an alias that is
  * not there errors, where a path would quietly run somewhere else.
  */
+/** A working directory that is not there fails as `spawn /bin/sh ENOENT` --
+ *  an error that blames the shell, which the model then "fixes" by trying
+ *  other commands. Said here instead, in the sentence the file tools use. */
+function present(mount: Attachment): { cwd: string } | { error: string } {
+  return attachmentMissing(mount) ? { error: missingAttachmentMessage(mount) } : { cwd: mount.path };
+}
+
 function commandCwd(inAlias: string): { cwd: string } | { error: string } {
   const active = activeProject();
   if (!active) {
@@ -61,9 +68,9 @@ function commandCwd(inAlias: string): { cwd: string } | { error: string } {
       const known = folders.map((a) => a.alias).join(", ") || "none";
       return { error: `No attached folder named "${inAlias}". Attached folders: ${known}.` };
     }
-    return { cwd: mount.path };
+    return present(mount);
   }
-  if (folders.length === 1) return { cwd: folders[0]!.path };
+  if (folders.length === 1) return present(folders[0]!);
   return { cwd: active.outDir };
 }
 

@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
  * someone which files Enio can reach.
  */
 const LIB = "../desktop/renderer/src/lib/filetree.js";
-const { childrenAt, groupRoots } = await import(LIB);
+const { childrenAt, groupRoots, missingAt } = await import(LIB);
 
 const folder = (alias: string) => ({ alias, kind: "folder" as const, note: "", path: `/tmp/${alias}` });
 
@@ -48,6 +48,28 @@ describe("childrenAt", () => {
     const { folders, here } = childrenAt([], [folder("todos")], ["todos"]);
     assert.deepEqual(folders, []);
     assert.deepEqual(here, []);
+  });
+});
+
+describe("missingAt", () => {
+  // Empty and missing produce the same listing -- no paths under the alias --
+  // so only the server's flag can keep "This folder is empty" from being
+  // said over a folder that was moved or is on an unplugged drive.
+  const gone = { ...folder("archive"), missing: true };
+
+  test("standing in a missing attachment, or anywhere under it, finds it", () => {
+    assert.equal(missingAt([folder("todos"), gone], ["archive"])?.alias, "archive");
+    assert.equal(missingAt([gone], ["archive", "2024", "q3"])?.alias, "archive");
+  });
+
+  test("a present folder that is merely empty is not missing", () => {
+    assert.equal(missingAt([folder("todos"), gone], ["todos"]), null);
+  });
+
+  test("the root is never missing, nor is a workspace folder that shares no alias", () => {
+    assert.equal(missingAt([gone], []), null);
+    assert.equal(missingAt([gone], ["drafts"]), null);
+    assert.equal(missingAt(undefined, ["archive"]), null);
   });
 });
 

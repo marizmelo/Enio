@@ -38,6 +38,21 @@ export function childrenAt(files, attachments, path) {
 }
 
 /**
+ * The missing attachment `path` stands in or under, or null.
+ *
+ * An empty listing has two causes that look identical from the paths alone:
+ * the folder holds nothing, or the folder is not there. Only the server can
+ * tell them apart (it marks the attachment `missing`), and reading "this
+ * folder is empty" over a folder that was moved or sits on an unplugged
+ * drive sends someone looking for files that were never lost. At the root it
+ * answers for a single alias, so a row can wear the mark before it is opened.
+ */
+export function missingAt(attachments, path) {
+  if (path.length === 0) return null;
+  return (attachments ?? []).find((a) => a.alias === path[0] && a.missing) ?? null;
+}
+
+/**
  * The root split into the project's own entries and the workspace's.
  *
  * An entry is the project's when it is an attachment alias, a generated

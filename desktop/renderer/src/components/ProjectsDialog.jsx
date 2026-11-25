@@ -231,10 +231,18 @@ export function ProjectsDialog({ open, onOpenChange, activeId, onOpened, onClose
         {detail.attachments.map((a) => (
           <div key={a.alias} className="flex items-center gap-2 rounded-md border px-2 py-1.5">
             <code className="shrink-0 text-xs">{a.alias}{a.kind === "folder" ? "/" : ""}</code>
-            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-              {a.note || a.path}
-            </span>
-            {a.kind === "folder" && apps?.editor && (
+            {/* The path, not the note, when it is gone: where it WAS is the
+                one fact needed to find it or to attach it again. */}
+            {a.missing ? (
+              <span className="min-w-0 flex-1 truncate text-xs text-destructive" title={a.path}>
+                Missing — was at {a.path}
+              </span>
+            ) : (
+              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                {a.note || a.path}
+              </span>
+            )}
+            {a.kind === "folder" && !a.missing && apps?.editor && (
               <button
                 className="shrink-0 text-muted-foreground hover:text-foreground"
                 title={`Open in ${apps.editor.name}`}
@@ -243,13 +251,13 @@ export function ProjectsDialog({ open, onOpenChange, activeId, onOpened, onClose
                 <Pencil className="size-3.5" />
               </button>
             )}
-            <button
+            {!a.missing && <button
               className="shrink-0 text-muted-foreground hover:text-foreground"
               title="Show in Finder"
               onClick={() => window.maple?.revealProjectPath(a.path)}
             >
               <SquareArrowOutUpRight className="size-3.5" />
-            </button>
+            </button>}
             <button
               className="shrink-0 text-muted-foreground hover:text-destructive"
               title="Detach (the files themselves are untouched)"

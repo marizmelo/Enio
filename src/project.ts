@@ -435,6 +435,37 @@ export function activeOutRoot(): string {
   return active ? active.outDir : resolve(config.workspace);
 }
 
+/**
+ * Whether an attachment is still where it was attached from.
+ *
+ * The path is resolved once, at attach time, and nothing held it to that
+ * afterwards: a folder that was moved, renamed, deleted or left on an
+ * unplugged drive kept its row everywhere, and every surface reported the
+ * nearest true-sounding thing instead -- the Files tree said "This folder is
+ * empty", list_dir named it as if it were there, and a write into it quietly
+ * rebuilt the old path with one file in it. Nothing throws on a missing
+ * folder until something reads it, so presence is asked here, at the moment
+ * of use, never cached: the drive may be plugged back in mid-session.
+ */
+export function attachmentMissing(a: Pick<Attachment, "path">): boolean {
+  return !existsSync(a.path);
+}
+
+/**
+ * The one sentence for it, shared by every tool that would otherwise fail
+ * with its own ENOENT. Written for the model to relay rather than act on:
+ * the remedy is a user act (projects are attached by the user, never by the
+ * model), and "do not retry" is there because a small model answers a bare
+ * not-found by guessing three more paths.
+ */
+export function missingAttachmentMessage(a: Pick<Attachment, "alias" | "path" | "kind">): string {
+  return (
+    `The attached ${a.kind} "${a.alias}" is missing: nothing is at ${a.path} now. ` +
+    `It was moved, renamed or deleted, or its drive is not connected. ` +
+    `Do not retry or guess another path. Tell the user it has to be attached again.`
+  );
+}
+
 /** The attachment a first path segment addresses, if any. */
 export function findMount(segment: string): Attachment | null {
   if (!active) return null;

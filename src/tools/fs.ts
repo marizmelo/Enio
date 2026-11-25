@@ -3,7 +3,7 @@ import { readFile, writeFile, readdir, mkdir, stat } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { config } from "../config.js";
 import { extractPdfText, looksLikePdf } from "../pdf.js";
-import { activeProject, findMount } from "../project.js";
+import { activeProject, attachmentMissing, findMount, missingAttachmentMessage } from "../project.js";
 import { conversationMounts, findConversationMount } from "../conversation-attachments.js";
 // Safe to import: mentions.ts reaches config, project, attachments and skills,
 // and none of those import back into tools/ -- checked, because a cycle here
@@ -37,7 +37,12 @@ import type { ToolDef } from "../types.js";
 /** Resolve a path inside one mount, with the containment check. Shared by
  *  project and conversation mounts — the alias grammar is identical, only
  *  who granted the mount differs. */
-function resolveInMount(mount: { alias: string; path: string; kind: string }, rest: string[]): string {
+function resolveInMount(mount: { alias: string; path: string; kind: "file" | "folder" }, rest: string[]): string {
+  // Before anything resolves inside it. A read would fail anyway, with an
+  // ENOENT that sends the model guessing; a WRITE would not fail at all --
+  // write_file makes parent folders, so it rebuilt the old location with one
+  // file in it and reported success, in a place the user no longer looks.
+  if (attachmentMissing(mount)) throw new Error(missingAttachmentMessage(mount));
   if (mount.kind === "file") {
     if (rest.length > 0) {
       throw new Error(`${mount.alias} is an attached file, not a folder.`);
@@ -94,6 +99,10 @@ export function safePath(userPath: string, opts: { forWrite?: boolean } = {}): s
     // then "plain path" is genuinely ambiguous and out/ is the honest home.
     const sole = soleCodeFolder(active);
     if (sole && !isDocumentPath(raw)) {
+      // Same refusal as a named mount: a plain path here means this folder,
+      // so falling through to out/ would hide the files the user asked for
+      // in the one place this rule exists to keep them out of.
+      if (attachmentMissing(sole)) throw new Error(missingAttachmentMessage(sole));
       const t = resolve(sole.path, raw);
       if (t === sole.path || t.startsWith(sole.path + sep)) return t;
     }
@@ -512,7 +521,8 @@ export async function listFolder(target: string): Promise<string> {
   const mounts =
     active && target === resolve(active.outDir)
       ? active.attachments.map(
-          (a) => `${a.alias}${a.kind === "folder" ? "/" : ""}${a.note ? ` — ${a.note}` : ""}`,
+          (a) =>
+            `${a.alias}${a.kind === "folder" ? "/" : ""}${attachmentMissing(a) ? " (missing)" : ""}${a.note ? ` — ${a.note}` : ""}`,
         )
       : [];
 

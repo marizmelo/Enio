@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, CornerLeftUp, File, FilePlus, Folder, Pencil, Search } from "lucide-react";
+import { ChevronRight, CornerLeftUp, File, FilePlus, Folder, FolderX, Pencil, Search } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { isImageName } from "@/lib/capabilities";
-import { childrenAt, groupRoots } from "@/lib/filetree";
+import { childrenAt, groupRoots, missingAt } from "@/lib/filetree";
 
 /**
  * Browsing the open project's files.
@@ -94,6 +94,12 @@ export function FileTree({ project, files = [], generated = [], onPick, pickLabe
   const currentPath = path.join("/");
   const noteFor = (alias) =>
     (project?.attachments ?? []).find((a) => a.alias === alias)?.note ?? "";
+  // The attachment this location cannot reach, if that is why it is bare.
+  // Everything that acts on "here" -- new file, open in editor, attach as
+  // folder -- is withheld with it: each would fail, or worse, rebuild the
+  // old path.
+  const gone = missingAt(project?.attachments, path);
+  const isGone = (name) => path.length === 0 && Boolean(missingAt(project?.attachments, [name]));
   const rootLabel = scope === "all" ? "Everything" : (project?.name ?? "Project");
 
   // Project-first at the root: with a project open, its attached folders and
@@ -185,11 +191,19 @@ export function FileTree({ project, files = [], generated = [], onPick, pickLabe
                     return (
                       <Row
                         key={full}
-                        icon={<Folder className="size-4 text-muted-foreground" />}
+                        icon={
+                          isGone(d) ? (
+                            <FolderX className="size-4 text-destructive/80" />
+                          ) : (
+                            <Folder className="size-4 text-muted-foreground" />
+                          )
+                        }
                         label={d}
                         // At the root these are the attachments, so their notes --
-                        // the user's own "what this is for" -- belong here.
-                        hint={path.length === 0 ? noteFor(d) : ""}
+                        // the user's own "what this is for" -- belong here. A
+                        // missing one says that instead: it is the more urgent
+                        // thing to know about the row.
+                        hint={isGone(d) ? "missing" : path.length === 0 ? noteFor(d) : ""}
                         trailing={<ChevronRight className="size-3.5 text-muted-foreground" />}
                         onClick={() => setPath([...path, d])}
                       />
@@ -202,15 +216,33 @@ export function FileTree({ project, files = [], generated = [], onPick, pickLabe
                         key={full}
                         icon={<FileIcon name={f} />}
                         label={f}
-                        onClick={() => onPick?.(full)}
+                        // An attached file that is gone still has its row --
+                        // it is attached -- but picking it could only fail.
+                        hint={isGone(f) ? "missing" : ""}
+                        onClick={() => !isGone(f) && onPick?.(full)}
                       />
                     );
                   })}
                 </div>
               ),
             )}
-            {folders.length === 0 && here.length === 0 && (
-              <p className="p-3 text-xs text-muted-foreground">This folder is empty.</p>
+            {gone ? (
+              <div className="flex flex-col gap-1 p-3 text-xs">
+                <p className="font-medium text-destructive">This folder is missing.</p>
+                <p className="text-muted-foreground">
+                  It was attached from <span className="break-all font-mono">{gone.path}</span>,
+                  and nothing is there now. It may have been moved, renamed or deleted, or it is
+                  on a drive that is not connected.
+                </p>
+                <p className="text-muted-foreground">
+                  Reconnect the drive, or open Projects to detach it and attach it from where it
+                  is now. Enio cannot read or write it until then.
+                </p>
+              </div>
+            ) : (
+              folders.length === 0 && here.length === 0 && (
+                <p className="p-3 text-xs text-muted-foreground">This folder is empty.</p>
+              )
             )}
           </>
         )}
@@ -219,7 +251,7 @@ export function FileTree({ project, files = [], generated = [], onPick, pickLabe
       {/* Attaching the folder itself is often the better answer: Enio can
           list and search inside it rather than being handed one file. Only
           in attach mode -- a folder cannot be opened in the canvas. */}
-      {pickLabel === "attach" && !results && path.length > 0 && (
+      {pickLabel === "attach" && !results && path.length > 0 && !gone && (
         <Button variant="outline" size="sm" className="self-start" onClick={() => onPick?.(currentPath)}>
           <Folder className="size-3.5" /> Attach “{path[path.length - 1]}” as a folder
         </Button>
@@ -228,12 +260,12 @@ export function FileTree({ project, files = [], generated = [], onPick, pickLabe
       {/* The folder, whole, in the editor -- the same hand-off the project
           row offers, from where you are standing. Several editors and no
           choice yet: ask once, keep the answer. */}
-      {pickLabel === "open" && !results && path.length > 0 && apps?.editor && (
+      {pickLabel === "open" && !results && path.length > 0 && !gone && apps?.editor && (
         <Button variant="outline" size="sm" className="self-start" onClick={() => openFolderIn(null)}>
           <Pencil className="size-3.5" /> Open {path[path.length - 1]} in {apps.editor.name}
         </Button>
       )}
-      {pickLabel === "open" && !results && path.length > 0 && !apps?.editor && apps?.choice === "ambiguous" && (
+      {pickLabel === "open" && !results && path.length > 0 && !gone && !apps?.editor && apps?.choice === "ambiguous" && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="self-start">
@@ -259,7 +291,7 @@ export function FileTree({ project, files = [], generated = [], onPick, pickLabe
           fine -- folders are made on the way, the same rule write_file
           follows. Creation is rooted in the CURRENT folder, so what you see
           in the breadcrumb is where the file lands. */}
-      {pickLabel === "open" && !results && (
+      {pickLabel === "open" && !results && !gone && (
         newName === null ? (
           <Button variant="outline" size="sm" className="self-start" onClick={() => { setNewName(""); setCreateError(""); }}>
             <FilePlus className="size-3.5" /> New file{path.length > 0 ? ` in ${path[path.length - 1]}` : ""}
