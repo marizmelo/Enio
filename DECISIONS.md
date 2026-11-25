@@ -4066,3 +4066,76 @@ added, including ones about another agent: giving the planner a read
 example moved two cases in the fitted half and two in the untuned half, in
 opposite directions, for the same total. Judge a change by a set it was not
 written for, never by the case it was aimed at.
+
+### A request for more than one agent ends on a draft plan (November 2026)
+
+**Chose:** before routing, a chat message that joins two things and whose
+steps need two agents is answered with a pipeline draft (`src/flow.ts`).
+The reply lists the steps and the agent for each, a card opens the draft on
+the Automations canvas, and the turn ends there. Reviewing, changing,
+running and reading the outcome are the canvas's existing draft flow,
+untouched. `plan:` at the start of a message asks for a plan outright; an
+`@mention` skips one; `ENIO_FLOW_PLANS=0` turns it off.
+
+**Why.** The specialists' tools are disjoint on purpose, so "search the web
+for budget laptops and email me a summary" has no right route: the
+researcher cannot send and the mail agent cannot look. Better routing does
+not help; the request is half done wherever it lands. The project already
+had the answer for work that spans specialists, a pipeline the harness
+executes one narrow turn per step, and its panel already did everything the
+flow needs: draft, edit, run without saving, per-step results, save. What
+was missing was the way in. The request arrives in chat, and chat routed it.
+
+This is the user's own framing, recorded because it settles a naming
+confusion: a planner should not do the work, only name the actors and the
+steps, and the person reviews, changes, approves, runs and reads the result.
+That is the composer plus the canvas. It is not the `planner` specialist,
+which is the calendar agent and does things.
+
+**Measured (25 Nov, `scripts/flow-bench.mjs`, Qwen3 4B Instruct; 127
+single-agent requests from the routing benches, 24 multi-agent requests
+written before anything was run):**
+
+| | single-agent requests planned (wrong) | multi-agent requests planned (right) |
+|---|---|---|
+| the composer on every message | 11 of 127 | 22 of 24 |
+| grammar check alone ("and", "then") | 9 of 127 | 24 of 24 |
+| grammar check, then the composer | 1 of 127 | 22 of 24 |
+
+- **The composer over-decomposes.** Asked about a request that is one
+  thing, it finds steps: "forward the contract to my lawyer" became find
+  the file, then send. It is a drafter, not a detector.
+- **It costs about 2.5 seconds.** On every message that is the whole
+  budget of a turn. Behind the grammar check it is paid on 9 of 127
+  ordinary requests, about one in fourteen.
+- **The one false plan** is "reply to Jonas and tell him thursday works",
+  drafted as calendar then send. It costs a glance and an `@mail`.
+- **The two misses** drafted a single step ("search for a lentil soup
+  recipe and put the ingredients in a note" became a web search alone), so
+  they route as before, to one agent.
+
+**Rejected:** a `plan` class in the router (it would put a new judgement in
+the one prompt that was just measured, for a decision the router has no
+examples to make, and every routed turn would pay for it); the composer as
+the detector (measured, above); running the draft inside the turn (the
+model's draft would execute unread, and a pipeline step starting from a chat
+turn is the chain one-hop forbids); a second editor in the thread (the
+canvas exists; a card that opens it is thirty lines, a poorer copy of it is
+a second thing to keep right); "make a plan for..." as the explicit door
+(also how someone asks for a travel plan; `plan:` is not).
+
+**Not built, and when it would be worth it:**
+
+- **The outcome in the thread.** A run's results stay on the canvas and in
+  the automation's history, so a follow-up in chat ("now send that to
+  Ana") has the plan as context and not what it produced. Worth building
+  once plans are actually run from chat often enough to see that follow-up
+  fail.
+- **One-clause requests for two agents.** "email me a summary of today's
+  news" has no "and" in it, so the grammar never shows it to the composer
+  and it routes to one agent. `plan:` is the door for now. A cheaper
+  detector than the composer is the missing piece, not a looser grammar.
+- **Renaming the `planner` specialist.** Its name promises what this entry
+  describes and it does something else. A rename touches a user-visible
+  mention, stored conversation rows and a published docs URL; proposed, not
+  decided.

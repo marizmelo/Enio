@@ -165,3 +165,37 @@ export const BOUNDARY = [
   ["who is the prime minister of portugal right now", "researcher"],
   ["what's the score in the benfica game", "researcher"],
 ];
+
+/**
+ * Requests that take more than one agent, for scripts/flow-bench.mjs: the
+ * positives for the check that turns such a request into a draft plan
+ * instead of routing it to one agent. BENCH and BOUNDARY are its negatives,
+ * since every prompt there belongs to exactly one agent. Written before the
+ * check was run on anything.
+ */
+export const FLOWS = [
+  "search the web for the best budget laptops and email me a summary",
+  "look up tomorrow's weather in porto and add a reminder to bring an umbrella",
+  "find the latest news on the eu ai act, write it up as a document and email it to Ana",
+  "take a screenshot and email it to me",
+  "research the top three project management tools then save a comparison as a markdown file",
+  "check my inbox for the invoice from the accountant and add the due date to my calendar",
+  "read my calendar for tomorrow and email the agenda to Marco",
+  "find the lease in my library and summarise it in a document",
+  "search for a lentil soup recipe and put the ingredients in a note",
+  "look up the train times from lisbon to porto, then add the 9am one to my calendar",
+  "remember that my passport expires in march and add a todo to renew it",
+  "summarise the unread emails from this week and save the summary as a file",
+  "find the pdf called insurance policy on my mac and email it to the broker",
+  "research competitors for a coffee subscription, then draft an email to my partner with the findings",
+  "check what's on my calendar this week and write a status report document",
+  "search the web for flights to madrid in june and remember the cheapest price",
+  "summarise expenses.csv and email the totals to my accountant",
+  "look in my library for the warranty and add a calendar event for the day it ends",
+  "get the headlines about spacex, then make a note of them in the notes app",
+  "find Priya's email address and send her the meeting notes",
+  "read the readme in my project and email a summary to the team",
+  "search for the best hiking trails near sintra and create a document with the top five",
+  "check the weather for saturday and schedule a picnic if it's dry",
+  "find my notes about the tax audit and email them to my accountant",
+];

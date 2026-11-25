@@ -129,6 +129,37 @@ fixed lookup, never a guess, and a draft opens unsaved — you name it, save
 it, and one successful run later it too teaches the composer. It runs when
 you click, never in the background.
 
+## A plan from chat
+
+Every message goes to one agent, and the agents' tools do not overlap. So a
+request like *"search the web for budget laptops and email me a summary"*
+has no right agent: the one that can search cannot send, and the one that
+can send cannot search. Ask that in chat and Enio does not pick one of them.
+It answers with a **plan**: the steps, which agent runs each, and a card that
+says nothing has run yet.
+
+**Review and run** opens the plan on the automation canvas, as the same
+draft you would get by describing it there. From that point it is an
+ordinary automation:
+
+1. **Review** the steps and how they connect.
+2. **Change** any of them: edit a step's guidance, add or remove a step,
+   rewire the connections.
+3. **Run** it. Nothing runs before this, and every safety gate still applies
+   inside each step.
+4. **Read the outcome**: each step shows what it did and the files it made.
+5. **Save** it, if you want it again or on a schedule.
+
+Enio drafts a plan on its own only when a message joins two things ("and",
+"then") *and* the steps need more than one agent. Two things for the same
+agent are an ordinary turn, since one agent already does several things in a
+row. To ask for a plan outright, start the message with `plan:`. To skip one,
+start with `@` and an agent's name. `ENIO_FLOW_PLANS=0` turns this off.
+
+The plan card comes back when you reopen the conversation. What the run
+produced stays on the canvas and in the automation's history, not in the
+thread.
+
 ## Agents can run your automations
 
 Ask in chat — *"run the ai-news-brief automation"* — and the generalist runs it

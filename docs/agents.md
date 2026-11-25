@@ -43,7 +43,10 @@ Counterintuitively this helps a *small* model more than a large one, which is
 the opposite of how multi-agent setups are usually pitched.
 
 Depth is exactly one hop: router → agent → answer. No agent talks to another,
-because every hand-off compounds error.
+because every hand-off compounds error. A request that genuinely needs two
+agents is not squeezed through one of them: it gets a
+[plan you review and run](pipelines.md#a-plan-from-chat), where each step is
+its own single hop.
 
 ## It is also a security boundary
 

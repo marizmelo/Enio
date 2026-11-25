@@ -47,6 +47,7 @@ and old variables still work.
 | Variable | Default |
 |---|---|
 | `ENIO_FAST_ROUTE` | `1` — route by nearest example first, in milliseconds; `0` sends every request to the model router |
+| `ENIO_FLOW_PLANS` | `1` — a chat request that needs more than one agent gets a draft plan to review and run (see [Automations](pipelines.md)); `0` routes every message to one agent |
 | `ENIO_FAST_ROUTE_MARGIN` | `0.06` — the confidence the fast tier needs before it decides; below it the model decides (see [Agents](agents.md)) |
 | `ENIO_MOOD_MARGIN` | `0.03` — the confidence the face's mood label needs before it decides; below it the face stays neutral (see [Avatar](avatar.md)) |
 

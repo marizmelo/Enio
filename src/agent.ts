@@ -21,6 +21,7 @@ import { distinctiveTerms, looksLikeQuestion as questionShaped, threadCovers } f
 import { noteTurn as noteGap } from "./memory/gaps.js";
 import { personalityView } from "./personality.js";
 import { panelRequest } from "./panels.js";
+import { draftFlow, flowReply } from "./flow.js";
 import { createMoodTrack, type Mood } from "./mood.js";
 import {
   accountSwitchRequest,
@@ -1169,6 +1170,52 @@ export async function runTurn(
         /* Tracing must never break a turn. */
       }
       return { reply, messages: history, toolsUsed: ["open_app"], specialist: "operator", question: userInput };
+    }
+  }
+
+  // A request that needs more than one agent ends here, on a draft plan,
+  // before the router is asked to pick one of them (flow.ts). Only for a
+  // bare message: an @mention is the user choosing the agent, a pinned skill
+  // or an attachment is context a drafted step would not carry, and with
+  // routing off one agent already holds every tool. A pipeline step never
+  // reaches this, because the executor pins its specialist.
+  if (
+    config.flowPlans &&
+    config.routingEnabled &&
+    !overrides.specialist &&
+    !(overrides.skills?.length) &&
+    !(overrides.files?.length)
+  ) {
+    const startedAt = Date.now();
+    const flow = await draftFlow(userInput, registry);
+    if (flow) {
+      const reply = flowReply(flow);
+      handlers.onRoute?.("generalist");
+      handlers.onWidget?.({ type: "flow", ...flow });
+      handlers.onContent?.(reply);
+      logMessage(sessionId, "user", userInput);
+      logMessage(sessionId, "assistant", reply);
+      history.push({ role: "user", content: userInput }, { role: "assistant", content: reply });
+      try {
+        recordTurn({
+          sessionId,
+          question: userInput,
+          reply,
+          specialist: "generalist",
+          systemPrompt: "(harness: flow_draft)",
+          memoryBlock: "",
+          startedAt,
+          durationMs: Date.now() - startedAt,
+          iterations: 0,
+          model: currentModelId(),
+          // The draft rides in the trace so a restored conversation can draw
+          // the card again: the reply is in messages, what made it is here.
+          steps: [{ seq: 0, kind: "harness", name: "flow_draft", args: JSON.stringify(flow), output: reply, error: null, durationMs: Date.now() - startedAt }],
+        });
+      } catch {
+        /* Tracing must never break a turn. */
+      }
+      return { reply, messages: history, toolsUsed: [], specialist: "generalist", question: userInput };
     }
   }
 

@@ -133,7 +133,7 @@ function layout(nodes, edges) {
   });
 }
 
-export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipes = false }) {
+export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipes = false, draft = null }) {
   const [saved, setSaved] = useState([]);
   const [view, setView] = useState("list"); // list | canvas
   const [current, setCurrent] = useState(null); // {id?, name, vouched?}
@@ -288,6 +288,31 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipe
     },
     [byId],
   );
+
+  // A plan handed over from the conversation lands on the canvas as the
+  // same fresh draft a compose here produces: unnamed, not yet run, with the
+  // request kept as its description. It runs after the reset-on-open effect
+  // above, which is what lets it win the view when both fire together.
+  const draftNonce = draft?.nonce ?? null;
+  useEffect(() => {
+    if (!open || !draft?.nodes?.length) return;
+    toFlow(
+      draft.nodes.map((n) => ({ id: n.id, abilityId: n.abilityId, prompt: n.prompt, position: undefined })),
+      draft.edges ?? [],
+    );
+    setComposedFrom(draft.request ?? "");
+    setPrompt(draft.request ?? "");
+    setCurrent({ name: "" });
+    setName("");
+    setHasRun(false);
+    setLastRunId(null);
+    setArtifacts([]);
+    setSelectedNode(null);
+    setView("canvas");
+    // Keyed on the nonce alone: it is what says "a new draft arrived".
+    // toFlow changes whenever the abilities list reloads, and re-running on
+    // that would wipe edits already made on the canvas.
+  }, [open, draftNonce]);
 
   const fromFlow = useCallback(
     () => ({

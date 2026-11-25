@@ -214,6 +214,10 @@ export function App() {
   const [attachError, setAttachError] = useState("");
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [pipelinesOpen, setPipelinesOpen] = useState(false);
+  // A draft plan a reply offered, on its way to the Automations canvas. The
+  // nonce makes the same card openable twice: without it the second click
+  // hands over an identical object and nothing reloads.
+  const [flowDraft, setFlowDraft] = useState(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
@@ -288,6 +292,17 @@ export function App() {
     if (el) el.scrollTop = el.scrollHeight;
     followRef.current = true;
     setShowJump(false);
+  }, []);
+
+  useEffect(() => {
+    const onFlow = (e) => {
+      const d = e.detail;
+      if (!Array.isArray(d?.nodes) || d.nodes.length === 0) return;
+      setFlowDraft({ request: d.request ?? "", nodes: d.nodes, edges: d.edges ?? [], nonce: Date.now() });
+      setPipelinesOpen(true);
+    };
+    window.addEventListener("enio:open-flow", onFlow);
+    return () => window.removeEventListener("enio:open-flow", onFlow);
   }, []);
 
   const backendReady = status.phase === "ready";
@@ -504,6 +519,8 @@ export function App() {
       // basis chip used to vanish on reopen for want of this line.
       basis: m.basis ?? null,
       mood: m.mood ?? null,
+      // The plan a reply offered, so its card is still a way in.
+      widgets: Array.isArray(m.flow?.nodes) ? [{ type: "flow", ...m.flow }] : [],
       restored: true,
     }));
     const lastTs = transcript.length > 0 ? transcript[transcript.length - 1].ts : null;
@@ -1048,7 +1065,13 @@ export function App() {
 
       <PipelinesDialog
         open={pipelinesOpen}
-        onOpenChange={setPipelinesOpen}
+        // Closing drops the draft: opening Automations from the toolbar
+        // afterwards must land on the list, not on a plan from an hour ago.
+        onOpenChange={(next) => {
+          setPipelinesOpen(next);
+          if (!next) setFlowDraft(null);
+        }}
+        draft={flowDraft}
         abilities={capabilities.abilities ?? []}
         showRecipes={isMac}
       />

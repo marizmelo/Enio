@@ -902,6 +902,9 @@ export interface StoredMessage {
   /** Files this reply created, recovered from its tools' own output — the
    *  same extraction that opens the canvas live. */
   artifacts?: Array<{ type: string; path: string }>;
+  /** A draft plan this reply offered (flow.ts), so its card can be drawn
+   *  again. Passed through as recorded; the client checks its shape. */
+  flow?: unknown;
 }
 
 /**
@@ -981,6 +984,18 @@ export function conversationMessages(sessionId: string): StoredMessage[] {
         }
       } catch {
         /* an unreadable basis leaves the reply unlabelled, never mislabelled */
+      }
+    }
+    // And the plan a reply offered. The card was the only way into the
+    // draft, and it only ever travelled over the live stream: reopen the
+    // conversation and the steps were still there as text with nothing to
+    // open them with.
+    if (step.kind === "harness" && step.name === "flow_draft") {
+      try {
+        const f = JSON.parse(step.args || "{}") as { nodes?: unknown };
+        if (Array.isArray(f.nodes) && f.nodes.length > 0) target.flow = f;
+      } catch {
+        /* an unreadable draft leaves the reply as its text, which has the steps */
       }
     }
     // Same for the mood: the face a restored reply shows is the one it had.

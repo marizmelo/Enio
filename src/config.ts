@@ -645,6 +645,12 @@ export const config = {
    * the requests answered in ~4ms. Off with ENIO_FAST_ROUTE=0.
    */
   fastRoute: env("FAST_ROUTE") !== "0",
+  /**
+   * A chat request that needs more than one agent is answered with a draft
+   * plan instead of being routed to one of them (flow.ts). Off with
+   * ENIO_FLOW_PLANS=0, which returns every message to the router.
+   */
+  flowPlans: env("FLOW_PLANS") !== "0",
   fastRouteMargin: (() => {
     const n = Number(env("FAST_ROUTE_MARGIN") ?? "0.06");
     return Number.isFinite(n) && n > 0 ? n : 0.06;

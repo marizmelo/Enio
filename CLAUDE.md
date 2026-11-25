@@ -146,6 +146,15 @@ the app keeps its pickers, and the never-show-cron rule stays a *UI* rule.
 **One hop only.** Router → specialist → answer. No agent-to-agent conversation.
 Every hand-off compounds error and at this model size it compounds fast.
 
+**A request for two specialists gets a draft, never a chain.** Disjoint tools
+mean "search the web and email me a summary" has no right route. `flow.ts`
+answers it with a pipeline draft — the composer's closed-list choice, shown
+as a plan — and the turn ends there. Running is a user act on the Automations
+canvas, each step its own single hop. Do not make the turn run the draft, and
+do not put the composer in front of every message: alone it called 11 of 127
+single-agent requests a flow and costs two seconds, which is why a grammar
+check stands in front of it (`scripts/flow-bench.mjs`).
+
 **Memory extraction uses a closed vocabulary** (`src/memory/schema.ts`, nine
 relations, six entity types). Open-ended extraction produces `USES` / `uses` /
 `USES_TOOL` as three separate relations and a graph that degrades as it grows.

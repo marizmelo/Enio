@@ -70,7 +70,19 @@ export type Widget =
    * Show in Finder through guarded IPC, and a client without the renderer
    * loses nothing — the text lists the same locations.
    */
-  | { type: "found_files"; paths: string[] };
+  | { type: "found_files"; paths: string[] }
+  /**
+   * A draft plan for a request that takes more than one agent (flow.ts).
+   * Not an action waiting on approval like `plan` above: nothing is stored
+   * and nothing will run from it. The client opens it on the Automations
+   * canvas, where editing, running and reading the outcome already live.
+   */
+  | {
+      type: "flow";
+      request: string;
+      nodes: Array<{ id: string; abilityId: string; title: string; agent: string; prompt: string }>;
+      edges: Array<{ from: string; to: string }>;
+    };
 
 /**
  * What a tool hands back.
