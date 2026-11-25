@@ -3965,3 +3965,104 @@ and the others in steps of an eighth of a nat, so its numbers are log-odds
 against the top and must be normalised before being called probabilities.
 It documents `top_logprobs` up to 11 and closes the connection on 11, with
 no status code; 10 works.
+
+### A calendar change is routed to whoever holds the tool, and every specialist has a prompt example (November 2026)
+
+**Chose:** the routing examples were rewritten against the bench, and one
+rule was added to them.
+
+- The planner has examples in the model router's prompt. It had none from
+  the day it was added; the only calendar example there, "add lunch to my
+  calendar for noon", still named the operator from before the planner
+  existed.
+- A calendar or todo change resolves at route time to whoever can make it
+  (`calendarChanger` in `src/routing-fast.ts`): the planner when the
+  calendar write grant is connected, the operator when it is not and
+  desktop control is on, the planner when neither. Both tiers read the same
+  resolved table.
+- One example each for lessons that had none: sending mail, a named sender
+  with no word "email", storing a fact, a how-to-behave instruction, bulk
+  file work, a timeless why. The prompt went from 16 examples to 23.
+- The operator's description no longer says "add a calendar event".
+- `scripts/route-bench-data.mjs` gains `BOUNDARY`, 81 cases on the lines
+  between agents, and `route-bench.mjs` measures the model tier with the
+  fast tier off. It had been reporting the combined router under the
+  model's name.
+
+**Why.** The previous entry ended on four of six misses going to the
+operator. A second set written before any change showed how much those four
+understated it: of seven calendar and todo changes in it, six went to the
+operator.
+Examples dominate descriptions at this size, and the table said so itself:
+"a specialist with no example effectively does not exist". The planner was
+that specialist, kept alive by the fast tier, which had its own exemplars
+for it. The two tables disagreed about one sentence's meaning, and every
+ambiguous request went to the model, which had only the stale half.
+
+**Measured (25 Nov, `scripts/route-bench.mjs`, Qwen3 4B Instruct on mlx-lm,
+this machine's agent list with two custom agents and the calendar write
+grant connected; combined router as it ships):**
+
+| | before | after |
+|---|---|---|
+| held-out, 46 | 41 | 44 |
+| held-out, model tier alone | 40 | 45 |
+| boundary, the 46 used to choose the examples | 34 | 42 |
+| boundary, the 35 never tuned against | 22 | 32 |
+| the operator's own requests, all sets, 28 | 26 | 27 |
+| model tier, median | 411 ms | about 435 ms |
+
+- **The gain holds on cases the tuning never saw.** The last 35 were
+  written after the examples were chosen and before they were ever run.
+  That row is the one to trust; the row above it is fitted.
+- **The description alone moved nothing.** With only "add a calendar
+  event" removed and the examples as they were: 41 and 34, identical to
+  before, miss for miss.
+- **The operator did not pay for it.** Its own requests held, so this is
+  the bias removed, not swung the other way.
+- **Without an account it is the same table read the other way.** Same
+  source, no accounts, desktop control on: the model tier sent all fifteen
+  calendar and todo changes to the operator, and outside those missed the
+  same kind of thing it misses with an account connected.
+- **Seven more examples cost about 25 ms** on the requests that reach the
+  model, which is half of them.
+
+**Rejected:** naming the planner for everybody (someone using Apple
+Calendar with no account connected would be routed from a working plan in
+the Calendar app to a specialist holding only `read_skill`); withholding an
+empty-handed planner from the router (its turn ends on the notice that says
+how to connect an account, which is the right answer to "what's on my
+calendar" there); fixing it in the descriptions (measured, above);
+reordering the prompt examples to repair one case the new ones broke (it
+did not; an example did); raising the fast tier's margin to 0.12 (gains one
+on the held-out set, loses one on the boundary set); writing examples for
+the misses in the never-tuned half (that is how it stops being one).
+
+**Still wrong, recorded and not fixed:**
+
+- "remember that my landlord's name is Teresa" goes to mail in the fast
+  tier at 0.106, on one noun shared with "check my inbox for anything from
+  the landlord". A librarian exemplar aimed at it did not move it.
+- "send my cv to the recruiter" goes to the coder in the fast tier at
+  0.099, and "run the shortcut for my morning routine" to the generalist at
+  0.077. Both clear the margin and are wrong.
+- A preference said as a wish goes to the generalist, which agrees and
+  stores nothing: "please stop using emojis in your replies", "I'd like you
+  to be more concise from now on", "note that I prefer answers in
+  portuguese". Three of four. "always answer me in bullet points" is in the
+  prompt and did not generalise to them.
+- Three timeless questions still reach the researcher ("why is the sky
+  blue" among them), which costs a web search and not a wrong answer.
+
+**Open:** who owns a reminder when both can act. The planner's description
+says reminders and the exemplars say the operator. With examples of its
+own the planner took "remind me at noon to call the bank" under one version
+of this table and lost it again under the next. A todo with a due time and
+an alert from the Reminders app are different things to the person asking,
+and nothing here decides between them.
+
+**For whoever tunes this next.** Single cases flip when any example is
+added, including ones about another agent: giving the planner a read
+example moved two cases in the fitted half and two in the untuned half, in
+opposite directions, for the same total. Judge a change by a set it was not
+written for, never by the case it was aimed at.

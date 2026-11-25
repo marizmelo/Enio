@@ -19,6 +19,13 @@ You'll see the choice in the transcript as `→ coder`.
 | `operator` | Doing things in Mac apps | `mac_recipe`, `open_app`, `propose_plan`, `take_screenshot`, `read_image`, `read_skill` |
 | `generalist` | Conversation, reasoning, anything else | `recall`, `current_time`, `weather`, `read_image`, `read_skill` |
 
+One request can belong to two of them. A change to your calendar or todo
+list goes to the `planner` when a connected account has been granted
+calendar changes, because that is one tool call. Without that grant, and
+with desktop control on, it goes to the `operator`, which proposes the same
+change in the Calendar or Reminders app for you to approve. Reading the
+calendar is always the planner's.
+
 The app shows this live: click the **tool count** in the top right and each
 agent appears with its tools as they stand right now — a crossed-out tool is
 withheld until its setup exists — plus the skills it can act on and the
@@ -75,8 +82,9 @@ It is also two tiers. A request is first matched against each agent's routing
 examples by meaning, on the CPU, in a few milliseconds; if the best agent
 clears the runner-up by a measured margin, that is the route, and the model is
 never asked. Only the ambiguous requests reach the model router. Measured on 46
-held-out prompts the model alone routed 40 right at 451ms median; the pair
-routed 41 right with half the requests decided in about 4ms. The trace of
+held-out prompts the model alone routed 45 right at about 440ms median; the
+pair routed 44 right with half the requests decided in about 4ms. On a second
+set of 81 written to sit on the lines between agents, the pair routed 74. The trace of
 every turn records which tier decided and at what margin, so a wrong route
 can be read back rather than guessed at. `ENIO_FAST_ROUTE=0` turns the fast
 tier off.

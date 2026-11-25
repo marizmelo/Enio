@@ -61,3 +61,107 @@ export const BENCH = [
   ["what did Sam say about the deadline", "mail"],
   ["find the notes from the offsite", "librarian"],
 ];
+
+/**
+ * A second set, aimed at the lines between agents rather than at their
+ * middles: a calendar or todo change against a Mac app action, a reply
+ * against a note, bulk file work against Finder, storing a preference
+ * against conversation. BENCH has two or three of each, which was too few to
+ * see that nearly all of them went the same wrong way.
+ *
+ * Its two halves have different standing. The first was written before the
+ * routing examples were changed in November 2026 and used to choose them, so
+ * it is no longer held out. The second was written after the examples were
+ * chosen and before it was ever run, and nothing was tuned against it: its
+ * misses are recorded in DECISIONS.md, not fixed.
+ *
+ * Labels follow the tables' own rules: a reminder or an alarm is the
+ * operator's, a todo or an event the planner's. A calendar or todo change is
+ * labelled for an install with the calendar write grant; without it those
+ * belong to the operator (calendarChanger in src/routing-fast.ts).
+ */
+export const BOUNDARY = [
+  // used to choose the examples
+  ["push my 2pm to tomorrow", "planner"],
+  ["cancel the meeting with Rita on wednesday", "planner"],
+  ["book an hour for the gym on saturday morning", "planner"],
+  ["add call the plumber to my list of things to do", "planner"],
+  ["what do I have going on next week", "planner"],
+  ["invite Tomás to the review on monday at 11", "planner"],
+  ["reschedule the haircut to next thursday", "planner"],
+  ["what's Marta's number", "planner"],
+  ["do I have time for lunch on wednesday", "planner"],
+  ["create an event for the school play on the 12th at 6pm", "planner"],
+  ["write back to Helena and say I'll send it monday", "mail"],
+  ["send Pedro the meeting notes by email", "mail"],
+  ["answer the email from HR and accept", "mail"],
+  ["let Carla know by email that the delivery is late", "mail"],
+  ["forward the contract to my lawyer", "mail"],
+  ["has the bank written to me this week", "mail"],
+  ["draft an email to the team about the outage", "mail"],
+  ["convert the csv files in this project to json", "coder"],
+  ["delete the unused imports in utils.py", "coder"],
+  ["count the lines in every file under src", "coder"],
+  ["batch rename the screenshots in the assets folder", "coder"],
+  ["move the test files into a tests directory", "coder"],
+  ["open system settings", "operator"],
+  ["pause the music", "operator"],
+  ["make a note in notes titled ideas", "operator"],
+  ["wake me up at 6:30 with an alarm", "operator"],
+  ["remind me to take the bins out at 8", "operator"],
+  ["what app is in front right now", "operator"],
+  ["close the finder window", "operator"],
+  ["run my resize shortcut", "operator"],
+  ["switch to dark mode", "operator"],
+  ["skip this song", "operator"],
+  ["open the calendar app", "operator"],
+  ["show me what's on the screen", "operator"],
+  ["remember that my accountant is called Rui", "librarian"],
+  ["note that I prefer answers in portuguese", "librarian"],
+  ["from now on call me Zé", "librarian"],
+  ["don't forget that my car is a 2019 golf", "librarian"],
+  ["what's my wife's name", "librarian"],
+  ["I'd like you to be more concise from now on", "librarian"],
+  ["what do you know about where I work", "librarian"],
+  ["why is the sky blue", "generalist"],
+  ["what's a good way to learn the guitar", "generalist"],
+  ["what's 15 percent of 240", "generalist"],
+  ["latest news on the spacex launch", "researcher"],
+  ["how much is a train ticket from porto to braga", "researcher"],
+  // never tuned against
+  ["pencil in coffee with Inês for thursday at four", "planner"],
+  ["shift the team sync to the afternoon", "planner"],
+  ["tick off the groceries task", "planner"],
+  ["block out friday afternoon for deep work", "planner"],
+  ["look up Ricardo's phone number", "planner"],
+  ["is anything scheduled for the 3rd", "planner"],
+  ["put pay the electricity bill on my task list", "planner"],
+  ["set up a meeting with the design team next monday", "planner"],
+  ["tell Miguel by email that the quote is approved", "mail"],
+  ["respond to the landlord's message and say tomorrow is fine", "mail"],
+  ["did the airline send a receipt", "mail"],
+  ["send my cv to the recruiter", "mail"],
+  ["what did the clinic write about my results", "mail"],
+  ["rename the photos in the trip folder by date", "coder"],
+  ["merge the two csv files in the data folder", "coder"],
+  ["remove the console logs from main.js", "coder"],
+  ["put all the images into an images folder", "coder"],
+  ["launch the notes app", "operator"],
+  ["open the reminders app", "operator"],
+  ["turn the brightness up", "operator"],
+  ["remind me at noon to call the bank", "operator"],
+  ["start a stopwatch", "operator"],
+  ["jot down a note that the wifi code is on the fridge", "operator"],
+  ["run the shortcut for my morning routine", "operator"],
+  ["quit safari", "operator"],
+  ["what's playing right now", "operator"],
+  ["remember that our anniversary is in june", "librarian"],
+  ["please stop using emojis in your replies", "librarian"],
+  ["what's my dog called", "librarian"],
+  ["for future reference, I work night shifts", "librarian"],
+  ["why do onions make you cry", "generalist"],
+  ["how do vaccines work", "generalist"],
+  ["what should I cook for six people", "generalist"],
+  ["who is the prime minister of portugal right now", "researcher"],
+  ["what's the score in the benfica game", "researcher"],
+];

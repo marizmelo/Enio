@@ -2,6 +2,8 @@ import { embed } from "./memory/embed.js";
 import { nearestLabel, embedMissing } from "./nearest.js";
 import { listCustomAgents } from "./custom-agents.js";
 import { config } from "./config.js";
+import { anyAccountWith } from "./accounts.js";
+import { desktopEnabled } from "./tools/desktop.js";
 
 /**
  * The fast tier of the router: a decision, not a generation.
@@ -27,6 +29,37 @@ export interface RoutingExample {
   specialist: string;
   /** Why this example exists, for the prompt's maintainers. */
   why?: string;
+  /** A change to the calendar or the todo list: see calendarChanger. */
+  calendarChange?: true;
+}
+
+/**
+ * Who a calendar or todo change goes to: whoever holds the tool for it.
+ *
+ * Two specialists can make one. The planner calls add_event or add_todo on a
+ * connected account, which exists only with the calendar write grant; the
+ * operator proposes a plan in the Calendar or Reminders app, which exists
+ * only with desktop control on. An example that names one of them for
+ * everybody is wrong wherever that one holds nothing: "add lunch to my
+ * calendar" stayed an operator example after the planner arrived, so with an
+ * account connected a change was routed past the one tool call that makes it
+ * and into an AppleScript plan — and naming the planner instead would send
+ * someone with no account to a specialist holding nothing but read_skill.
+ * The conditions are the tools' own registration gates, read at route time,
+ * so the route follows the tool rather than a second opinion about it.
+ * With neither, the planner: its turn ends on the notice that says how to
+ * connect an account.
+ */
+export function calendarChanger(): "planner" | "operator" {
+  return !anyAccountWith("calendar.write") && desktopEnabled() ? "operator" : "planner";
+}
+
+/** The examples as this install should read them, each with the specialist
+ *  it teaches. Both tiers take their table from here, so they cannot
+ *  disagree about who a calendar change belongs to. */
+export function resolveExamples(table: RoutingExample[]): Exemplar[] {
+  const changer = calendarChanger();
+  return table.map((e) => ({ text: e.text, specialist: e.calendarChange ? changer : e.specialist }));
 }
 
 /**
@@ -45,6 +78,11 @@ export const ROUTING_EXAMPLES: RoutingExample[] = [
     why: "Data questions are file work: the coder reads the file and answers with Python through run_command. Without this, \"analyze this csv\" landed on the generalist, which has no file tools.",
   },
   {
+    text: "sort the files in the exports folder into subfolders by year",
+    specialist: "coder",
+    why: "Bulk file work is run_command in a folder. \"control Finder\" in the operator's description took renames and moves to a specialist with no file tools.",
+  },
+  {
     text: "build me a resume",
     specialist: "coder",
     why: "Documents are files, and write_file lives on the coder — routed to the researcher nothing landed on disk. A note-in-an-app stays with the operator.",
@@ -52,6 +90,16 @@ export const ROUTING_EXAMPLES: RoutingExample[] = [
   { text: "ask a bigger model to write this", specialist: "coder", why: "The handoff flow: composing a prompt-file is document work." },
   { text: "write a document about our launch plan", specialist: "coder" },
   { text: "what did I say I was working on", specialist: "librarian" },
+  {
+    text: "remember that I take my coffee black",
+    specialist: "librarian",
+    why: "Storing had no example, only retrieving: \"remind yourself that...\" went to the generalist, which has no remember tool.",
+  },
+  {
+    text: "always answer me in bullet points",
+    specialist: "librarian",
+    why: "A how-to-behave instruction is set_preference. Unexampled it read as conversation and was agreed to, then forgotten.",
+  },
   {
     text: "find my notes about the tax audit",
     specialist: "librarian",
@@ -63,8 +111,35 @@ export const ROUTING_EXAMPLES: RoutingExample[] = [
     why: "A name search is find_file, not the coder, whose search is scoped to the workspace.",
   },
   { text: "did Sam reply about the invoice", specialist: "mail" },
+  {
+    text: "what did the insurance company send me",
+    specialist: "mail",
+    why: "A named sender with no word \"email\": beside the librarian's \"what did I say\" it read as memory.",
+  },
+  {
+    text: "reply to Marco and say yes",
+    specialist: "mail",
+    why: "Sending had no example, only reading, so a reply to a person read as an action in a Mac app.",
+  },
+  {
+    text: "what's on my calendar today",
+    specialist: "planner",
+    why: "Reading the calendar is the planner's on every install, so it keeps one example when the changes below resolve to the operator.",
+  },
+  {
+    text: "add lunch to my calendar for noon",
+    specialist: "planner",
+    calendarChange: true,
+    why: "The planner had no example here at all, and this one named the operator from before the planner existed: nearly every calendar or todo change the model routed went to the operator.",
+  },
+  { text: "add buy milk to my todos", specialist: "planner", calendarChange: true },
+  {
+    text: "move my 3pm meeting to friday",
+    specialist: "planner",
+    calendarChange: true,
+    why: "No word \"calendar\" in it. Rescheduling is said with move, push and shift, which otherwise read as moving a thing on the Mac.",
+  },
   { text: "write a note with my grocery list", specialist: "operator" },
-  { text: "add lunch to my calendar for noon", specialist: "operator" },
   {
     text: "set an alarm for 7 tomorrow morning",
     specialist: "operator",
@@ -81,6 +156,11 @@ export const ROUTING_EXAMPLES: RoutingExample[] = [
     why: "Authoring an automation is not a model act; the generalist's prompt knows where automations come from.",
   },
   { text: "explain monads to me", specialist: "generalist" },
+  {
+    text: "why do cats purr",
+    specialist: "generalist",
+    why: "A timeless question needs no lookup. With only \"explain\" exampled, a plain why went to the researcher and paid for a web search.",
+  },
 ];
 
 /**
@@ -113,7 +193,6 @@ export const FAST_EXEMPLARS: RoutingExample[] = [
   { text: "where is the login function defined", specialist: "coder" },
   { text: "make me a spreadsheet of these numbers", specialist: "coder" },
   // librarian
-  { text: "remember that I take my coffee black", specialist: "librarian" },
   { text: "what do you know about my job", specialist: "librarian" },
   { text: "what did we discuss last time about the move", specialist: "librarian" },
   { text: "search my library for the lease agreement", specialist: "librarian" },
@@ -133,14 +212,12 @@ export const FAST_EXEMPLARS: RoutingExample[] = [
   { text: "forward the receipt to accounting", specialist: "mail" },
   { text: "search my email for the flight confirmation", specialist: "mail" },
   // planner
-  { text: "what's on my calendar today", specialist: "planner" },
-  { text: "schedule a call with Marco on thursday at 3", specialist: "planner" },
-  { text: "add buy milk to my todos", specialist: "planner" },
+  { text: "schedule a call with Marco on thursday at 3", specialist: "planner", calendarChange: true },
   { text: "what are my tasks for this week", specialist: "planner" },
   { text: "do I have anything on friday evening", specialist: "planner" },
   { text: "what's Ana's email address", specialist: "planner" },
-  { text: "put the dentist appointment in my calendar", specialist: "planner" },
-  { text: "mark the report todo as done", specialist: "planner" },
+  { text: "put the dentist appointment in my calendar", specialist: "planner", calendarChange: true },
+  { text: "mark the report todo as done", specialist: "planner", calendarChange: true },
   { text: "when is my next meeting", specialist: "planner" },
   // operator
   { text: "open safari", specialist: "operator" },
@@ -152,6 +229,13 @@ export const FAST_EXEMPLARS: RoutingExample[] = [
   { text: "mute the sound", specialist: "operator" },
   { text: "what's on my screen right now", specialist: "operator" },
   { text: "open the calculator and add these up", specialist: "operator" },
+  // Opening an app is the operator's whatever the app is about: without
+  // this, an app named after another specialist's subject went to that
+  // specialist ("open the calendar app" to the planner, clear of the margin).
+  { text: "open the mail app", specialist: "operator" },
+  // The only exemplar that says Shortcut. "run my ... shortcut" otherwise sat
+  // nearest "run my news-brief automation" and went to the generalist.
+  { text: "run the Shortcut that turns on focus mode", specialist: "operator" },
   // generalist
   { text: "what's the difference between a virus and a bacterium", specialist: "generalist" },
   { text: "help me decide between two apartments", specialist: "generalist" },
@@ -162,6 +246,9 @@ export const FAST_EXEMPLARS: RoutingExample[] = [
   { text: "what time is it", specialist: "generalist" },
   { text: "tell me something interesting", specialist: "generalist" },
   { text: "is it a good idea to learn rust in 2026", specialist: "generalist" },
+  // Advice about a hobby is not a request to operate it: "a good way to
+  // learn the guitar" was nearest "play some music", by 0.097.
+  { text: "what's a good way to get better at chess", specialist: "generalist" },
 ];
 
 export interface Exemplar {
@@ -175,8 +262,8 @@ export interface Exemplar {
 export function routingExemplars(specialists: Array<{ name: string; description: string }>): Exemplar[] {
   const out: Exemplar[] = [];
   const names = new Set(specialists.map((s) => s.name));
-  for (const e of [...ROUTING_EXAMPLES, ...FAST_EXEMPLARS]) {
-    if (names.has(e.specialist)) out.push({ text: e.text, specialist: e.specialist });
+  for (const e of resolveExamples([...ROUTING_EXAMPLES, ...FAST_EXEMPLARS])) {
+    if (names.has(e.specialist)) out.push(e);
   }
   for (const s of specialists) out.push({ text: s.description, specialist: s.name });
   for (const a of listCustomAgents()) {

@@ -1,6 +1,6 @@
 import { complete } from "./model.js";
 import { activeProject } from "./project.js";
-import { ROUTING_EXAMPLES, fastRoute } from "./routing-fast.js";
+import { ROUTING_EXAMPLES, fastRoute, resolveExamples } from "./routing-fast.js";
 import { config } from "./config.js";
 import { listCustomAgents } from "./custom-agents.js";
 import type { Registry } from "./tools/index.js";
@@ -224,12 +224,16 @@ export const SPECIALISTS: Specialist[] = [
   {
     name: "operator",
     // Leads with the concrete verbs people actually say -- "write a note",
-    // "add an event" -- because the router pattern-matches wording, and
+    // "set a reminder" -- because the router pattern-matches wording, and
     // "doing something on the machine" matched nothing anyone says. Measured:
     // "write a note for groceries" routed to the generalist, which cannot do
     // it, and answered with prose about the note it was not creating.
+    // A calendar event is deliberately not in the list. With an account
+    // connected that change is the planner's, and saying it here kept pulling
+    // it back; on an install where it is the operator's, the examples say so
+    // (calendarChanger in routing-fast.ts).
     description:
-      "Creating or changing things in Mac apps: open an app, write a note, add a calendar event, set a reminder, check the screen, control Finder or Music, run a Shortcut.",
+      "Creating or changing things in Mac apps: open an app, write a note, set a reminder or an alarm, check the screen, control Finder or Music, run a Shortcut.",
     systemPrompt:
       `You operate the user's Mac.\n\n` +
       `open_app opens or fronts an app by name; that alone needs no plan. ` +
@@ -466,7 +470,8 @@ async function routeInner(
         // against too (routing-fast.ts) -- one source, so the two routers
         // cannot drift apart on what a request means.
         `Examples:\n` +
-        ROUTING_EXAMPLES.filter((e) => list.some((s) => s.name === e.specialist))
+        resolveExamples(ROUTING_EXAMPLES)
+          .filter((e) => list.some((s) => s.name === e.specialist))
           .map((e) => `"${e.text}" -> {"specialist": "${e.specialist}"}`)
           .join("\n") +
         (customExamples ? `\n${customExamples}` : ""),

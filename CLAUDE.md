@@ -406,6 +406,13 @@ MCP server. People reach for MCP when they needed a skill.
   `<tool_call>` scavenging never see the text, because the failed parse
   consumes it first. `scripts/patch-runtime.mjs` makes the parser use
   `raw_decode`; `install.sh` re-applies it after every pull.
+- A specialist with no example in the model router's prompt is unreachable
+  for anything ambiguous, and nothing fails: the planner had none from the
+  day it was added, and nearly every calendar or todo change the model
+  routed went to the operator. The examples are the router; descriptions
+  alone measurably move nothing. A test now holds one prompt example per
+  specialist. Tune them against `scripts/route-bench.mjs`, and judge a
+  change by cases it was not written for.
 - Cosine similarity and lexical-overlap scores are on different scales. They had
   a shared threshold once and keyword search silently returned nothing.
 - The lexical fallback needs stemming: people rephrase when they repeat
