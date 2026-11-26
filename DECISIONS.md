@@ -4406,3 +4406,93 @@ and the server already holds the samples).
 sound is 0.4 of the first clip, however it is cut. A faster build of the
 voice (a different quantisation, or the GPU) would move that number for
 every sentence; nothing here does.
+
+### A follow-up is searched with its thread, and a score is not a name (November 2026)
+
+**The report:** after a web answer, the next question did not seem to use
+it. The trace showed why, and it was not the thread: every earlier message
+is in the prompt on every turn (`docs/chatting.md`). The researcher's
+search runs before the model's first call, and it ran with the user's new
+words alone. "Weren't there games for the Brazilian Cup yesterday?" was
+answered; "What happened to Flamengo?" then searched for those four words
+and brought back the club's Wikipedia page, a Florida restaurant, and a
+Copa Libertadores dispute. The model answered from the pages in front of
+it, as told. The user asked a third time with the cup spelled out.
+
+So the conversation was remembered and the lookup was not. The seed took
+the judgement "whether to search" away from the model and, with it, the
+only place the thread could have shaped the query.
+
+**The change** (`src/followup.ts`): a research question with a thread
+behind it gets its query completed from that thread. The model is given
+the last three questions, the last answer and the new question, and
+returns `{"continues", "query"}`. The harness then refuses the rewrite
+unless every word it added is already in the conversation and every word
+the user typed that names something is still there. A refusal searches the
+user's own words, which is what happened before. A first question never
+makes the call. The trace records `seed_query` with what was asked and
+what the thread supplied.
+
+**Measured** (`scripts/followup-bench.mjs`, Qwen3 4B, cases written before
+the first run and never tuned against):
+
+| | |
+|---|---|
+| Unrelated question in a thread, left as typed | 20 of 20 |
+| Follow-up completed, by the words listed beforehand | 15 of 20 |
+| Follow-up completed with the thread's subject, read by eye | 17 of 20 |
+| Follow-up left as typed | 3 of 20 |
+| Added time, median | 0.9 s |
+
+The second and third rows differ by two cases where the list wanted
+"brazil" or "election" and the query said "Lula da Silva" and "uk 2029".
+The three left as typed were "and of spain?", "what are their names?" and
+"will the eurostar run?". They are searched as they always were.
+
+The first row is the one that decided it. A wrong completion searches for
+a mixture of two subjects, which is worse than the bare question.
+
+**Replayed:** the same thread against the running app. The search was
+"What happened to Flamengo in the 2026 Copa do Brasil?" and the answer was
+about the cup, in one pass.
+
+**Rejected:**
+- *Appending the previous question's words without asking the model.* It
+  cannot tell a follow-up from a new subject, and the second case is the
+  one that must not be touched.
+- *Letting the rewrite stand unchecked.* The model reaching for what it
+  remembers is the failure the seeded search exists to prevent.
+- *Giving the search the whole thread.* A search engine handed forty
+  messages returns pages about the longest of them.
+- *Leaving it to the model to search again with better words.* It can, and
+  in these traces it did not: the instruction it follows best is "answer
+  from these results".
+
+**The second finding, in the same turn.** The answer to "What happened to
+Flamengo?" was correct for what was searched, and was then withdrawn. The
+check that catches invented names (`namesWithoutEvidence`) treated every
+bold span as a name and compared it as typed: the model wrote "0–0",
+"3–0 victory" and "28 November 2026", the page said "0-0", "3-0 win" and
+"28 November", and all three were called inventions. The correction came
+back as an audit of the first answer in place of an answer.
+
+Changed: dashes are compared as one character; a bold span with a figure
+in it is supported when its figures are in the evidence; a bold span with
+no capital in it is a phrase and is skipped. Names inside a bold span are
+still checked by the Title Case pass. Over the 29 stored research turns
+this stops flagging 35 spans, and the turn that invented a final against
+Botafogo is still caught.
+
+**Not fixed, and it matters:** that same answer would still be withdrawn,
+for "South American", because the page says "South America's". The check
+still fires on 13 of 29 stored research turns, and many of those are the
+model's wording of something the page does say ("GB RAM", "Intel Core",
+"The New York Post"). The original note on the check says a false alarm
+"costs a corrective round, never a wrong answer". These traces say it
+costs the answer: the corrected reply reads as a report on the first one.
+Settling when a missing name should withdraw a reply needs a labelled set
+of those turns, not another rule added by eye.
+
+**Open:** memory recall and routing also see only the new message. Neither
+was changed. Whether to complete the question once and hand the same
+completed form to all three is the obvious next question.

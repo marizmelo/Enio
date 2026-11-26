@@ -76,6 +76,25 @@ This is worth the space specifically because the model is small. It reads a
 page and writes a paragraph, and in the paragraph a summary and an invention
 look identical.
 
+### Follow-up questions
+
+Every message is answered with the whole conversation behind it. A web
+search is a separate matter: it needs words, and a follow-up often leaves
+out the ones that matter. Ask "weren't there cup games yesterday?" and then
+"what happened to Flamengo?", and the second question says nothing about a
+cup.
+
+So when a research question follows earlier ones, Enio completes it from
+the conversation before searching. Open the search badge to see the words
+that were actually used. Only words already in the conversation can be
+added, and a question about something new is searched exactly as you typed
+it.
+
+It does not always catch a follow-up. If an answer is about the wrong
+thing, open the search badge: the words it searched with will show
+whether the question was read as a new one, and saying the subject in the
+question fixes it.
+
 ## Reading a reply as it arrives
 
 The thread follows the answer while you are at the bottom, and stops following

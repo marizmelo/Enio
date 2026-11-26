@@ -23,6 +23,7 @@ import { noteTurn as noteGap } from "./memory/gaps.js";
 import { personalityView } from "./personality.js";
 import { panelRequest } from "./panels.js";
 import { draftFlow, flowReply } from "./flow.js";
+import { seedQuery } from "./followup.js";
 import { enterAssetTurn, leaveAssetTurn, noteAssetAgent, placeNewFile } from "./assets.js";
 import { createMoodTrack, type Mood } from "./mood.js";
 import {
@@ -613,12 +614,36 @@ export function looksLikeQuotedEmail(text: string): boolean {
  * present costs a corrective round, never a wrong answer.
  */
 export function namesWithoutEvidence(reply: string, evidence: string[], question: string): string[] {
-  const hay = (evidence.join("\n") + "\n" + question).toLowerCase().replace(/\s+/g, " ");
+  // One dash. A model writes a score as "0–0" and the page it read says
+  // "0-0"; compared as typed, every score and date range in a reply was an
+  // invention.
+  const plain = (text: string) => text.replace(/[\u2010-\u2015\u2212]/g, "-");
+  const hay = plain(evidence.join("\n") + "\n" + question).toLowerCase().replace(/\s+/g, " ");
+  const hayWords = new Set(hay.split(/[^\p{L}\p{N}-]+/u));
   const candidates = new Set<string>();
-  for (const m of reply.matchAll(/\*\*([^*\n]{3,80})\*\*/g)) candidates.add(m[1]!.trim());
+  for (const m of reply.matchAll(/\*\*([^*\n]{3,80})\*\*/g)) {
+    const span = plain(m[1]!.trim());
+    // Bold is emphasis as often as it is a name, and two kinds of emphasis
+    // are not names at all. A span with a figure in it -- a score, a date,
+    // "3-0 victory" -- is supported when its figures are in the evidence:
+    // "victory" for the page's "win" is the model's wording, not a claim.
+    // The names inside such a span are still checked, by the Title Case
+    // pass below. And a span with no capital in it ("not confirmed") is a
+    // phrase. Watched: a correct answer about a 0-0 draw and a 3-0 protest
+    // was withdrawn for naming "0–0", "3–0 victory" and "28 November 2026",
+    // all three on the page, and the correction came back as an audit of
+    // the first answer in place of an answer.
+    if (/\d/.test(span)) {
+      const figures = span.toLowerCase().split(/[^\p{L}\p{N}-]+/u).filter((w) => /\d/.test(w));
+      if (figures.every((f) => hayWords.has(f) || hay.includes(f))) continue;
+    } else if (!/(?:^|\s)\p{Lu}/u.test(span)) {
+      continue;
+    }
+    candidates.add(span);
+  }
   // No period inside a word: "Arquitetos. Estúdio" must be two runs, not one.
   const TITLE = /(?:\p{Lu}[\p{L}'’-]+)(?:\s+(?:de|da|do|dos|das|e|of|and|the|&|\p{Lu}[\p{L}'’-]+)){1,6}/gu;
-  for (const m of reply.matchAll(TITLE)) {
+  for (const m of plain(reply).matchAll(TITLE)) {
     const run = m[0]!.trim();
     if (run.split(/\s+/).filter((w) => /^\p{Lu}/u.test(w)).length >= 2) candidates.add(run);
   }
@@ -1570,8 +1595,8 @@ async function runTurnInner(
   // only the first iteration; only a real question (a greeting or a bare
   // "thanks" would search for nothing); and never when the turn already
   // came in with a skill invoked, since that skill may say what to do
-  // instead. The user's words are the query -- composing a better one would
-  // be a model call, which is the latency this exists to remove.
+  // instead. The user's words are the query, completed from the thread when
+  // there is one (see below): a first question pays no extra call.
   const searchTool = activeTools.find((t) => t.name === "web_search");
   const looksLikeQuestion = questionShaped(userInput);
   // Memory and this thread come before the web. The known set is every
@@ -1631,8 +1656,26 @@ async function runTurnInner(
     !(overrides.skills && overrides.skills.length > 0)
   ) {
     // Mentions are already stripped upstream (parseMentions runs before
-    // runTurn), so the input is the plain question.
-    const query = userInput.trim().slice(0, 200);
+    // runTurn), so the input is the plain question. A first question is
+    // searched as typed. One with a thread behind it is completed from that
+    // thread first, because "what happened to Flamengo?" asked after a
+    // question about the cup searched for the club in general and the model
+    // answered from pages about something else (followup.ts). The trace says
+    // when that happened, so a search that differs from the question never
+    // looks like the model's own idea.
+    const seeded = await seedQuery(userInput, history);
+    const query = seeded.query;
+    if (seeded.via === "thread") {
+      steps.push({
+        seq: steps.length,
+        kind: "harness",
+        name: "seed_query",
+        args: JSON.stringify({ asked: userInput.trim().slice(0, 200), added: seeded.added }),
+        output: query,
+        error: null,
+        durationMs: 0,
+      });
+    }
     const call: ToolCall = {
       id: "seed_search",
       type: "function",

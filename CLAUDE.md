@@ -369,6 +369,7 @@ src/
   mentions.ts     /skill and @mention parsing
   notes.ts        the managed note store: transforms, comment anchors
   assets.ts       the dated store of what Enio made, each with its origin
+  followup.ts     completes a follow-up's search query from its thread
   tasks.ts        scheduler
   suggest.ts      mines traces for what's worth automating
   vision.ts       images → text
@@ -444,6 +445,15 @@ MCP server. People reach for MCP when they needed a skill.
   alone measurably move nothing. A test now holds one prompt example per
   specialist. Tune them against `scripts/route-bench.mjs`, and judge a
   change by cases it was not written for.
+- The whole thread is in the prompt on every turn, and a follow-up to a web
+  answer still ignored it: the researcher's seeded search ran with the new
+  message alone, so "what happened to Flamengo?" after a question about the
+  cup searched for the club in general, and the model answered from pages
+  about something else. It looked like lost memory and was a lost query.
+  `followup.ts` completes the query from the thread, and the harness
+  refuses any word the thread did not hold. Anything else that acts on the
+  bare message before the model sees the thread has the same hole; memory
+  recall and routing still do.
 - Cosine similarity and lexical-overlap scores are on different scales. They had
   a shared threshold once and keyword search silently returned nothing.
 - The lexical fallback needs stemming: people rephrase when they repeat

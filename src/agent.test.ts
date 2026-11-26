@@ -790,6 +790,32 @@ describe("names without evidence", () => {
     );
     assert.deepEqual(out, []);
   });
+
+  test("a score, a date and plain emphasis in bold are not names", async () => {
+    const { namesWithoutEvidence } = await import("./agent.js");
+    // The page writes a hyphen and "win"; the model writes an en dash and
+    // "victory". Compared as typed this correct answer was withdrawn.
+    const evidence = [
+      "Flamengo and Estudiantes drew 0-0 on 22 October 2026. Flamengo wants a 3-0 win. " +
+        "A ruling could put it in the 28 November final of the Copa Libertadores.",
+    ];
+    const reply =
+      "Flamengo and Estudiantes drew **0–0**. Flamengo asked for a **3–0 victory**, which is **not confirmed**. " +
+      "The final is on **28 November 2026**, in the **2026 Copa Libertadores**.";
+    assert.deepEqual(namesWithoutEvidence(reply, evidence, "what happened to flamengo"), []);
+  });
+
+  test("a figure the sources never gave is still an invention, and so is a name beside a real figure", async () => {
+    const { namesWithoutEvidence } = await import("./agent.js");
+    const evidence = ["Flamengo and Estudiantes drew 0-0 on 22 October 2026."];
+    const out = namesWithoutEvidence(
+      "The match ended **4–3 on penalties**, and **Botafogo Athletic 2026** went through.",
+      evidence,
+      "what happened to flamengo",
+    );
+    assert.ok(out.some((n) => /4-3/.test(n)), `the score is invented: ${out}`);
+    assert.ok(out.some((n) => /Botafogo Athletic/.test(n)), `the name is invented although 2026 is real: ${out}`);
+  });
 });
 
 describe("thread coverage is strict", () => {
