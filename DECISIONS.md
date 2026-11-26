@@ -4071,10 +4071,9 @@ written for, never by the case it was aimed at.
 
 **Chose:** before routing, a chat message that joins two things and whose
 steps need two agents is answered with a pipeline draft (`src/flow.ts`).
-The reply lists the steps and the agent for each, a card opens the draft on
-the Automations canvas, and the turn ends there. Reviewing, changing,
-running and reading the outcome are the canvas's existing draft flow,
-untouched. `plan:` at the start of a message asks for a plan outright; an
+The reply lists the steps and the agent for each, a card under it holds the
+draft, and the turn ends there. (As first built the card only opened the
+Automations canvas; see the correction below.) `plan:` at the start of a message asks for a plan outright; an
 `@mention` skips one; `ENIO_FLOW_PLANS=0` turns it off.
 
 **Why.** The specialists' tools are disjoint on purpose, so "search the web
@@ -4124,13 +4123,70 @@ canvas exists; a card that opens it is thirty lines, a poorer copy of it is
 a second thing to keep right); "make a plan for..." as the explicit door
 (also how someone asks for a travel plan; `plan:` is not).
 
+**Corrected the same day: the plan runs in the thread.** The first version
+of the card only opened the canvas, and the entry above this line called
+running there "the canvas's existing draft flow, untouched" as if that were
+a virtue. Used once, it was plainly wrong: the plan ran in a dialog, the
+results stayed in the dialog, and the conversation that had asked still had
+no answer in it. The request is made in chat, so chat is where it runs and
+where the answer goes. Now the card has Run, Stop, Edit and Save; each step
+ticks in place; and when the run ends the server writes the outcome into
+the conversation as a reply (`recordFlowOutcome`). The canvas, opened from
+a plan, offers **Use in chat** where Run was: it is for changing a plan and
+for keeping it.
+
+- **The outcome is assembled, not written.** `flowOutcome` builds it from
+  the executor's own results: each step, its agent, what that agent
+  replied, or why it did not run. A summarising step was rejected because
+  it is one more generation able to say a failed step worked.
+- **Earlier steps are clipped to 600 characters, the last is whole.** The
+  last finished step is the answer; a researcher's full reply ahead of it
+  buries the result and fills a 2,000-token window on the next turn.
+- **It is a real message.** Stored in the transcript and traced as a
+  `flow_run` harness step, so a follow-up has it as history, a reopened
+  conversation shows it with its files, and the plan's card says it ran
+  instead of offering "nothing has run" above the reply that says what did.
+- **A run on the card vouches for the plan.** Save from the card opens the
+  canvas with that run adopted, so nothing has to be run twice to be kept.
+
+- **A step that made nothing is not counted as done.** The first real run
+  reported "2 of 2 steps finished" above a document step whose whole reply
+  was the harness's own "I described doing that, but I did not actually run
+  anything". The executor calls a step finished when its turn returns. For
+  an ability that exists to produce a thing (no `text` among its outputs),
+  the outcome now checks that a thing of that kind came out and says
+  "finished without making a document" when it did not. Reported, not
+  enforced: the executor still treats the step as finished, because
+  failing it there would also change every saved automation, on the
+  strength of one regex-recovered artifact list.
+- **The run's working session belongs to the conversation.** Each run
+  executes its steps in a session of its own. Unmarked, that session
+  appeared in History as a conversation opening on a step's prompt, and as
+  the newest thing written it was what the app reopened at launch instead
+  of the conversation that asked. `sessions.parent_id` marks it; History
+  and resume skip marked sessions. Runs from the canvas and scheduled runs
+  are unchanged, since nothing else holds their results.
+- **Figures the drafter added are pointed out, not forbidden.** Asked for
+  "the best budget laptops" the composer wrote "under $600, focusing on
+  top models in 2024", in November 2026, and the researcher then failed to
+  find what nobody had asked for. Telling the composer not to was measured
+  on the 24 multi-agent requests: as its own rule, 19 drafted instead of
+  22; folded into the step-prompt rule, 20; and it still invented a figure
+  in two or three drafts either way, against five with no rule. So the
+  composer prompt is as it was, and `addedFigures` compares each step with
+  the request and names the prices, years, counts and times that are the
+  drafter's, under the step, where the person is one Edit from removing
+  them. Figures only: a closed thing a comparison can decide.
+
+**Rejected:** a "Run the plan" user bubble in front of the outcome (the
+person clicked a button and typed nothing; two replies in a row is what
+happened); keeping Run on the canvas for plans as well (two places to run
+one plan, one of which loses the answer); persisting an edit that was never
+run (the card would have to become a stored object with its own lifecycle,
+for a draft someone chose not to run).
+
 **Not built, and when it would be worth it:**
 
-- **The outcome in the thread.** A run's results stay on the canvas and in
-  the automation's history, so a follow-up in chat ("now send that to
-  Ana") has the plan as context and not what it produced. Worth building
-  once plans are actually run from chat often enough to see that follow-up
-  fail.
 - **One-clause requests for two agents.** "email me a summary of today's
   news" has no "and" in it, so the grammar never shows it to the composer
   and it routes to one agent. `plan:` is the door for now. A cheaper

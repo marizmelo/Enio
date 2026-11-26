@@ -14,14 +14,22 @@ const now = () => Date.now();
 
 /* ---------- sessions & raw log ------------------------------------------ */
 
-export function startSession(): string {
+/**
+ * `parent`, when given, is the conversation this session does work for (a
+ * plan run from a thread). Such a session holds real turns and traces like
+ * any other, but it is not a conversation anyone had: unmarked, each run
+ * appeared in History as a thread opening on a step's prompt, and being the
+ * newest thing written, it was what the app reopened at launch instead of
+ * the conversation that asked for the run.
+ */
+export function startSession(parent: string | null = null): string {
   const id = randomUUID();
   // Stamped at creation from whichever project is open, so resuming a
   // project can find its conversations. project.ts is a leaf module; the
   // import cannot cycle.
   getDb()
-    .prepare(`INSERT INTO sessions (id, started_at, project_id) VALUES (?, ?, ?)`)
-    .run(id, now(), activeProject()?.id ?? null);
+    .prepare(`INSERT INTO sessions (id, started_at, project_id, parent_id) VALUES (?, ?, ?, ?)`)
+    .run(id, now(), activeProject()?.id ?? null, parent);
   return id;
 }
 
@@ -840,6 +848,7 @@ export function listConversations(limit = 50, projectId?: string): ConversationS
          FROM sessions s
          JOIN messages m ON m.session_id = s.id
         WHERE (? IS NULL OR s.project_id = ?)
+          AND s.parent_id IS NULL
         GROUP BY s.id
         ORDER BY lastAt DESC
         LIMIT ?`,
@@ -875,6 +884,7 @@ export function latestSessionForProject(projectId: string): string | null {
          FROM sessions s
          JOIN messages m ON m.session_id = s.id
         WHERE s.project_id = ?
+          AND s.parent_id IS NULL
         GROUP BY s.id
         ORDER BY lastAt DESC
         LIMIT 1`,
@@ -964,6 +974,7 @@ export function conversationMessages(sessionId: string): StoredMessage[] {
   // silently attaching one reply's tools to another is worse than showing
   // none: it is a wrong answer to "where did this come from".
   const assistants = messages.filter((m) => m.role === "assistant");
+  const drafts = new Map<string, { ran?: string }>();
   for (const turn of routed) {
     const target = assistants.find((m) => m.ts >= turn.startedAt);
     if (target && !target.agent) target.agent = turn.specialist;
@@ -992,10 +1003,36 @@ export function conversationMessages(sessionId: string): StoredMessage[] {
     // open them with.
     if (step.kind === "harness" && step.name === "flow_draft") {
       try {
-        const f = JSON.parse(step.args || "{}") as { nodes?: unknown };
-        if (Array.isArray(f.nodes) && f.nodes.length > 0) target.flow = f;
+        const f = JSON.parse(step.args || "{}") as { id?: string; nodes?: unknown; ran?: string };
+        if (Array.isArray(f.nodes) && f.nodes.length > 0) {
+          target.flow = f;
+          if (typeof f.id === "string") drafts.set(f.id, f);
+        }
       } catch {
         /* an unreadable draft leaves the reply as its text, which has the steps */
+      }
+    }
+    // A run of that plan: its files ride with the outcome reply, and the
+    // draft's card learns it already ran — a restored card still offering
+    // "nothing has run" above the reply that says what ran would be a lie.
+    if (step.kind === "harness" && step.name === "flow_run") {
+      try {
+        const r = JSON.parse(step.args || "{}") as {
+          flowId?: string;
+          status?: string;
+          artifacts?: Array<{ type?: string; path?: string }>;
+        };
+        const draft = typeof r.flowId === "string" ? drafts.get(r.flowId) : undefined;
+        if (draft && (r.status === "succeeded" || r.status === "failed" || r.status === "cancelled")) {
+          draft.ran = r.status;
+        }
+        for (const a of r.artifacts ?? []) {
+          if (!a.path) continue;
+          const list = (target.artifacts ??= []);
+          if (!list.some((x) => x.path === a.path)) list.push({ type: a.type ?? "file", path: a.path });
+        }
+      } catch {
+        /* the outcome reply still stands as text */
       }
     }
     // Same for the mood: the face a restored reply shows is the one it had.

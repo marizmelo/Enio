@@ -149,9 +149,12 @@ Every hand-off compounds error and at this model size it compounds fast.
 **A request for two specialists gets a draft, never a chain.** Disjoint tools
 mean "search the web and email me a summary" has no right route. `flow.ts`
 answers it with a pipeline draft — the composer's closed-list choice, shown
-as a plan — and the turn ends there. Running is a user act on the Automations
-canvas, each step its own single hop. Do not make the turn run the draft, and
-do not put the composer in front of every message: alone it called 11 of 127
+as a plan — and the turn ends there. Running is a user act on the card under
+that reply, each step its own single hop, and the outcome is written back
+into the conversation as a reply the harness assembles from the executor's
+results (`flowOutcome`) — never a model's summary of them, and never left on
+the Automations canvas, where the first version stranded it. Do not make the
+turn run the draft, and do not put the composer in front of every message: alone it called 11 of 127
 single-agent requests a flow and costs two seconds, which is why a grammar
 check stands in front of it (`scripts/flow-bench.mjs`).
 

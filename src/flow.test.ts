@@ -83,6 +83,34 @@ describe("which messages are shown to the composer", () => {
   }
 });
 
+describe("figures the drafter added are pointed out", () => {
+  test("a price and a year nobody gave are named; the user's own numbers are not", () => {
+    assert.deepEqual(
+      flow.addedFigures(
+        "search the web for the best budget laptops and write up the three best",
+        "Search for the best budget laptops under $600, top models in 2024, and pick 3.",
+      ),
+      ["$600", "2024"],
+    );
+    assert.deepEqual(flow.addedFigures("add the 9am train on the 12th", "Add the 9 am train on the 12th to the calendar"), []);
+    assert.deepEqual(flow.addedFigures("schedule a picnic on saturday", "Schedule a picnic for Saturday at 3:00"), ["3:00"]);
+  });
+
+  test("the plan says so under the step it is in", () => {
+    const reply = flow.flowReply({
+      id: "f",
+      request: "find budget laptops and write them up",
+      nodes: [
+        { id: "n1", abilityId: "web-search", title: "Web search", agent: "researcher", prompt: "Find laptops under $600" },
+        { id: "n2", abilityId: "create-document", title: "Create document", agent: "coder", prompt: "Write them up" },
+      ],
+      edges: [],
+    });
+    assert.match(reply, /Find laptops under \$600\n   Not in your request, added by the drafter: \$600\.\n2\. /);
+    assert.doesNotMatch(reply, /Write them up\n   Not in your request/);
+  });
+});
+
 describe("a request for more than one agent ends on a draft", () => {
   test("the turn returns the plan, draws its card, runs nothing, and is restorable", async () => {
     const registry = await buildRegistry();
@@ -168,5 +196,137 @@ describe("a request for more than one agent ends on a draft", () => {
     assert.equal(draft?.nodes.length, 2);
     assert.equal(draft?.request, "write a cover letter for the analyst role");
     assert.match(flow.flowReply(draft!), /^Here is the plan\. Nothing has run yet\./);
+  });
+});
+
+describe("what a run did goes back into the conversation", () => {
+  const nodes = [
+    { id: "n1", abilityId: "web-search" },
+    { id: "n2", abilityId: "create-document" },
+    { id: "n3", abilityId: "send-email" },
+  ];
+
+  test("the outcome names each step with what its agent replied, the last one whole", () => {
+    const long = "A finding. ".repeat(200);
+    const text = flow.flowOutcome(
+      nodes.slice(0, 2),
+      [
+        { nodeId: "n1", status: "finished", reply: long },
+        { nodeId: "n2", status: "finished", reply: `Saved laptops.md. ${long}` },
+      ],
+      "succeeded",
+    );
+    assert.match(text, /^The plan ran: 2 of 2 steps finished\./);
+    assert.match(text, /\*\*1\. Web search\*\* \(researcher\)/);
+    assert.match(text, /\*\*2\. Create document\*\* \(coder\)\nSaved laptops\.md\./);
+    // The earlier step is how the answer was reached: clipped. The last
+    // finished step is the answer: whole.
+    const [, first, second] = text.split(/\*\*\d\. /);
+    assert.ok(first!.length < 800 && first!.includes("…"), `earlier step is clipped: ${first!.length}`);
+    assert.ok(second!.length > long.length, "the last step is given whole");
+  });
+
+  test("a failed step and the ones it stranded are said, never smoothed over", () => {
+    const text = flow.flowOutcome(
+      nodes,
+      [
+        { nodeId: "n1", status: "finished", reply: "Found three." },
+        { nodeId: "n2", status: "failed", reply: "", error: "write_file was refused" },
+        { nodeId: "n3", status: "skipped", reply: "" },
+      ],
+      "failed",
+    );
+    assert.match(text, /^The plan did not finish: 1 of 3 steps finished\./);
+    assert.match(text, /Create document\*\* \(coder\): failed\. write_file was refused/);
+    assert.match(text, /Send email\*\* \(mail\): not run/);
+    assert.match(flow.flowOutcome(nodes, [], "cancelled"), /^You stopped the plan: 0 of 3 steps finished\./);
+  });
+
+  test("a step that finished without making what it was for is not counted as done", () => {
+    const two = nodes.slice(0, 2);
+    const narrated = flow.flowOutcome(
+      two,
+      [
+        { nodeId: "n1", status: "finished", reply: "Found three.", made: [] },
+        { nodeId: "n2", status: "finished", reply: "I described doing that, but I did not actually run anything.", made: [] },
+      ],
+      "succeeded",
+    );
+    assert.match(narrated, /^The plan ran: 2 of 2 steps finished, 1 of them without making what it was for\./);
+    assert.match(narrated, /Create document\*\* \(coder\): finished without making a document\.\nI described/);
+    // A web search is for an answer, not a file: making none is not a miss.
+    assert.doesNotMatch(narrated, /Web search\*\* \(researcher\): finished without/);
+
+    const wrote = flow.flowOutcome(
+      two,
+      [
+        { nodeId: "n1", status: "finished", reply: "Found three.", made: [] },
+        { nodeId: "n2", status: "finished", reply: "Saved laptops.md.", made: ["document"] },
+      ],
+      "succeeded",
+    );
+    assert.match(wrote, /^The plan ran: 2 of 2 steps finished\.\n/);
+    // What was made is unknown: nothing is concluded from that.
+    assert.match(
+      flow.flowOutcome(two.slice(1), [{ nodeId: "n2", status: "finished", reply: "Done." }], "succeeded"),
+      /^The plan ran: 1 of 1 step finished\.\n/,
+    );
+  });
+
+  test("the reply lands in the thread, keeps its files, and the plan's card learns it ran", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    script(TWO_AGENTS);
+    const widgets: Widget[] = [];
+    await runTurn("search the web for budget laptops and write up the three best", [], registry, sessionId, {
+      onWidget: (w) => widgets.push(w),
+    });
+    const card = widgets[0]!;
+    assert.equal(card.type, "flow");
+    if (card.type !== "flow") return;
+    assert.match(card.id, /^[0-9a-f-]{36}$/);
+
+    const before = store.conversationMessages(sessionId);
+    assert.equal((before[1]!.flow as { ran?: string }).ran, undefined, "not run yet");
+
+    // Restore pairs a trace step with the first reply at or after it; a
+    // tick apart keeps this run's step off the plan's own reply.
+    await new Promise((r) => setTimeout(r, 5));
+    const reply = flow.recordFlowOutcome({
+      sessionId,
+      flowId: card.id,
+      runId: "run-1",
+      nodes: card.nodes,
+      results: [
+        { nodeId: "n1", status: "finished", reply: "Found three." },
+        { nodeId: "n2", status: "finished", reply: "Saved laptops.md." },
+      ],
+      status: "succeeded",
+      artifacts: [{ type: "document", path: "laptops.md" }],
+    });
+
+    const after = store.conversationMessages(sessionId);
+    assert.deepEqual(after.map((m) => m.role), ["user", "assistant", "assistant"]);
+    assert.equal(after[2]!.content, reply);
+    assert.deepEqual(after[2]!.artifacts, [{ type: "document", path: "laptops.md" }]);
+    assert.equal((after[1]!.flow as { ran?: string }).ran, "succeeded");
+    assert.equal(after[2]!.flow, undefined, "the outcome is a reply, not a second plan");
+  });
+
+  test("the session a run works in is not a conversation: History and resume skip it", () => {
+    const asked = store.startSession();
+    store.logMessage(asked, "user", "search the web and write it up");
+    store.logMessage(asked, "assistant", "Here is a plan.");
+    // The run's own session, written to after the conversation: the newest
+    // thing in the database, and the thing that used to be reopened.
+    const working = store.startSession(asked);
+    store.logMessage(working, "user", "Find budget laptops");
+    store.logMessage(working, "assistant", "Found three.");
+
+    const listed = store.listConversations(50).map((c) => c.id);
+    assert.ok(listed.includes(asked));
+    assert.ok(!listed.includes(working), "a run's working session is not listed, so it cannot be the one reopened");
+    // Still there to be inspected, like any traced turn.
+    assert.equal(store.conversationMessages(working).length, 2);
   });
 });

@@ -117,6 +117,7 @@ import {
 } from "./project.js";
 import { buildIndexInBackground } from "./project-index.js";
 import { latestSessionForProject } from "./memory/store.js";
+import { recordFlowOutcome, type FlowStepResult } from "./flow.js";
 import { embeddingsDegraded } from "./memory/embed.js";
 import { generatedFiles, mentionContext, parseMentions } from "./mentions.js";
 import { SPECIALISTS, allSpecialists } from "./specialists.js";
@@ -1227,7 +1228,7 @@ async function handle(
     // a name. The ephemeral id exists only so the run can be stopped and,
     // if the user saves afterwards, adopted. Every executor guard (running
     // set, recursion flag, node gates) applies exactly as for a saved run.
-    let draft: { nodes: PipelineNode[]; edges: PipelineEdge[] };
+    let draft: { nodes: PipelineNode[]; edges: PipelineEdge[]; sessionId?: unknown; flowId?: unknown };
     try {
       draft = JSON.parse((await readBody(req)) || "{}");
     } catch {
@@ -1239,26 +1240,67 @@ async function handle(
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
     });
+    // A plan run from a conversation (flow.ts) names that conversation, and
+    // its outcome is written back into it as a reply. Collected from the
+    // executor's own events, so the reply reports what ran, not what the
+    // draft said would.
+    const nodes = draft.nodes ?? [];
+    const conversation =
+      typeof draft.sessionId === "string" && /^[0-9a-f-]{8,64}$/i.test(draft.sessionId) ? draft.sessionId : null;
+    const stepResults: FlowStepResult[] = [];
+    const made: Array<{ type: string; path: string }> = [];
+    let finished: { status: "succeeded" | "failed" | "cancelled"; runId: string } | null = null;
     try {
       await runPipeline(
         {
           id: randomUUID(),
           name: "(draft)",
           description: "",
-          nodes: draft.nodes ?? [],
+          nodes,
           edges: draft.edges ?? [],
           createdAt: Date.now(),
           lastRunAt: null,
         },
         registry,
         (event) => {
+          if (event.type === "node_finished") {
+            stepResults.push({
+              nodeId: event.nodeId,
+              status: "finished",
+              reply: event.reply,
+              made: event.artifacts.filter((a) => a.type !== "text").map((a) => a.type),
+            });
+            for (const a of event.artifacts) {
+              if (a.path && !made.some((m) => m.path === a.path)) made.push({ type: a.type, path: a.path });
+            }
+          } else if (event.type === "node_failed") {
+            stepResults.push({ nodeId: event.nodeId, status: "failed", reply: "", error: event.error });
+          } else if (event.type === "node_skipped") {
+            stepResults.push({ nodeId: event.nodeId, status: "skipped", reply: "" });
+          } else if (event.type === "run_finished") {
+            finished = { status: event.status, runId: event.runId };
+          }
           res.write(`data: ${JSON.stringify(event)}\n\n`);
         },
+        conversation,
       );
     } catch (err) {
       res.write(
         `data: ${JSON.stringify({ type: "run_finished", status: "failed", error: (err as Error).message })}\n\n`,
       );
+    }
+    const done = finished as { status: "succeeded" | "failed" | "cancelled"; runId: string } | null;
+    if (conversation && done) {
+      const reply = recordFlowOutcome({
+        sessionId: conversation,
+        flowId: typeof draft.flowId === "string" ? draft.flowId : null,
+        runId: done.runId,
+        nodes,
+        results: stepResults,
+        status: done.status,
+        artifacts: made,
+      });
+      res.write(`data: ${JSON.stringify({ type: "outcome", reply, status: done.status, artifacts: made })}\n\n`);
     }
     res.end();
     return;

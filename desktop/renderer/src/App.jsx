@@ -298,12 +298,51 @@ export function App() {
     const onFlow = (e) => {
       const d = e.detail;
       if (!Array.isArray(d?.nodes) || d.nodes.length === 0) return;
-      setFlowDraft({ request: d.request ?? "", nodes: d.nodes, edges: d.edges ?? [], nonce: Date.now() });
+      setFlowDraft({
+        id: d.id ?? null,
+        request: d.request ?? "",
+        nodes: d.nodes,
+        edges: d.edges ?? [],
+        runId: d.runId ?? null,
+        nonce: Date.now(),
+      });
       setPipelinesOpen(true);
     };
     window.addEventListener("enio:open-flow", onFlow);
     return () => window.removeEventListener("enio:open-flow", onFlow);
   }, []);
+
+  // What a plan's run did, arriving as a reply in the thread it was run
+  // from. Held back while a turn is streaming: that loop redraws the thread
+  // from its own copy of the history on every token and would wipe a
+  // message appended under it. The server has already stored the reply, so
+  // a conversation that was left meanwhile simply shows it when reopened.
+  const conversationIdRef = useRef(null);
+  conversationIdRef.current = conversationId;
+  const heldOutcomes = useRef([]);
+  const appendOutcome = useCallback((d) => {
+    if (d.sessionId !== conversationIdRef.current) return;
+    setMessages((prior) => [
+      ...prior,
+      { role: "assistant", content: d.reply, tools: [], artifacts: d.artifacts ?? [], agent: null },
+    ]);
+  }, []);
+  useEffect(() => {
+    const onOutcome = (e) => {
+      const d = e.detail;
+      if (!d?.reply) return;
+      if (streamingRef.current) heldOutcomes.current.push(d);
+      else appendOutcome(d);
+    };
+    window.addEventListener("enio:flow-outcome", onOutcome);
+    return () => window.removeEventListener("enio:flow-outcome", onOutcome);
+  }, [appendOutcome]);
+  useEffect(() => {
+    if (streaming || heldOutcomes.current.length === 0) return;
+    const held = heldOutcomes.current;
+    heldOutcomes.current = [];
+    held.forEach(appendOutcome);
+  }, [streaming, appendOutcome]);
 
   const backendReady = status.phase === "ready";
   // Open a part of the app by its closed name: the harness asks for it over

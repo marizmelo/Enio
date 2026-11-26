@@ -73,12 +73,14 @@ export type Widget =
   | { type: "found_files"; paths: string[] }
   /**
    * A draft plan for a request that takes more than one agent (flow.ts).
-   * Not an action waiting on approval like `plan` above: nothing is stored
-   * and nothing will run from it. The client opens it on the Automations
-   * canvas, where editing, running and reading the outcome already live.
+   * Unlike `plan` above it is not stored server-side: the client holds the
+   * graph, sends it back to run, and the outcome returns to the thread as
+   * a reply. `ran` is set on restore when the trace shows it already did.
    */
   | {
       type: "flow";
+      id: string;
+      ran?: "succeeded" | "failed" | "cancelled";
       request: string;
       nodes: Array<{ id: string; abilityId: string; title: string; agent: string; prompt: string }>;
       edges: Array<{ from: string; to: string }>;

@@ -23,8 +23,8 @@ const RENDERERS = {
   flow: FlowWidget,
 };
 
-export function Widget({ widget, onOpenFile }) {
+export function Widget({ widget, onOpenFile, sessionId = null }) {
   const Renderer = RENDERERS[widget?.type];
   if (!Renderer) return null;
-  return <Renderer {...widget} onOpenFile={onOpenFile} />;
+  return <Renderer {...widget} onOpenFile={onOpenFile} sessionId={sessionId} />;
 }

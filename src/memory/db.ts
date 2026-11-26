@@ -268,6 +268,12 @@ function migrate(d: Database.Database): void {
   // list is small, read whole, and written whole -- and it rides the row
   // whose lifetime it shares.
   addColumn(d, "sessions", "attachments", "TEXT");
+  // The conversation a session works for. A plan run from a conversation
+  // executes its steps in a session of its own, so they trace like any
+  // turn; this says that session is that conversation's working room, not
+  // a conversation someone had, which keeps it out of History and out of
+  // "reopen the last conversation".
+  addColumn(d, "sessions", "parent_id", "TEXT");
   // A fact that stops being true is closed, not deleted — the same rule edges
   // already follow. valid_to says when; superseded_by says by which newer
   // fact, so a correction is traceable and a wrong one can be undone. origin

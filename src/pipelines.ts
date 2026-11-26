@@ -680,6 +680,10 @@ export async function runPipeline(
   pipeline: Pipeline,
   registry: Registry,
   emit: (event: RunEvent) => void,
+  /** The conversation this run was started from, when it was (a plan run
+   *  in a thread): its session is then that conversation's, not one of its
+   *  own in History. */
+  parentSession: string | null = null,
 ): Promise<{ runId: string; status: "succeeded" | "failed" | "cancelled" }> {
   const valid = validatePipeline(pipeline.nodes, pipeline.edges);
   if (!valid.ok) throw new Error(valid.reason);
@@ -696,7 +700,7 @@ export async function runPipeline(
 
   // One session for the whole run: every node's turn lands in the ordinary
   // trace tables, so a pipeline is inspectable exactly like a conversation.
-  const sessionId = startSession();
+  const sessionId = startSession(parentSession);
   setMemorySession(sessionId);
   setPlanSession(sessionId);
   setBrowseSession(sessionId);

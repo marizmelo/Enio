@@ -24,6 +24,7 @@ import {
   Inbox,
   Loader2,
   PencilLine,
+  Check,
   Play,
   Plus,
   Send,
@@ -304,8 +305,11 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipe
     setPrompt(draft.request ?? "");
     setCurrent({ name: "" });
     setName("");
-    setHasRun(false);
-    setLastRunId(null);
+    // A plan that just ran in the conversation arrives with that run: it
+    // has been seen to work, so it can be saved without running it again
+    // here, and the save adopts the run so the automation is born vouched.
+    setHasRun(Boolean(draft.runId));
+    setLastRunId(draft.runId ?? null);
     setArtifacts([]);
     setSelectedNode(null);
     setView("canvas");
@@ -326,6 +330,30 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipe
     }),
     [nodes, edges],
   );
+
+  // A plan opened from a conversation is here to be changed or kept, not
+  // run: it runs in the thread it was asked in, and that is where its
+  // answer goes. So this hands the graph back instead of offering Run —
+  // running it here left the conversation without a reply.
+  const fromChat = Boolean(draft?.id) && !current?.id;
+  const useInChat = () => {
+    const g = fromFlow();
+    window.dispatchEvent(
+      new CustomEvent("enio:flow-edited", {
+        detail: {
+          id: draft.id,
+          nodes: g.nodes.map((n) => ({
+            id: n.id,
+            abilityId: n.abilityId,
+            prompt: n.prompt,
+            title: byId.get(n.abilityId)?.title ?? n.abilityId,
+          })),
+          edges: g.edges,
+        },
+      }),
+    );
+    onOpenChange(false);
+  };
 
   const compose = async () => {
     if (!prompt.trim()) return;
@@ -995,7 +1023,11 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipe
                   disabled={running}
                   onChange={(e) => setName(e.target.value)}
                 />
-                {running ? (
+                {fromChat ? (
+                  <Button size="sm" className="gap-1" disabled={busy || nodes.length === 0} onClick={useInChat}>
+                    <Check className="size-3.5" /> Use in chat
+                  </Button>
+                ) : running ? (
                   <Button size="sm" variant="destructive" className="gap-1" disabled={!stopTarget} onClick={stop}>
                     <Square className="size-3.5" /> Stop
                   </Button>
@@ -1040,7 +1072,9 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipe
                 )}
                 {!current?.id && !hasRun && nodes.length > 0 && (
                   <p className="text-[10px] leading-tight text-muted-foreground">
-                    Run it once — Save unlocks after you've seen it work.
+                    {fromChat
+                      ? "It runs in the conversation. Save unlocks after you've seen it work there."
+                      : "Run it once — Save unlocks after you've seen it work."}
                   </p>
                 )}
               </div>

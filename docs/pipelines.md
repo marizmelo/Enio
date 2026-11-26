@@ -138,17 +138,30 @@ can send cannot search. Ask that in chat and Enio does not pick one of them.
 It answers with a **plan**: the steps, which agent runs each, and a card that
 says nothing has run yet.
 
-**Review and run** opens the plan on the automation canvas, as the same
-draft you would get by describing it there. From that point it is an
-ordinary automation:
+The card under that reply is where the plan is run, and the conversation is
+where its answer arrives:
 
-1. **Review** the steps and how they connect.
-2. **Change** any of them: edit a step's guidance, add or remove a step,
-   rewire the connections.
-3. **Run** it. Nothing runs before this, and every safety gate still applies
-   inside each step.
-4. **Read the outcome**: each step shows what it did and the files it made.
-5. **Save** it, if you want it again or on a schedule.
+1. **Review** the steps in the reply. If the drafter put a price, a year or
+   a count into a step that you never gave, the reply says so under that
+   step.
+2. **Edit**, if a step is wrong: the plan opens on the automation canvas,
+   where you change a step's guidance, add or remove steps, or rewire them.
+   **Use in chat** brings the changed plan back to the card.
+3. **Run** it from the card. Nothing runs before this, and every safety gate
+   still applies inside each step. Each step ticks as its agent works, and
+   **Stop** ends it at the next safe point.
+4. **Read the outcome** as the next reply in the thread: every step, the
+   agent that ran it, what that agent said, and the files it made. A step
+   that failed says so, and so do the steps left waiting behind it. So does
+   a step that finished without making the thing it was for, such as a
+   document step that wrote no document. A follow-up message can build on
+   that reply like any other.
+5. **Save** it from the card once it has run, if you want it again or on a
+   schedule. The run you just watched is what vouches for it.
+
+The automation window is for changing a plan and keeping it. A plan opened
+from a conversation is not run there, because its answer would never reach
+the conversation that asked.
 
 Enio drafts a plan on its own only when a message joins two things ("and",
 "then") *and* the steps need more than one agent. Two things for the same
@@ -156,9 +169,8 @@ agent are an ordinary turn, since one agent already does several things in a
 row. To ask for a plan outright, start the message with `plan:`. To skip one,
 start with `@` and an agent's name. `ENIO_FLOW_PLANS=0` turns this off.
 
-The plan card comes back when you reopen the conversation. What the run
-produced stays on the canvas and in the automation's history, not in the
-thread.
+The card and the outcome both come back when you reopen the conversation,
+and the card remembers that it ran. An edit you did not run is not kept.
 
 ## Agents can run your automations
 

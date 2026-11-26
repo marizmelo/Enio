@@ -343,7 +343,7 @@ export function Message({
           {widgets
             .filter((w) => w.type !== "image")
             .map((w, i) => (
-              <Widget key={`${w.type}-${i}`} widget={w} onOpenFile={onOpenFile} />
+              <Widget key={`${w.type}-${i}`} widget={w} onOpenFile={onOpenFile} sessionId={sessionId} />
             ))}
         </div>
       )}
