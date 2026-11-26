@@ -4763,6 +4763,33 @@ page: one each way, as with the endings rule. It is a count over old
 text, not a replay. The pages have changed since, and a model shown rows
 on one line would not have written the same answer.
 
+**One run on the model, afterwards.** The 36 fresh questions were asked
+again through the researcher with the new reader, same model (Qwen3 4B),
+the same day as the stored set. It was collected with `ENIO_DATA_DIR`
+pointed at another folder, because `collect` writes `fresh-turns.json`
+and would have replaced the turns the labels describe.
+
+| | stored fresh set (old reader) | this run (new reader) |
+|---|---|---|
+| words per quoted page, 92 pages each | 189 | 223 |
+| whitespace beyond one separator | 13.4% | 0.7% |
+| tokens with a lower-to-upper change, URLs left out | 237 | 34 |
+| turns the check fires on | 16 of 36 | 12 of 36 |
+| names it lists | 55 | 48 |
+
+Of the 34 tokens left, all but one are names (JavaScript, QuietComfort,
+WhatsApp); the one is text beside an element. The headphones page came
+back the same page with its list on four lines, and that turn no longer
+fires. The cars search returned a different page, so that turn says
+nothing about the page that started this. Six turns that fired are quiet
+and two that were quiet fire; one turn, on the year's films, lists 22 of
+the 48 names where it listed 11 of the 55.
+
+It is one run, without labels, and a search does not return the same
+pages twice, so some of the difference is not the reader. From 16 to 12
+is what the fix would do if it works. It is not a measurement that it
+does.
+
 **Rejected:**
 - *Opening the seams in the grounding check* (split evidence at a
   lower-to-upper change). The same stored turns hold "JavaScript" ten
@@ -4794,7 +4821,8 @@ on one line would not have written the same answer.
 - A one-character label next to another element stays joined (a rank "1"
   in its own span, directly against a name).
 - A page that wraps each letter in a `div` comes back a letter per line.
-- Nothing here was measured on the model. Whether answers are better from
-  rows on one line, and whether a tab is the right cell separator, are
-  both open. No turn was run.
+- Whether answers are more often right is not shown. The run below counts
+  what the check does and what the evidence looks like; nobody read the
+  new answers against their sources. Whether a tab is the right cell
+  separator is also open.
 - Mail bodies (`tools/mail.ts`) still turn every tag into a space.
