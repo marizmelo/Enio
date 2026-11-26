@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { config } from "../config.js";
 import { scriptMailAccount } from "../accounts.js";
 import { callScript } from "../appsscript.js";
+import { placeNewFile } from "../assets.js";
 import type { ToolDef } from "../types.js";
 
 /**
@@ -69,7 +70,8 @@ const emailTool: ToolDef = {
 
     if (!config.emailSend) {
       // Dry run: write it out so it can actually be inspected.
-      const file = join(config.workspace, `draft-${Date.now()}.eml`);
+      // The draft is something Enio made, so it is an asset of this turn.
+      const file = placeNewFile(`draft-${Date.now()}.eml`);
       await writeFile(file, rendered, "utf8");
       return (
         `DRY RUN — nothing was sent.\n\n${rendered}\n` +

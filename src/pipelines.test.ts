@@ -265,13 +265,21 @@ test("executor: a two-node chain hands node 1's document to node 2, with the rig
     const finished = events.filter((e) => e.type === "node_finished");
     assert.equal(finished.length, 2);
     const first = finished[0] as Extract<RunEvent, { type: "node_finished" }>;
-    assert.ok(
-      first.artifacts.some((a: { type: string; path?: string }) => a.type === "document" && a.path === "report.md"),
-      "node 1's write_file surfaced as a document artifact",
-    );
+    const doc = first.artifacts.find((a: { type: string; path?: string }) => a.type === "document");
+    assert.ok(doc?.path, "node 1's write_file surfaced as a document artifact");
+    // In the run's asset: one dated folder for everything its steps make.
+    assert.match(doc!.path!, /^assets\/\d{4}-\d{2}-\d{2}-\d{4}-report\/report\.md$/);
     // And the file really exists -- the tool ran for real.
-    const { existsSync } = await import("node:fs");
-    assert.ok(existsSync(join(scratch, "workspace", "report.md")));
+    const { existsSync, readFileSync } = await import("node:fs");
+    assert.ok(existsSync(join(scratch, "workspace", doc!.path!)));
+    // It says what made it: the automation, by name, with no conversation.
+    const origin = JSON.parse(
+      readFileSync(join(scratch, "workspace", doc!.path!, "..", ".asset.json"), "utf8"),
+    ) as { source: string; automation: string; conversationId: string | null; agents: string[] };
+    assert.equal(origin.source, "automation");
+    assert.equal(origin.automation, "chain-test");
+    assert.equal(origin.conversationId, null);
+    assert.deepEqual(origin.agents, ["coder"]);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -23,6 +23,7 @@ No API keys. No account. Nothing leaves your computer.
 | [Chatting](chatting.md) | The conversation loop, `/skill`, `@mention`, commands |
 | [Projects](projects.md) | Standing context: instructions, attached folders, project skills |
 | [Launcher and automations](pipelines.md) | Pick abilities as tiles, chain them into flows on a canvas |
+| [Assets](assets.md) | Everything Enio makes, in one dated place, each with what made it |
 | [Controlling your computer](mac-control.md) | Open apps, read windows, propose and approve plans |
 | [Models](models.md) | Switching models, and what the context budget means |
 

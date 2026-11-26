@@ -1179,10 +1179,21 @@ export function App() {
         open={filesOpen}
         onOpenChange={setFilesOpen}
         conversationId={conversationId}
+        project={project}
         // Browse tab: a picked file opens in the canvas to read and edit.
         // Fullscreen, because choosing a file from a tree is choosing to
         // work on it; the header toggle brings the conversation back.
         onOpenInCanvas={(path) => setCanvas({ path, openedBy: "user", rev: Date.now(), full: true })}
+        // From an asset to the conversation that made it. Looked up rather
+        // than assumed, because opening a conversation opens its project,
+        // and that is the conversation's own project, not whichever one
+        // happened to be open when the asset was listed.
+        onOpenConversation={async (id, projectId) => {
+          const conv = (await listConversations().catch(() => [])).find((c) => c.id === id);
+          // The list is the recent ones. An older conversation still opens,
+          // under the project the asset was made in.
+          openConversation(conv ?? { id, projectId });
+        }}
         onReuse={(paths) => {
           setSessionFiles((prev) => [...new Set([...prev, ...paths])]);
           setInput((value) => paths.reduce(appendMention, value));

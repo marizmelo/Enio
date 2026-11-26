@@ -92,8 +92,11 @@ export interface Project {
 
 /** Aliases that would shadow paths the sandbox needs to keep meaning what
  *  they mean: "out" is the project's own output dir, "attachments" is where
- *  conversation attachments live in the global workspace fallback. */
-const RESERVED_ALIASES = new Set(["out", "attachments"]);
+ *  conversation attachments live in the global workspace fallback, and
+ *  "assets" is the first segment of every path into the asset store — a
+ *  folder attached under that name would capture the paths the file tools
+ *  print for everything Enio makes. */
+const RESERVED_ALIASES = new Set(["out", "attachments", "assets"]);
 
 export function projectsRoot(): string {
   return join(config.dataDir, "projects");

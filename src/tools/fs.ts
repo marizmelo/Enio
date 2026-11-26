@@ -9,6 +9,14 @@ import { conversationMounts, findConversationMount } from "../conversation-attac
 // and none of those import back into tools/ -- checked, because a cycle here
 // would surface as an undefined at call time rather than a build error.
 import { workspaceFiles } from "../mentions.js";
+import {
+  assetFileWritten,
+  assetLinked,
+  assetScopeOpen,
+  existingAssetFile,
+  plannedAssetFile,
+  storePath,
+} from "../assets.js";
 import type { ToolDef } from "../types.js";
 
 /**
@@ -16,17 +24,24 @@ import type { ToolDef } from "../types.js";
  *
  * With no project open that is config.workspace, exactly as it always was.
  * With a project open, a path's first segment may name an attachment alias
- * ("api/src/x.ts" reads inside the attached folder whose alias is "api");
- * anything unprefixed roots in the project's out dir, so generated files
- * live and die with the project instead of piling into the global
- * workspace. Unprefixed reads fall back to the global workspace when the
- * file exists there and not in the project -- conversation attachments land
- * in the workspace whatever is open, and an attachment must never be able
- * to fail a turn. Writes never take the fallback -- by option, not by
- * accident: the old claim was "a write target does not exist yet", which
- * is false for an existing workspace file, and write_file("shot.png") with
- * a project open would have overwritten the conversation's attachment. A
- * write resolves in the project and stays there.
+ * ("api/src/x.ts" reads inside the attached folder whose alias is "api").
+ *
+ * A NEW file with no stated home becomes an asset (assets.ts): it goes into
+ * this turn's dated folder under <workspace>/assets, whatever is open. That
+ * replaced two homes that depended on context -- the workspace root, and a
+ * project's hidden out/ dir -- where the same request left a file in a
+ * different place depending on whether a project happened to be open, with
+ * nothing saying what had made it. An EXISTING file is found where it is:
+ * in the asset being made, in an asset this conversation made earlier, and
+ * then in those two old homes, which are still read and edited in place so
+ * nothing made before assets stops resolving.
+ *
+ * Unprefixed reads fall back to the global workspace when the file exists
+ * there and not in the project -- conversation attachments land in the
+ * workspace whatever is open, and an attachment must never be able to fail
+ * a turn. Writes never take that fallback -- by option, not by accident:
+ * write_file("shot.png") with a project open would have overwritten the
+ * conversation's attachment.
  *
  * The containment check resolves the path first and then verifies it's
  * inside the root, which is what makes it robust to `../` traversal.
@@ -86,6 +101,13 @@ export function safePath(userPath: string, opts: { forWrite?: boolean } = {}): s
         : null;
     if (mount) return resolveInMount(mount, segments.slice(1));
 
+    // The path a tool printed for something Enio made, copied back. Checked
+    // after the mounts and before every "plain path" rule below, which
+    // would otherwise root "assets/..." in the project's out dir or its
+    // code folder. No attachment can be named "assets" (RESERVED_ALIASES).
+    const stored = storePath(segments);
+    if (stored) return stored;
+
     // A code project with exactly one attached folder: that folder IS the
     // project, and an unprefixed path roots there. Watched: asked to create
     // an app in the folder the user had just attached for that purpose, the
@@ -110,11 +132,20 @@ export function safePath(userPath: string, opts: { forWrite?: boolean } = {}): s
     const outRoot = resolve(active.outDir);
     const target = resolve(outRoot, raw);
     if (target === outRoot || target.startsWith(outRoot + sep)) {
-      if (!opts.forWrite && !existsSync(target)) {
-        const wsRoot = resolve(config.workspace);
-        const fallback = resolve(wsRoot, raw);
-        if ((fallback === wsRoot || fallback.startsWith(wsRoot + sep)) && existsSync(fallback)) {
-          return fallback;
+      // Something this conversation already made, by its bare name.
+      const made = segments.length > 0 ? existingAssetFile(raw) : null;
+      if (made) return made;
+      if (!existsSync(target)) {
+        if (!opts.forWrite) {
+          const wsRoot = resolve(config.workspace);
+          const fallback = resolve(wsRoot, raw);
+          if ((fallback === wsRoot || fallback.startsWith(wsRoot + sep)) && existsSync(fallback)) {
+            return fallback;
+          }
+        } else if (assetScopeOpen() && segments.length > 0) {
+          // New, and nowhere yet: an asset. A file already in out/ falls
+          // through to `target` and is rewritten where it has always been.
+          return plannedAssetFile(raw);
         }
       }
       return target;
@@ -140,7 +171,26 @@ export function safePath(userPath: string, opts: { forWrite?: boolean } = {}): s
         (aliases ? `, or start with an attachment name (${aliases}).` : `.`),
     );
   }
+  // The same order as with a project open: what this conversation made,
+  // then what is already at that path, then -- for a write -- a new asset.
+  // "assets/..." needs no rule here: it is a workspace path already.
+  if (segments.length > 0 && segments[0] !== "assets" && !existsSync(target)) {
+    const made = existingAssetFile(raw);
+    if (made) return made;
+    if (opts.forWrite && assetScopeOpen()) return plannedAssetFile(raw);
+  }
   return target;
+}
+
+/** The attached folder a path is inside, if any: where a new file is the
+ *  user's own and the store only gets a pointer to it. */
+function mountHolding(abs: string): { alias: string; path: string } | null {
+  for (const list of [activeProject()?.attachments ?? [], conversationMounts()]) {
+    for (const a of list) {
+      if (a.kind === "folder" && abs.startsWith(a.path + sep)) return { alias: a.alias, path: a.path };
+    }
+  }
+  return null;
 }
 
 /** Render an absolute path the way the model addresses it: alias-relative
@@ -371,6 +421,17 @@ export const fsTools: ToolDef[] = [
       const kept = previous != null && previous !== content ? stashPrevious(target, previous) : null;
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, content, "utf8");
+      // The asset exists from its first file. One written into a folder the
+      // user attached stays there, and the store keeps a pointer to it --
+      // only when the file is new: rewriting the user's own file makes
+      // nothing. Never allowed to fail the write it is recording.
+      try {
+        assetFileWritten(target);
+        const mount = previous == null ? mountHolding(target) : null;
+        if (mount) assetLinked(mount, target);
+      } catch {
+        /* the file is written; an unrecorded asset is a smaller loss */
+      }
       const head =
         `Wrote ${content.length} bytes to ${rel(target)}` +
         (kept ? ` (previous version kept: ${kept})` : "");

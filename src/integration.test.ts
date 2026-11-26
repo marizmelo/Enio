@@ -235,9 +235,11 @@ describe("artifact channel", () => {
     });
     const write = outputs.find((o) => o.name === "write_file");
     assert.ok(write, "write_file ran");
-    assert.deepEqual(extractArtifacts(write!.name, write!.output), [
-      { type: "document", path: "canvas-probe.md" },
-    ]);
+    // The path is the asset the turn made: assets/<date>-<time>-<slug>/<name>.
+    const made = extractArtifacts(write!.name, write!.output);
+    assert.equal(made.length, 1);
+    assert.equal(made[0]!.type, "document");
+    assert.match(made[0]!.path!, /^assets\/\d{4}-\d{2}-\d{2}-\d{4}-canvas-probe\/canvas-probe\.md$/);
   });
 });
 

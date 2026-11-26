@@ -25,6 +25,7 @@ import type { Message, ToolDef } from "./types.js";
 export { extractArtifacts, type Artifact } from "./artifacts.js";
 import { extractSources } from "./sources.js";
 import { openGaps } from "./memory/gaps.js";
+import { beginAssetRun, endAssetRun } from "./assets.js";
 import { extractArtifacts, type Artifact } from "./artifacts.js";
 
 /**
@@ -710,6 +711,17 @@ export async function runPipeline(
   const skills = loadSkills().skills;
   let wasStopped = false;
 
+  // Everything the run's steps create is one asset, credited to the run:
+  // the conversation that asked for the plan, or the automation by name.
+  // Held across the steps, so a document written in step two sits with the
+  // screenshot taken in step one rather than each in a folder of its own.
+  beginAssetRun({
+    request: pipeline.description || (pipeline.name === "(draft)" ? "" : `The "${pipeline.name}" automation`),
+    source: parentSession ? "plan" : "automation",
+    automation: pipeline.name === "(draft)" ? undefined : pipeline.name,
+    conversationId: parentSession,
+  });
+
   try {
     for (const nodeId of valid.order) {
       const node = pipeline.nodes.find((n) => n.id === nodeId)!;
@@ -820,6 +832,7 @@ export async function runPipeline(
       }
     }
   } finally {
+    endAssetRun();
     wasStopped = stopRequested.has(pipeline.id);
     running.delete(pipeline.id);
     stopRequested.delete(pipeline.id);

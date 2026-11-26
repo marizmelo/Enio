@@ -1228,7 +1228,7 @@ async function handle(
     // a name. The ephemeral id exists only so the run can be stopped and,
     // if the user saves afterwards, adopted. Every executor guard (running
     // set, recursion flag, node gates) applies exactly as for a saved run.
-    let draft: { nodes: PipelineNode[]; edges: PipelineEdge[]; sessionId?: unknown; flowId?: unknown };
+    let draft: { nodes: PipelineNode[]; edges: PipelineEdge[]; sessionId?: unknown; flowId?: unknown; request?: unknown };
     try {
       draft = JSON.parse((await readBody(req)) || "{}");
     } catch {
@@ -1255,7 +1255,8 @@ async function handle(
         {
           id: randomUUID(),
           name: "(draft)",
-          description: "",
+          // What was asked, for the origin of anything the run creates.
+          description: typeof draft.request === "string" ? draft.request.slice(0, 500) : "",
           nodes,
           edges: draft.edges ?? [],
           createdAt: Date.now(),

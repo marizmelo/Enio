@@ -83,6 +83,8 @@ export function FlowWidget({ id, request, nodes = [], edges = [], ran = null, se
           // Names the conversation, so the server writes the outcome into it.
           sessionId,
           flowId: id,
+          // Recorded on anything the run creates, as why it exists.
+          request,
         },
         (event) => {
           if (event.type === "run_started") {

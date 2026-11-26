@@ -60,18 +60,17 @@ global.
 Each attachment is addressed by its **alias** — its folder or file name,
 shown in the project editor. The alias is the first path segment everywhere:
 `read_file` on `platformer/src/player.gd` reads inside the attached folder
-whose alias is `platformer`. Plain relative paths (`notes.md`) are the
-project's own storage: files the agent creates land inside the project's
-folder under `~/.enio/projects/`, not in the global workspace — delete the
-project and its generated files go with it.
+whose alias is `platformer`. A new file given a plain relative path
+(`notes.md`) becomes an [asset](assets.md): it is saved in the dated asset
+store with the request that made it, tagged with this project.
 
 **One exception, for the common case.** A *code* project with exactly one
 attached folder treats that folder as the project: a plain code path
 (`src/app.js`) means `<alias>/src/app.js`, so "build me an app" lands in the
-folder you attached for it rather than in hidden storage. Documents (`.md`,
-`.txt`) still go to the project's own storage, and with several folders
-attached — or none — plain paths do too, because then "plain path" is
-genuinely ambiguous. Conversation attachments stay in
+folder you attached for it rather than somewhere out of sight. Documents
+(`.md`, `.txt`) are still assets, and with several folders attached — or
+none — every plain path is, because then "plain path" is genuinely
+ambiguous. Either way the Assets list shows what was made and where. Conversation attachments stay in
 the global workspace and remain readable either way; an attachment can never
 fail a turn.
 
@@ -200,9 +199,11 @@ opening a project are user acts — the CLI or the (authenticated) desktop —
 and no tool the model holds can do any of them. Attaching refuses the
 filesystem root, your home directory itself, and Enio's own data directory.
 The active project is process memory: a restart forgets it, and reopening is
-a fresh click or command. Deleting a project removes its folder, index, and
-generated files, but never the attached originals, and its conversations stay
-in history.
+a fresh click or command. Deleting a project removes its folder and index, but never
+the attached originals. Its conversations stay in history, and what it made
+stays in [Assets](assets.md), still tagged with the project's name. Files it
+generated before assets existed sit in the project's own folder and do go
+with it.
 
 ## Resume
 

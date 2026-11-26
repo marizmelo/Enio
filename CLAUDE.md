@@ -292,14 +292,32 @@ and when it is empty but the newest conversation is owned, the faithful
 restore is a fresh chat, because null-while-owned can only mean the user left.
 While
 one is open the readable roots are the attached paths (addressed by alias as
-the first path segment), the project's own out dir (unprefixed paths), and a
-read-only fallback to the global workspace for files that already exist there
-— conversation attachments must never fail a turn. A project is *contextual*,
+the first path segment), the asset store and the project's own out dir
+(unprefixed paths — new files become assets, files already in out/ are found
+where they are), and a read-only fallback to the global workspace for files
+that already exist there — conversation attachments must never fail a turn. A project is *contextual*,
 not a mode: routing keeps working, the type only biases the router. And every
 always-loaded project field (description, instructions, notes) is hard-capped
 at save time, sized to the smallest supported context budget — refuse
 overflow, never truncate, and never size anything off the model's identity
 instead of `contextBudget()`.
+
+**Everything Enio creates is an asset, and its origin lives with it.** A new
+file with no stated home goes into this turn's dated folder under
+`<workspace>/assets` (`assets.ts`), one folder per turn or per plan run, so
+an app of five files is one asset. The folder's `.asset.json` holds the
+request that made it (quoted), the agents, the conversation and the project
+— on disk beside the files, not in the database, because the database's
+account of a conversation is deleted with the conversation and this is the
+part that must outlive it. The list is derived from the folders on every
+call. Three things not to undo: the store stays *inside* the workspace, so
+safePath's single boundary still contains it; a file written into an
+attached folder stays there and the store keeps only a pointer, because
+attaching the folder was the instruction; and nothing about an asset is
+written by the model — "why" is the request and "what" is read off the
+content. A new place that creates files goes through `placeNewFile`, never
+`join(config.workspace, name)`: that line is how the workspace root became a
+pile of `screen-1786307090790.png` with nothing saying what any of it was.
 
 **The model proposes scripts; it does not run them.** No specialist has
 `run_applescript`. The operator calls `propose_plan`, which stores the script
@@ -350,6 +368,7 @@ src/
   skills.ts       SKILL.md loading, progressive disclosure
   mentions.ts     /skill and @mention parsing
   notes.ts        the managed note store: transforms, comment anchors
+  assets.ts       the dated store of what Enio made, each with its origin
   tasks.ts        scheduler
   suggest.ts      mines traces for what's worth automating
   vision.ts       images → text

@@ -7,6 +7,7 @@ import { readImage } from "../vision.js";
 import type { ToolDef } from "../types.js";
 import { listSavedRecipes, osascriptFailure, proposePlan, runScript, type PlanKind } from "../plans.js";
 import { autoRunEnabled, desktopControlStored } from "../automation.js";
+import { placeNewFile } from "../assets.js";
 import {
   assistiveAccessGranted,
   axBridge,
@@ -225,7 +226,10 @@ const screenshotTool: ToolDef = {
     required: [],
   },
   async run(args) {
-    const file = join(config.workspace, `screen-${Date.now()}.png`);
+    // An asset of this turn: beside whatever else the turn makes, with the
+    // request that asked for it, instead of one more screen-<number>.png in
+    // the workspace root with nothing saying what it was a screenshot of.
+    const file = placeNewFile(`screen-${Date.now()}.png`);
     let note = "";
     try {
       await withoutOwnWindow(async () => {

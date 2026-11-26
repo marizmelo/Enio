@@ -13,6 +13,7 @@ import { FileViewer } from "@/components/FileViewer";
 import { listFiles, removeConversationFiles, removeFile } from "@/lib/recipes";
 import { fetchCapabilities } from "@/lib/capabilities";
 import { FileTree } from "@/components/ProjectFilesDialog";
+import { AssetsPanel } from "@/components/AssetsPanel";
 import { cn } from "@/lib/utils";
 
 const size = (bytes) =>
@@ -42,14 +43,17 @@ const size = (bytes) =>
  * the user's actual work, the server refuses to delete them, and their row
  * offers Finder instead.
  */
-export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpenInCanvas }) {
+export function FilesDialog({ open, onOpenChange, conversationId, project = null, onReuse, onOpenInCanvas, onOpenConversation }) {
   const [data, setData] = useState(null);
   // Two faces of one button. Browse is the tree: every file Enio can reach
   // (project folders, conversation attachments, the workspace), click to
   // open in the canvas to read and edit. Storage is what was here before:
   // what the workspace holds, grouped by conversation, and how to free it.
-  // Browse first, because "open a file" is the more common want.
-  const [tab, setTab] = useState("browse");
+  // Assets come first: what Enio made, newest first, with what made it —
+  // the question this dialog is opened with far more often than "what is on
+  // disk". Browse and Storage stay for the files that are not Enio's work:
+  // the folders you attached and the things you attached to conversations.
+  const [tab, setTab] = useState("assets");
   // The reachable file list, fetched fresh each time the dialog opens: the
   // startup snapshot in capabilities would not show files the agent wrote
   // a minute ago, which is exactly when you want to open them.
@@ -81,6 +85,7 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
   useEffect(() => {
     if (open) {
       setError("");
+      setTab("assets");
       refresh();
     }
   }, [open, refresh]);
@@ -116,7 +121,6 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
   // and scrolling past four other threads to reach it would be backwards.
   const mine = conversations.find((c) => c.id === conversationId);
   const others = conversations.filter((c) => c.id !== conversationId);
-  const workspace = data?.workspace ?? [];
 
   const row = (file, siblings) => (
     <FileRow
@@ -125,10 +129,7 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
       busy={busy === file.path}
       onOpen={() => setViewing({ files: siblings, index: siblings.indexOf(file) })}
       onReuse={() => onReuse([file.path])}
-      // Deleting is for attachments — enio's own copies. A workspace file is
-      // the user's actual work; the server refuses to delete it, so no button
-      // pretends otherwise. Show in Finder is how those are managed.
-      onRemove={siblings === workspace ? null : () => drop(file.path)}
+      onRemove={() => drop(file.path)}
     />
   );
 
@@ -152,11 +153,12 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
       <DialogContent className="flex h-[80vh] flex-col gap-0 sm:max-w-2xl">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <DialogTitle>Files</DialogTitle>
+            <DialogTitle>Assets</DialogTitle>
             <nav className="flex gap-1 text-xs">
               {[
-                ["browse", "Browse"],
-                ["storage", "Storage"],
+                ["assets", "Made by Enio"],
+                ["browse", "Browse files"],
+                ["storage", "Attachments"],
               ].map(([id, label]) => (
                 <button
                   key={id}
@@ -172,7 +174,9 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
             </nav>
           </div>
           <DialogDescription>
-            {tab === "browse"
+            {tab === "assets"
+              ? "Everything Enio has made, newest first. Each one says what made it and links back to the conversation."
+              : tab === "browse"
               ? tree.project
                 ? `Every file Enio can reach — ${tree.project.name}'s folders and your workspace. Click one to open it.`
                 : "Every file Enio can reach in your workspace. Click one to open it."
@@ -181,6 +185,28 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
                 : "Reading the workspace…"}
           </DialogDescription>
         </DialogHeader>
+
+        {tab === "assets" && (
+          <AssetsPanel
+            active={open && tab === "assets"}
+            // From the app, which already knows it, not from the fetch this
+            // dialog makes on opening: the filter arriving a moment after
+            // the list pushed every row down under the pointer.
+            project={project}
+            onOpenDocument={(path) => {
+              onOpenInCanvas?.(path);
+              onOpenChange(false);
+            }}
+            onOpenImage={(paths, index) => {
+              const files = paths.map((path) => ({ path, name: path.split("/").pop(), image: true }));
+              setViewing({ files, index: Math.max(0, index) });
+            }}
+            onOpenConversation={(id, projectId) => {
+              onOpenConversation?.(id, projectId);
+              onOpenChange(false);
+            }}
+          />
+        )}
 
         {tab === "browse" && (
           <div className="mt-3 flex min-h-0 flex-1 flex-col">
@@ -275,17 +301,6 @@ export function FilesDialog({ open, onOpenChange, conversationId, onReuse, onOpe
           </section>
         )}
 
-        {workspace.length > 0 && (
-          <section className="mt-6">
-            <h3 className="text-xs font-medium text-muted-foreground">Workspace</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Files you or the agent put in <code>~/enio-workspace</code>, rather than
-              attached to a conversation. These are your files — enio does not delete
-              them; use Show in Finder to manage them.
-            </p>
-            <ul className="mt-2 space-y-1">{workspace.map((f) => row(f, workspace))}</ul>
-          </section>
-        )}
         </div>)}
       </DialogContent>
     </Dialog>

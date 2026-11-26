@@ -1,6 +1,6 @@
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -26,6 +26,11 @@ after(() => {
   closeDb();
   rmSync(scratch, { recursive: true, force: true });
 });
+
+/** Where a turn's file lands: assets/<date>-<time>-<slug>/<name>. */
+const asset = (slug: string, name: string) =>
+  new RegExp(`^assets/\\d{4}-\\d{2}-\\d{2}-\\d{4}-${slug}(-\\d+)?/${name.replace(/\./g, "\\.")}$`);
+let firstMemo = "";
 
 /** The integration.test.ts stub, reduced to content-only turns. */
 function scriptModel(replies: string[]) {
@@ -77,7 +82,8 @@ describe("handoff turns persist through the harness, not the model", () => {
     const result = await runTurn("package this", [], registry, sessionId, {}, {
       skills: [handoffSkill],
     });
-    assert.equal(result.handoffFile, "handoff-lease-deposit-review.md");
+    // An asset of the turn: a dated folder named for the file, the file in it.
+    assert.match(result.handoffFile!, asset("handoff-lease-deposit-review", "handoff-lease-deposit-review.md"));
     const saved = readFileSync(join(workspace(), result.handoffFile!), "utf8");
     assert.match(saved, /# Handoff: Lease Deposit Review/);
     assert.match(saved, /find the deposit/);
@@ -90,8 +96,9 @@ describe("handoff turns persist through the harness, not the model", () => {
     const result = await runTurn("package this", [], registry, sessionId, {}, {
       skills: [handoffSkill],
     });
-    assert.equal(result.handoffFile, "handoff-memo.md");
-    assert.ok(existsSync(join(workspace(), "handoff-memo.md")));
+    assert.match(result.handoffFile!, asset("handoff-memo", "handoff-memo.md"));
+    assert.ok(existsSync(join(workspace(), result.handoffFile!)));
+    firstMemo = result.handoffFile!;
   });
 
   test("a second save with the same name dedupes instead of overwriting", async () => {
@@ -101,7 +108,12 @@ describe("handoff turns persist through the harness, not the model", () => {
     const result = await runTurn("package this again", [], registry, sessionId, {}, {
       skills: [handoffSkill],
     });
-    assert.equal(result.handoffFile, "handoff-memo-2.md");
+    // Each turn's asset is its own folder, so the name the reply claimed
+    // stays true and the earlier file is not what got written.
+    assert.match(result.handoffFile!, /\/handoff-memo\.md$/);
+    assert.notEqual(result.handoffFile, firstMemo);
+    assert.ok(existsSync(join(workspace(), firstMemo)));
+    assert.ok(existsSync(join(workspace(), result.handoffFile!)));
   });
 
   test("a single outer fence is unwrapped as wrapping, not content", async () => {
@@ -184,7 +196,10 @@ describe("handoff turns persist through the harness, not the model", () => {
       skills: [handoffSkill],
     });
     assert.equal(result.handoffFile, undefined, "harness does not double-save");
-    const saved = readFileSync(join(workspace(), "handoff-self.md"), "utf8");
+    // The model's own write_file made the asset; the harness added nothing.
+    const folders = readdirSync(join(workspace(), "assets")).filter((d) => d.endsWith("-handoff-self"));
+    assert.equal(folders.length, 1, "written once, by the model");
+    const saved = readFileSync(join(workspace(), "assets", folders[0]!, "handoff-self.md"), "utf8");
     assert.match(saved, /# Handoff: Self/);
   });
 });

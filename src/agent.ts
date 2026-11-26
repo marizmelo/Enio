@@ -1,3 +1,4 @@
+import { relative } from "node:path";
 import { config } from "./config.js";
 import { complete } from "./model.js";
 import { buildMemoryBlock, logMessage, retractLastAssistantMessage, saveFoldSummary } from "./memory/store.js";
@@ -22,6 +23,7 @@ import { noteTurn as noteGap } from "./memory/gaps.js";
 import { personalityView } from "./personality.js";
 import { panelRequest } from "./panels.js";
 import { draftFlow, flowReply } from "./flow.js";
+import { enterAssetTurn, leaveAssetTurn, noteAssetAgent, placeNewFile } from "./assets.js";
 import { createMoodTrack, type Mood } from "./mood.js";
 import {
   accountSwitchRequest,
@@ -1016,13 +1018,13 @@ function projectBlock(): string {
         ? // The path grammar must agree with what safePath does, and safePath
           // refuses a plain code path here rather than diverting it to out/
           // -- the hidden-files failure the sole-folder rule exists to stop.
-          `"${sole.alias}/" is the project's code folder and it is missing, so code files cannot be read or created until the user attaches it again. Say so instead of trying. Documents (.md, .txt) with plain paths are stored with the project.`
+          `"${sole.alias}/" is the project's code folder and it is missing, so code files cannot be read or created until the user attaches it again. Say so instead of trying. A document (.md, .txt) given a plain file name is saved as an asset; write_file prints its path.`
         : sole
         ? // One folder, code project: that folder is the project. Saying so
           // is what sends new files there rather than to the hidden out/
           // dir -- the model writes what the path grammar tells it to.
-          `Use these names as the first path segment. "${sole.alias}/" is the project's code folder: new code files go there (a plain path like src/app.js means ${sole.alias}/src/app.js). Documents (.md, .txt) with plain paths are stored with the project.`
-        : `Use these names as the first path segment. Files you create with plain relative paths are stored with the project.`,
+          `Use these names as the first path segment. "${sole.alias}/" is the project's code folder: new code files go there (a plain path like src/app.js means ${sole.alias}/src/app.js). A document (.md, .txt) is not code: give it a plain file name with no folder and it is saved as an asset; write_file prints its path.`
+        : `Use these names as the first path segment. A file you create with a plain relative path is saved as an asset; write_file prints the path to use for it from then on.`,
     );
   }
   return lines.join("\n");
@@ -1060,6 +1062,29 @@ export async function runTurn(
   sessionId: string,
   handlers: TurnHandlers = {},
   overrides: TurnOverrides = {},
+): Promise<TurnResult> {
+  // What this turn creates is one asset, and this is what it will say made
+  // it: the conversation and the words that asked (assets.ts). Wrapped here
+  // rather than threaded through the loop because the turn has a dozen
+  // exits and every one of them must close the scope -- a scope left open
+  // would file the next conversation's work under this one's request.
+  // Inside a plan or automation run the run already holds the scope, and
+  // the turn joins it.
+  enterAssetTurn({ request: userInput, source: "chat", conversationId: sessionId, agent: overrides.specialist ?? null });
+  try {
+    return await runTurnInner(userInput, history, registry, sessionId, handlers, overrides);
+  } finally {
+    leaveAssetTurn();
+  }
+}
+
+async function runTurnInner(
+  userInput: string,
+  history: Message[],
+  registry: Registry,
+  sessionId: string,
+  handlers: TurnHandlers,
+  overrides: TurnOverrides,
 ): Promise<TurnResult> {
   // "open the project in cursor", "open src/app.js in my editor": a path to
   // the user's editor, resolved by grammar (apps.ts) before the model is
@@ -1274,6 +1299,7 @@ export async function runTurn(
     readAttachments(overrides.files ?? [], attachmentNotes, overrides.canvasPath ?? null),
   ]);
   const specialistName = routed;
+  noteAssetAgent(specialistName || null);
   // How the route was decided rides in the trace: "fast tier at margin
   // 0.07" is a fact about a wrong route that nothing else records.
   const routeInfo = overrides.specialist ? null : lastRouteDecision();
@@ -2387,13 +2413,14 @@ export async function runTurn(
       const stamp = new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-");
       const base = claimed?.[0]?.replace(/\.md$/, "") ?? (slug ? `handoff-${slug}` : `handoff-${stamp}`);
 
-      let rel = `${base}.md`;
-      let target = safePath(rel);
-      for (let n = 2; existsSync(target); n++) {
-        rel = `${base}-${n}.md`;
-        target = safePath(rel);
-      }
+      // An asset like anything else Enio makes: this turn's folder, so the
+      // prompt-file sits with whatever else the turn wrote and carries the
+      // request that asked for it. The name cannot collide there except
+      // with this turn's own files.
+      let target = placeNewFile(`${base}.md`);
+      for (let n = 2; existsSync(target); n++) target = placeNewFile(`${base}-${n}.md`);
       await writeFile(target, `${body}\n`, "utf8");
+      const rel = relative(config.workspace, target);
       handoffFile = rel;
       handlers.onNotice?.(`Handoff saved to ${rel}.`);
       // Into the trace in the tool step's own dialect, so a restored

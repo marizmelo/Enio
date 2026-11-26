@@ -4195,3 +4195,77 @@ for a draft someone chose not to run).
   describes and it does something else. A rename touches a user-visible
   mention, stored conversation rows and a published docs URL; proposed, not
   decided.
+
+### Assets: one dated store, and the origin lives with the file (November 2026)
+
+**Chose:** everything Enio creates is an *asset*. A new file with no stated
+home goes into a folder under `<workspace>/assets` named by when it was made
+and what it is (`2026-11-25-1624-trails-sintra`), one folder per turn or per
+plan run. Each folder carries a sidecar, `.asset.json`, with the request
+that produced it, the agents, the conversation and the project. An Assets
+view lists them newest first with a link back to the conversation.
+
+**Why.** Asked where documents were being saved, the honest answer was
+"one of three places, depending on how the model spelled the path": the
+workspace root, a project's hidden `out/` dir, or an attached folder. The
+same request left its file somewhere different according to whether a
+project happened to be open. Nothing recorded what had made any of it; the
+only link from a file to its reason was the conversation's trace, and
+discarding a conversation deletes the trace. The workspace root held
+nineteen things, mostly `screen-<number>.png`.
+
+The user's framing, which this follows: saved in time order, easy to browse,
+each one saying what generated it, linked to its conversation, and still
+explaining itself when that conversation is gone. And an asset is not only a
+document: it can be a whole self-contained app.
+
+- **One folder per turn, not per file.** That is what makes an app one
+  asset. A plan run holds one folder across all its steps for the same
+  reason.
+- **The origin is on disk beside the files, not in the database.** The
+  database's account of a conversation goes when the conversation does;
+  this is the part that has to outlive it. It also makes the list a
+  derivation, rebuilt from the folders on every call, in line with the
+  rest of the project: the files are the store.
+- **"Why" is quoted and "what" is read.** The request is stored verbatim.
+  The description is the document's first heading, the page's title, the
+  draft's subject. A model-written summary was rejected: it is exactly the
+  free generation this model size fills with things that are not there,
+  and it would be the one account of an asset that could be false.
+- **The store is inside the workspace.** `safePath` keeps its single
+  boundary and every existing tool, search and mention reaches assets with
+  no new rule. The model still writes `trails.md`; the harness chooses the
+  folder and prints the full path back, and a bare name on a later turn
+  finds what the same conversation made rather than starting a second one.
+- **A file in an attached folder stays there.** Attaching the folder was
+  the instruction, and "fix app.js" must edit the repo and not a copy. The
+  store gets a pointer: a folder holding the origin and a `LOCATION.txt`
+  that names the files. Only for files that did not exist; rewriting the
+  user's own file creates nothing.
+- **Projects became a tag.** New files no longer go to a project's `out/`
+  dir. What a project made is filtered by, not stored under, the project,
+  so deleting a project no longer deletes it.
+- **Nothing was moved.** Files from before are listed where they sit, with
+  their origin recovered from the traces while the conversation still
+  exists. Moving them would have broken every path a note, a saved
+  automation or a person already uses.
+
+**Rejected:** a model-written "what this is" (above); an `assets` table as
+the record (it would be authoritative for the one fact the database is
+designed to forget); copying code out of attached folders into the store
+(two copies, one of them stale within a turn); date folders by month with
+files loose inside (an app has no folder of its own to be one asset in);
+a visible `asset.json` (it would sit beside `index.html` in every app Enio
+builds, and the tools would list it to the model as part of the work).
+
+**Not built, and when it would be worth it:**
+
+- **Meeting notes and managed notes** keep their own folder and panel. The
+  Notes panel lists by scanning that folder, so moving them means changing
+  its store, not just a path.
+- **Files a shell command creates** are not recorded: the harness sees the
+  command, not what it wrote. Worth doing if `run_command` becomes a common
+  way documents get made, by diffing the folder around the call.
+- **Renaming an asset's folder** when its first file turns out to be
+  generic. The name is chosen at the first write and the model is told the
+  path, so a later rename would break the path it was given.
