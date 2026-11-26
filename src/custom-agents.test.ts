@@ -108,6 +108,28 @@ describe("saving a custom agent", () => {
     assert.equal(deleteCustomAgent("fetcher"), true);
   });
 
+  test("a calendar write, a task write and starting an automation count as acting", () => {
+    // Each of these once saved beside a web tool with no refusal: the list
+    // of acting tools named only what changes the machine.
+    for (const act of ["add_event", "add_todo", "run_pipeline"]) {
+      assert.throws(
+        () =>
+          saveCustomAgent(
+            { ...valid(), tools: ["web_search", act] },
+            { ...CTX, knownTools: [...KNOWN, act] },
+          ),
+        /read the web.*act/,
+        `web_search beside ${act} was saved`,
+      );
+    }
+    // Without a web tool they are an ordinary pick.
+    saveCustomAgent(
+      { ...valid(), name: "scheduler", tools: ["add_event", "add_todo", "run_pipeline"] },
+      { ...CTX, knownTools: [...KNOWN, "add_event", "add_todo", "run_pipeline"] },
+    );
+    assert.equal(deleteCustomAgent("scheduler"), true);
+  });
+
   test("run_applescript is never held — proposing and running stay separated", () => {
     assert.throws(
       () => saveCustomAgent({ ...valid(), tools: ["run_applescript"] }, CTX),

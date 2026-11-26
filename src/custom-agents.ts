@@ -65,6 +65,15 @@ const MUTATES = new Set([
   "remember",
   "set_preference",
   "take_screenshot",
+  // Acting is not only the machine. A page that can get an event or a task
+  // added has written to the user's calendar account, and nothing on this
+  // side of the script asks first.
+  "add_event",
+  "add_todo",
+  // It takes a name and nothing else, so a page cannot put its own words
+  // into an automation -- but it can start one, and a saved automation
+  // writes files and drafts mail under its own agents with no approval.
+  "run_pipeline",
 ]);
 
 const NAME_RE = /^[a-z][a-z0-9-]{1,29}$/;

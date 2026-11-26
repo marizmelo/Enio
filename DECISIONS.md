@@ -4826,3 +4826,46 @@ does.
   new answers against their sources. Whether a tab is the right cell
   separator is also open.
 - Mail bodies (`tools/mail.ts`) still turn every tag into a space.
+
+### Acting includes the calendar and starting an automation (November 2026)
+
+**Chose:** `add_event`, `add_todo` and `run_pipeline` are on the list of
+tools that act, in the save check for custom agents
+(`src/custom-agents.ts`) and in the copy `web.test.ts` keeps. A custom
+agent holding a web tool beside any of them is refused at save, as one
+holding a web tool beside `run_command` always was.
+
+**What was wrong.** The list named what changes the machine: files, the
+shell, mail, scripts, memory. The two calendar writes and the automation
+runner were not on it, so a web tool beside any of the three saved with no
+refusal. Probed against the built code, not seen in use: it needs a custom
+agent a person assembled that way, and for the calendar pair a connected
+account that grants the write. No built-in specialist holds such a pair,
+and the two custom agents on the machine this was found on do not either.
+
+- **A calendar write is acting.** It changes an account outside the
+  machine, and the tool's own description is the only thing asking the
+  model to confirm first.
+- **Starting an automation is acting.** The tool takes a name and nothing
+  else, so a page cannot put its words into one. It can start one, and a
+  saved automation writes files and drafts mail under its own agents with
+  no approval step.
+
+**Why two lists did not catch it.** The copy in the test is there so that
+weakening one side trips the other. Both were written from the same idea
+of what acting is, so both were missing the same three names. Two copies
+catch one being edited; they do not catch a tool that neither ever
+classified, and no test asks that of a new tool.
+
+**Not closed:**
+- **MCP tools.** Both lists hold bare built-in names, so a tool named
+  `server__tool` matches neither: a web tool beside an MCP tool that writes
+  files still saves. Either default costs something. Treating an untagged
+  MCP tool as harmless keeps this; treating it as acting refuses agents
+  that save today, and the coder is granted three MCP servers whole.
+- **Agents already saved.** The check runs at save. An agent stored with
+  such a pair keeps both tools until it is next edited, when the save is
+  refused. `agents.json` edited by hand was never checked either.
+- **Every other tool.** Nothing makes a new tool say whether it reads
+  untrusted text or acts. That is the gap this fell through, and it is
+  what putting those facts on the tool definition would close.

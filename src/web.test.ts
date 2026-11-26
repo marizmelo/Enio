@@ -400,6 +400,12 @@ describe("untrusted page content cannot become an action", () => {
     "remember",
     "set_preference",
     "take_screenshot",
+    // Writes to the calendar account, and starting a saved automation: both
+    // were missing from this copy and from the save check at once, which is
+    // the one failure two independent lists cannot catch for each other.
+    "add_event",
+    "add_todo",
+    "run_pipeline",
   ];
 
   test("no specialist both reads the web and can act", async () => {
