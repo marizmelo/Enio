@@ -469,6 +469,13 @@ MCP server. People reach for MCP when they needed a skill.
   not change the check without running it. The wording was judged by blind
   panels on replayed turns, which the script does not reproduce; the
   method and every number are in DECISIONS.md.
+- Page text for the model is never `textContent`. That is a subtree's text
+  nodes end to end, so a minified `<li>ANC</li><li>30-hour battery</li>`
+  read "ANC30-hour battery" and two stacked spans read "Lucid AirGrand
+  Touring" — the model's only evidence, and the grounding check then
+  called real names missing. `nodeText` (`src/tools/page-text.ts`) reads
+  an element with the separators `innerText` would give it. Turning every
+  tag into a space is the same bug the other way: `<b>Sam</b>sung`.
 - Cosine similarity and lexical-overlap scores are on different scales. They had
   a shared threshold once and keyword search silently returned nothing.
 - The lexical fallback needs stemming: people rephrase when they repeat

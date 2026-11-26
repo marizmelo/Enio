@@ -4678,7 +4678,8 @@ confirmation turns differs, as above. The names listed fell from 82 to 76.
   reply ("Not found in this turn's sources") is what catches those.
 - Of the names it still lists wrongly, several come from page text that
   arrives glued ("Lucid AirGrand Touring", "EVWT", "modeLDAC"). That is the
-  page reader, not this check, and it was not touched.
+  page reader, not this check, and it was not touched here. It is fixed in
+  the reader, in the next entry, which also counts "several": three.
 - A page in Portuguese and an answer in English produce missing names that
   are translations.
 - One model (Qwen3 4B), one agent (the researcher), and the judges were
@@ -4688,3 +4689,112 @@ confirmation turns differs, as above. The names listed fell from 82 to 76.
 **Open:** whether an answer should be checked for what it says the pages
 say, not only for the names in it. The labellers did that by hand and
 found most of the inventions that way. It is a model call per answer.
+
+### Page text is read with its layout, not as textContent (November 2026)
+
+**The question** left by the entry above: text the web tools hand the model
+sometimes had neighbouring page elements run together. "Lucid AirGrand
+Touring", "Chevrolet Silverado EVWT Max Range", "Adaptive ANC30-hour
+batteryULT bass modeLDAC Hi-Res", "LeagueCampeonato Brasileiro Série
+ACampeonato Carioca". That text is the model's only evidence, and the
+grounding check then cannot find "Grand", "WT" or "LDAC" as words.
+
+**What was found.** One path, three markups. Every one of those strings
+came out of `extractReadable`, which returned Readability's `textContent`:
+the article's text nodes end to end. What separates two cells or two list
+items on a rendered page is layout, and layout is not in the text. The
+three pages were fetched again and their markup read:
+
+| glued text | markup, as served |
+|---|---|
+| Adaptive ANC30-hour battery… | `<li>Adaptive ANC</li><li>30-hour battery</li>`, minified |
+| LeagueCampeonato … Série ACampeonato Carioca | `<th>League</th><td><a>…Série A</a><br/><a>…Carioca</a></td>` |
+| Lucid AirGrand Touring | `<span class="model-name">Lucid Air</span><span class="model-trim">Grand Touring</span>` in one cell |
+
+The third was assumed to be two table cells and is not. It is two inline
+elements that a stylesheet stacks (`display:block`), with no text between
+them, so a rule about blocks and cells alone would have left it glued.
+
+The other two paths do not glue, and each had the opposite fault. The
+regex fallback turned every tag into a space, so `<b>Sam</b>sung` read
+"Sam sung". The snippet path deleted every tag, right for a search
+engine's inline highlight and wrong only if a snippet ever held a block;
+none was seen. `browse` reads `innerText` in Chromium, which has the
+layout, and was not touched.
+
+A second cost was sitting in the same text. Pretty-printed pages kept
+their indentation: on the car page 21,334 characters of old text are 8,080
+with the same words, and the per-page limit of 1,500 characters held 98
+words where it now holds 297 (222 to 237 and 207 to 233 on the other two).
+Across the 227 pages quoted in the stored bench turns, about a tenth of
+the characters were whitespace beyond one separator.
+
+**Shipped** (`src/tools/page-text.ts`). Readability still chooses the
+article; its serializer now hands back the element, and `nodeText` walks
+it. The separators are the ones the HTML standard's `innerText` gives a
+rendered page, with the element's name standing in for its display: a
+line per block and per `<br>`, a tab between cells, a blank line around a
+paragraph, the source's own whitespace collapsed to one space. Inline
+markup yields nothing. The one inline boundary that yields a space is two
+elements with no text between them, each holding more than one character,
+where the join would run a letter or digit into another. Not inside `pre`,
+`code` or `math`, and not before `sup` or `sub`. A block that is the first
+or last thing in a cell does not break its row, because Readability turns
+a cell's wrapper `div` into a paragraph and the row came apart. A page
+Readability declines is walked the same way from the body, without nav,
+header, footer and aside; the pattern reader is under that and keeps the
+same contract. Output limits are the same numbers, and the control-token
+pass is where it was, at `executeCall`.
+
+**What the bench says, and does not.** `scripts/names-bench.mjs` gives the
+numbers it gave before: 25 of 66 withdrawn, 76 names listed, 24 of them
+not invented. It has to. Its turns store the text the tools returned in
+November, glued, and the check is unchanged. That is not a result for
+this change in either direction.
+
+What the stored text does allow is a count. Of the 24 names listed
+wrongly, three have their unfound word in the evidence only inside a glued
+token: "Lucid Air Grand Touring", "Chevrolet Silverado EV WT Max Range"
+and "Hi-Res LDAC", on two turns, each the turn's only missing names. So
+"several" in the entry above is three, and with the seams open two
+withdrawals would not have happened. One is a sound answer. The other
+answer did invent, elsewhere, and was caught for a name that was on the
+page: one each way, as with the endings rule. It is a count over old
+text, not a replay. The pages have changed since, and a model shown rows
+on one line would not have written the same answer.
+
+**Rejected:**
+- *Opening the seams in the grounding check* (split evidence at a
+  lower-to-upper change). The same stored turns hold "JavaScript" ten
+  times and "PlayStation" nine, which it would cut in two, and the model
+  would still be answering from glued text. The text is wrong where it is
+  made.
+- *A space at every tag*, which the fallback did. Nothing glues and words
+  open: search highlights and emphasis fall inside words.
+- *A space between any two adjacent inline elements.* Highlighted code is
+  adjacent spans (`price` `Count`), so is a heading animated letter by
+  letter, so is a price (`US$` `114` `,900`). Hence the conditions above;
+  each has a test.
+- *Asking the stylesheet*, or rendering every page for `innerText`. The
+  first is a layout engine. The second puts a browser under `web_fetch`,
+  whose point is that it has none, and under the three reads a search
+  makes.
+- *A visible cell separator* (" | "). Possibly clearer to the model, not
+  measured, and two more characters per cell out of 1,500. The tab is what
+  `browse` already returns.
+- *Markdown output* (a converter). A dependency, link targets and table
+  rules spending the same budget, and nothing measured on this model.
+- *Re-fetching the bench pages to show the numbers move.* It would be a
+  different set of turns scored against labels written for the old ones.
+
+**What this does not do:**
+- Text beside an element stays joined: `Stadium<span>Maracanã</span>` is
+  the same shape as `Sam<b>sung</b>` and only a stylesheet tells them
+  apart.
+- A one-character label next to another element stays joined (a rank "1"
+  in its own span, directly against a name).
+- A page that wraps each letter in a `div` comes back a letter per line.
+- Nothing here was measured on the model. Whether answers are better from
+  rows on one line, and whether a tab is the right cell separator, are
+  both open. No turn was run.
+- Mail bodies (`tools/mail.ts`) still turn every tag into a space.

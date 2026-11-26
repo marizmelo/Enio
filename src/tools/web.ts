@@ -2,6 +2,7 @@ import { config } from "../config.js";
 import { toolOutputChars } from "../model-settings.js";
 import type { ToolDef } from "../types.js";
 import { isBlockedHost, renderPage, playwrightAvailable } from "./browser.js";
+import { markupText, nodeText } from "./page-text.js";
 export { isBlockedHost };
 
 /**
@@ -191,8 +192,9 @@ async function runSearch(query: string, count: number): Promise<SearchHit[]> {
 
 /* ---------- extraction -------------------------------------------------- */
 
+/** One line of text from a fragment of markup: a title, a snippet. */
 function stripTags(html: string): string {
-  return html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+  return markupText(html).replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -200,9 +202,17 @@ function stripTags(html: string): string {
  * nodes by text density and link ratio to find the actual article. Much better
  * than tag-stripping, which cannot tell a nav sidebar from a paragraph.
  *
- * Falls back to the regex path when Readability declines — it returns null on
- * pages with no article-like structure, which is common for docs sites and
- * search results, and those still have text worth reading.
+ * Readability chooses the article; it does not write the text. Its own
+ * `textContent` is the article's text nodes end to end, with nothing where
+ * the page had a cell boundary, a list item or a line break, so the element
+ * it chose is read by `nodeText` instead (page-text.ts has the cases). That
+ * is why the serializer hands back the element and not its markup.
+ *
+ * When Readability declines — it returns null on pages with no article-like
+ * structure, which is common for docs sites and search results, and those
+ * still have text worth reading — the whole body is read the same way,
+ * without its navigation. The pattern reader is under that, for a page the
+ * parser itself cannot take.
  */
 export async function extractReadable(
   html: string,
@@ -219,16 +229,19 @@ export async function extractReadable(
     base.setAttribute("href", url);
     document.head?.appendChild(base);
 
-    const article = new Readability(document as never, { charThreshold: 200 }).parse();
-    if (article?.textContent && article.textContent.trim().length > 200) {
-      return {
-        title: article.title ?? "",
-        text: article.textContent.replace(/\n{3,}/g, "\n\n").trim(),
-        byReadability: true,
-      };
-    }
+    const article = new Readability(document as never, {
+      charThreshold: 200,
+      serializer: (el) => el,
+    }).parse();
+    const text = article?.content ? nodeText(article.content) : "";
+    if (text.length > 200) return { title: article?.title ?? "", text, byReadability: true };
+
+    // Readability edits the document it is given, so the fallback reads a
+    // fresh parse, not what was left of this one.
+    const whole = nodeText(parseHTML(html).document, { dropChrome: true });
+    if (whole) return { title: titleOf(html), text: whole, byReadability: false };
   } catch {
-    /* fall through to the regex path */
+    /* fall through to the pattern reader */
   }
   return { title: titleOf(html), text: htmlToText(html), byReadability: false };
 }
@@ -239,18 +252,7 @@ function titleOf(html: string): string {
 
 /** Crude but dependency-free fallback extraction. */
 export function htmlToText(html: string): string {
-  let text = html;
-  text = text.replace(/<script\b[\s\S]*?<\/script>/gi, " ");
-  text = text.replace(/<style\b[\s\S]*?<\/style>/gi, " ");
-  text = text.replace(/<noscript\b[\s\S]*?<\/noscript>/gi, " ");
-  text = text.replace(/<!--[\s\S]*?-->/g, " ");
-  text = text.replace(/<(nav|header|footer|aside)\b[\s\S]*?<\/\1>/gi, " ");
-  text = text.replace(/<\/(p|div|section|article|li|h[1-6]|tr)>/gi, "\n");
-  text = text.replace(/<br\s*\/?>/gi, "\n");
-  text = text.replace(/<[^>]+>/g, " ");
-  text = decodeEntities(text);
-  text = text.replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*\n+/g, "\n\n");
-  return text.trim();
+  return decodeEntities(markupText(html, { dropChrome: true }));
 }
 
 function decodeEntities(s: string): string {

@@ -72,6 +72,134 @@ describe("content extraction", () => {
   });
 });
 
+/**
+ * The same page shapes page-text.test.ts reads directly, here through the
+ * path the tools take: Readability picks the article, and what it picked is
+ * read with its layout. Minified, because indentation between tags hides
+ * the bug.
+ */
+describe("page text keeps what the layout separated", () => {
+  const prose =
+    "Range figures are the EPA estimates published for each trim, and prices are the manufacturers' own for the current model year. ".repeat(4);
+  const comparison =
+    `<html><head><title>Longest range</title></head><body><nav><a href="/">Home</a><a href="/evs">EVs</a></nav><article>` +
+    `<h1>Longest range electric cars</h1><p>${prose}</p>` +
+    `<table><thead><tr><th>Model</th><th>Price</th><th>Range</th></tr></thead><tbody>` +
+    `<tr><td class="model"><span class="model-name">Lucid Air</span><span class="model-trim">Grand Touring</span></td>` +
+    `<td>$114,900</td><td><div class="bar"><em>512 mi</em></div></td></tr>` +
+    `<tr><td class="model"><span class="model-name">Chevrolet Silverado EV</span><span class="model-trim">WT Max Range</span></td>` +
+    `<td>$74,600</td><td><div class="bar"><em>493 mi</em></div></td></tr></tbody></table>` +
+    `<h2>Sony ULT WEAR</h2><ul class="feats"><li>Adaptive ANC</li><li>30-hour battery</li><li>ULT bass mode</li><li>LDAC Hi-Res</li></ul>` +
+    `<dl><dt>Full name</dt><dd>Clube de Regatas do Flamengo</dd><dt>Nicknames</dt><dd>Rubro-Negro</dd></dl>` +
+    `<p>The <b>Sam</b>sung Galaxy and the iPhone both run on macOS-adjacent chips.<br>${prose}</p>` +
+    `</article><footer>Privacy policy</footer></body></html>`;
+  const glued = [
+    "Lucid AirGrand Touring",
+    "Silverado EVWT",
+    "Adaptive ANC30-hour batteryULT bass modeLDAC Hi-Res",
+    "Full nameClube de Regatas do FlamengoNicknamesRubro-Negro",
+  ];
+
+  test("Readability's own text glues these, which is what the tools used to return", async () => {
+    const [{ parseHTML }, { Readability }] = await Promise.all([import("linkedom"), import("@mozilla/readability")]);
+    const before = new Readability(parseHTML(comparison).document as never, { charThreshold: 200 }).parse()?.textContent ?? "";
+    for (const run of glued) assert.ok(before.includes(run), `expected the old text to hold "${run}"`);
+  });
+
+  test("the article's cells, items and stacked labels come back separated", async () => {
+    const { text, byReadability } = await extractReadable(comparison, "https://x.test/range");
+    assert.equal(byReadability, true, "the article path is the one under test");
+    for (const run of glued) assert.ok(!text.includes(run), `"${run}" is still glued`);
+    assert.ok(text.includes("Model\tPrice\tRange"));
+    assert.ok(text.includes("Lucid Air Grand Touring\t$114,900\t512 mi\nChevrolet Silverado EV WT Max Range\t$74,600\t493 mi"));
+    assert.ok(text.includes("Adaptive ANC\n30-hour battery\nULT bass mode\nLDAC Hi-Res"));
+    assert.ok(text.includes("Full name\nClube de Regatas do Flamengo\nNicknames\nRubro-Negro"));
+    assert.ok(text.includes("The Samsung Galaxy and the iPhone both run on macOS-adjacent chips.\nRange figures"));
+    assert.ok(!text.includes("Privacy policy") && !text.includes("Home"), "chrome is still dropped");
+    assert.ok(!/[ \t]{2,}|\n{3,}/.test(text), "no run of blank space spends the output budget");
+  });
+
+  test("the names the grounding check could not find are words again", async () => {
+    const { namesWithoutEvidence } = await import("./grounding.js");
+    // Both names are on the page, and each spans a seam: a name that sits
+    // on one side of it was always found, as a phrase inside the glued run.
+    const reply =
+      "The **Lucid Air Grand Touring** leads at 512 mi, ahead of the **Chevrolet Silverado EV WT Max Range** at 493 mi.";
+    const question = "which electric cars have the longest range";
+    const [{ parseHTML }, { Readability }] = await Promise.all([import("linkedom"), import("@mozilla/readability")]);
+    const before = new Readability(parseHTML(comparison).document as never, { charThreshold: 200 }).parse()?.textContent ?? "";
+    assert.deepEqual(namesWithoutEvidence(reply, [before], question), [
+      "Lucid Air Grand Touring",
+      "Chevrolet Silverado EV WT Max Range",
+    ]);
+    const { text } = await extractReadable(comparison, "https://x.test/range");
+    assert.deepEqual(namesWithoutEvidence(reply, [text], question), []);
+  });
+
+  test("a page Readability declines is read the same way, without its navigation", async () => {
+    const listing =
+      `<html><head><title>Specs</title><style>td{padding:4px}</style></head><body><nav><a href="/">Home</a><a href="/all">All</a></nav>` +
+      `<table><tr><th>Full name</th><td>Clube de Regatas do Flamengo</td></tr><tr><th>League</th>` +
+      `<td><a href="/a">Série A</a><br><a href="/c">Carioca</a></td></tr></table>` +
+      `<div><span class="chip">Adaptive ANC</span><span class="chip">LDAC Hi-Res</span></div>` +
+      `<p>The <b>Sam</b>sung one.</p><script>track()</script></body></html>`;
+    const { text, title, byReadability } = await extractReadable(listing, "https://x.test/specs");
+    assert.equal(byReadability, false);
+    assert.equal(title, "Specs");
+    assert.equal(
+      text,
+      "Full name\tClube de Regatas do Flamengo\nLeague\tSérie A\nCarioca\nAdaptive ANC LDAC Hi-Res\n\nThe Samsung one.",
+    );
+  });
+
+  test("the pattern reader under both keeps the same contract", () => {
+    const text = htmlToText(
+      `<body><header>Site</header><ul><li>Adaptive ANC</li><li>LDAC Hi-Res</li></ul>` +
+        `<table><tr><td>Lucid Air</td><td>Grand Touring</td></tr></table><p>The <b>Sam</b>sung &amp; co.</p></body>`,
+    );
+    assert.equal(text, "Adaptive ANC\nLDAC Hi-Res\nLucid Air\tGrand Touring\n\nThe Samsung & co.");
+  });
+
+  test("search reads the top pages within the same per-page limit, separated", async () => {
+    const page = comparison.replace(prose, "Intro. ").replace(prose, prose.repeat(6));
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("/search")) {
+        return new Response(
+          JSON.stringify({
+            results: [
+              { title: "Longest range", url: "https://example.com/range", content: "The <b>Sam</b>sung of EVs<br>Lucid Air<p>Grand Touring</p>" },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(page, { status: 200, headers: { "content-type": "text/html" } });
+    }) as typeof fetch;
+
+    const search = buildWebTools().find((t) => t.name === "web_search")!;
+    const result = toolText(await search.run({ query: "longest range ev", count: 1 }));
+    // The snippet: inline markup closes up, a break or a block is a space.
+    assert.ok(result.includes("The Samsung of EVs Lucid Air Grand Touring"), result.slice(0, 300));
+    const quoted = result.slice(result.indexOf("--- https://example.com/range\n") + "--- https://example.com/range\n".length);
+    assert.ok(quoted.includes("Lucid Air Grand Touring\t$114,900\t512 mi"));
+    assert.ok(quoted.includes("LDAC Hi-Res"));
+    assert.ok(quoted.endsWith("\n…"), "the page was longer than the limit and says so");
+    assert.equal(quoted.length, 1500 + "\n…".length, "the per-page limit is unchanged");
+  });
+
+  test("web_fetch still clips to the tool output limit", async () => {
+    const { toolOutputChars } = await import("./model-settings.js");
+    const long = comparison.replace(prose, prose.repeat(400));
+    globalThis.fetch = (async () =>
+      new Response(long, { status: 200, headers: { "content-type": "text/html" } })) as typeof fetch;
+    const fetchTool = buildWebTools().find((t) => t.name === "web_fetch")!;
+    const result = toolText(await fetchTool.run({ url: "https://example.com/range" }));
+    assert.ok(result.endsWith("\n\n[truncated]"));
+    assert.equal(result.length, toolOutputChars() + "\n\n[truncated]".length);
+  });
+});
+
 describe("search provider selection", () => {
   test("prefers SearXNG when its URL is set", () => {
     assert.equal(activeProvider(), "searxng");
