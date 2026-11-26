@@ -116,3 +116,78 @@ test("warm reports the load, long text is capped, and a failed synthesis is null
   w.reply({ id: w.sent[2].id, ok: true, voices: ["am_fenrir", "af_heart"] });
   assert.deepEqual(await voices, ["am_fenrir", "af_heart"]);
 });
+
+/**
+ * The silence at a clip's ends. Kokoro leaves about 240 ms before the first
+ * word and half a second after the last, and a reply is one clip per
+ * sentence, so untrimmed there was three quarters of a second of nothing
+ * between every two sentences. Nothing fails when the trim is wrong: the
+ * voice just loses the start of its first word, or pauses like it forgot.
+ */
+function wavOf(samples: number[], { rate = 24000, float = true } = {}): Buffer {
+  const bytes = float ? 4 : 2;
+  const data = Buffer.alloc(samples.length * bytes);
+  samples.forEach((v, i) => (float ? data.writeFloatLE(v, i * 4) : data.writeInt16LE(Math.round(v * 32767), i * 2)));
+  const head = Buffer.alloc(44);
+  head.write("RIFF", 0, "latin1");
+  head.writeUInt32LE(36 + data.length, 4);
+  head.write("WAVEfmt ", 8, "latin1");
+  head.writeUInt32LE(16, 16);
+  head.writeUInt16LE(float ? 3 : 1, 20);
+  head.writeUInt16LE(1, 22);
+  head.writeUInt32LE(rate, 24);
+  head.writeUInt32LE(rate * bytes, 28);
+  head.writeUInt16LE(bytes, 32);
+  head.writeUInt16LE(bytes * 8, 34);
+  head.write("data", 36, "latin1");
+  head.writeUInt32LE(data.length, 40);
+  return Buffer.concat([head, data]);
+}
+const ms = (n: number, rate = 24000) => Math.round((n / 1000) * rate);
+const framesOf = (wav: Buffer, bytes = 4) => wav.readUInt32LE(40) / bytes;
+
+test("a clip keeps a short lead and tail, and loses the long silence around them", async () => {
+  const { trimSilence, KEEP_LEAD_MS, KEEP_TAIL_MS } = await import("./voice.js");
+  // 240 ms of floor, 500 ms of speech with a pause in the middle, 600 ms of floor.
+  const speech = [...Array(ms(200)).fill(0.3), ...Array(ms(100)).fill(0), ...Array(ms(200)).fill(-0.3)];
+  const clip = wavOf([...Array(ms(240)).fill(0.001), ...speech, ...Array(ms(600)).fill(0.001)]);
+  const out = trimSilence(clip);
+
+  assert.equal(framesOf(out), ms(KEEP_LEAD_MS) + speech.length + ms(KEEP_TAIL_MS));
+  // The header agrees with the body, or a player reads past the end.
+  assert.equal(out.readUInt32LE(4), out.length - 8);
+  assert.equal(out.length, 44 + framesOf(out) * 4);
+  // The first sample of speech is exactly where the lead says, untouched,
+  // and the pause inside the sentence is still a pause.
+  assert.ok(Math.abs(out.readFloatLE(44 + ms(KEEP_LEAD_MS) * 4) - 0.3) < 1e-6);
+  assert.equal(out.readFloatLE(44 + (ms(KEEP_LEAD_MS) + ms(250)) * 4), 0);
+});
+
+test("a soft first consonant is speech, not silence to cut", async () => {
+  const { trimSilence, KEEP_LEAD_MS } = await import("./voice.js");
+  // An "h": quiet, well under the vowel that follows, and the first thing lost
+  // by a trim that looks for loudness.
+  const clip = wavOf([...Array(ms(300)).fill(0.0005), ...Array(ms(60)).fill(0.012), ...Array(ms(300)).fill(0.4), ...Array(ms(400)).fill(0)]);
+  const out = trimSilence(clip);
+  assert.ok(Math.abs(out.readFloatLE(44 + ms(KEEP_LEAD_MS) * 4) - 0.012) < 1e-6, "the consonant starts the clip");
+});
+
+test("16-bit clips are trimmed the same way", async () => {
+  const { trimSilence, KEEP_LEAD_MS, KEEP_TAIL_MS } = await import("./voice.js");
+  const clip = wavOf([...Array(ms(240, 16000)).fill(0), ...Array(ms(300, 16000)).fill(0.5), ...Array(ms(500, 16000)).fill(0)], { rate: 16000, float: false });
+  const out = trimSilence(clip);
+  assert.equal(framesOf(out, 2), ms(KEEP_LEAD_MS, 16000) + ms(300, 16000) + ms(KEEP_TAIL_MS, 16000));
+});
+
+test("what it cannot read, or has nothing to cut from, comes back as it was", async () => {
+  const { trimSilence } = await import("./voice.js");
+  const silent = wavOf(Array(ms(500)).fill(0));
+  assert.equal(trimSilence(silent), silent, "silence throughout");
+  const tight = wavOf(Array(ms(300)).fill(0.3));
+  assert.equal(trimSilence(tight), tight, "already tight");
+  const junk = Buffer.from("not a wav file at all, just some bytes that are long enough");
+  assert.equal(trimSilence(junk), junk);
+  const eightBit = wavOf(Array(ms(300)).fill(0.3));
+  eightBit.writeUInt16LE(8, 34);
+  assert.equal(trimSilence(eightBit), eightBit, "a format it does not know");
+});

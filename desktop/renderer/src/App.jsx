@@ -49,7 +49,7 @@ import { currentModel } from "@/lib/recipes";
 import { MemoryDialog } from "@/components/MemoryDialog";
 import { NotesDialog } from "@/components/NotesDialog";
 import { SkillsDialog } from "@/components/SkillsDialog";
-import { onSpeaking, speak, stopSpeaking, takeSentences, warmVoice } from "@/lib/speech";
+import { onSpeaking, primeSpeech, speak, stopSpeaking, takeFirstClause, takeSentences, warmVoice } from "@/lib/speech";
 import { transcribe as transcribeAudio } from "@/lib/dictation";
 import { startUtteranceRecorder } from "@/lib/utterance-recorder";
 import { createVoiceLoop } from "@/lib/voice-loop";
@@ -780,6 +780,12 @@ export function App() {
       let thinking = 0;
       // Text streamed but not yet handed to the voice.
       let unspoken = "";
+      // Whether anything of this reply has been handed to the voice yet:
+      // only the very first thing said may be cut at a clause.
+      let spoke = false;
+      // A reply that will be read aloud is coming. The output takes a
+      // moment to wake, and the model takes longer than that to answer.
+      if (speakReplies) primeSpeech(15000);
       const notices = [];
       let withdrawn = null;
       let basis = null;
@@ -863,6 +869,7 @@ export function App() {
             // speech is dropped too; the withdrawn words must not be read out.
             assistant = "";
             unspoken = "";
+            spoke = false;
             withdrawn = event.reason;
             // Including what is already queued or playing: the comment above
             // promised it, and a face mouthing withdrawn words made the gap
@@ -886,7 +893,11 @@ export function App() {
             // whole answer has finished streaming.
             if (speakReplies) {
               unspoken += event.text;
-              const { ready, rest } = takeSentences(unspoken);
+              let { ready, rest } = takeSentences(unspoken);
+              // Nothing said yet and no sentence finished: start on the
+              // opening clause rather than wait out a long first sentence.
+              if (!spoke && ready.length === 0) ({ ready, rest } = takeFirstClause(unspoken));
+              if (ready.length > 0) spoke = true;
               unspoken = rest;
               // Tracked in a ref: the voice loop's "speaking" state awaits
               // the LAST of these — every speak() joins one drain, so the
@@ -996,6 +1007,7 @@ export function App() {
   const enterVoiceMode = useCallback(async () => {
     if (voiceLoopRef.current) return;
     warmVoice(); // Kokoro's cold load is ~4.5s; pay it now, not mid-reply
+    primeSpeech(15000);
     prevSpeakRepliesRef.current = speakReplies;
     setSpeakReplies(true);
     const loop = createVoiceLoop({

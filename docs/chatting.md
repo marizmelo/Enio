@@ -92,6 +92,14 @@ own. While anything is being read, the composer's speaker becomes a stop
 button and Escape stops it too; stopping does not switch spoken replies
 off. Needs a voice (`ENIO_TTS`); without one the buttons are not shown.
 
+Speech starts as early as it can. The voice needs a finished piece of text
+before it can say it, and making the sound takes roughly two fifths as long
+as the sound lasts, so the first thing spoken is the reply's opening clause
+rather than its whole first sentence. The silence the voice leaves at each
+end of a sentence is trimmed, which leaves a short natural pause between
+sentences. And the audio output is woken before the first word is ready, so
+that word is not lost to an output that was still coming up.
+
 ## Voice conversation
 
 Press **Talk** on the [avatar](avatar.md)'s window and speak: Enio

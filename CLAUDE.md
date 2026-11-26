@@ -474,6 +474,15 @@ MCP server. People reach for MCP when they needed a skill.
   too, because naming an entitlements file replaces the builder's defaults.
   The recorder now reports an open-but-silent input (`createSilenceWatch`),
   which is how the next cause of this shows itself instead of hiding.
+- The first word of a spoken reply went unheard, and no clip was missing
+  it: every clip the server makes transcribes back to its own first word.
+  The output was asleep when the clip started — the plain path opened a new
+  stream per sentence with `new Audio()`. Speech now plays through one
+  audio context held awake by an inaudible primer (`audio-out.js`), started
+  when speech becomes likely, not when it is ready. Do not go back to an
+  element per sentence, and do not add a path that plays speech without
+  calling `primeSpeech` first. Whether it is fixed can only be judged by
+  ear; nothing in the suite can hear.
 - Electron and Chromium apps (VSCodium, Slack, Figma, Discord) expose no
   accessibility tree until a client sets `AXManualAccessibility` on the
   application element — no focused field, an empty front window — so a

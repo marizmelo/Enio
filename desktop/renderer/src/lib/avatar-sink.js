@@ -1,4 +1,5 @@
 import { estimateWordTimes } from "./word-timing.js";
+import { createPrimer } from "./audio-out.js";
 
 /**
  * The speech player's outlet while the face is on screen.
@@ -26,7 +27,12 @@ export function createAvatarSink(head, { estimate = estimateWordTimes, graceMs =
     for (const resolve of pending) resolve();
     pending.clear();
   };
+  // The head plays through an audio context of its own, so the one the
+  // player keeps awake is not the one a face speaks from.
+  const primer = createPrimer(() => head.audioCtx);
   return {
+    prime: (ms) => primer.prime(ms),
+    warmFor: () => primer.warmFor(),
     async play(blob, text, timing = null) {
       const bytes = await blob.arrayBuffer();
       // Decoding on a context that gets closed mid-way (the pane unmounted
@@ -85,6 +91,7 @@ export function createAvatarSink(head, { estimate = estimateWordTimes, graceMs =
     },
     dispose() {
       disposed = true;
+      primer.stop();
       endDisposal();
       settleAll();
     },

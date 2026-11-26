@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
  * renderer module as untyped rather than demanding a declaration for it.
  */
 const SPEECH = "../desktop/renderer/src/lib/speech.js";
+const AUDIO_OUT = "../desktop/renderer/src/lib/audio-out.js";
 
 const SYNTH_MS = 120;
 const PLAY_MS = 200;
@@ -282,5 +283,130 @@ describe("a speech sink", () => {
     } finally {
       setSpeechSink(null);
     }
+  });
+});
+
+/**
+ * The start of a spoken reply. Two different losses, both silent: the first
+ * word going unheard because the output was asleep when the clip started,
+ * and the first sentence going unsaid for seconds because speech waited for
+ * its full stop.
+ */
+describe("the first words of a reply", () => {
+  test("an output that has just been woken is given time before the first clip", async () => {
+    installBrowserStubs([], () => 0);
+    const { speak, setSpeechSink, clearSpeechSink } = (await import(SPEECH)) as any;
+    const { WARM_MS } = (await import(AUDIO_OUT)) as any;
+    let primedAt = 0;
+    let playedAt = 0;
+    const sink = {
+      prime() {
+        if (!primedAt) primedAt = Date.now();
+      },
+      warmFor: () => (primedAt ? Date.now() - primedAt : 0),
+      async play() {
+        if (!playedAt) playedAt = Date.now();
+      },
+      stop() {},
+    };
+    setSpeechSink(sink);
+    try {
+      await speak("Hello.");
+      assert.ok(primedAt > 0, "the output was woken when the sentence was queued");
+      // Synthesis in the stub takes 120 ms, less than the warm-up: the clip
+      // must wait out the rest, not start into an output still coming up.
+      assert.ok(playedAt - primedAt >= WARM_MS - 15, `played ${playedAt - primedAt}ms after waking, wanted ${WARM_MS}`);
+
+      // Already warm: the next sentence waits for nothing but its synthesis.
+      const before = Date.now();
+      playedAt = 0;
+      await speak("Again.");
+      assert.ok(playedAt - before < WARM_MS, `a warm output was made to wait ${playedAt - before}ms`);
+    } finally {
+      clearSpeechSink(sink);
+    }
+  });
+
+  test("a primer starts once, is extended by each request, and lets go when nothing more is asked", async () => {
+    const { createPrimer } = (await import(AUDIO_OUT)) as any;
+    let clock = 0;
+    let scheduled: { fn: () => void; at: number } | null = null;
+    const started: string[] = [];
+    const ctx = {
+      state: "running",
+      sampleRate: 100,
+      destination: {},
+      createBuffer: (_c: number, n: number) => ({ getChannelData: () => new Float32Array(n) }),
+      createBufferSource: () => ({
+        buffer: null,
+        loop: false,
+        connect() {},
+        disconnect() {},
+        start: () => started.push("start"),
+        stop: () => started.push("stop"),
+      }),
+    };
+    const primer = createPrimer(() => ctx, {
+      now: () => clock,
+      later: (fn: () => void, ms: number) => (scheduled = { fn, at: clock + ms }),
+      cancel: () => (scheduled = null),
+    });
+
+    assert.equal(primer.warmFor(), 0, "asleep until asked");
+    primer.prime(1000);
+    clock = 400;
+    primer.prime(1000);
+    assert.deepEqual(started, ["start"], "one source, however often it is asked");
+    assert.equal(primer.warmFor(), 400);
+    assert.equal(scheduled!.at, 1400, "the later request extends the hold");
+    // A shorter request does not cut a longer one short.
+    primer.prime(100);
+    assert.equal(scheduled!.at, 1400);
+
+    clock = 1400;
+    scheduled!.fn();
+    assert.deepEqual(started, ["start", "stop"]);
+    assert.equal(primer.warmFor(), 0);
+    // A context that is gone is not an error, it is nothing to wake.
+    createPrimer(() => null).prime();
+    createPrimer(() => ({ state: "closed" })).prime();
+  });
+
+  test("the opening clause is ready before its sentence ends", async () => {
+    const { takeFirstClause } = (await import(SPEECH)) as any;
+    assert.deepEqual(
+      takeFirstClause("The Santa Maria Trail is one of the top options in Sintra, and it is short enough"),
+      { ready: ["The Santa Maria Trail is one of the top options in Sintra,"], rest: " and it is short enough" },
+    );
+    // A fragment is not worth a clip of its own: wait for more.
+    assert.deepEqual(takeFirstClause("Well, that depends on what you"), { ready: [], rest: "Well, that depends on what you" });
+    // …and the next boundary that is long enough is the one taken.
+    assert.deepEqual(takeFirstClause("Well, that depends on what you want: speed or"), {
+      ready: ["Well, that depends on what you want:"],
+      rest: " speed or",
+    });
+    // A comma inside a number is not a clause boundary.
+    assert.deepEqual(takeFirstClause("There are about 1,000 trails in the whole region and"), {
+      ready: [],
+      rest: "There are about 1,000 trails in the whole region and",
+    });
+    // A boundary still being typed is not one yet.
+    assert.deepEqual(takeFirstClause("The trail is short and easy to follow,").ready, []);
+    assert.deepEqual(takeFirstClause("It takes about an hour — less if you").ready, ["It takes about an hour —"]);
+  });
+
+  test("with no punctuation to cut at, a long opening breaks before a joining word", async () => {
+    const { takeFirstClause } = (await import(SPEECH)) as any;
+    assert.deepEqual(
+      takeFirstClause("The best way to reach the old lighthouse is by the coast road because the inland"),
+      { ready: ["The best way to reach the old lighthouse is by the coast road"], rest: " because the inland" },
+    );
+    // Not early: a short run before "and" is a list, not a clause.
+    assert.deepEqual(takeFirstClause("Bread and butter and a little jam are all you need for").ready, []);
+    // Punctuation, when it comes first, is the better place.
+    assert.deepEqual(
+      takeFirstClause("The best way to reach the lighthouse, which is old and lovely, is").ready,
+      ["The best way to reach the lighthouse,"],
+    );
   });
 });

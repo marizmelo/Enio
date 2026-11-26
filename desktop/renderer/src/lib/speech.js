@@ -18,6 +18,10 @@
  * read, and the gap is whatever is left of the last one when playback ends.
  */
 
+// Relative, not the @/ alias: this module is imported by the node test
+// suite, which has no bundler to resolve aliases.
+import { WARM_MS, createPrimer, outputContext } from "./audio-out.js";
+
 /**
  * How many sentences to synthesise ahead.
  *
@@ -75,11 +79,85 @@ const htmlAudioSink = {
     this.current = null;
   },
 };
+/**
+ * The plain path, through one audio context held for the whole session.
+ *
+ * The element above opens a new output stream for every sentence, and a
+ * stream that has just been opened does not deliver its first moments —
+ * which was the first word of every reply. A context is opened once, kept
+ * awake by the primer (audio-out.js), and each clip is a buffer started on
+ * it. The element stays as the fallback for a body that will not decode and
+ * for anywhere without Web Audio.
+ *
+ * Rejects only before anything is audible, the contract every sink keeps,
+ * so the caller can hand the same clip to the element without it playing
+ * twice.
+ */
+const contextSink = {
+  current: null,
+  async play(blob) {
+    const ctx = outputContext();
+    if (!ctx) throw new Error("no Web Audio here");
+    const buffer = await ctx.decodeAudioData(await blob.arrayBuffer());
+    if (ctx.state === "suspended") await ctx.resume();
+    await new Promise((resolve) => {
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      const entry = { source, resolve };
+      this.current = entry;
+      source.onended = () => {
+        if (this.current === entry) this.current = null;
+        resolve();
+      };
+      source.start();
+    });
+  },
+  stop() {
+    const entry = this.current;
+    if (!entry) return;
+    this.current = null;
+    try {
+      entry.source.onended = null;
+      entry.source.stop();
+      entry.source.disconnect();
+    } catch {
+      // Not started, or already over.
+    }
+    // A stopped source fires no "ended" once its handler is gone, and the
+    // drain is waiting on this promise.
+    entry.resolve();
+  },
+};
+const sharedPrimer = createPrimer(outputContext);
+
 let sink = null;
 
-/** Route playback through `next` ({play(blob, text), stop()}); null restores the element. */
+/** Route playback through `next` ({play(blob, text), stop(), prime?(ms),
+ *  warmFor?()}); null restores the plain path. */
 export function setSpeechSink(next) {
   sink = next;
+}
+
+/**
+ * Wake the output that the next sentence will come out of.
+ *
+ * Called the moment speech becomes likely — a message sent with read-aloud
+ * on, the conversation mode opening — and again on every sentence queued,
+ * so the output is already up when the first clip arrives. A face has its
+ * own audio context, so it primes its own; without one it is the shared
+ * context. Safe to call at any rate: it only extends a timer.
+ */
+export function primeSpeech(ms = 6000) {
+  if (sink?.prime) sink.prime(ms);
+  else sharedPrimer.prime(ms);
+}
+
+/** How long the output about to be used has been awake. Infinity when
+ *  there is nothing to wake (no Web Audio): the element needs no wait. */
+function warmFor() {
+  if (sink?.warmFor) return sink.warmFor();
+  return outputContext() ? sharedPrimer.warmFor() : Infinity;
 }
 
 /** Unregister, but only if `which` is still the one registered: a pane
@@ -118,6 +196,7 @@ export function stopSpeaking() {
   queue = [];
   draining = false;
   sink?.stop();
+  contextSink.stop();
   htmlAudioSink.stop();
   announce(false);
 }
@@ -207,6 +286,14 @@ async function drain(mine) {
     const blob = await item.blob;
     if (!blob || mine !== generation) continue;
 
+    // Held awake for as long as there is something to say, and never started
+    // into cold: synthesis nearly always outlasts the warm-up, so this wait
+    // is zero in practice and is here for the clip that arrives sooner.
+    primeSpeech();
+    const cold = WARM_MS - warmFor();
+    if (cold > 0) await new Promise((r) => setTimeout(r, cold));
+    if (mine !== generation) continue;
+
     const target = sink;
     let played = false;
     if (target) {
@@ -215,6 +302,14 @@ async function drain(mine) {
         played = true;
       } catch {
         // Rejected before queuing: the sentence is still owed, the plain way.
+      }
+    }
+    if (!played && mine === generation) {
+      try {
+        await contextSink.play(blob);
+        played = true;
+      } catch {
+        // No Web Audio, or a body it would not decode: the element says it.
       }
     }
     if (!played && mine === generation) await htmlAudioSink.play(blob);
@@ -283,6 +378,8 @@ export function speak(text) {
   const trimmed = spokenText(text);
   if (!trimmed) return Promise.resolve();
   queue.push({ text: trimmed, blob: null });
+  // The output starts waking now, while the sentence is being made.
+  primeSpeech();
   // Kicked off here rather than only in the drain loop, so the first sentence
   // starts being made the moment it is known, and the second while the first
   // is still playing.
@@ -313,6 +410,55 @@ export function takeSentences(buffer) {
   }
 
   return { ready: ready.filter(Boolean), rest: buffer.slice(consumed) };
+}
+
+/** The least a first clause must hold to be worth saying on its own. A
+ *  shorter one ("Well,", "Yes,") is a fragment whose clip is mostly the
+ *  pause after it. */
+const FIRST_CLAUSE_CHARS = 24;
+/** And the least before a cut with no punctuation to justify it. */
+const OPENING_CHARS = 44;
+const OPENING_WORDS = 9;
+
+/**
+ * The opening clause of a reply, ready to speak before its sentence ends.
+ *
+ * Speech used to wait for the first full stop. Synthesis takes about two
+ * fifths as long as the clip it makes, so a long opening sentence — eight
+ * seconds read aloud — put three seconds of silence after its text was
+ * already on screen, and that first wait is the one a person feels. Cut at
+ * its first clause boundary the opening is a couple of seconds long and its
+ * clip is ready in under one; the rest of the sentence is being made while
+ * that plays.
+ *
+ * Only ever for the first thing said in a reply: every later sentence is
+ * synthesised while the one before it plays, so splitting them would buy
+ * nothing and cost the engine the sentence's natural rise and fall. A comma
+ * between digits ("1,000") is not followed by a space and is not a boundary.
+ */
+export function takeFirstClause(buffer) {
+  const text = String(buffer ?? "");
+  const boundary = /[,;:](?=\s)|\s[—–-]\s/g;
+  let m;
+  while ((m = boundary.exec(text))) {
+    const end = m.index + (m[0].length === 1 ? 1 : m[0].length - 1);
+    const clause = text.slice(0, end).trim();
+    if (clause.length >= FIRST_CLAUSE_CHARS && clause.split(/\s+/).length >= 4) {
+      return { ready: [clause], rest: text.slice(end) };
+    }
+  }
+  // A long opening with no punctuation in it at all still has places a
+  // speaker would breathe: before the word that joins the next clause on.
+  // Held to a full clause's worth of words first, so "bread and butter"
+  // is never cut, and only once the joining word has itself arrived.
+  const joiner = /\s(?=(?:and|but|or|so|because|which|while|when|where|although|though|since|unless|until|if)\s)/gi;
+  while ((m = joiner.exec(text))) {
+    const clause = text.slice(0, m.index).trim();
+    if (clause.length >= OPENING_CHARS && clause.split(/\s+/).length >= OPENING_WORDS) {
+      return { ready: [clause], rest: text.slice(m.index) };
+    }
+  }
+  return { ready: [], rest: text };
 }
 
 /**

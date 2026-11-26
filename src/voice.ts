@@ -339,6 +339,89 @@ function forkVoiceWorker(): VoiceWorkerLike {
   };
 }
 
+/** How much quiet a spoken clip keeps at each end. */
+export const KEEP_LEAD_MS = 90;
+export const KEEP_TAIL_MS = 160;
+/** Below this a sample is the engine's own floor, not speech. Low enough to
+ *  keep a soft first consonant ("h", "s", "f"), which is the part of a
+ *  sentence a careless trim removes. */
+const QUIET = 0.008;
+
+/**
+ * Cut the silence an engine leaves at both ends of a clip.
+ *
+ * Measured on Kokoro: every clip opens with about 240 ms of near-silence and
+ * closes with 450 to 630 ms. A reply is spoken one sentence per clip, so
+ * between every two sentences sat three quarters of a second of nothing —
+ * which is most of why speech fell behind the text, and why a face held its
+ * mouth still mid-answer. A natural pause between sentences is about a
+ * quarter of a second; this leaves that much.
+ *
+ * Only the ends are touched, never a pause inside a sentence. Any clip this
+ * cannot read — a format other than 16-bit PCM or 32-bit float, a header it
+ * does not recognise, a clip that is silence throughout — is returned as it
+ * came: a clip with long pauses is still a spoken sentence, and a mangled
+ * one is not.
+ */
+export function trimSilence(wav: Buffer, leadMs = KEEP_LEAD_MS, tailMs = KEEP_TAIL_MS): Buffer {
+  try {
+    if (wav.length < 44 || wav.toString("latin1", 0, 4) !== "RIFF" || wav.toString("latin1", 8, 12) !== "WAVE") return wav;
+    let at = 12;
+    let fmt: { format: number; channels: number; rate: number; bits: number; block: number } | null = null;
+    let data: { at: number; size: number; sizeAt: number } | null = null;
+    while (at + 8 <= wav.length) {
+      const id = wav.toString("latin1", at, at + 4);
+      const size = wav.readUInt32LE(at + 4);
+      if (id === "fmt ") {
+        fmt = {
+          format: wav.readUInt16LE(at + 8),
+          channels: wav.readUInt16LE(at + 10),
+          rate: wav.readUInt32LE(at + 12),
+          block: wav.readUInt16LE(at + 20),
+          bits: wav.readUInt16LE(at + 22),
+        };
+      } else if (id === "data") {
+        data = { at: at + 8, size: Math.min(size, wav.length - at - 8), sizeAt: at + 4 };
+        break;
+      }
+      at += 8 + size + (size % 2);
+    }
+    if (!fmt || !data || fmt.block === 0 || fmt.rate === 0) return wav;
+    const float = fmt.format === 3 && fmt.bits === 32;
+    const pcm16 = fmt.format === 1 && fmt.bits === 16;
+    if (!float && !pcm16) return wav;
+
+    const frames = Math.floor(data.size / fmt.block);
+    const loud = (frame: number): boolean => {
+      for (let c = 0; c < fmt!.channels; c++) {
+        const o = data!.at + frame * fmt!.block + c * (fmt!.bits / 8);
+        const v = float ? wav.readFloatLE(o) : wav.readInt16LE(o) / 32768;
+        if (Math.abs(v) > QUIET) return true;
+      }
+      return false;
+    };
+    let first = 0;
+    while (first < frames && !loud(first)) first++;
+    if (first === frames) return wav; // silence throughout: not ours to shorten
+    let last = frames - 1;
+    while (last > first && !loud(last)) last--;
+
+    const from = Math.max(0, first - Math.round((leadMs / 1000) * fmt.rate));
+    const to = Math.min(frames, last + 1 + Math.round((tailMs / 1000) * fmt.rate));
+    if (from === 0 && to === frames) return wav;
+
+    const body = wav.subarray(data.at + from * fmt.block, data.at + to * fmt.block);
+    // Everything up to the samples is kept as it was, and anything after the
+    // data chunk is dropped: nothing a player needs lives there.
+    const out = Buffer.concat([wav.subarray(0, data.at), body]);
+    out.writeUInt32LE(out.length - 8, 4);
+    out.writeUInt32LE(body.length, data.sizeAt);
+    return out;
+  } catch {
+    return wav;
+  }
+}
+
 const voiceClient = createVoiceClient({
   spawn: forkVoiceWorker,
   engine: () => config.ttsEngine,
@@ -347,7 +430,10 @@ const voiceClient = createVoiceClient({
 });
 
 export const warmVoice = (): Promise<boolean> => voiceClient.warm();
-export const synthesize = (text: string): Promise<Buffer | null> => voiceClient.synthesize(text);
+export const synthesize = async (text: string): Promise<Buffer | null> => {
+  const wav = await voiceClient.synthesize(text);
+  return wav ? trimSilence(wav) : null;
+};
 export const kokoroVoices = (): Promise<string[]> => voiceClient.voices();
 
 /**

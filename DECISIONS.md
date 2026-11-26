@@ -4330,3 +4330,79 @@ a voice command to interrupt (the microphone is closed exactly when you
 would want to barge in, by the half-duplex design); treating a quiet room
 as a fault by thresholding the level (it would nag everyone who paused to
 think).
+
+### The first word of a reply, and the wait before it (November 2026)
+
+**Chose:** three changes to spoken replies, each against something
+measured.
+
+- The audio output is opened before there is anything to say and held open
+  while there is, by a looped second of noise at -80 dBFS
+  (`desktop/renderer/src/lib/audio-out.js`). Speech without a face plays as
+  buffers on that one context; the face primes its own.
+- The server trims the silence at both ends of every clip (`trimSilence` in
+  `src/voice.ts`).
+- The first thing spoken in a reply is its opening clause, not its whole
+  first sentence (`takeFirstClause`).
+
+**The report.** The start of the audio was cut, with the face and with the
+plain read-aloud button, and speech lagged the written reply.
+
+**Measured (25 Nov, Kokoro q8 on this machine's CPU):**
+
+| | before | after |
+|---|---|---|
+| quiet before the first word of a clip | about 240 ms | about 100 ms |
+| quiet after the last word | 450 to 630 ms | about 180 ms |
+| so, dead air between two sentences | about 750 ms | about 280 ms |
+| "Hello!" as a clip | 1.15 s | 0.74 s |
+| synthesis time, as a share of the clip's length | about 0.4 | the same |
+
+- **No clip was missing its first word.** Six clips, each converted and
+  transcribed back by the same whisper the microphone uses: every one
+  returned its opening word, "Hello" and "Yes" included. So the cut is at
+  playback, and the avatar library's player starts a buffer at the
+  context's current time with no trim. What the two paths shared was an
+  output that had been idle. The plain path made it worse than it had to
+  be: a new `Audio` element, and so a new output stream, for every
+  sentence.
+- **Where the lag came from.** The voice cannot start a clip until its
+  text is complete, and synthesis takes about two fifths of the clip's
+  length. A long opening sentence, eight seconds spoken, was three seconds
+  of silence after its text was on screen. Then three quarters of a second
+  of nothing between every two sentences, which is the engine's own
+  padding, twice.
+- **The primer starts when speech becomes likely, not when it is ready:**
+  a message sent with read-aloud on, the read-aloud button, the
+  conversation opening. That is always earlier than the first clip, so the
+  warm-up costs no time. A floor of 350 ms is enforced for the clip that
+  arrives sooner.
+- **Noise, not silence.** Some outputs treat a run of zero samples as
+  nothing playing and go quiet anyway.
+- **It lets go.** The primer stops a few seconds after the last request, so
+  the app does not hold the audio device for as long as it is open.
+
+**Not verified, and it should be said plainly:** whether the first word is
+heard now. Nothing here can listen to the headphone jack. What was verified
+is that both paths play a reply to completion through the new player, that
+the clips are complete and trimmed as measured, and that the primer and the
+warm-up behave as specified in tests. The cause is an inference from what
+the two paths had in common, not a recording of the fault. If the first
+word is still lost, the next thing to try is a longer `WARM_MS`, and after
+that capturing the output through a loopback device to see what actually
+leaves the machine.
+
+**Rejected:** padding the first clip with silence (it adds the delay it is
+meant to hide, and does nothing for an output that sleeps through
+silence); cutting the opening at a fixed word count (the voice ends every
+clip with a falling tone, so a cut mid-phrase sounds like a stop; cuts are
+only at punctuation, or before a joining word after nine words);
+splitting every sentence into clauses (later sentences are synthesised
+while the one before plays, so it would buy nothing and cost the
+sentence's shape); trimming on the client (every client would need it,
+and the server already holds the samples).
+
+**Open:** the engine itself. At 0.4 of real time, the wait for the first
+sound is 0.4 of the first clip, however it is cut. A faster build of the
+voice (a different quantisation, or the GPU) would move that number for
+every sentence; nothing here does.
