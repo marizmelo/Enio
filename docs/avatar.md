@@ -28,6 +28,16 @@ anything is being read — a reply, or a message you asked for with the
 speaker button under it — the speaker in the composer becomes a stop
 button, and Escape stops it too.
 
+## Talking with it
+
+**Talk**, at the bottom of the face's window, starts a spoken conversation:
+you speak, Enio answers aloud, and it listens again. The pill that replaces
+the button shows whose turn it is, interrupts when you click it mid-reply,
+and has an × beside it to end the conversation. See
+[Voice conversation](chatting.md#voice-conversation) for how the turn-taking
+works. Hiding the face ends the conversation, so the microphone is never
+left open behind a window with no way to close it.
+
 ## Installing a face
 
 Enio ships no face in the app itself: the head is a file of tens of

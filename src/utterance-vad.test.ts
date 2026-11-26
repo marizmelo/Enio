@@ -100,3 +100,51 @@ describe("the VAD tracker", () => {
     assert.ok(Math.abs(half - 0.5) < 1e-6);
   });
 });
+
+/**
+ * A microphone that is open and sending nothing. Nothing throws when this
+ * happens: getUserMedia resolves, the mode says "listening…", and every
+ * sample is zero. It was the installed app's state for as long as it was
+ * signed without the audio-input entitlement.
+ */
+describe("a microphone that delivers no sound at all", () => {
+  async function watch(afterMs = 3000) {
+    const { createSilenceWatch } = (await import(LIB)) as any;
+    return createSilenceWatch({ blockMs: BLOCK_MS, afterMs });
+  }
+
+  test("exact silence for three seconds is reported once, not on every block", async () => {
+    const w = await watch();
+    const blocks = Math.ceil(3000 / BLOCK_MS);
+    assert.deepEqual(pushN(w, 0, blocks - 1), [], "not yet");
+    assert.deepEqual(pushN(w, 0, 1), ["dead"]);
+    assert.deepEqual(pushN(w, 0, 200), [], "said once");
+  });
+
+  test("a quiet room is not a dead microphone: any signal at all resets it", async () => {
+    const w = await watch();
+    // Far below the speech threshold, and still not zero.
+    assert.deepEqual(pushN(w, 0.00002, 500), []);
+    // A real input that drops a block of zeros now and then never gets there.
+    for (let i = 0; i < 40; i++) {
+      assert.deepEqual(pushN(w, 0, 20), []);
+      assert.equal(w.push(QUIET), null);
+    }
+  });
+
+  test("sound coming back is reported, so the warning can be withdrawn", async () => {
+    const w = await watch();
+    pushN(w, 0, 100);
+    assert.equal(w.push(LOUD), "alive");
+    assert.equal(w.push(LOUD), null);
+    // And it can go dead again.
+    assert.deepEqual(pushN(w, 0, 100), ["dead"]);
+  });
+
+  test("a pause does not count toward it", async () => {
+    const w = await watch();
+    pushN(w, 0, 30);
+    w.reset(); // the half-duplex gate muted the track
+    assert.deepEqual(pushN(w, 0, 30), [], "counting starts again after the gap");
+  });
+});

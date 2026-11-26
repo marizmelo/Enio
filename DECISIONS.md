@@ -4269,3 +4269,64 @@ builds, and the tools would list it to the model as part of the work).
 - **Renaming an asset's folder** when its first file turns out to be
   generic. The name is chosen at the first write and the model is told the
   path, so a later rename would break the path it was given.
+
+### Talking with the face is started from the face, and a silent microphone says so (November 2026)
+
+**Chose:** the voice-conversation control moved out of the message box and
+onto the avatar's window (`AvatarTalk`). The message box keeps what belongs
+to a prompt: the microphone that dictates into it and the button that sends
+it. On the face there is a **Talk** button, and once talking, a state pill
+that interrupts and a separate × that ends the conversation. While
+listening the pill shows the room's level, and an input that is open and
+delivering nothing is named as that.
+
+**Why the move.** The message box had three small icons in a row, two of
+which open the microphone and mean different things: dictate a prompt, or
+hold a hands-off conversation. The user's report was two things at once —
+move it, and it does not work — and the second was partly the first: the
+only feedback the old control gave was the word "listening…".
+
+- **Two buttons where there was one with two meanings.** The old pill
+  exited when clicked while listening and interrupted when clicked while
+  speaking. Learnable, not obvious. The face's window has room to say
+  both.
+- **Hiding the face ends the conversation.** The control goes with the
+  window, and an open microphone with nothing on screen to close it is the
+  one state this must not reach.
+- **A face that fails to load still renders a card.** It used to render
+  nothing, on the reasoning that a broken face is worse than none. Now
+  that window is also where the conversation is ended.
+- **Without a face capability the control stays in the message box.** It
+  is still the only way in there.
+
+**Why it did not work.** Both server endpoints were fine: a generated
+recording transcribed correctly and speech synthesised. The installed app
+is signed with the hardened runtime, and its entitlements did not include
+`com.apple.security.device.audio-input`. Under the hardened runtime that
+does not fail: `getUserMedia` resolves, the mode opens, and every sample is
+exactly zero. The unsigned dev build has no hardened runtime, which is why
+this only ever appeared in the installed app.
+
+This was confirmed before it was fixed, in that order on purpose. The level
+meter and the silence check were built first and installed into a build
+still missing the entitlement: the pill went to "no sound" three seconds
+after opening. Then the entitlement was added
+(`desktop/entitlements.mac.plist`, applied to the helper processes as well,
+since Chromium captures audio in one) and the same click produced a
+transcribed "Hello." and a spoken answer from a real microphone.
+
+- **Digital silence, not quiet.** `createSilenceWatch` reports only when
+  every sample has been exactly zero for three seconds. A real input in a
+  silent room still carries noise, so a quiet room never trips it; a
+  missing entitlement, a hardware mute or a vanished device all do.
+- **The level does not go through React.** The recorder reports about
+  twelve times a second; a state update at that rate would re-render the
+  thread to move three bars. It goes over a small emitter straight to the
+  DOM.
+
+**Rejected:** leaving a second copy of the control in the message box "for
+convenience" (two places to start one mode is the confusion this removes);
+a voice command to interrupt (the microphone is closed exactly when you
+would want to barge in, by the half-duplex design); treating a quiet room
+as a fault by thresholding the level (it would nag everyone who paused to
+think).

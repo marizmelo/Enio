@@ -823,7 +823,7 @@ const INSTALLABLE_ADDONS = {
   voice: {
     title: "Voice",
     ready:
-      "The microphone now dictates, and the voice button holds a spoken conversation. " +
+      "The microphone now dictates, and Talk on the avatar holds a spoken conversation. " +
       "Your first dictation downloads the speech model (~500MB) — that one takes a while.",
   },
   avatar: {

@@ -465,6 +465,15 @@ MCP server. People reach for MCP when they needed a skill.
   minutes into a session, with no JavaScript error to catch. Speech therefore
   runs in a forked child process, never a worker thread, and anything else
   that wants onnxruntime off the main thread must do the same.
+- The packaged app is signed with the hardened runtime, and under it the
+  microphone needs `com.apple.security.device.audio-input`. Without the
+  entitlement nothing fails: `getUserMedia` resolves, the mode says
+  "listening…", and every sample is exactly zero — dictation and voice
+  conversation both dead in the installed app while the unsigned dev build
+  worked. It is in `desktop/entitlements.mac.plist`, applied to the helpers
+  too, because naming an entitlements file replaces the builder's defaults.
+  The recorder now reports an open-but-silent input (`createSilenceWatch`),
+  which is how the next cause of this shows itself instead of hiding.
 - Electron and Chromium apps (VSCodium, Slack, Figma, Discord) expose no
   accessibility tree until a client sets `AXManualAccessibility` on the
   application element — no focused field, an empty front window — so a

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    What the signed app may do under the hardened runtime. The first three
+    are the ones Electron cannot run without and that the builder applies by
+    default; naming this file replaces that default, so they are restated.
+
+    audio-input is the one that was missing. A hardened app without it is
+    handed a microphone stream that never carries a sample: nothing fails,
+    no prompt appears, and dictation and voice conversation both sit there
+    "listening" to digital silence. It applies to the helper processes too
+    (entitlementsInherit), because Chromium captures audio in one of them.
+  -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+</dict>
+</plist>

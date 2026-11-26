@@ -6,6 +6,7 @@ import { clearSpeechSink, onSpeaking, setSpeechSink } from "@/lib/speech";
 import { createAvatarSink } from "@/lib/avatar-sink";
 import { createTalkingHead, disposeTalkingHead } from "@/lib/avatar-head";
 import { loadAvatarModel } from "@/lib/avatar-assets";
+import { AvatarTalk } from "@/components/AvatarTalk";
 
 /**
  * Enio's face.
@@ -41,7 +42,7 @@ function gaze(head, target) {
 }
 
 export const AvatarPane = forwardRef(function AvatarPane(
-  { mode = "pip", capability, director, speakReplies, onExpand, onCollapse, onClose, onInstall, className },
+  { mode = "pip", capability, director, speakReplies, voice = null, onExpand, onCollapse, onClose, onInstall, className },
   ref,
 ) {
   const nodeRef = useRef(null);
@@ -150,7 +151,29 @@ export const AvatarPane = forwardRef(function AvatarPane(
     // neither is a dependency.
   }, [installed, body, mode]);
 
-  if (phase === "error") return null;
+  // A face that failed to load used to render nothing, on the reasoning
+  // that a broken face is worse than no face. That still holds for the
+  // face — but this window is now also where the conversation is started
+  // and ended, and vanishing would take the only control for an open
+  // microphone with it.
+  if (phase === "error") {
+    return (
+      <div className={cn("group relative overflow-hidden rounded-lg border bg-background shadow-sm", className)}>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3 text-center text-xs text-muted-foreground">
+          <ScanFace className="size-6" />
+          <p>The face could not load. You can still talk.</p>
+        </div>
+        {onClose && (
+          <div className="absolute right-1 top-1">
+            <TipButton tip="Hide" className="size-6" onClick={onClose}>
+              <X className="size-3" />
+            </TipButton>
+          </div>
+        )}
+        <AvatarTalk voice={voice} compact={mode === "pip"} />
+      </div>
+    );
+  }
 
   return (
     <div className={cn("group relative overflow-hidden rounded-lg border bg-background shadow-sm", className)}>
@@ -199,11 +222,14 @@ export const AvatarPane = forwardRef(function AvatarPane(
           </TipButton>
         )}
       </div>
-      {phase === "ready" && !speakReplies && (
-        <p className="pointer-events-none absolute inset-x-0 bottom-1 text-center text-[10px] text-muted-foreground">
+      {phase === "ready" && !speakReplies && !voice?.state && (
+        <p className="pointer-events-none absolute inset-x-0 bottom-11 text-center text-[10px] text-muted-foreground">
           Turn on Read replies aloud to hear it
         </p>
       )}
+      {/* Present in every phase but loading: talking needs the voice, not
+          the head, and a face still being set up can already be spoken to. */}
+      {phase !== "loading" && <AvatarTalk voice={voice} compact={mode === "pip"} />}
     </div>
   );
 });

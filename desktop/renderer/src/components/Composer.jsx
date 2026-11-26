@@ -50,6 +50,7 @@ export const Composer = forwardRef(function Composer({
   speaking = false,
   onStopSpeaking = () => {},
   voiceState = null,
+  voiceInAvatar = false,
   onToggleVoice = () => {},
   onVoiceInterrupt = () => {},
   onInstallVoice = null,
@@ -434,8 +435,12 @@ export const Composer = forwardRef(function Composer({
           INTERRUPTS (cuts speech, aborts the turn, back to listening);
           during listening/held it EXITS the mode. Visible while streaming —
           barging in is precisely a mid-turn act. Needs both halves of the
-          voice stack: something to hear with and something to speak with. */}
-      {capabilities.voice?.transcription && capabilities.voice?.speech && (
+          voice stack: something to hear with and something to speak with.
+          Only when there is no face: with one, this control lives on it
+          (AvatarTalk), and this row is the prompt's alone — a mic that
+          dictates into the box and a button that sends it. Two microphone
+          icons side by side that meant different things was the confusion. */}
+      {capabilities.voice?.transcription && capabilities.voice?.speech && !voiceInAvatar && (
         voiceState ? (
           <button
             type="button"

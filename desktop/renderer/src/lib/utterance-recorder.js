@@ -130,7 +130,52 @@ export function createVadTracker({
   };
 }
 
-export async function startUtteranceRecorder({ onUtterance, onLevel }) {
+// No sound at all for this long while listening means the microphone is not
+// delivering anything, which is different from a quiet room: a real input in
+// a silent room still carries noise, and this is every sample exactly zero.
+export const DEAD_MS = 3000;
+
+/**
+ * Notices a microphone that is open and sending nothing.
+ *
+ * Watched happen: the installed app, signed without the audio-input
+ * entitlement, was handed a stream by getUserMedia that never carried a
+ * sample. Nothing failed. The mode said "listening…" for as long as anyone
+ * cared to talk at it, which reads as Enio ignoring you — and the same
+ * happens with a muted interface or an input device that has gone away.
+ * The recorder cannot fix any of those, but it is the only place that can
+ * tell them apart from someone who has simply not spoken yet.
+ *
+ * Fed the same per-block RMS as the VAD. Answers "dead" once when the input
+ * has been exactly zero for afterMs, and "alive" once when sound returns.
+ */
+export function createSilenceWatch({ blockMs, afterMs = DEAD_MS } = {}) {
+  let zeroBlocks = 0;
+  let dead = false;
+  return {
+    reset() {
+      zeroBlocks = 0;
+    },
+    push(rms) {
+      if (rms > 0) {
+        zeroBlocks = 0;
+        if (dead) {
+          dead = false;
+          return "alive";
+        }
+        return null;
+      }
+      zeroBlocks++;
+      if (!dead && zeroBlocks * blockMs >= afterMs) {
+        dead = true;
+        return "dead";
+      }
+      return null;
+    },
+  };
+}
+
+export async function startUtteranceRecorder({ onUtterance, onLevel, onMeter, onDead }) {
   const stream = await navigator.mediaDevices.getUserMedia({
     // echoCancellation stays on: it is free residual-echo insurance for the
     // guard window after enio stops speaking, even though the loop's real
@@ -144,6 +189,7 @@ export async function startUtteranceRecorder({ onUtterance, onLevel }) {
   const blockMs = (4096 / context.sampleRate) * 1000;
   const preRollBlocks = Math.max(1, Math.round(PREROLL_MS / blockMs));
   const tracker = createVadTracker({ blockMs });
+  const silence = createSilenceWatch({ blockMs });
 
   let preRoll = [];
   let chunks = null; // null = not in an utterance
@@ -175,7 +221,14 @@ export async function startUtteranceRecorder({ onUtterance, onLevel }) {
       chunks.push(block);
     }
 
-    const verdict = tracker.push(blockRms(block));
+    const rms = blockRms(block);
+    // How loud the room is right now, for whoever draws it: proof to the
+    // person that they are being heard, before any utterance has ended.
+    onMeter?.(rms);
+    const signal = silence.push(rms);
+    if (signal) onDead?.(signal === "dead");
+
+    const verdict = tracker.push(rms);
     if (verdict === "start") {
       chunks = [...preRoll, ...(chunks ?? [])];
       preRoll = [];
@@ -212,6 +265,10 @@ export async function startUtteranceRecorder({ onUtterance, onLevel }) {
       preRoll = [];
       chunks = null;
       tracker.reset();
+      // A muted track is silent by design, and no block is read while
+      // paused; the count must not carry across the gap either.
+      silence.reset();
+      onMeter?.(0);
     },
     resume() {
       if (stopped) return;

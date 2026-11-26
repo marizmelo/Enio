@@ -53,6 +53,7 @@ import { onSpeaking, speak, stopSpeaking, takeSentences, warmVoice } from "@/lib
 import { transcribe as transcribeAudio } from "@/lib/dictation";
 import { startUtteranceRecorder } from "@/lib/utterance-recorder";
 import { createVoiceLoop } from "@/lib/voice-loop";
+import { setVoiceLevel } from "@/lib/voice-meter";
 import { AvatarPane } from "@/components/AvatarPane";
 import { createAvatarDirector } from "@/lib/avatar-director";
 import { avatarCapability, invalidateAvatarModel } from "@/lib/avatar-assets";
@@ -103,6 +104,8 @@ export function App() {
   // the loop call the CURRENT send — a useCallback over messages — without
   // rebuilding the loop every turn.
   const [voiceState, setVoiceState] = useState(null); // null = mode off
+  // The microphone is open and sending nothing (utterance-recorder.js).
+  const [voiceDead, setVoiceDead] = useState(false);
   const voiceLoopRef = useRef(null);
   const sendRef = useRef(null);
   const streamingRef = useRef(false);
@@ -160,6 +163,8 @@ export function App() {
     voiceLoopRef.current.stop();
     voiceLoopRef.current = null;
     setVoiceState(null);
+    setVoiceDead(false);
+    setVoiceLevel(0);
     setSpeakReplies(prevSpeakRepliesRef.current);
   };
   const teardownVoiceRef = useRef(teardownVoice);
@@ -998,7 +1003,14 @@ export function App() {
       // you while you speak. Wrapped here rather than changed in the loop,
       // whose contract passes only onUtterance.
       startRecorder: (opts) =>
-        startUtteranceRecorder({ ...opts, onLevel: (on) => direct({ type: "user-level", speaking: on }) }),
+        startUtteranceRecorder({
+          ...opts,
+          onLevel: (on) => direct({ type: "user-level", speaking: on }),
+          // The level goes to the talk control without passing through
+          // React; "nothing is arriving" is rare and does.
+          onMeter: setVoiceLevel,
+          onDead: setVoiceDead,
+        }),
       transcribe: (wav) => transcribeAudio(wav), // accurate pass, never fast
       sendTurn: async (text) => {
         loopTurnRef.current = true;
@@ -1024,6 +1036,7 @@ export function App() {
     });
     voiceLoopRef.current = loop;
     await loop.start();
+    setVoiceDead(false);
     if (loop.state === "idle") {
       // getUserMedia refused — mode never opened.
       voiceLoopRef.current = null;
@@ -1034,6 +1047,23 @@ export function App() {
 
   // Null when the agent predates the face: no button, no card.
   const avatarCap = avatarCapability(capabilities);
+  // The conversation's control, handed to the face (AvatarTalk). It needs
+  // both halves of the voice stack: something to hear with and something to
+  // speak with.
+  const avatarVoice = {
+    available: Boolean(capabilities.voice?.transcription && capabilities.voice?.speech),
+    state: voiceState,
+    dead: voiceDead,
+    onToggle: () => (voiceLoopRef.current ? teardownVoiceRef.current() : enterVoiceMode()),
+    onInterrupt: () => voiceLoopRef.current?.interrupt(),
+  };
+  // Hiding the face ends the conversation: its control goes with it, and a
+  // microphone left open behind a window with no way to close it is the
+  // one state this must never reach.
+  const hideAvatar = () => {
+    teardownVoiceRef.current();
+    setAvatarMode("off");
+  };
   const installAvatar = useCallback(async () => {
     const result = await window.maple?.installAddon?.("avatar");
     if (result?.ok) {
@@ -1075,7 +1105,7 @@ export function App() {
         onConnections={() => setConnectionsOpen(true)}
         onSettings={() => setSettingsOpen(true)}
         avatarOn={avatarMode !== "off"}
-        onToggleAvatar={avatarCap ? () => setAvatarMode((m) => (m === "off" ? "pip" : "off")) : undefined}
+        onToggleAvatar={avatarCap ? () => (avatarMode === "off" ? setAvatarMode("pip") : hideAvatar()) : undefined}
       />
 
       <AgentsDialog
@@ -1319,8 +1349,9 @@ export function App() {
             capability={avatarCap}
             director={directorRef.current}
             speakReplies={speakReplies}
+            voice={avatarVoice}
             onExpand={() => setAvatarMode("panel")}
-            onClose={() => setAvatarMode("off")}
+            onClose={hideAvatar}
             onInstall={installAvatar}
             className="h-full w-full"
           />
@@ -1405,6 +1436,10 @@ export function App() {
           setSpeakReplies((on) => !on);
         }}
         voiceState={voiceState}
+        // With a face available the conversation is started from the face,
+        // and the message box keeps only what belongs to a prompt: dictate
+        // and send. Without one, this is still the only way in.
+        voiceInAvatar={Boolean(avatarCap)}
         onToggleVoice={() => (voiceLoopRef.current ? teardownVoiceRef.current() : enterVoiceMode())}
         onVoiceInterrupt={() => voiceLoopRef.current?.interrupt()}
       />
@@ -1447,8 +1482,9 @@ export function App() {
               capability={avatarCap}
               director={directorRef.current}
               speakReplies={speakReplies}
+              voice={avatarVoice}
               onCollapse={() => setAvatarMode("pip")}
-              onClose={() => setAvatarMode("off")}
+              onClose={hideAvatar}
               onInstall={installAvatar}
               className="h-full w-full rounded-none border-0 border-l shadow-none"
             />

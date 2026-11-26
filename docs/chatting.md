@@ -94,12 +94,25 @@ off. Needs a voice (`ENIO_TTS`); without one the buttons are not shown.
 
 ## Voice conversation
 
-Press the waveform button beside the speaker toggle and talk: Enio
+Press **Talk** on the [avatar](avatar.md)'s window and speak: Enio
 transcribes what you said, answers, reads the answer aloud, and listens
-again. The pill shows whose turn it is — *listening* (pulsing dot),
-*thinking*, *speaking* — and one click does the obvious thing for each:
-**click while it thinks or speaks to interrupt** (the reply stops
-mid-sentence, kept as text); **click while it listens to exit**.
+again. The control is on the face because the conversation is with the
+face. The message box keeps only what belongs to a prompt: the microphone
+there dictates into the box, and the arrow sends it.
+
+The pill shows whose turn it is — *listening*, *transcribing*, *thinking*,
+*speaking* — and there are two buttons. **Click the pill while it thinks or
+speaks to interrupt** (the reply stops mid-sentence, kept as text). **The ×
+beside it ends the conversation.** Hiding the face ends it too.
+
+While it listens, three small bars move with the sound in the room, so you
+can see that you are being heard before you finish a sentence. If the
+microphone is open and nothing at all is arriving, the pill says *no sound*
+and tells you what to check: the input device and its mute switch, and
+Microphone access for Enio in System Settings.
+
+Without a face installed, the same control is the waveform button beside
+the speaker toggle in the message box.
 
 It never listens while it speaks, on purpose. On speakers, an open
 microphone would hear Enio's own voice, transcribe it, and answer itself —
