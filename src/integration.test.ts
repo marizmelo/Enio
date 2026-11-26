@@ -1146,6 +1146,154 @@ describe("the fabrication correction", () => {
   });
 });
 
+describe("a research reply that names what its sources never mention", () => {
+  const QUESTION = "what is the best architecture firm in recife";
+  const INVENTED = "The best firm is **Von Buhler Arquitetos**, known for its towers.";
+  /** A results page in the search provider's own markup, naming one firm. */
+  const page = (firm: string) =>
+    `<table><tr><td><a rel="nofollow" href="https://example.org/firms" class='result-link'>${firm}</a></td></tr>` +
+    "<tr><td class='result-snippet'>An architecture firm based in Recife.</td></tr></table>";
+  type Sent = { messages: Array<{ role: string; content: unknown }>; tools?: unknown[] };
+
+  /**
+   * Only model calls reach the script. The seeded search fetches too, and
+   * would otherwise eat the first scripted reply as its results page.
+   */
+  function onlyModelCallsAreScripted(results: string): Sent[] {
+    const sent: Sent[] = [];
+    const scripted = globalThis.fetch;
+    globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
+      if (!/chat\/completions/.test(String(url))) return new Response(results, { status: 200 });
+      sent.push(JSON.parse(String(init?.body ?? "{}")) as Sent);
+      return scripted(url as string, init);
+    }) as typeof fetch;
+    return sent;
+  }
+  const answersIn = (history: Message[]) =>
+    history.filter((m) => m.role === "assistant" && typeof m.content === "string").map((m) => m.content);
+  const answersLogged = (sessionId: string) =>
+    (getDb().prepare(`SELECT content FROM messages WHERE session_id = ? AND role = 'assistant' ORDER BY id`).all(sessionId) as {
+      content: string;
+    }[]).map((r) => r.content);
+
+  test("is written again without the first answer in view, and one answer is left behind", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const REWRITE = "The results list Estúdio Verde in Recife without ranking it.";
+    scriptModel([{ content: INVENTED }, { content: REWRITE }]);
+    const sent = onlyModelCallsAreScripted(page("Estúdio Verde"));
+
+    const history: Message[] = [];
+    const notices: string[] = [];
+    const result = await runTurn(QUESTION, history, registry, sessionId, { onNotice: (n) => notices.push(n) }, { specialist: "researcher" });
+
+    assert.equal(result.reply, REWRITE);
+    assert.ok(notices.some((n) => /Von Buhler Arquitetos/.test(n)), `the user is told why it waited: ${notices}`);
+
+    // The rewrite round. Shown its first answer and told what was wrong
+    // with it, the model answered the correction instead of the user --
+    // "the statement … is not supported by the results" -- so the first
+    // answer must be gone from what it is sent, and so must its names.
+    const rewrite = sent.at(-1)!;
+    assert.ok(!JSON.stringify(rewrite.messages).includes("Von Buhler"), "the first answer and its names are not in view");
+    assert.match(String(rewrite.messages.at(-1)?.content), /from the search results above only/);
+    assert.ok(!rewrite.tools || rewrite.tools.length === 0, "the rewrite reads what is there; it is offered no tools");
+
+    // What the next turn inherits, and what a reload draws: one answer.
+    assert.deepEqual(answersIn(history), [REWRITE]);
+    assert.deepEqual(answersLogged(sessionId), [REWRITE]);
+    assert.ok(!history.some((m) => m.role === "user" && /search results above only/.test(String(m.content))), "the note is scaffolding");
+  });
+
+  test("a name the results do hold is left alone", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "The results list **Von Buhler Arquitetos** among firms in Recife." }, { content: "SHOULD NOT BE REACHED" }]);
+    const sent = onlyModelCallsAreScripted(page("Von Buhler Arquitetos"));
+    const notices: string[] = [];
+    const result = await runTurn(QUESTION, [], registry, sessionId, { onNotice: (n) => notices.push(n) }, { specialist: "researcher" });
+    // The evidence is what the tools returned this turn: with the wiring
+    // broken every name would be missing, and every answer rewritten.
+    assert.match(result.reply, /Von Buhler Arquitetos/);
+    assert.equal(sent.length, 1, "nothing was written again");
+    assert.ok(!notices.some((n) => /Von Buhler/.test(n)), notices.join(" | "));
+  });
+
+  test("a rewrite that says the same thing word for word is still one answer", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    // "Did the reply change" is the wrong test for "did a rewrite arrive":
+    // the same text came back, was already stored, and was stored again.
+    scriptModel([{ content: INVENTED }, { content: INVENTED }]);
+    onlyModelCallsAreScripted(page("Estúdio Verde"));
+    const history: Message[] = [];
+    const result = await runTurn(QUESTION, history, registry, sessionId, {}, { specialist: "researcher" });
+    assert.equal(result.reply, INVENTED);
+    assert.deepEqual(answersIn(history), [INVENTED]);
+    assert.deepEqual(answersLogged(sessionId), [INVENTED]);
+  });
+
+  test("a rewrite that comes back empty leaves the first answer, once, and says so", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: INVENTED }, { content: "" }]);
+    onlyModelCallsAreScripted(page("Estúdio Verde"));
+    const history: Message[] = [];
+    const notices: string[] = [];
+    const result = await runTurn(QUESTION, history, registry, sessionId, { onNotice: (n) => notices.push(n) }, { specialist: "researcher" });
+    assert.equal(result.reply, INVENTED);
+    assert.deepEqual(answersIn(history), [INVENTED], "the transcript holds what was shown");
+    assert.deepEqual(answersLogged(sessionId), [INVENTED], "and so does the log");
+    // The first notice said it was being written again. What follows it is
+    // the answer that was held back, so the user has to be told that too.
+    assert.ok(notices.some((n) => /rewrite did not come back/.test(n) && /Von Buhler Arquitetos/.test(n)), notices.join(" | "));
+  });
+
+  test("a rewrite that writes out a search instead of an answer does not get one", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    // The parser recovers a written-out call from the text whatever was
+    // offered. Run, it searched again with the withdrawn name as its query.
+    scriptModel([
+      { content: INVENTED },
+      { content: '<tool_call>{"name":"web_search","arguments":{"query":"von buhler arquitetos recife"}}</tool_call>' },
+      { content: "SHOULD NOT BE REACHED" },
+    ]);
+    const sent = onlyModelCallsAreScripted(page("Estúdio Verde"));
+    const searches: string[] = [];
+    const history: Message[] = [];
+    const result = await runTurn(
+      QUESTION,
+      history,
+      registry,
+      sessionId,
+      { onToolStart: (name, args) => void (name === "web_search" && searches.push(String(args.query))) },
+      { specialist: "researcher" },
+    );
+    assert.deepEqual(searches, [QUESTION], "the one search is the turn's own");
+    assert.equal(sent.length, 2, "the first answer and the rewrite, and no round after it");
+    assert.equal(result.reply, INVENTED);
+    assert.deepEqual(answersIn(history), [INVENTED]);
+  });
+
+  test("another correction that applies takes the turn, and the notice names that one", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    // Missing names and a trailing "Searching…": the lookup correction
+    // runs, with tools and with the first answer in view. The notice used
+    // to announce a rewrite all the same.
+    scriptModel([{ content: `${INVENTED}\n\nSearching for more details…` }, { content: "Nothing more was found." }]);
+    const sent = onlyModelCallsAreScripted(page("Estúdio Verde"));
+    const notices: string[] = [];
+    await runTurn(QUESTION, [], registry, sessionId, { onNotice: (n) => notices.push(n) }, { specialist: "researcher" });
+    const correction = sent.at(-1)!;
+    assert.match(String(correction.messages.at(-1)?.content), /announced a lookup and stopped/);
+    assert.ok((correction.tools ?? []).length > 0, "that correction asks for a call, so it is offered the tools");
+    assert.ok(JSON.stringify(correction.messages).includes("Von Buhler"), "and it is shown what it said");
+    assert.ok(!notices.some((n) => /Writing it again/.test(n)), `the notice names what happened: ${notices.join(" | ")}`);
+  });
+});
+
 describe("skill invocation trace", () => {
   test("a turn with an invoked skill records a skill_invoked harness step", async () => {
     const registry = await buildRegistry();

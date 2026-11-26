@@ -47,7 +47,7 @@ import { activeProject, attachmentMissing } from "./project.js";
 import { editorRequest, effectiveEditor, openInEditor, type EditorRequest } from "./apps.js";
 import { conversationMounts } from "./conversation-attachments.js";
 import { neutralizeControlTokens } from "./sanitize.js";
-import { unsupportedSpecifics } from "./grounding.js";
+import { namesWithoutEvidence, unsupportedSpecifics, withdrawsForNames } from "./grounding.js";
 
 /**
  * Who the assistant is, ahead of everything else in the system message.
@@ -595,72 +595,6 @@ export function looksLikeQuotedEmail(text: string): boolean {
   const salutation = /\b(?:dear|hi|hello)\s+[A-Z][\w ]{0,30},/i.test(text);
   const signoff = /\b(?:best regards|kind regards|regards|sincerely|thanks,|thank you,|cheers,)\b/i.test(text);
   return salutation && signoff;
-}
-
-/**
- * Names a reply asserts that appear in none of the evidence it was given.
- *
- * Watched happen: asked for the best architecture firm in Recife, the
- * researcher searched, was handed 6,500 characters of results, and named
- * three firms that appear in none of them — in bold, with specialities.
- * The sources sat under the answer looking like support. A claim and an
- * invention are indistinguishable in prose; the one structural check
- * available is whether the entities the reply commits to exist in what it
- * read. Candidates are what the model marks as the answer — bold spans —
- * and Title Case runs of two or more words; single capitalised words are
- * sentence starts as often as names and are left alone. A name the user
- * typed is theirs, not an invention. Deliberately not applied to the
- * evidence's own wording: an abbreviation or translation of a name that is
- * present costs a corrective round, never a wrong answer.
- */
-export function namesWithoutEvidence(reply: string, evidence: string[], question: string): string[] {
-  // One dash. A model writes a score as "0–0" and the page it read says
-  // "0-0"; compared as typed, every score and date range in a reply was an
-  // invention.
-  const plain = (text: string) => text.replace(/[\u2010-\u2015\u2212]/g, "-");
-  const hay = plain(evidence.join("\n") + "\n" + question).toLowerCase().replace(/\s+/g, " ");
-  const hayWords = new Set(hay.split(/[^\p{L}\p{N}-]+/u));
-  const candidates = new Set<string>();
-  for (const m of reply.matchAll(/\*\*([^*\n]{3,80})\*\*/g)) {
-    const span = plain(m[1]!.trim());
-    // Bold is emphasis as often as it is a name, and two kinds of emphasis
-    // are not names at all. A span with a figure in it -- a score, a date,
-    // "3-0 victory" -- is supported when its figures are in the evidence:
-    // "victory" for the page's "win" is the model's wording, not a claim.
-    // The names inside such a span are still checked, by the Title Case
-    // pass below. And a span with no capital in it ("not confirmed") is a
-    // phrase. Watched: a correct answer about a 0-0 draw and a 3-0 protest
-    // was withdrawn for naming "0–0", "3–0 victory" and "28 November 2026",
-    // all three on the page, and the correction came back as an audit of
-    // the first answer in place of an answer.
-    if (/\d/.test(span)) {
-      const figures = span.toLowerCase().split(/[^\p{L}\p{N}-]+/u).filter((w) => /\d/.test(w));
-      if (figures.every((f) => hayWords.has(f) || hay.includes(f))) continue;
-    } else if (!/(?:^|\s)\p{Lu}/u.test(span)) {
-      continue;
-    }
-    candidates.add(span);
-  }
-  // No period inside a word: "Arquitetos. Estúdio" must be two runs, not one.
-  const TITLE = /(?:\p{Lu}[\p{L}'’-]+)(?:\s+(?:de|da|do|dos|das|e|of|and|the|&|\p{Lu}[\p{L}'’-]+)){1,6}/gu;
-  for (const m of plain(reply).matchAll(TITLE)) {
-    const run = m[0]!.trim();
-    if (run.split(/\s+/).filter((w) => /^\p{Lu}/u.test(w)).length >= 2) candidates.add(run);
-  }
-  const missing: string[] = [];
-  for (const raw of candidates) {
-    const name = raw.replace(/[*_`"“”().,:;!?]/g, " ").replace(/\s+/g, " ").trim();
-    if (name.length < 3 || /^[A-Z][a-z]*$/.test(name)) continue;
-    // Bare labels ("Conclusion", "Key Points") are not names.
-    if (/^(conclusion|summary|note|key points?|overview|sources?|answer|result|in short|tl;dr)$/i.test(name)) continue;
-    const lower = name.toLowerCase();
-    if (hay.includes(lower)) continue;
-    // A parenthesised acronym after a name is part of the same claim.
-    const withoutAcronym = lower.replace(/\s*\([a-z]{2,6}\)\s*$/, "").trim();
-    if (withoutAcronym !== lower && hay.includes(withoutAcronym)) continue;
-    missing.push(name);
-  }
-  return [...new Set(missing)];
 }
 
 /**
@@ -1977,7 +1911,7 @@ async function runTurnInner(
   // looking like support -- and only names, never claims in prose, which
   // no closed check can judge.
   const webRanThisTurn = steps.some((s) => s.kind === "tool" && WEB_TOOL_NAMES.has(s.name ?? ""));
-  const inventedNames =
+  const missingNames =
     specialistName === "researcher" && webRanThisTurn
       ? namesWithoutEvidence(
           reply,
@@ -1985,6 +1919,7 @@ async function runTurnInner(
           userInput,
         )
       : [];
+  const inventedNames = withdrawsForNames(missingNames) ? missingNames : [];
   // The mail agent presenting an email it did not read this turn.
   const quotedUnreadMail =
     specialistName === "mail" && !toolRanThisTurn && !composedUnasked && looksLikeQuotedEmail(reply);
@@ -2037,6 +1972,23 @@ async function runTurnInner(
     // worse than either alone. The client clears what it showed and the
     // reason lands where the retraction is, at the top of the retry; a
     // client without live rendering only ever sees the final reply anyway.
+    // The names correction is the one that does not show the model its own
+    // answer. Every other correction here says "that was wrong, now act";
+    // this one has nothing to act on -- the results are already in the
+    // transcript -- so told what it got wrong, the model answers the
+    // correction instead of the user: "the results do not confirm…", "the
+    // statement … is not supported". Judged blind on 25 withdrawn turns,
+    // that wording commented on a text the user never saw in 20 and was
+    // worse than the answer it replaced in 10. Asked the question
+    // again without the first answer in view, none read as commentary,
+    // none was worse and 20 were better (DECISIONS.md, November 2026). It
+    // also stops the correction repeating the check's mistakes: about a
+    // third of the names it lists are not inventions, and a model told "X
+    // is not in the results" says so.
+    const rewriteFromSources =
+      inventedNames.length > 0 &&
+      !disclaimed && !answeredFromMemory && !codeInReply && !composedUnasked &&
+      !deniesMailAccount && !deniesCalendar && !misownedAccount && !announcedLookup && !quotedUnreadMail;
     const reason = disclaimed
       ? "That reply said it could not look things up — but it holds the tools to. Correcting."
       : answeredFromMemory
@@ -2049,8 +2001,8 @@ async function runTurnInner(
               ? "That reply drafted an email nobody asked for. Answering just the question."
               : fabricatedCurrent
                 ? "That answer states recent facts this agent has no way to check. Correcting."
-                : inventedNames.length > 0
-                  ? `That answer names things its sources do not mention (${inventedNames.slice(0, 3).join(", ")}). Correcting.`
+                : rewriteFromSources
+                  ? `That answer named things not found in its sources (${inventedNames.slice(0, 3).join(", ")}). Writing it again from the sources.`
                   : quotedUnreadMail
                     ? "That reply presented an email, but no email was read this turn. Reading it."
                     : deniesMailAccount
@@ -2084,6 +2036,7 @@ async function runTurnInner(
     const withdrawn = reply;
     const withdrawnAt = history.length - 1;
     retractLastAssistantMessage(sessionId, withdrawn);
+    if (rewriteFromSources && history[withdrawnAt]?.content === withdrawn) history.pop();
     history.push({
       role: "user",
       content: disclaimed
@@ -2144,12 +2097,16 @@ async function runTurnInner(
                 "with the [id] shown in the earlier search results and quote only what it returns. If no id " +
                 "is in this conversation, call search_email first.)"
             : inventedNames.length > 0
-              ? // The names, verbatim, and the rule: only what the results
-                // say. Offering the sources is the honest shape when they
-                // name nothing specific -- the alternative is this reply.
-                `(Your reply named ${inventedNames.slice(0, 4).join(", ")} — none of these appear in the ` +
-                "search results you were given. Answer only from what the results actually say. If they " +
-                "do not name specific ones, say so plainly and point to the sources; never invent names.)"
+              ? // The question again, and the rule. Declining comes first:
+                // with it last ("if they do not answer the question, say
+                // so"), the model named things anyway on the turns whose
+                // pages held no answer. No list of the missing names:
+                // listing the ones to avoid put them back in the answer
+                // ("these names were included in the user's input"), and
+                // the list is not reliable enough to state as fact.
+                "(Answer my question from the search results above only. If they do not name the specific things " +
+                "I asked about, say that plainly in one sentence and point to the sources instead of naming any. " +
+                "Otherwise name only the people, organisations, products, places, dates and numbers that appear in them.)"
             : fabricatedCurrent
               ? // Admission is the only honest output available: this agent
                 // holds no tool that could produce the fact. Naming the
@@ -2186,6 +2143,10 @@ async function runTurnInner(
         "Only if none of them can possibly do this, say plainly that you cannot. " +
         "Never describe an action as done.)",
     });
+    // Whether a corrective round produced the reply. Not "is the reply
+    // different": a rewrite can come back word for word, and then it is
+    // already in the transcript and the log.
+    let rewritten = false;
     try {
       // A client that could not restart still needs the seam between the
       // withdrawn text and the retry; one that did restart starts clean.
@@ -2206,9 +2167,12 @@ async function runTurnInner(
       }
       for (let round = 0; round < 2; round++) {
         const startedAt = Date.now();
+        // The rewrite is offered no tools: it was measured that way, and
+        // its job is to read the results already in front of it.
+        const offered = round === 0 && !rewriteFromSources ? wireTools : [];
         const fix = await complete(
           history,
-          round === 0 ? wireTools : [],
+          offered,
           { onReasoning: handlers.onReasoning, onContent: emitContent },
           undefined,
           { maxTokens: outputBudget },
@@ -2222,9 +2186,18 @@ async function runTurnInner(
           scavenged: fix.scavenged,
           durationMs: Date.now() - startedAt,
         });
-        if (fix.toolCalls.length === 0) {
+        // A call on the rewrite round is the model writing one out anyway,
+        // and the parser recovers it from the text without asking what was
+        // offered. Running it would be acting on a tool this round
+        // withheld: the rewrite searched again, with the withdrawn name as
+        // its query. Same guard as the no-think retry above, and kept to
+        // the rewrite: the other corrections' second round has always run
+        // what the model asked for, and a coder writing its second file
+        // there is doing what it was told.
+        if (fix.toolCalls.length === 0 || rewriteFromSources) {
           if (fix.content.trim() && !looksDegenerate(fix.content)) {
             reply = fix.content.trim();
+            rewritten = true;
             history.push({ role: "assistant", content: reply });
             logMessage(sessionId, "assistant", reply);
           }
@@ -2253,6 +2226,20 @@ async function runTurnInner(
     ) {
       // [withdrawn assistant, correction user, ...rounds]
       history.splice(withdrawnAt, 2);
+    } else if (rewriteFromSources) {
+      // [note, rewrite]: the first answer was already taken out above.
+      if (history[withdrawnAt]?.role === "user") history.splice(withdrawnAt, 1);
+      if (!rewritten) {
+        // Nothing came back. The first answer is what the user will be
+        // shown, so it is what the transcript and the log must hold -- and
+        // the notice above said it was being written again, which is no
+        // longer true of what follows it.
+        history.push({ role: "assistant", content: withdrawn });
+        logMessage(sessionId, "assistant", withdrawn);
+        handlers.onNotice?.(
+          `The rewrite did not come back, so this is the first answer. It names things not found in its sources (${inventedNames.slice(0, 3).join(", ")}) — check them before relying on it.`,
+        );
+      }
     }
 
     // The correction is not trusted either -- measured twice. Asked again, the

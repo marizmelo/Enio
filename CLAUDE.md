@@ -454,6 +454,21 @@ MCP server. People reach for MCP when they needed a skill.
   refuses any word the thread did not hold. Anything else that acts on the
   bare message before the model sees the thread has the same hole; memory
   recall and routing still do.
+- A correction that has nothing to act on must not show the model its own
+  answer. Every other withdrawal here ends in a call ("you wrote the code
+  in the reply, use write_file"); the researcher's invented names end in
+  another answer, and shown the first one with a list of what was wrong
+  the model answered the correction: "the statement … is not supported by
+  the results", to a user who never saw the statement. Blind-judged on 25
+  turns, that commented on the unseen answer in 20 and was worse than the
+  answer it replaced in 10. The first answer is now removed and the
+  question asked again; none commented and none was worse. The check that
+  triggers it (`namesWithoutEvidence`) was also wrong two times in three
+  about which names were missing. Both were measured, not adjusted by eye.
+  `scripts/names-bench.mjs` scores the check against labelled turns: do
+  not change the check without running it. The wording was judged by blind
+  panels on replayed turns, which the script does not reproduce; the
+  method and every number are in DECISIONS.md.
 - Cosine similarity and lexical-overlap scores are on different scales. They had
   a shared threshold once and keyword search silently returned nothing.
 - The lexical fallback needs stemming: people rephrase when they repeat

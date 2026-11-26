@@ -4493,6 +4493,198 @@ costs the answer: the corrected reply reads as a report on the first one.
 Settling when a missing name should withdraw a reply needs a labelled set
 of those turns, not another rule added by eye.
 
+That was done the same day; the next entry is the result. It also corrects
+this one: "GB RAM" and "Intel Core" were not the model's wording of
+something on the page. The page had no specifications at all.
+
 **Open:** memory recall and routing also see only the new message. Neither
 was changed. Whether to complete the question once and hand the same
 completed form to all three is the obvious next question.
+
+### When a missing name withdraws a research answer, and what replaces it (November 2026)
+
+**The question** left open above: the check that withdraws a research
+answer for naming things its sources never mention (`namesWithoutEvidence`)
+fired on almost half the stored research turns, often wrongly, and the
+answer that came back read as an audit of one the user never saw. Three
+things had to be settled with data: what counts as a missing name, how many
+it takes, and what the model is asked to do next.
+
+**The data** (`scripts/names-bench.mjs`; turns and labels are local, never
+in the repository, because a turn is the user's question and other
+people's pages):
+
+| set | turns | answers holding a material invention | standing |
+|---|---|---|---|
+| stored | 30 | 12 | already in the local database; the rule was chosen here |
+| fresh | 36 | 16 | 36 questions written before any rule was measured; never tuned on |
+| confirm | 24 | 6 | run once through the finished change; nothing changed after it |
+
+Each stored and fresh turn was read by three independent labellers who saw
+only the question, the evidence and the reply. Every span the strictest
+test could not find got a label (supported, invented, not a claim), and a
+"supported" had to quote the evidence. All 304 labelled items had a
+majority, 297 were unanimous, and every quote was checked by program to be
+in the evidence. The turn's own label is whether the reply states as fact
+something material that the evidence does not hold.
+
+**What counts as a missing name.** On the 66 stored and fresh turns:
+
+| rule | answers withdrawn | of the 28 that invent | of the 38 that are sound | names it lists | of those, not invented |
+|---|---|---|---|---|---|
+| the phrase as typed (before today, `041acf6`) | 42 | 26 | 16 | 227 | 153 |
+| this morning's fix (`458147a`) | 41 | 25 | 16 | 179 | 112 |
+| **word by word (shipped)** | 25 | 21 | 4 | 76 | 24 |
+| word by word, two or more names | 14 | 12 | 2 | | |
+
+The first two rows are the functions as they were committed, run on the
+same turns. Six and four of their names have no label, because they differ
+from a labelled span by a character; they are in neither of the last two
+columns.
+
+Shipped: a span is supported when every capitalised word in it is somewhere
+in the evidence, allowing another ending ("American" for "America's").
+Figures inside a span do not decide. Sentence words around a name are taken
+off it, so "The Lucid Air" is checked as "Lucid Air", and what is left with
+one capital is not a name ("Is Flamengo").
+
+On the fresh set alone, which nothing was fitted to: 16 withdrawn, 13 of
+the 16 that invent and 3 of the 20 sound, against 28, 16 and 12 before.
+
+So the old rule caught more of the bad answers, 26 against 21, and it did
+so by withdrawing 42% of the sound ones and naming the wrong things two
+times in three. That trade is the decision. Three bad turns in four are
+still caught, and the names it reports are right two times in three
+instead of one.
+
+Left out because they changed no decision on either set: folding accents,
+reading ordinals ("36th" for "36ª"), stripping zero-width characters.
+One part stays on thinner evidence, and it should be said how thin. The
+endings rule changes two withdrawals in 66. It spares a sound answer that
+said "Supreme Court of India" over a page that said "Indian". And it spares
+the "South American" answer, whose only missing name was on the page; that
+answer did invent, elsewhere, so there the rule gives up a catch that was
+right for the wrong reason. One each way.
+
+**What replaces the answer.** The 25 turns the shipped rule withdraws were
+replayed with different corrections, and three judges per turn read the
+replies blind, wordings hidden behind letters in rotated order. The model
+server returns the same text for the same prompt, so each wording is one
+text per turn and the second panel re-read two of the first panel's.
+
+| wording | reads as an answer | declines | commentary on the unseen answer | still invents | better / same / worse than the first answer |
+|---|---|---|---|---|---|
+| before: "your reply named X, none of these appear" | 2 | 3 | 20 | 7 | 10 / 5 / 10 |
+| first answer kept, told to start over | 21 | 3 | 1 | 13 | 13 / 10 / 2 |
+| first answer removed, decline last | 22 | 3 | 0 | 12 | 14 / 8 / 3 |
+| first answer removed, missing names listed | 18 | 3 | 3 | 8 | 14 / 7 / 4 |
+| **first answer removed, decline first (shipped)** | 19 | 6 | 0 | 7 | 20 / 5 / 0 |
+
+Rows two and four are the first panel's; the others the second's. Row
+four's first three columns add to 24: on one turn the three judges each
+called that reply a different kind, so it is counted in none.
+
+The old wording invents least and answers least: told what it got wrong,
+the model replies to the correction ("the results do not confirm…").
+Removing the first answer from what the model is shown ends that. Where the
+decline instruction sits then decides the rest: last, the model named
+things anyway on four of the six turns whose pages held no answer; first,
+it declined on five of them.
+
+Shipped: the withdrawn answer is taken out of the transcript, the question
+is asked again with one note (decline if the results do not name what was
+asked, otherwise name only what is in them), no tools are offered, and the
+note is removed afterwards. If nothing comes back, the first answer is
+shown and logged, because that is what the user will see.
+
+**How many names.** One. Of the 25 turns, 11 have exactly one missing name
+and 9 of those answers invented all the same. Under the shipped wording
+those 11 came out 8 better, 3 the same, none worse. Under the old wording
+it was 3, 2 and 6, so "two or more" would have been right this morning and
+is wrong now. The threshold depends on the wording; `withdrawsForNames`
+says so.
+
+**Confirmation.** The decline-first wording was written after both panels'
+turns had been seen, so the whole change was run once on 24 new questions:
+search, first answer, check, rewrite, as shipped. Judges scored every
+answer, and both versions where a rewrite happened, without knowing which
+was shown.
+
+| | |
+|---|---|
+| First answers holding a material invention | 6 of 24 |
+| Of those, withdrawn | 6 of 6 |
+| Answers rewritten | 9 of 24 |
+| Rewrite better / same / worse than the first answer | 7 / 1 / 1 |
+| Rewrites that read as commentary | 0 of 9 |
+| Answers shown to the user that invent | 1 of 24, against 6 without the check |
+
+The one worse case was a sound answer whose rewrite added an invention.
+Three sound answers were rewritten in all.
+
+That run was made before the review below. Replaying the corrected rule
+over the same 24 first answers changes one decision: an answer about
+monitors, which did invent, was withdrawn only because the old pattern cut
+the model number "VG289Q" and called "VG" a missing name. The name was on
+the page; the invention was in the specifications. With the corrected rule
+that answer is shown, so the last row reads 2 of 24 against 6, with 5 of
+the 6 bad answers withdrawn and 8 rewrites at 6 / 1 / 1.
+
+**What review changed.** Four reviewers read the diff and a second reader
+tried to refute each finding by running it; 27 stood.
+- *The flow.* A rewrite that came back word for word was stored twice,
+  because "nothing came back" was tested as "the reply is unchanged". A
+  rewrite that wrote out a tool call had it run, although the round
+  offered none: it searched again, with the withdrawn name as its query.
+  A rewrite that came back empty showed the first answer under a notice
+  saying it had been written again. Each now has a test.
+- *The patterns.* A run could begin inside a token ("16GB RAM" gave "GB
+  RAM"). A joiner matched the start of a longer word ("Casa Norte offers"
+  gave "Casa Norte of"). Sentence words discarded the whole run, so any
+  invented name after "The" was never checked; they are now taken off the
+  span. A word boundary took an accented letter for a space, so "Inês" was
+  read as "in". The acronym allowance and the "tl;dr" label could never
+  match.
+- *The numbers.* The two "before" rows were first measured with the
+  bench's own strict reading, not the committed functions; they are now
+  the committed functions.
+
+With all of that fixed, every withdraw decision on the 66 stored and fresh
+turns is the same as it was when the rule was chosen, and one on the 24
+confirmation turns differs, as above. The names listed fell from 82 to 76.
+
+**Rejected:**
+- *Two or more names before withdrawing.* It withdraws 2 sound answers
+  where one name withdraws 4, and keeps 16 of the 28 bad ones where one
+  name keeps 7. Right under the old wording, not under this one.
+- *Listing the missing names in the note.* On a turn whose pages named no
+  restaurant, the reply listed all four invented ones and said they "were
+  included in the user's input". And about a third of the list is wrong.
+- *Checking the rewrite and falling back to the old wording.* Measured on
+  the decline-last wording: the check fired again on 7 of 25 rewrites, 4
+  that invented and 3 that did not, and the fallback would have helped
+  three turns and hurt three, for one more model call.
+- *Withdrawing on figures.* A number checked beside the word it counts
+  ("8 GB", "45-60 minutes") was labelled the same way: 83 flagged, 26
+  invented. Translation is most of the rest ("80 pontos" for "80 points").
+- *Offering tools on the rewrite.* Not measured, so not shipped.
+
+**What this does not do.** Stated with the same numbers:
+- Seven of the 28 bad answers are not withdrawn. Most material inventions
+  are not names: specifications, quantities, a wrong account of what
+  happened. In one stored turn the pages listed four laptops in a menu and
+  the answer gave each a processor and memory. Every name was real.
+- Seven of the 25 rewrites still invented. The existing notice under the
+  reply ("Not found in this turn's sources") is what catches those.
+- Of the names it still lists wrongly, several come from page text that
+  arrives glued ("Lucid AirGrand Touring", "EVWT", "modeLDAC"). That is the
+  page reader, not this check, and it was not touched.
+- A page in Portuguese and an answer in English produce missing names that
+  are translations.
+- One model (Qwen3 4B), one agent (the researcher), and the judges were
+  models reading against the evidence, three per item. Nobody read these
+  as a user.
+
+**Open:** whether an answer should be checked for what it says the pages
+say, not only for the names in it. The labellers did that by hand and
+found most of the inventions that way. It is a model call per answer.

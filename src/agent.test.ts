@@ -766,7 +766,7 @@ describe("fresh facts asserted by an agent that cannot check", () => {
 
 describe("names without evidence", () => {
   test("bold and Title Case names absent from every tool output are the inventions; present ones are not", async () => {
-    const { namesWithoutEvidence } = await import("./agent.js");
+    const { namesWithoutEvidence } = await import("./grounding.js");
     const evidence = [
       "1. Top 9 Architecture firms based in Recife, Brazil\n   https://example.org\n   The largest include Estúdio Verde Arquitetos and Casa Norte.",
     ];
@@ -782,7 +782,7 @@ describe("names without evidence", () => {
   });
 
   test("a name the user typed is theirs, and a lone sentence-start capital is not a name", async () => {
-    const { namesWithoutEvidence } = await import("./agent.js");
+    const { namesWithoutEvidence } = await import("./grounding.js");
     const out = namesWithoutEvidence(
       "There is no firm called **ND Studio Arquitetura** in the results. Nothing else matches.",
       ["No matches."],
@@ -792,7 +792,7 @@ describe("names without evidence", () => {
   });
 
   test("a score, a date and plain emphasis in bold are not names", async () => {
-    const { namesWithoutEvidence } = await import("./agent.js");
+    const { namesWithoutEvidence } = await import("./grounding.js");
     // The page writes a hyphen and "win"; the model writes an en dash and
     // "victory". Compared as typed this correct answer was withdrawn.
     const evidence = [
@@ -805,16 +805,18 @@ describe("names without evidence", () => {
     assert.deepEqual(namesWithoutEvidence(reply, evidence, "what happened to flamengo"), []);
   });
 
-  test("a figure the sources never gave is still an invention, and so is a name beside a real figure", async () => {
-    const { namesWithoutEvidence } = await import("./agent.js");
+  test("a figure alone does not decide, and a name beside a real figure is still caught", async () => {
+    const { namesWithoutEvidence } = await import("./grounding.js");
+    // Figures are not names: every page holds a 4, a 3 and a 2026, so their
+    // presence proves nothing and their absence is often a translation.
     const evidence = ["Flamengo and Estudiantes drew 0-0 on 22 October 2026."];
     const out = namesWithoutEvidence(
       "The match ended **4–3 on penalties**, and **Botafogo Athletic 2026** went through.",
       evidence,
       "what happened to flamengo",
     );
-    assert.ok(out.some((n) => /4-3/.test(n)), `the score is invented: ${out}`);
-    assert.ok(out.some((n) => /Botafogo Athletic/.test(n)), `the name is invented although 2026 is real: ${out}`);
+    // The bold span and the Title Case run inside it; the score is not there.
+    assert.deepEqual(out.sort(), ["Botafogo Athletic", "Botafogo Athletic 2026"]);
   });
 });
 

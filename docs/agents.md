@@ -56,11 +56,18 @@ a coincidence, and it is what makes prompt injection survivable: a page saying
 carry it out.
 
 The researcher is also held to its sources. When it searched and its
-answer names things none of the results mention, the answer is withdrawn
-and it is told to answer only from what the results say — or to say plainly
-that they name nothing specific and point to them. Prose it cannot judge;
-names it can, and named inventions with sources sitting underneath them
-were the failure this guards.
+answer names something none of the results mention, the answer is held
+back and written again from the results alone — or it says plainly that
+they do not name what you asked for and points to them. A one-line note
+says why the reply took longer. Prose it cannot judge; names it can, and
+named inventions with sources sitting underneath them were the failure
+this guards.
+
+It is a partial check, and worth knowing as one. Measured on 66 research
+answers it held back three in four of those that invented something, and
+one in ten of those that did not. What it misses is mostly not names: a
+specification, a quantity, a wrong account of what happened. Sources under
+an answer mean the pages were read, not that every line is in them.
 
 No wording defends against injection reliably. Capability does. There is a test
 asserting that no agent both reads untrusted content and can act, keyed to the
