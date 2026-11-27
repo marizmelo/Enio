@@ -1,5 +1,5 @@
 import { abstains } from "./adapters.js";
-import { callStatus } from "./tool-detail.js";
+import { callStatus, neverRan } from "./tool-detail.js";
 import { config } from "./config.js";
 import { embedBatch, embeddingsDegraded } from "./memory/embed.js";
 import { nearestLabel, embedMissing, type Embedder, type Nearest } from "./nearest.js";
@@ -104,10 +104,17 @@ export interface StepLike {
   error?: string | null;
 }
 
-/** The last tool call of the turn went wrong, by the tool's own account. */
+/**
+ * The last tool call of the turn went wrong, by the tool's own account.
+ *
+ * A call that never reached a tool is skipped: it has an error, but no tool
+ * said anything, and nothing was shown for it. Counted, a hallucinated tool
+ * name followed by an ordinary answer containing the word "error" settled
+ * the face on sorry with only a successful badge on screen.
+ */
 export function lastToolFailed(steps: ReadonlyArray<StepLike>): boolean {
   let last: StepLike | undefined;
-  for (const s of steps) if (s.kind === "tool") last = s;
+  for (const s of steps) if (s.kind === "tool" && !neverRan(s.error)) last = s;
   if (!last) return false;
   return Boolean(last.error) || callStatus(String(last.output ?? "")) === "failed";
 }

@@ -19,6 +19,7 @@ mkdirSync(process.env.ENIO_WORKSPACE, { recursive: true });
 mkdirSync(process.env.ENIO_DATA_DIR, { recursive: true });
 
 const { fsTools } = await import("./tools/fs.js");
+const { writtenPath } = await import("./artifacts.js");
 const writeTool = fsTools.find((t) => t.name === "write_file")!;
 const run = (args: Record<string, unknown>) => writeTool.run(args) as Promise<string | { text: string; notice?: string }>;
 const text = (r: string | { text: string }) => (typeof r === "string" ? r : r.text);
@@ -39,6 +40,17 @@ test("a new file stashes nothing; an overwrite keeps the previous version and sa
   assert.match(kept[0]!, /-notes\.md$/);
   assert.equal(readFileSync(join(stashDir, kept[0]!), "utf8"), "one\n");
   assert.equal(readFileSync(ws("notes.md"), "utf8"), "two\n");
+  // The line is read back for its path by the harness and the canvas. The
+  // writer and the reader are tested against each other here, on the real
+  // output, because a reworded line breaks the reader without an error.
+  assert.equal(writtenPath(fresh), "notes.md");
+  assert.equal(writtenPath(over), "notes.md", `read from: ${over.split("\n")[0]}`);
+  // And a name with a bracket of its own, where a looser reader would stop
+  // at the wrong one.
+  await run({ path: "draft (old).md", content: "one\n" });
+  const bracketed = text(await run({ path: "draft (old).md", content: "two\n" }));
+  assert.match(bracketed, /previous version kept: stash\//);
+  assert.equal(writtenPath(bracketed), "draft (old).md", `read from: ${bracketed.split("\n")[0]}`);
 });
 
 test("the big-loss warning points at the kept copy instead of calling it unrecoverable", async () => {

@@ -39,7 +39,14 @@ after(() => {
 
 /** Queue of scripted model responses; each call to the model pops one. */
 function scriptModel(
-  turns: Array<{ content?: string; toolCall?: { name: string; args: unknown } }>,
+  turns: Array<{
+    content?: string;
+    toolCall?: { name: string; args: unknown };
+    // Several calls in ONE response, which a model does and a queue of
+    // single calls cannot say: what happens to the second call's record
+    // was untestable without it.
+    toolCalls?: Array<{ name: string; args: unknown }>;
+  }>,
   // Sees each request the harness sends: the way to assert on the prompt.
   onRequest?: (body: { messages: Array<{ role: string; content: unknown }> }) => void,
 ) {
@@ -65,22 +72,18 @@ function scriptModel(
         `data: ${JSON.stringify({ choices: [{ delta: { content: turn.content } }] })}\n\n`,
       );
     }
-    if (turn.toolCall) {
+    const calls = turn.toolCalls ?? (turn.toolCall ? [turn.toolCall] : []);
+    if (calls.length > 0) {
       frames.push(
         `data: ${JSON.stringify({
           choices: [
             {
               delta: {
-                tool_calls: [
-                  {
-                    index: 0,
-                    id: "call_x",
-                    function: {
-                      name: turn.toolCall.name,
-                      arguments: JSON.stringify(turn.toolCall.args),
-                    },
-                  },
-                ],
+                tool_calls: calls.map((call, index) => ({
+                  index,
+                  id: index === 0 ? "call_x" : `call_x${index}`,
+                  function: { name: call.name, arguments: JSON.stringify(call.args) },
+                })),
               },
             },
           ],
@@ -1876,6 +1879,97 @@ describe("harness verification after a write", () => {
     }
   });
 
+  test("a write_file that replaces a file still verifies", async () => {
+    // Replacing a file with different contents adds "(previous version
+    // kept: …)" to the line the path is read from. Read to the end of the
+    // line, that sentence was the path: a file that does not exist, in no
+    // project, so the test run was skipped with nothing said. Only on an
+    // overwrite -- a fix written with write_file was never checked.
+    const root = repo("vrepo-over");
+    const p = project.createProject({ name: "vproj-over", type: "code" });
+    project.attachPath(p.id, root, "the repo");
+    project.openProject(p.id);
+    try {
+      const registry = await buildRegistry();
+      const sessionId = store.startSession();
+      scriptModel([
+        { content: "" }, // the file seed's search_code
+        {
+          toolCall: {
+            name: "write_file",
+            args: { path: "vrepo-over/src/greet.ts", content: 'export const greet = (n: string) => "hello " + n;\n' },
+          },
+        },
+        { content: "Rewrote the file; the tests pass." },
+      ]);
+      const notices: string[] = [];
+      const history: Message[] = [];
+      await runTurn("fix the typo in src/greet.ts", history, registry, sessionId, {
+        onNotice: (n) => notices.push(n),
+      }, { specialist: "coder" });
+
+      const wrote = String(history.find((m) => m.role === "tool" && /^Wrote /.test(String(m.content)))?.content ?? "");
+      assert.match(wrote, /previous version kept: /, "the case under test: the write reported a kept copy");
+      assert.ok(
+        notices.some((n) => /Ran `npm test` after the edit — passed/.test(n)),
+        `the overwrite was verified: ${notices.join(" | ") || "(no notice)"}`,
+      );
+    } finally {
+      project.closeProject();
+    }
+  });
+
+  test("a write made under a corrected name, or beside a refused one, still verifies", async () => {
+    // Both were lost to looking the step up by the name the call was typed
+    // with: a misspelling matched no step, and with two writes in one
+    // response both were read off the second -- the one that was refused.
+    const cases: Array<{ name: string; calls: Array<{ name: string; args: unknown }> }> = [
+      {
+        name: "vrepo-typo",
+        calls: [
+          { name: "write_fille", args: { path: "vrepo-typo/src/greet.ts", content: 'export const greet = (n: string) => "hello " + n;\n' } },
+        ],
+      },
+      {
+        name: "vrepo-batch",
+        calls: [
+          { name: "write_file", args: { path: "vrepo-batch/src/greet.ts", content: 'export const greet = (n: string) => "hello " + n;\n' } },
+          { name: "write_file", args: { path: "vrepo-batch/src/other.ts" } }, // no content: refused
+        ],
+      },
+    ];
+    for (const c of cases) {
+      const root = repo(c.name);
+      const p = project.createProject({ name: `proj-${c.name}`, type: "code" });
+      project.attachPath(p.id, root, "the repo");
+      project.openProject(p.id);
+      try {
+        const registry = await buildRegistry();
+        const sessionId = store.startSession();
+        scriptModel([
+          { content: "" }, // the file seed's search_code
+          { toolCalls: c.calls },
+          { content: "Rewrote the file; the tests pass." },
+        ]);
+        const notices: string[] = [];
+        const result = await runTurn("fix the typo in src/greet.ts", [], registry, sessionId, {
+          onNotice: (n) => notices.push(n),
+        }, { specialist: "coder" });
+        assert.equal(
+          result.toolsUsed.filter((t) => t === "write_file").length,
+          1,
+          `${c.name}: one write happened, under the tool's own name: ${result.toolsUsed.join(", ")}`,
+        );
+        assert.ok(
+          notices.some((n) => /Ran `npm test` after the edit — passed/.test(n)),
+          `${c.name}: the write was verified: ${notices.join(" | ") || "(no notice)"}`,
+        );
+      } finally {
+        project.closeProject();
+      }
+    }
+  });
+
   test("two writes verify once; a failed edit, a document write, and another agent verify never", async () => {
     const root = repo("vrepo2");
     const p = project.createProject({ name: "vproj2", type: "code" });
@@ -2610,5 +2704,228 @@ describe("the mood label", () => {
     }, { specialist: "generalist" });
     assert.equal(restarts, 1);
     assert.equal(moods.length, 2, `one frame per shown reply, got ${moods.join(",")}`);
+  });
+});
+
+/**
+ * A tool step says what happened, not what was asked for.
+ *
+ * The record used to be the call as the model typed it: the name it wrote
+ * and, unless the text began "Error:", success. Everything downstream reads
+ * that record -- which guards are armed, whether a write happened, where the
+ * answer came from -- so a wrong record was a wrong decision several steps
+ * later, with nothing failing in between.
+ */
+describe("a tool step records what happened", () => {
+  const lastSteps = () =>
+    getDb()
+      .prepare(
+        `SELECT kind, name, error FROM turn_steps WHERE turn_id = (SELECT MAX(id) FROM turns) ORDER BY seq`,
+      )
+      .all() as Array<{ kind: string; name: string | null; error: string | null }>;
+
+  test("a call refused for missing arguments is not a write that happened", async () => {
+    // What the coder's guards read to decide a file was written is a
+    // write_file step with no error. A refused call was exactly that.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { toolCall: { name: "write_file", args: { path: "x.txt" } } }, // no content
+      { content: "Fixed." },
+    ]);
+    const result = await runTurn("write a file", [], registry, sessionId);
+    const step = lastSteps().find((s) => s.kind === "tool");
+    assert.equal(step?.name, "write_file");
+    assert.match(String(step?.error), /Missing required argument/, "the refusal is the step's error");
+    assert.deepEqual(result.toolsUsed, [], "a refused call used no tool");
+  });
+
+  test("a call to a tool that does not exist leaves the action-claim guard armed", async () => {
+    // "Did anything run this turn" was answered yes by a call that reached
+    // no tool, which switched off every guard that asks it.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { toolCall: { name: "make_coffee", args: {} } },
+      { content: "Done — I have opened Calculator for you and cleared the display." },
+      { content: "I cannot open apps from here — that is the operator's job." },
+    ]);
+    let restarts = 0;
+    const seen: string[] = [];
+    const result = await runTurn("please open calculator and clear it for me now", [], registry, sessionId, {
+      onRestart: () => restarts++,
+      onBasis: (b) => seen.push(b),
+    }, { specialist: "generalist" });
+    assert.equal(restarts, 1, "the fabricated action is still withdrawn");
+    assert.deepEqual(result.toolsUsed, []);
+    // The retry ran nothing either, so its text does not stand.
+    assert.match(result.reply, /did not actually run anything/);
+    assert.deepEqual(seen, ["model"]);
+  });
+
+  test("a refused read is not an answer from files, live or reopened", async () => {
+    // The name alone used to decide the label: read_file with no path read
+    // nothing and the reply still wore "from files". Reopened, the same
+    // call must not grow a badge the live turn never showed.
+    const { conversationMessages } = await import("./memory/store.js");
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ toolCall: { name: "read_file", args: {} } }, { content: "A closure keeps its scope." }]);
+    const seen: string[] = [];
+    const started: string[] = [];
+    await runTurn("what is a closure", [], registry, sessionId, {
+      onBasis: (b) => seen.push(b),
+      onToolStart: (n) => started.push(n),
+    });
+    assert.deepEqual(started, [], "the case under test: nothing was announced live");
+    assert.deepEqual(seen, ["model"]);
+    const reply = conversationMessages(sessionId).find((m) => m.role === "assistant");
+    assert.equal(reply?.basis, "model");
+    assert.deepEqual(reply?.calls ?? [], [], "no badge for a call that never ran");
+    assert.deepEqual(reply?.tools ?? [], []);
+  });
+
+  test("a misspelled name that was corrected is recorded as the tool that ran", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ toolCall: { name: "current_timee", args: {} } }, { content: "It is noon." }]);
+    const result = await runTurn("what time is it?", [], registry, sessionId, {}, { specialist: "generalist" });
+    assert.deepEqual(result.toolsUsed, ["current_time"]);
+    const step = lastSteps().find((s) => s.kind === "tool");
+    assert.equal(step?.name, "current_time", "the step is found by everything that looks for the tool");
+    assert.equal(step?.error, null);
+    // And what was typed is still in the trace: with the tool step under
+    // the real name, this row is the only place the misspelling survives.
+    const fix = getDb()
+      .prepare(
+        `SELECT args, repaired FROM turn_steps
+          WHERE name = 'tool_name_corrected' AND turn_id = (SELECT MAX(id) FROM turns)`,
+      )
+      .get() as { args: string; repaired: number } | undefined;
+    assert.deepEqual(JSON.parse(fix?.args ?? "{}"), { typed: "current_timee", ran: "current_time" });
+    assert.equal(fix?.repaired, 1, "a repair, so the turn is not mined as clean");
+  });
+});
+
+describe("the mail agent's last word", () => {
+  test("a denial corrected by a plain re-answer keeps the re-answer", async () => {
+    // The correction names the account and asks for no call, and the retry
+    // was then judged on whether a tool ran: every good retry was replaced
+    // by an apology for not using web_search, which the mail agent does not
+    // hold.
+    const { config } = await import("./config.js");
+    mkdirSync(config.dataDir, { recursive: true });
+    const accounts = await import("./accounts.js");
+    const account = accounts.addScriptAccount({
+      email: "ana@example.com",
+      url: "https://script.google.com/macros/s/live/exec",
+      secret: "s",
+      version: 5,
+      grants: ["mail.read"],
+      owner: "user",
+    });
+    try {
+      const registry = await buildRegistry();
+      const sessionId = store.startSession();
+      scriptModel([
+        { content: "I don't have access to your email address." },
+        { content: "The account in use is ana@example.com." },
+      ]);
+      const notices: string[] = [];
+      const result = await runTurn("what is my email address?", [], registry, sessionId, {
+        onNotice: (n) => notices.push(n),
+      }, { specialist: "mail" });
+      assert.ok(notices.some((n) => /denied knowing the connected account/.test(n)), "the case under test: the denial was caught");
+      assert.equal(result.reply, "The account in use is ana@example.com.");
+    } finally {
+      accounts.removeAccount(account.id);
+    }
+  });
+
+  test("a denial repeated on the retry, in any wording, is answered with the account", async () => {
+    // The retry is judged on what a good one contains -- the account -- not
+    // on one more pattern for a denial. The first is the pattern's own
+    // wording; the second has the apostrophe the model really types and a
+    // phrasing the pattern does not know; the third denies nothing and
+    // still does not say which account.
+    const { config } = await import("./config.js");
+    mkdirSync(config.dataDir, { recursive: true });
+    const accounts = await import("./accounts.js");
+    const account = accounts.addScriptAccount({
+      email: "ana@example.com",
+      url: "https://script.google.com/macros/s/live/exec",
+      secret: "s",
+      version: 5,
+      grants: ["mail.read"],
+      owner: "user",
+    });
+    try {
+      const registry = await buildRegistry();
+      for (const retry of [
+        "I still cannot access your email account.",
+        "I\u2019m unable to see the email account from here.",
+        "I am not sure what you mean.",
+      ]) {
+        const sessionId = store.startSession();
+        scriptModel([{ content: "I don\u2019t have access to your email address." }, { content: retry }]);
+        const result = await runTurn("what is my email address?", [], registry, sessionId, {}, { specialist: "mail" });
+        assert.match(result.reply, /no access to the account, but I do: it is .*ana@example\.com/, `after: ${retry}`);
+      }
+    } finally {
+      accounts.removeAccount(account.id);
+    }
+  });
+
+  test("a denial beside another failure does not excuse the other failure", async () => {
+    // The denial's correction is the one sent, and its test passes the
+    // moment the denial is dropped. Alone, that let a retry keep the search
+    // it announced and never made, and ship it as the answer.
+    const { config } = await import("./config.js");
+    mkdirSync(config.dataDir, { recursive: true });
+    const accounts = await import("./accounts.js");
+    const account = accounts.addScriptAccount({
+      email: "ana@example.com",
+      url: "https://script.google.com/macros/s/live/exec",
+      secret: "s",
+      version: 5,
+      grants: ["mail.read"],
+      owner: "user",
+    });
+    try {
+      const registry = await buildRegistry();
+      const sessionId = store.startSession();
+      scriptModel([
+        { content: "I don't have access to your email address. Let me search your inbox." },
+        { content: "Let me search your inbox." },
+      ]);
+      const result = await runTurn("check my email", [], registry, sessionId, {}, { specialist: "mail" });
+      assert.match(result.reply, /without looking anything up/);
+    } finally {
+      accounts.removeAccount(account.id);
+    }
+  });
+
+  test("reporting a call the harness refused is an answer, not an announcement", async () => {
+    // The correction for an announced search offers two ways out: make the
+    // call, or report what a tool already answered or refused. A refused
+    // call ran nothing, and it is still something to report.
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { toolCall: { name: "open_the_mailbox", args: {} } },
+      { content: "Let me search your inbox." },
+      { content: "That call was refused, so there is nothing to show yet." },
+    ]);
+    const result = await runTurn("check my email", [], registry, sessionId, {}, { specialist: "mail" });
+    assert.equal(result.reply, "That call was refused, so there is nothing to show yet.");
+  });
+
+  test("a search announced and never made is not blamed on a tool it does not hold", async () => {
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([{ content: "Let me search your inbox." }, { content: "You have no new messages." }]);
+    const result = await runTurn("check my email", [], registry, sessionId, {}, { specialist: "mail" });
+    assert.ok(!/web_search/.test(result.reply), result.reply);
+    assert.match(result.reply, /without looking anything up/);
   });
 });

@@ -4869,3 +4869,77 @@ classified, and no test asks that of a new tool.
 - **Every other tool.** Nothing makes a new tool say whether it reads
   untrusted text or acts. That is the gap this fell through, and it is
   what putting those facts on the tool definition would close.
+
+### A tool step records what happened, not what was asked for (November 2026)
+
+**Chose:** `executeCall` returns what a call came to — the text, the tool
+that ran, and whether any tool was reached — and the step is written from
+that. Five faults had one root or sat beside it, and were fixed together.
+
+**What was wrong.** The record of a call was the call as the model typed
+it: the name it wrote and, unless the text began `Error:`, success.
+Everything later reads that record.
+
+- **A refused call counted as a tool that ran.** No such tool, arguments
+  missing, arguments that would not parse: each came back as text with no
+  `Error:`. So a coder whose `write_file` was refused had "written", the
+  label could say "from files" for a read that read nothing, and every
+  guard that asks "did anything run this turn" was told yes.
+- **A corrected name was recorded under the misspelling.** `write_fil` ran
+  as `write_file` and was stored as `write_fil`, so the write was invisible
+  to the test run after it, to the editor link, and to the guard that then
+  withdrew the reply for not writing.
+- **An overwrite skipped the test run.** `write_file` adds "(previous
+  version kept: …)" to the line the path is read from. Read to the end of
+  the line, that was the path: a file in no project. One reader now
+  (`writtenPath`, `artifacts.ts`) for the harness and the canvas.
+- **The library was listed under a name no tool has** (`search_library`),
+  so an answer from the user's own documents wore "from the model".
+- **The mail agent apologised for not using `web_search`**, which it does
+  not hold, and a correct answer to "you do have the account" was replaced
+  by that apology, because the retry was judged on whether a tool ran and
+  its correction asks for none.
+
+**How a refusal is marked.** In the step's `error`, prefixed `never ran: `
+(`tool-detail.ts`). Not in the output: that is what the model reads, and
+its wording is the cue to try again. The mark is read by the turn loop,
+by the face (`mood.ts`: a call that reached no tool is not a tool that
+failed), and by restore (`store.ts`: nothing was announced for it live, so
+nothing is drawn for it reopened).
+
+**A correction is recorded as one.** With the tool step under the real
+name, what was typed would be nowhere: a structured call leaves the model
+step's text empty. A `tool_name_corrected` harness step keeps both names.
+It is marked repaired, which also keeps such a turn out of the set mined
+as clean, where the misspelling used to keep it.
+
+**Found by reviewing the fix, and changed before it shipped:**
+- The face went sorry on an ordinary answer after a hallucinated tool
+  name. The mark above is what fixed it.
+- The mail denial's own test let a retry drop the denial and keep an
+  invented email or an unmade search. It now applies only when the denial
+  is the only failure.
+- That test was one more pattern for a denial, which a curly apostrophe or
+  a rewording passes. The retry is judged on what a good one contains: the
+  account's address.
+- A retry that reports a refused call was floored, though reporting it is
+  one of the two ways out its correction offers.
+
+**Rejected:**
+- *Dropping refused calls from what the gap ledger sees.* Reindex rebuilds
+  the ledger from stored steps, and rows written before the mark cannot say
+  which calls were refused. The live turn reads what reindex can, so the
+  two agree.
+- *Rewording the refusals so `callStatus` reads them as failed.* They are
+  model-facing and they work.
+- *Renaming the tool message in the model's history.* It keeps the typed
+  name so it still pairs with the call above it.
+
+**Not done:**
+- A coder that claims a finished write after a refused one is still not
+  caught when another tool ran in the turn, which the harness's own code
+  search usually has. That needs a guard of its own.
+- The last-resort line still says "propose a plan" to agents that hold no
+  such tool.
+- Drive reads are still missing from the list behind "from files".
+- Steps stored before this carry no mark, and restore as they did.

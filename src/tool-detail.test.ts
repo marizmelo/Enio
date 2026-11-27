@@ -17,6 +17,9 @@ describe("callDetail", () => {
     );
     assert.equal(callDetail("read_file", { path: "src/app.js" }), "src/app.js");
     assert.equal(callDetail("web_search", { query: "who won" }), "who won");
+    // By the name the tool has: under a name no tool has, the entry never
+    // matched and the line read "query: lease terms".
+    assert.equal(callDetail("library_search", { query: "lease terms" }), "lease terms");
   });
 
   test("a file's contents never become the label", () => {

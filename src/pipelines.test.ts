@@ -81,6 +81,32 @@ test("artifact extraction is pinned to the tools' exact wording", () => {
   assert.deepEqual(extractArtifacts("write_file", "Wrote 512 bytes to notes/report.md"), [
     { type: "document", path: "notes/report.md" },
   ]);
+  // A write that replaced a file says where the old one went, on the same
+  // line. That is not part of the path: read as one, the chip pointed at a
+  // file that does not exist.
+  assert.deepEqual(
+    extractArtifacts(
+      "write_file",
+      "Wrote 48 bytes to src/app.js (previous version kept: stash/2026-11-26T10-00-00-app.js)",
+    ),
+    [{ type: "document", path: "src/app.js" }],
+  );
+  // A name with a bracket of its own is still the whole name: written
+  // fresh, ending in one, and overwritten -- where the kept copy's name
+  // carries the same bracket. Only the note the writer adds is cut.
+  assert.deepEqual(extractArtifacts("write_file", "Wrote 9 bytes to notes (1).md"), [
+    { type: "document", path: "notes (1).md" },
+  ]);
+  assert.deepEqual(extractArtifacts("write_file", "Wrote 9 bytes to draft (old)"), [
+    { type: "document", path: "draft (old)" },
+  ]);
+  assert.deepEqual(
+    extractArtifacts(
+      "write_file",
+      "Wrote 9 bytes to dir (v2)/notes (1).md (previous version kept: stash/2026-11-26T10-00-00-000-notes (1).md)",
+    ),
+    [{ type: "document", path: "dir (v2)/notes (1).md" }],
+  );
   // edit_file speaks the same first line, so the canvas reloads on an edit
   // exactly as it does on a write.
   assert.deepEqual(

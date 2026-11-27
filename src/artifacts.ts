@@ -21,13 +21,35 @@ export interface Artifact {
   text?: string;
 }
 
+/**
+ * The path a write reported, from its first line.
+ *
+ * write_file adds where it kept the previous version when it replaces a file
+ * with different contents: "Wrote 120 bytes to app.js (previous version
+ * kept: stash/…-app.js)". Read to the end of the line, that whole sentence
+ * was the path -- a file that does not exist -- so the test run after a
+ * write found no project and was skipped without a word, and the chip for
+ * the file pointed nowhere. Only on an overwrite, which is the write a test
+ * run matters most for.
+ *
+ * One reader for both places that need it, beside the other grammar this
+ * module pins.
+ */
+export function writtenPath(output: string): string | null {
+  // The suffix as stashPrevious writes it -- stash/<stamp>-<name>, no folder
+  // below that -- and nothing looser: any trailing bracket would take
+  // "draft (old)" for a path with a note after it.
+  const m = /^Wrote \d+ bytes to (.+?)(?: \(previous version kept: stash\/[^/\n]+\))?$/m.exec(output);
+  return m ? m[1]!.trim() : null;
+}
+
 export function extractArtifacts(tool: string, output: string): Artifact[] {
   const artifacts: Artifact[] = [];
   if (tool === "write_file" || tool === "handoff_saved" || tool === "edit_file") {
     // handoff_saved is the harness recording its own save in the tool's
     // dialect (see runTurn); one grammar, two writers.
-    const m = /^Wrote \d+ bytes to (.+)$/m.exec(output);
-    if (m) artifacts.push({ type: "document", path: m[1]!.trim() });
+    const path = writtenPath(output);
+    if (path) artifacts.push({ type: "document", path });
   } else if (tool === "take_screenshot") {
     const m = /Screenshot saved to (.+?\.png)/.exec(output);
     if (m) artifacts.push({ type: "image", path: m[1]!.trim() });

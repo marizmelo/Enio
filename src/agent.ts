@@ -9,7 +9,8 @@ import { skillCatalogue } from "./skills.js";
 import { invokedSkillBlock } from "./mentions.js";
 import type { Skill } from "./skills.js";
 import { safePath } from "./tools/fs.js";
-import { extractArtifacts } from "./artifacts.js";
+import { extractArtifacts, writtenPath } from "./artifacts.js";
+import { NEVER_RAN, neverRan } from "./tool-detail.js";
 import { verificationFor, verifyFailed } from "./verify.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
@@ -664,6 +665,15 @@ function deniesCalendarAccess(reply: string): boolean {
   );
 }
 
+/** The mail agent saying it cannot see the account it reads from. Its own
+ *  function because it is asked twice: of the reply, and of the retry. */
+export function deniesMailAccess(reply: string): boolean {
+  // Curly apostrophes first, for the reason disclaimsLiveAccess gives: the
+  // model writes don’t, and a pattern that wants don't is inert on it.
+  const plain = reply.replace(/[\u2018\u2019\u02BC]/g, "'");
+  return /\b(?:don'?t|do not|cannot|can'?t) (?:have )?access(?: to)? your (?:personal )?(?:e-?mail|account|address)|not stored in the system/i.test(plain);
+}
+
 export function disclaimsLiveAccess(text: string): boolean {
   // Curly apostrophes first. The model emits don’t (U+2019), and the first
   // version of this guard matched only don't — one character, and it was
@@ -841,7 +851,7 @@ const LIVE_TOOLS = new Set(["web_search", "web_fetch", "browse", "weather", "cur
 /** For the basis label: what counts as "went to the web" and "read files".
  *  Closed lists, like everything the harness states about itself. */
 const WEB_TOOLS = new Set(["web_search", "web_fetch", "browse"]);
-const FILE_TOOLS = new Set(["read_file", "edit_file", "search_code", "list_dir", "search_library", "find_file", "read_image", "read_email", "search_email"]);
+const FILE_TOOLS = new Set(["read_file", "edit_file", "search_code", "list_dir", "library_search", "find_file", "read_image", "read_email", "search_email"]);
 
 export function looksDegenerate(text: string): boolean {
   const sentences = text
@@ -1384,30 +1394,62 @@ async function runTurnInner(
   async function runToolCalls(calls: ToolCall[]): Promise<void> {
     for (const call of calls) {
       const toolStartedAt = Date.now();
-      const output = await executeCall(call, registry, handlers, allowedToolNames);
-      toolsUsed.push(call.function.name);
-      if (isWebTool(call.function.name)) {
+      const { output, name, ran } = await executeCall(call, registry, handlers, allowedToolNames);
+      // A refused call used no tool. The step below still records it, with
+      // the refusal as its error, so the trace shows what the model tried.
+      if (ran) toolsUsed.push(name);
+      if (ran && isWebTool(name)) {
         let parsed: Record<string, unknown> = {};
         try {
           parsed = JSON.parse(call.function.arguments || "{}");
         } catch {
           /* Malformed args already surfaced to the model; no source to record. */
         }
-        for (const src of extractSources(call.function.name, parsed, output)) {
+        for (const src of extractSources(name, parsed, output)) {
           if (src.url && !turnSources.includes(src.url)) turnSources.push(src.url);
         }
         setMemorySources(turnSources);
       }
-      steps.push({
+      const step: StepRecord = {
         seq: steps.length,
         kind: "tool",
-        name: call.function.name,
+        // The tool that ran, not the spelling it was asked for by. The
+        // spelling is kept in the step after this one when they differ.
+        name,
         args: call.function.arguments,
         output,
-        // executeCall converts throws into text, so treat the prefix as the signal.
-        error: output.startsWith("Error:") ? output.slice(0, 300) : null,
+        // executeCall converts throws into text, so the prefix is the signal
+        // for a tool that ran and failed. A refusal has no prefix -- its
+        // wording is the model's cue to try again and is left alone -- so it
+        // is marked here, in the column the model never reads.
+        error: !ran
+          ? (NEVER_RAN + output).slice(0, 300)
+          : output.startsWith("Error:")
+            ? output.slice(0, 300)
+            : null,
         durationMs: Date.now() - toolStartedAt,
-      });
+      };
+      steps.push(step);
+      stepOf.set(call, step);
+      // The correction is itself something that happened, and the tool step
+      // no longer shows it: a structured call leaves the model step's text
+      // empty, so without this the typed name is nowhere in the trace and a
+      // model that fat-fingers a name on every turn looks like one that
+      // never does. Marked repaired because it is one -- the harness fixed
+      // the model's output -- which also keeps the turn out of the set
+      // mined as clean, where the typed spelling used to keep it.
+      if (ran && name !== call.function.name) {
+        steps.push({
+          seq: steps.length,
+          kind: "harness",
+          name: "tool_name_corrected",
+          args: JSON.stringify({ typed: call.function.name, ran: name }),
+          output: null,
+          repaired: true,
+          error: null,
+          durationMs: 0,
+        });
+      }
       history.push({
         role: "tool",
         tool_call_id: call.id,
@@ -1433,14 +1475,16 @@ async function runTurnInner(
     if (!allowedToolNames.has("run_command")) return;
     const written: string[] = [];
     for (const call of calls) {
-      const name = call.function.name;
-      if (name !== "write_file" && name !== "edit_file") continue;
-      const step = [...steps].reverse().find((st) => st.kind === "tool" && st.name === name);
+      // The step this call became, not the newest step of the same name:
+      // two writes in one batch were both read off the second, and a write
+      // made under a corrected name was not found at all.
+      const step = stepOf.get(call);
       if (!step || step.error) continue;
-      const m = /^Wrote \d+ bytes to (.+)$/m.exec(step.output ?? "");
-      if (!m) continue;
+      if (step.name !== "write_file" && step.name !== "edit_file") continue;
+      const path = writtenPath(step.output ?? "");
+      if (!path) continue;
       try {
-        written.push(safePath(m[1]!.trim()));
+        written.push(safePath(path));
       } catch {
         /* a path that no longer resolves is not one to verify */
       }
@@ -1481,6 +1525,11 @@ async function runTurnInner(
   // path -- a failed trace write must never break a working conversation.
   const turnStartedAt = Date.now();
   const steps: StepRecord[] = [];
+  // Which step each call became: the test run after a write reads the
+  // call's own step, not the newest one of the same name.
+  const stepOf = new WeakMap<ToolCall, StepRecord>();
+  /** A tool step whose tool was reached -- it may still have failed. */
+  const ranTool = (s: StepRecord): boolean => s.kind === "tool" && !neverRan(s.error);
   // The reply's mood label, driven from the same sites that stream the
   // text (mood.ts explains the timing). Reads `steps` for what ran.
   const moods = createMoodTrack(steps, (m) => handlers.onMood?.(m));
@@ -1850,7 +1899,7 @@ async function runTurnInner(
   // tool calls. One corrective round, with tools, so the model can either do
   // the thing (open_app, propose_plan) or retract. The correction streams
   // after the fabricated text; the notice is what tells the user why.
-  const toolRanThisTurn = steps.some((s) => s.kind === "tool");
+  const toolRanThisTurn = steps.some(ranTool);
   const heldLiveTools = activeTools.filter((t) => LIVE_TOOLS.has(t.name)).map((t) => t.name);
   // The researcher exists to look things up; a substantive answer from it
   // with no lookup is answering from training data, whatever the wording.
@@ -1910,12 +1959,12 @@ async function runTurnInner(
   // web tool ran this turn -- that is when sources sit under the answer
   // looking like support -- and only names, never claims in prose, which
   // no closed check can judge.
-  const webRanThisTurn = steps.some((s) => s.kind === "tool" && WEB_TOOL_NAMES.has(s.name ?? ""));
+  const webRanThisTurn = steps.some((s) => ranTool(s) && WEB_TOOL_NAMES.has(s.name ?? ""));
   const missingNames =
     specialistName === "researcher" && webRanThisTurn
       ? namesWithoutEvidence(
           reply,
-          steps.filter((s) => s.kind === "tool").map((s) => s.output ?? ""),
+          steps.filter(ranTool).map((s) => s.output ?? ""),
           userInput,
         )
       : [];
@@ -1928,9 +1977,7 @@ async function runTurnInner(
     (specialistName === "mail" || specialistName === "researcher") && trailingAnnouncement(reply);
   // The mail agent denying knowledge of the account it is connected to.
   const mailAccount = specialistName === "mail" ? scriptMailAccount("read") : null;
-  const deniesMailAccount =
-    Boolean(mailAccount) &&
-    /\b(?:don'?t|do not|cannot|can'?t) (?:have )?access(?: to)? your (?:personal )?(?:e-?mail|account|address)|not stored in the system/i.test(reply);
+  const deniesMailAccount = Boolean(mailAccount) && deniesMailAccess(reply);
   // The planner saying no calendar is connected when one is. Watched: with
   // only Enio's own account connected, two turns of "no account is
   // connected" sat in the thread, and the third calendar question was
@@ -2264,10 +2311,28 @@ async function runTurnInner(
     // whether a write happened; an unrequested draft on whether the fix
     // still drafts -- its correction is a pure re-answer, so "did a tool
     // run" is the wrong question and floored a good fix with a worse text.
+    // The denial judged alone, and only when it is alone. Beside an email
+    // that was never read, a search announced and not made, or a fresh
+    // fact asserted, the denial's correction is still the one sent -- but a
+    // retry that drops the denial and keeps the other failure must not
+    // pass on the denial's test, so those fall through to their own.
+    const denialOnly =
+      deniesMailAccount && !quotedUnreadMail && !announcedLookup && !fabricatedCurrent && !misownedAccount;
+    // Judged on what a good retry contains, not on one more pattern for a
+    // denial: the correction says which account to answer with, and a
+    // reply that names it has. A denial reworded past the pattern does not.
+    const stillDeniesAccount =
+      deniesMailAccount &&
+      (deniesMailAccess(reply) || !reply.toLowerCase().includes(mailAccount!.email.toLowerCase()));
     const floorNeeded = owedAWrite
       ? !wroteAfterCorrection
       : composedUnasked
         ? looksLikeMailDraft(reply)
+        : denialOnly
+          ? // A pure re-answer too: the correction names the account and
+            // asks for no call, so "did a tool run" floored every good
+            // retry -- "The account in use is …" was replaced by an apology.
+            stillDeniesAccount
         : misownedAccount
           ? claimsUsersOwn(reply)
         : fabricatedCurrent
@@ -2275,7 +2340,13 @@ async function runTurnInner(
             // the retry is still asserting instead. "Did a tool run" would
             // always floor here -- there is no tool that could.
             assertsFreshFact(reply) && !admitsCannotCheck(reply)
-          : !steps.some((st) => st.kind === "tool");
+        : announcedLookup
+          ? // Its correction offers two ways out: make the call, or report
+            // what a tool already answered or refused. A call the harness
+            // refused is something to report, so it counts here though it
+            // ran nothing -- only a turn with no call at all is floored.
+            !steps.some((st) => st.kind === "tool")
+          : !steps.some(ranTool);
     if (floorNeeded) {
       // Two failures, two honest floors. The "propose a plan" line is the
       // operator's — offered to a researcher that refused to search, it read
@@ -2288,6 +2359,13 @@ async function runTurnInner(
         : composedUnasked
           ? "I drafted an email nobody asked for. Ask again and I will just answer — " +
             "say reply or send when you want mail written."
+        : denialOnly || (deniesMailAccount && deniesMailAccess(reply))
+          ? // The retry denied it again, or still did not say which account,
+            // so the harness says what is true. Beside another failure this
+            // is said only for a denial repeated in so many words; anything
+            // else there gets that failure's own floor below.
+            `I said I had no access to the account, but I do: it is ${mailAccount!.spoken}. ` +
+            "Ask again and I will answer from it."
         : fabricatedCurrent
           ? "I made that up — I have no way to check current releases or news from " +
             "here. Ask @researcher, or say \"search the web for …\", and it will be " +
@@ -2309,8 +2387,15 @@ async function runTurnInner(
               `I said no calendar was connected, but ${calendarAccount!.spoken} is. ` +
               "Ask again and I will read it with read_calendar."
           : stale
-            ? `I should have looked that up with ${heldLiveTools[0] ?? "web_search"} and did not. ` +
-              "Ask again and I will search rather than answer from memory."
+            ? heldLiveTools.length > 0
+              ? `I should have looked that up with ${heldLiveTools[0]} and did not. ` +
+                "Ask again and I will search rather than answer from memory."
+              : // No lookup tool to name. This used to fall back to the word
+                // web_search, so the mail agent -- which reaches here for an
+                // email it did not read, or a search it announced and never
+                // made -- apologised for not using a tool it does not hold.
+                "I answered that without looking anything up. " +
+                "Ask again and I will check before I answer."
             : "I described doing that, but I did not actually run anything — nothing " +
           'has changed on your computer. Say "propose a plan to …" and I will write ' +
           "out the exact steps for you to approve.";
@@ -2370,7 +2455,7 @@ async function runTurnInner(
   // page, and with no page in front of it the model minted one. On such a
   // turn the sources are what memory and the thread hold; a URL that is in
   // neither cannot be true.
-  const noToolRan = !steps.some((s) => s.kind === "tool");
+  const noToolRan = !steps.some(ranTool);
   if (!noToolRan || /https?:\/\//i.test(reply)) {
     try {
       const project = activeProject();
@@ -2479,7 +2564,7 @@ async function runTurnInner(
   // talking from its weights" is exactly the case a user should be able to
   // see at a glance, and exactly the one the model itself will never say.
   // Recorded as a harness step too, so a restored conversation carries it.
-  const toolNames = steps.filter((st) => st.kind === "tool").map((st) => st.name ?? "");
+  const toolNames = steps.filter(ranTool).map((st) => st.name ?? "");
   const usedWeb = toolNames.some((n) => WEB_TOOLS.has(n));
   const usedFiles = toolNames.some((n) => FILE_TOOLS.has(n));
   const basis: "web" | "files" | "memory" | "conversation" | "model" = usedWeb
@@ -2555,7 +2640,11 @@ async function runTurnInner(
     question: userInput,
     specialist: specialistName || "single",
     basis,
-    toolNames,
+    // Every tool step, refused ones included -- not `toolNames`, which is
+    // what ran. Reindex rebuilds the ledger from the stored steps, and those
+    // do not say which calls were refused; the two have to reach the same
+    // answer, so this one reads what the other can.
+    toolNames: steps.filter((st) => st.kind === "tool").map((st) => st.name ?? ""),
     skillsInvoked: Boolean(overrides.skills && overrides.skills.length > 0),
     at: turnStartedAt,
   });
@@ -2799,6 +2888,28 @@ function editDistance(a: string, b: string): number {
   return row[b.length]!;
 }
 
+/**
+ * What a call came to.
+ *
+ * The text alone was not enough, and two things went wrong for want of the
+ * rest. A call refused before any tool was reached -- no such tool, arguments
+ * missing -- came back as a string with no "Error:" in front, so it was
+ * recorded as a tool that ran and worked: a coder whose write_file was
+ * refused counted as having written, and every guard that asks "did
+ * anything run" was told yes. And a misspelled name corrected to the real
+ * tool ran under the real name and was recorded under the misspelling, so
+ * the write that happened was invisible to everything that looks for
+ * write_file.
+ *
+ * `name` is the tool that ran, or the name as the model typed it when
+ * nothing matched. `ran` is false when no tool was reached.
+ */
+interface CallOutcome {
+  output: string;
+  name: string;
+  ran: boolean;
+}
+
 async function executeCall(
   call: ToolCall,
   registry: Registry,
@@ -2814,7 +2925,7 @@ async function executeCall(
    * which is where it saw them.
    */
   allowed: Set<string>,
-): Promise<string> {
+): Promise<CallOutcome> {
   // A small model fat-fingers the tool name itself, separately from
   // hallucinating one: it wrote "run_appletescript" for run_applescript, one
   // transposition off, having just used the skill to author a correct script.
@@ -2832,21 +2943,33 @@ async function executeCall(
     // exactly what it has recovers the turn far more often than a bare error --
     // but only this route's tools, or the suggestion is one it cannot take.
     const available = [...allowed].join(", ");
-    return `No tool named "${call.function.name}". Available tools: ${available}`;
+    return {
+      output: `No tool named "${call.function.name}". Available tools: ${available}`,
+      name: call.function.name,
+      ran: false,
+    };
   }
 
   let args: Record<string, unknown>;
   try {
     args = JSON.parse(call.function.arguments || "{}") as Record<string, unknown>;
   } catch {
-    return `Arguments for ${tool.name} were not valid JSON. Send a JSON object matching the tool's schema.`;
+    return {
+      output: `Arguments for ${tool.name} were not valid JSON. Send a JSON object matching the tool's schema.`,
+      name: tool.name,
+      ran: false,
+    };
   }
 
   const missing = (tool.parameters.required ?? []).filter(
     (key) => args[key] === undefined,
   );
   if (missing.length > 0) {
-    return `Missing required argument${missing.length > 1 ? "s" : ""} for ${tool.name}: ${missing.join(", ")}.`;
+    return {
+      output: `Missing required argument${missing.length > 1 ? "s" : ""} for ${tool.name}: ${missing.join(", ")}.`,
+      name: tool.name,
+      ran: false,
+    };
   }
 
   handlers.onToolStart?.(tool.name, args);
@@ -2895,10 +3018,10 @@ async function executeCall(
     const output =
       tool.origin === "mcp" ? `FROM MCP (${tool.server ?? "unknown"}): ${body}` : body;
     handlers.onToolEnd?.(tool.name, output);
-    return output;
+    return { output, name: tool.name, ran: true };
   } catch (err) {
     const message = `Error: ${(err as Error).message}`;
     handlers.onToolEnd?.(tool.name, message);
-    return message;
+    return { output: message, name: tool.name, ran: true };
   }
 }

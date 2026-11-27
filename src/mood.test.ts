@@ -65,6 +65,12 @@ describe("the mood label", () => {
     assert.equal(moodByRule("I couldn't find that file anywhere.", [failed]), "sorry", "the failure is the more specific fact");
     assert.equal(moodByRule("Here is the summary.", [failed]), null, "an unacknowledged failure is not an apology");
     assert.equal(moodByRule("The file says hello.", [fine]), null);
+    // A call that never reached a tool is not a tool that failed: nothing
+    // was shown for it, so the face has nothing to be sorry about. The
+    // last tool that was reached decides.
+    const refused = { kind: "tool", output: 'No tool named "open_url".', error: 'never ran: No tool named "open_url".' };
+    assert.equal(moodByRule("The deploy broke because of a configuration error.", [fine, refused]), null);
+    assert.equal(moodByRule("I couldn't read that file.", [failed, refused]), "sorry", "a real failure before it still counts");
   });
 
   test("classifier: the nearest authored example over the margin, else neutral", async () => {

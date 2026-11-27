@@ -30,7 +30,7 @@ const HEADLINE: Record<string, string[]> = {
   read_skill: ["name"],
   recall: ["query"],
   remember: ["fact"],
-  search_library: ["query"],
+  library_search: ["query"],
   read_email: ["id"],
   search_email: ["query"],
   run_pipeline: ["name"],
@@ -66,6 +66,26 @@ export function callStatus(output: string): CallStatus {
   if (/^(Error:|exit \d+|Timed out|Failed to start|Exited immediately)/.test(text)) return "failed";
   if (/^Started in the background \(pid \d+\)/.test(text)) return "background";
   return "ok";
+}
+
+/**
+ * How a step's `error` says the call never reached a tool: no such tool,
+ * arguments that would not parse, a required one missing.
+ *
+ * That is not a tool failing, and the difference is read in three places.
+ * The turn loop asks "did anything run"; the face must not apologise for a
+ * tool that gave no account of anything; and a reopened conversation must
+ * not draw a badge the live one never showed -- nothing is announced for a
+ * call that was refused before it started.
+ *
+ * In the error column and not the output: the output is what the model
+ * reads, and its wording is the cue to try again. The column is ours.
+ * Steps stored before this existed carry no mark and read as they did.
+ */
+export const NEVER_RAN = "never ran: ";
+
+export function neverRan(error: string | null | undefined): boolean {
+  return typeof error === "string" && error.startsWith(NEVER_RAN);
 }
 
 function clip(text: string): string {

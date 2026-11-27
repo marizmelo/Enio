@@ -401,7 +401,8 @@ export function failureCases(specialist: string, limit = 20): FailureCase[] {
     const reasons: string[] = [];
     const errored = steps.filter((s) => s.kind === "tool" && s.error);
     if (errored.length) reasons.push(`tool errors: ${[...new Set(errored.map((s) => s.name))].join(", ")}`);
-    if (steps.some((s) => s.repaired)) reasons.push("malformed JSON repaired");
+    if (steps.some((s) => s.repaired && s.name !== "tool_name_corrected")) reasons.push("malformed JSON repaired");
+    if (steps.some((s) => s.name === "tool_name_corrected")) reasons.push("tool name corrected");
     if (steps.some((s) => s.scavenged)) reasons.push("tool call scavenged from text");
     if (t.iterations >= config.maxToolIterations) reasons.push("ran to the iteration cap");
     if (HARNESS_REPLY.test(t.reply)) reasons.push("no usable answer");

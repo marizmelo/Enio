@@ -7,7 +7,7 @@ import { chunkTranscript, extractTriples, summarize } from "./extract.js";
 import type { Triple } from "./schema.js";
 import { extractSources, type Source } from "../sources.js";
 import { extractArtifacts } from "../artifacts.js";
-import { callDetail, callStatus } from "../tool-detail.js";
+import { callDetail, callStatus, neverRan } from "../tool-detail.js";
 import { resolveGaps } from "./gaps.js";
 
 const now = () => Date.now();
@@ -942,12 +942,12 @@ export function conversationMessages(sessionId: string): StoredMessage[] {
     )
     .all(sessionId) as StoredMessage[];
 
-  let steps: Array<{ startedAt: number; kind: string; name: string; args: string; output: string }>;
+  let steps: Array<{ startedAt: number; kind: string; name: string; args: string; output: string; error: string | null }>;
   let routed: Array<{ startedAt: number; specialist: string }>;
   try {
     steps = db
       .prepare(
-        `SELECT t.started_at AS startedAt, s.kind, s.name, s.args, s.output
+        `SELECT t.started_at AS startedAt, s.kind, s.name, s.args, s.output, s.error
            FROM turns t JOIN turn_steps s ON s.turn_id = t.id
           WHERE t.session_id = ? AND s.kind IN ('tool', 'harness') AND s.name IS NOT NULL
           ORDER BY t.started_at ASC, s.seq ASC`,
@@ -982,6 +982,11 @@ export function conversationMessages(sessionId: string): StoredMessage[] {
   for (const step of steps) {
     const target = assistants.find((m) => m.ts >= step.startedAt);
     if (!target) continue;
+    // A call refused before any tool was reached drew nothing live -- no
+    // badge is announced for it -- so it draws nothing here either. Without
+    // this a reopened reply grew a working-looking badge for a tool that
+    // never ran, beside a label saying nothing was looked up.
+    if (step.kind === "tool" && neverRan(step.error)) continue;
     // A harness step is not a tool the model ran: no badge, no sources —
     // a restored reply must not grow a chip its live rendering never had.
     // Its artifact still rides below, which is the whole reason it is here.

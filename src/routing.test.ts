@@ -182,3 +182,62 @@ describe("the route decision is recorded", () => {
     assert.equal(lastRouteDecision()?.specialist, "coder");
   });
 });
+
+/**
+ * Here and not with the other label tests: those run unrouted, where the
+ * registry is cut to sixteen tools and the library is the one it loses, so
+ * a call to library_search there is refused and proves nothing.
+ */
+describe("the label on an answer from the library", () => {
+  test("files, not the model — the tool by the name it has", async () => {
+    // The list said search_library; the tool is library_search. A wrong
+    // name in a set never matches and never errors, so the librarian's
+    // answers from the user's own documents wore "nothing was looked up".
+    const turns: Array<{ content?: string; toolCall?: { name: string; args: unknown } }> = [
+      { toolCall: { name: "library_search", args: { query: "lease terms" } } },
+      { content: "Nothing saved mentions a lease." },
+    ];
+    globalThis.fetch = (async (url: unknown) => {
+      // The embedding model is not on a test machine, and its download is
+      // not a model call: refused, the search falls back to keywords.
+      if (/huggingface/.test(String(url))) throw new Error("no network in tests");
+      const turn = turns.shift() ?? { content: "(exhausted)" };
+      const delta = turn.toolCall
+        ? {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_lib",
+                function: { name: turn.toolCall.name, arguments: JSON.stringify(turn.toolCall.args) },
+              },
+            ],
+          }
+        : { content: turn.content };
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            const enc = new TextEncoder();
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`));
+            c.enqueue(enc.encode("data: [DONE]\n\n"));
+            c.close();
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    const seen: string[] = [];
+    const result = await runTurn(
+      "what does my lease say about pets",
+      [],
+      registry,
+      sessionId,
+      { onBasis: (b) => seen.push(b) },
+      { specialist: "librarian" },
+    );
+    assert.deepEqual(result.toolsUsed, ["library_search"], "the case under test: the library was searched");
+    assert.deepEqual(seen, ["files"]);
+  });
+});
