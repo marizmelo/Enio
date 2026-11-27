@@ -129,7 +129,7 @@ describe("desktop control", () => {
     // "show my emails" failed by default on a machine that could answer it.
     assert.equal(desktopEnabled(), false);
 
-    const offered = desktopTools.map((t) => t.name);
+    const offered: string[] = desktopTools.map((t) => t.name);
     for (const mutating of ["run_applescript", "take_screenshot", "propose_plan"]) {
       assert.ok(!offered.includes(mutating), `${mutating} must stay behind ENIO_DESKTOP`);
     }

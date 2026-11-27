@@ -1,4 +1,4 @@
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 import { readImage, isImage, IMAGE_EXTENSIONS } from "../vision.js";
 import { safePath } from "./fs.js";
 
@@ -9,7 +9,7 @@ import { safePath } from "./fs.js";
  * needs one — and means the vision model can be swapped, or absent entirely,
  * without anything upstream noticing.
  */
-export const visionTools: ToolDef[] = [
+export const visionTools: BuiltinTool[] = [
   {
     name: "read_image",
     description:

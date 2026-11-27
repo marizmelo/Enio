@@ -17,7 +17,7 @@ import {
   plannedAssetFile,
   storePath,
 } from "../assets.js";
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 
 /**
  * Filesystem access, hard-scoped to roots the user granted.
@@ -296,7 +296,7 @@ function stashPrevious(target: string, previous: string): string | null {
   }
 }
 
-export const fsTools: ToolDef[] = [
+export const fsTools: BuiltinTool[] = [
   {
     name: "read_file",
     // "including PDFs" is load-bearing: the model's training says PDFs are
@@ -542,7 +542,7 @@ export const fsTools: ToolDef[] = [
  * rather than web_search -- the silent capability loss the pipelines suite
  * caught as "web-search ability does not exist".
  */
-export const listDirTool: ToolDef = {
+export const listDirTool: BuiltinTool = {
   name: "list_dir",
   description:
     "List files and directories at a path in the working folder. Use this before reading to discover what exists.",

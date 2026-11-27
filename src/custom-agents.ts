@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.js";
+import { toolsWhere } from "./tool-traits.js";
 
 /**
  * User-defined agents: the same shape as a built-in specialist, stored on
@@ -48,33 +49,16 @@ const NEVER_HELD = new Set(["run_applescript"]);
  * untrusted web content and holds a tool that acts. No wording defends
  * against a page's instructions reliably — capability does — and a
  * user-assembled agent with web_fetch and run_command would hand any page
- * it reads a shell. web.test.ts keeps its own copy of these lists on
- * purpose: independent duplication is the tripwire if either side is
- * quietly weakened.
+ * it reads a shell.
+ *
+ * Both halves are read off the traits table, where a tool cannot exist
+ * without saying which it is. web.test.ts keeps its own literal copy of the
+ * two lists on purpose and asserts the table equals it: a row changed in
+ * the table by mistake then has to be changed there as well, by someone
+ * who is told why.
  */
-const READS_UNTRUSTED = new Set(["browse", "web_fetch", "web_fetch_rendered", "web_search"]);
-const MUTATES = new Set([
-  "write_file",
-  "edit_file",
-  "run_command",
-  "send_email",
-  "propose_plan",
-  "run_applescript",
-  "open_app",
-  "mac_recipe",
-  "remember",
-  "set_preference",
-  "take_screenshot",
-  // Acting is not only the machine. A page that can get an event or a task
-  // added has written to the user's calendar account, and nothing on this
-  // side of the script asks first.
-  "add_event",
-  "add_todo",
-  // It takes a name and nothing else, so a page cannot put its own words
-  // into an automation -- but it can start one, and a saved automation
-  // writes files and drafts mail under its own agents with no approval.
-  "run_pipeline",
-]);
+const READS_UNTRUSTED = toolsWhere((t) => t.reads === "web");
+const MUTATES = toolsWhere((t) => t.acts);
 
 const NAME_RE = /^[a-z][a-z0-9-]{1,29}$/;
 

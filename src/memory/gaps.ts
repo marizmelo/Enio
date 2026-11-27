@@ -1,5 +1,6 @@
 import { getDb } from "./db.js";
 import { distinctiveTerms, looksLikeQuestion } from "./terms.js";
+import { toolReads } from "../tool-traits.js";
 
 /**
  * The gap ledger: what was asked that nothing covered.
@@ -53,7 +54,7 @@ export function isGap(t: TurnOutcome): boolean {
   if (!looksLikeQuestion(t.question)) return false;
   if (t.skillsInvoked) return false;
   if (t.specialist === "coder") return false;
-  if (t.toolNames.some((n) => n !== "recall")) return false;
+  if (t.toolNames.some((n) => !toolReads(n, "memory"))) return false;
   return gapKey(t.question) !== null;
 }
 

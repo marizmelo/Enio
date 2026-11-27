@@ -15,6 +15,8 @@
  * show: this is the evidence, not a parallel account of it.
  */
 
+import { toolsWhere } from "./tool-traits.js";
+
 export interface Source {
   /** Empty for a file: there is nothing to open in a browser. */
   url: string;
@@ -27,13 +29,14 @@ export interface Source {
 }
 
 /** Only these tools reach the web, so only these can contribute a source. */
-const WEB_TOOLS = new Set(["web_search", "web_fetch", "web_fetch_rendered", "browse"]);
+const WEB_TOOLS = toolsWhere((t) => t.reads === "web");
 
 /**
  * Tools that put the contents of a named file in front of the model.
  *
- * A closed list for the same reason WEB_TOOLS is one: a tool that merely
- * *lists* files (list_dir, search_code) did not hand over any content, and
+ * Narrower than "reads files" in the traits table, and kept by hand for
+ * that reason: a tool that merely *lists* files (list_dir, search_code) did
+ * not hand over any content, and
  * citing it would claim a reading that never happened. Naming the file is the
  * point -- "read_file" on a badge says a file was read, not which one, and
  * "which document did this come from" is exactly the question a paragraph

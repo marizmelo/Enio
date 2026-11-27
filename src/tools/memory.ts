@@ -1,4 +1,4 @@
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 import { rememberFact, searchFacts, searchGraph, searchSummaries } from "../memory/store.js";
 import { addPreference } from "../memory/learning.js";
 
@@ -29,7 +29,7 @@ export const setMemorySources = (urls: string[]) => {
   currentSources = urls;
 };
 
-export const memoryTools: ToolDef[] = [
+export const memoryTools: BuiltinTool[] = [
   {
     name: "remember",
     description:

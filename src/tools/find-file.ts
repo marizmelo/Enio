@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { homedir } from "node:os";
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 
 /**
  * Finding a file on the machine by name — Spotlight, scoped to names.
@@ -36,7 +36,7 @@ const defaultRun = (bin: string, args: string[]): Promise<string> =>
     });
   });
 
-export function findFileTool(deps: FindFileDeps = {}): ToolDef {
+export function findFileTool(deps: FindFileDeps = {}): BuiltinTool {
   const run = deps.run ?? defaultRun;
   return {
     name: "find_file",

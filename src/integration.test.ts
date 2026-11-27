@@ -28,7 +28,23 @@ const { runTurn } = await import("./agent.js");
 const { buildRegistry } = await import("./tools/index.js");
 const store = await import("./memory/store.js");
 const { closeDb, getDb } = await import("./memory/db.js");
-import type { Message } from "./types.js";
+import type { Message, ToolDef } from "./types.js";
+import type { Registry } from "./tools/index.js";
+import type { BuiltinToolName } from "./tool-traits.js";
+
+/** A registry of one stand-in tool. The harness reads what a tool IS from
+ *  its name, and several real ones are withheld on a machine with no
+ *  browser engine or no connected account, so the name is what is tested. */
+function onlyTool(name: BuiltinToolName, text: string): Registry {
+  const tool: ToolDef = {
+    name,
+    description: "stand-in",
+    origin: "builtin",
+    parameters: { type: "object", properties: { url: { type: "string" }, id: { type: "string" } } },
+    run: async () => text,
+  };
+  return { all: [tool], byName: new Map([[name, tool]]), dropped: [] };
+}
 
 const originalFetch = globalThis.fetch;
 after(() => {
@@ -1437,6 +1453,40 @@ describe("the current date reaches the model", () => {
 });
 
 describe("the disclaimed-access correction", () => {
+  test("when the correction fails too, the last word names a tool that searches", async () => {
+    // The live tools are listed in registry order, where the clock comes
+    // first. Naming the first one had this say "I should have looked that
+    // up with current_time ... I will search".
+    const registry = await buildRegistry();
+    const sessionId = store.startSession();
+    scriptModel([
+      { content: "I don't have real-time news access, so I can't provide today's latest news." },
+      { content: "I still cannot browse the internet for you." },
+    ]);
+    const result = await runTurn("what news today?", [], registry, sessionId, {});
+    assert.match(result.reply, /looked that up with web_search and did not/);
+  });
+
+  test("holding only a rendered fetch still makes the disclaimer false", async () => {
+    // The list of live tools left web_fetch_rendered out, so an agent whose
+    // one web tool was that one could say it had no internet access and be
+    // believed. No built-in agent is such an agent; one a person assembles
+    // can be.
+    const registry = onlyTool("web_fetch_rendered", "Pricing\n\nTwo plans.");
+    const sessionId = store.startSession();
+    scriptModel([
+      { content: "I don't have access to the internet, so I can't open that page." },
+      { toolCall: { name: "web_fetch_rendered", args: { url: "https://example.com/pricing" } } },
+      { content: "The page lists two plans." },
+    ]);
+    const notices: string[] = [];
+    const result = await runTurn("what does https://example.com/pricing say", [], registry, sessionId, {
+      onNotice: (t) => notices.push(t),
+    });
+    assert.ok(notices.some((n) => /holds the tools/.test(n)), `no correction: ${notices.join(" | ")}`);
+    assert.deepEqual(result.toolsUsed, ["web_fetch_rendered"]);
+  });
+
   test("a refusal to look things up, with lookup tools held, gets one corrective round", async () => {
     const registry = await buildRegistry();
     const sessionId = store.startSession();
@@ -1685,6 +1735,38 @@ describe("the basis label", () => {
       onBasis: (b) => seen.push(b),
     }, { specialist: "coder" });
     assert.deepEqual(seen, ["files"]);
+  });
+
+  test("web after a rendered fetch, which three lists knew and this one did not", async () => {
+    // web_fetch_rendered counted as the web for sources, for the save check
+    // and for "can this agent check the world", and not for the label: a
+    // reply written from a page it had just rendered said nothing was
+    // looked up.
+    const sessionId = store.startSession();
+    scriptModel([
+      { toolCall: { name: "web_fetch_rendered", args: { url: "https://example.com/pricing" } } },
+      { content: "The page lists two plans." },
+    ]);
+    const seen: string[] = [];
+    await runTurn("what does https://example.com/pricing say", [], onlyTool("web_fetch_rendered", "Pricing\n\nTwo plans."), sessionId, {
+      onBasis: (b) => seen.push(b),
+    });
+    assert.deepEqual(seen, ["web"]);
+  });
+
+  test("files after reading a Drive file, as after reading mail", async () => {
+    for (const name of ["read_drive", "search_drive"] as const) {
+      const sessionId = store.startSession();
+      scriptModel([
+        { toolCall: { name, args: { id: "deck-1" } } },
+        { content: "The deck says the third quarter was flat." },
+      ]);
+      const seen: string[] = [];
+      await runTurn("what does my deck say about the third quarter", [], onlyTool(name, "Q3 was flat."), sessionId, {
+        onBasis: (b) => seen.push(b),
+      });
+      assert.deepEqual(seen, ["files"], name);
+    }
   });
 
   test("a restored conversation carries the basis", async () => {

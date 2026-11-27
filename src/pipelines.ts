@@ -21,7 +21,7 @@ import { setBrowseSession } from "./tools/browse.js";
 import { setConversationSession } from "./conversation-attachments.js";
 import { setPlanSession } from "./tools/desktop.js";
 import type { Registry } from "./tools/index.js";
-import type { Message, ToolDef } from "./types.js";
+import type { BuiltinTool, Message } from "./types.js";
 export { extractArtifacts, type Artifact } from "./artifacts.js";
 import { extractSources } from "./sources.js";
 import { openGaps } from "./memory/gaps.js";
@@ -870,7 +870,7 @@ export async function runPipeline(
  * changes as pipelines are saved and run, and descriptions are static, so
  * eligibility is checked inside run().
  */
-export function buildPipelineTools(registry: () => Registry): ToolDef[] {
+export function buildPipelineTools(registry: () => Registry): BuiltinTool[] {
   return [
     {
       name: "run_pipeline",

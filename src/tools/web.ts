@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { toolOutputChars } from "../model-settings.js";
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 import { isBlockedHost, renderPage, playwrightAvailable } from "./browser.js";
 import { markupText, nodeText } from "./page-text.js";
 export { isBlockedHost };
@@ -292,7 +292,7 @@ function clip(text: string): string {
 
 /* ---------- tools ------------------------------------------------------- */
 
-const searchTool: ToolDef = {
+const searchTool: BuiltinTool = {
   name: "web_search",
   description:
     "Search the web and get back a ranked list of titles, URLs and snippets. Use this to find pages; use web_fetch to read one.",
@@ -380,7 +380,7 @@ async function readArticle(hit: SearchHit): Promise<string | null> {
   }
 }
 
-const fetchTool: ToolDef = {
+const fetchTool: BuiltinTool = {
   name: "web_fetch",
   description:
     "Fetch a web page and return its main article text, with navigation and boilerplate removed. Fast. If the result looks empty or the page needs JavaScript, use web_fetch_rendered instead.",
@@ -419,7 +419,7 @@ const fetchTool: ToolDef = {
   },
 };
 
-const renderedFetchTool: ToolDef = {
+const renderedFetchTool: BuiltinTool = {
   name: "web_fetch_rendered",
   description:
     "Fetch a web page using a real browser, running its JavaScript first. Slower than web_fetch — use it only when web_fetch returned little or no text, or the page is an app rather than a document.",
@@ -458,10 +458,10 @@ const renderedFetchTool: ToolDef = {
   },
 };
 
-export function buildWebTools(): ToolDef[] {
+export function buildWebTools(): BuiltinTool[] {
   // Always offered now: there is a provider that needs no configuration, so
   // there is no state in which searching is impossible while fetching is not.
-  const tools: ToolDef[] = [searchTool, fetchTool];
+  const tools: BuiltinTool[] = [searchTool, fetchTool];
   if (playwrightAvailable()) tools.push(renderedFetchTool);
   return tools;
 }

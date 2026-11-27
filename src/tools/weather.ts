@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 
 /**
  * Where the user is, and what the weather is doing there.
@@ -87,7 +87,7 @@ async function geocode(place: string): Promise<{
   return data.results?.[0] ?? null;
 }
 
-export const weatherTools: ToolDef[] = [
+export const weatherTools: BuiltinTool[] = [
   {
     name: "weather",
     description:

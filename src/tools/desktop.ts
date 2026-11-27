@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { config } from "../config.js";
 import { detectPlatform } from "../platform.js";
 import { readImage } from "../vision.js";
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 import { listSavedRecipes, osascriptFailure, proposePlan, runScript, type PlanKind } from "../plans.js";
 import { autoRunEnabled, desktopControlStored } from "../automation.js";
 import { placeNewFile } from "../assets.js";
@@ -205,7 +205,7 @@ async function frontWindowRect(): Promise<string | null> {
   }
 }
 
-const screenshotTool: ToolDef = {
+const screenshotTool: BuiltinTool = {
   name: "take_screenshot",
   description:
     "Capture the screen and read what's on it. Use when the user refers to something they can see, or to check the result of something you did.",
@@ -277,7 +277,7 @@ const screenshotTool: ToolDef = {
   },
 };
 
-const appleScriptTool: ToolDef = {
+const appleScriptTool: BuiltinTool = {
   name: "run_applescript",
   description:
     "Run AppleScript to control a Mac app — read Mail, add a Calendar event, create a Note, query Music, control Finder. Prefer this over shell commands for anything involving an app's own data.",
@@ -560,7 +560,7 @@ function capped(text: string, limit = 6000): string {
   return `${text.slice(0, limit)}\n… truncated. Narrow it down or ask about one part of the window.`;
 }
 
-const recipeTool: ToolDef = {
+const recipeTool: BuiltinTool = {
   name: "mac_recipe",
   // Rebuilt on read so a recipe saved this session is offered on the next turn
   // without a restart -- the whole point of saving one.
@@ -713,7 +713,7 @@ const STEP_ACTIONS: Array<[key: string, kind: ActionKind]> = [
   ["press", "key"],
 ];
 
-const openAppTool: ToolDef = {
+const openAppTool: BuiltinTool = {
   name: "open_app",
   description:
     "Open a Mac app by name — Spotify, Calendar, Notes. Call it every time the user asks to open or show an app: it is safe when the app is already running (it just comes to the front), and apps open and close outside this conversation, so never answer from memory. For anything beyond opening, use mac_recipe or propose_plan.",
@@ -769,7 +769,7 @@ const openAppTool: ToolDef = {
   },
 };
 
-const proposeTool: ToolDef = {
+const proposeTool: BuiltinTool = {
   name: "propose_plan",
   description:
     "Propose something no recipe covers, for the user to approve before it runs. Use when the user asks for an action on their Mac that mac_recipe cannot do. Prefer click/menu/press/type_text steps, copying names exactly from window_controls or menu_items. You are not running this — you are writing down what you would do.",
@@ -972,7 +972,7 @@ const proposeTool: ToolDef = {
 /** A function, not a const: desktop control can now be enabled at runtime
  *  (the launcher button), and the registry rebuild that follows must see the
  *  gate's current answer -- a const spread the import-time answer forever. */
-export function buildDesktopTools(): ToolDef[] {
+export function buildDesktopTools(): BuiltinTool[] {
   return [
     // open_app sits with the recipes, not behind the flag: the gate is about
     // irreversibility, and opening an app is undone by quitting it.

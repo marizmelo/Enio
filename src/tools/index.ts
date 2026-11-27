@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool, ToolDef } from "../types.js";
 import { fsTools, listDirTool } from "./fs.js";
 import { searchTools } from "./search.js";
 import { shellTools } from "./shell.js";
@@ -77,7 +77,9 @@ export async function buildRegistry(
     ? Math.max(config.maxExposedTools, 64)
     : config.maxExposedTools;
 
-  const builtins: ToolDef[] = [
+  // Typed as built-ins so that nothing joins this list without a row in
+  // the traits table: an unclassified tool is a compile error here.
+  const builtins: BuiltinTool[] = [
     ...skillTools,
     ...timeTools,
     ...weatherTools,

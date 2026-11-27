@@ -1,4 +1,4 @@
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 import { findSkill, loadSkills, skillContents, skillFile } from "../skills.js";
 
 /**
@@ -8,7 +8,7 @@ import { findSkill, loadSkills, skillContents, skillFile } from "../skills.js";
  * skill's reference material would need a second tool, and against a 16-tool
  * ceiling that doubling is not affordable.
  */
-export const skillTools: ToolDef[] = [
+export const skillTools: BuiltinTool[] = [
   {
     name: "read_skill",
     description:

@@ -11,6 +11,7 @@ import type { Skill } from "./skills.js";
 import { safePath } from "./tools/fs.js";
 import { extractArtifacts, writtenPath } from "./artifacts.js";
 import { NEVER_RAN, neverRan } from "./tool-detail.js";
+import { toolMakes, toolsWhere } from "./tool-traits.js";
 import { verificationFor, verifyFailed } from "./verify.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
@@ -732,9 +733,10 @@ export function admitsCannotCheck(text: string): boolean {
   );
 }
 
-/** The tools whose absence means "cannot check the world". Mirrors the
- *  read/act lists the same way: a small closed set, named once. */
-const WEB_TOOL_NAMES = new Set(["web_search", "web_fetch", "web_fetch_rendered", "browse"]);
+/** The tools whose absence means "cannot check the world", and whose use
+ *  means the turn went to the web. Read off the traits table
+ *  (tool-traits.ts). */
+const WEB_TOOL_NAMES = toolsWhere((t) => t.reads === "web");
 
 /**
  * File names the user typed, for the coder's look-before-guess seed.
@@ -846,12 +848,16 @@ export function looksLikeMailDraft(text: string): boolean {
   return /\b(here is (the|a|my) draft|draft of what i (will|'ll) send|i (will|'ll) draft a repl)/i.test(text);
 }
 
-/** The tools whose presence makes a live-access disclaimer false. */
-const LIVE_TOOLS = new Set(["web_search", "web_fetch", "browse", "weather", "current_time"]);
-/** For the basis label: what counts as "went to the web" and "read files".
- *  Closed lists, like everything the harness states about itself. */
-const WEB_TOOLS = new Set(["web_search", "web_fetch", "browse"]);
-const FILE_TOOLS = new Set(["read_file", "edit_file", "search_code", "list_dir", "library_search", "find_file", "read_image", "read_email", "search_email"]);
+/** The tools whose presence makes a live-access disclaimer false: anything
+ *  that reads the web, and the clock and the forecast. */
+const LIVE_TOOLS = toolsWhere((t) => t.reads === "web" || t.reads === "live");
+/** For the basis label, what counts as "read files"; "went to the web" is
+ *  WEB_TOOL_NAMES. Still closed lists -- the table is one. */
+const FILE_TOOLS = toolsWhere((t) => t.reads === "files");
+
+/** A call that leaves a document behind: a write or an edit. */
+const wroteDocument = (name: string | null | undefined): boolean =>
+  toolMakes(name ?? "") === "document";
 
 export function looksDegenerate(text: string): boolean {
   const sentences = text
@@ -1480,7 +1486,7 @@ async function runTurnInner(
       // made under a corrected name was not found at all.
       const step = stepOf.get(call);
       if (!step || step.error) continue;
-      if (step.name !== "write_file" && step.name !== "edit_file") continue;
+      if (!wroteDocument(step.name)) continue;
       const path = writtenPath(step.output ?? "");
       if (!path) continue;
       try {
@@ -1927,7 +1933,7 @@ async function runTurnInner(
   // work narrated, not done. Only when nothing was WRITTEN this turn -- a
   // reply that shows a snippet of a file it just saved is fine.
   const wroteThisTurn = steps.some(
-    (s) => s.kind === "tool" && (s.name === "write_file" || s.name === "edit_file") && !s.error,
+    (s) => s.kind === "tool" && wroteDocument(s.name) && !s.error,
   );
   const canWrite =
     specialistName === "coder" && !wroteThisTurn && activeTools.some((t) => t.name === "write_file");
@@ -2301,7 +2307,7 @@ async function runTurnInner(
     // anything actually get WRITTEN": a correction that ran a read and then
     // narrated the code again has still created nothing.
     const wroteAfterCorrection = steps.some(
-      (st) => st.kind === "tool" && (st.name === "write_file" || st.name === "edit_file") && !st.error,
+      (st) => st.kind === "tool" && wroteDocument(st.name) && !st.error,
     );
     // Both write failures are judged on whether a write happened, not on
     // whether anything ran: a correction that read the file and narrated
@@ -2388,7 +2394,11 @@ async function runTurnInner(
               "Ask again and I will read it with read_calendar."
           : stale
             ? heldLiveTools.length > 0
-              ? `I should have looked that up with ${heldLiveTools[0]} and did not. ` +
+              ? // A web reader when one is held: the list is in registry
+                // order, where the clock and the forecast come first, and
+                // "looked that up with current_time ... I will search" is
+                // not a sentence anyone can act on.
+                `I should have looked that up with ${heldLiveTools.find((n) => WEB_TOOL_NAMES.has(n)) ?? heldLiveTools[0]} and did not. ` +
                 "Ask again and I will search rather than answer from memory."
               : // No lookup tool to name. This used to fall back to the word
                 // web_search, so the mail agent -- which reaches here for an
@@ -2565,7 +2575,7 @@ async function runTurnInner(
   // see at a glance, and exactly the one the model itself will never say.
   // Recorded as a harness step too, so a restored conversation carries it.
   const toolNames = steps.filter(ranTool).map((st) => st.name ?? "");
-  const usedWeb = toolNames.some((n) => WEB_TOOLS.has(n));
+  const usedWeb = toolNames.some((n) => WEB_TOOL_NAMES.has(n));
   const usedFiles = toolNames.some((n) => FILE_TOOLS.has(n));
   const basis: "web" | "files" | "memory" | "conversation" | "model" = usedWeb
     ? "web"
@@ -2583,7 +2593,7 @@ async function runTurnInner(
   if (specialistName === "coder") {
     const written = [...new Set(
       steps
-        .filter((st) => st.kind === "tool" && (st.name === "write_file" || st.name === "edit_file") && !st.error)
+        .filter((st) => st.kind === "tool" && wroteDocument(st.name) && !st.error)
         .map((st) => {
           try {
             return String((JSON.parse(st.args ?? "{}") as { path?: unknown }).path ?? "");

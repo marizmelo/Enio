@@ -4943,3 +4943,132 @@ as clean, where the misspelling used to keep it.
   such tool.
 - Drive reads are still missing from the list behind "from files".
 - Steps stored before this carry no mark, and restore as they did.
+
+### What a tool is, is said once: the traits table (November 2026)
+
+**Chose:** `src/tool-traits.ts` holds one row per built-in tool with four
+facts: where its result comes from (`reads`), whether a call can change
+anything (`acts`), what it leaves behind (`makes`), and which argument goes
+on the badge (`headline`). The lists the harness kept by hand for those
+four questions are derived from it. `ToolDef` is a union, and its built-in
+half takes its names from the table, so a definition with no row does not
+compile.
+
+**What was wrong.** The same few questions were answered by lists of tool
+names kept in six files, and a name missing from a list is not an error: it
+is the answer "no". The sweep that preceded this found the library tool
+spelled two ways, a rendered fetch counted as the web in three lists and
+not in two, and the two calendar writes and the automation runner on
+neither copy of the list that keeps a web reader away from a shell. The
+first and last were fixed where they were found; the rendered fetch is
+fixed here, by the derivation. Nothing stopped the next one, because
+nothing asked a new tool to say what it is.
+
+**What is derived now:**
+- "Reads the web": can this agent check the world, did the turn go to the
+  web, may the result be a web source, the untrusted half of the read/act
+  boundary (`agent.ts`, `sources.ts`, `custom-agents.ts`).
+- "Live": the tools that make "I have no real-time access" false.
+- "Read files": the label on the answer.
+- "Acts": the acting half of the boundary.
+- "Makes a document": the four places the turn loop asks whether a file
+  was written or edited.
+- The headline on a badge (`tool-detail.ts`), and the one tool a gap may
+  have run (`gaps.ts`: whatever reads memory).
+- The docs test's list of tools this machine withholds.
+
+**What changed for a user,** each with a test that fails on the old lists:
+- A reply written from a page `web_fetch_rendered` read is labelled "from
+  the web". It was labelled as if nothing had been read: "from the model",
+  or memory or this conversation when one of those covered the question.
+- An agent whose only web tool is `web_fetch_rendered` and says it has no
+  internet access is corrected, as one holding `web_fetch` always was. One
+  that holds it beside other live tools was already corrected and now sees
+  it named in the correction with the rest.
+- A reply written from `read_drive` or `search_drive` is labelled "from
+  files", as one from the mailbox always was.
+
+No built-in agent holds `web_fetch_rendered`, so the first two reach only
+an agent a person assembled, and single-agent mode. A label is stored with
+its turn, so a conversation from before this reopens with the label it had.
+
+Two differences on the badge that no call which ran can show. `find_file`
+lost `name` and `browse` lost `action` from their headlines: arguments
+neither tool takes, found by checking every headline against the tool's
+own parameters. And a tool name that is a key of every object
+(`constructor`, `toString`) used to make the badge code throw; it is now a
+name with no row, like any other.
+
+**Found by the review of this change, in the commit before it:** when the
+live-access correction fails twice, the last-resort reply names a tool to
+ask again with. It named the first live tool held, which is registry
+order: `current_time`. It names a web reader when one is held.
+
+**A table, not a field on each definition.** Restore, the gap ledger and
+the save check work from stored names (a past turn's steps, a saved
+agent's tool list) with no definition in hand, and must know what `browse`
+was on a machine that withholds it today. Most definitions are private to
+their module and handed out only through a gate, so a field could be read
+only off a tool this machine registers. And the acting column is a
+security boundary, better read top to bottom in one file than collected
+from every file that defines a tool. The cost is that adding a tool
+touches two files; the compiler refuses the build until the second is
+done.
+
+**Every field is required.** `acts: false` is something a person decided.
+An optional field would have moved the forgetting from six files to one
+and kept it.
+
+**What the compiler and the tests cannot see.** Whether a row is right. A
+new tool typed `acts: false` that in fact writes passes everything: the
+table and the copy in `web.test.ts` then agree by leaving it out. The row
+is where that is reviewed, which is the point of there being one place.
+An independent reading of all 35 tools from their own code, blind to the
+old lists, agreed with every `acts` value but `browse`, which is the
+recorded exception.
+
+**The boundary keeps its second copy.** `web.test.ts` still writes the two
+lists out, and now asserts the table equals them. Deriving the test from
+the table would have left a row flipped by mistake able to open "reads the
+web and holds a shell" with every test green. The "from files" and "live"
+columns are written out once more in `tool-traits.test.ts` for the same
+reason. The table is frozen at load.
+
+**Rejected:**
+- *Generating prompts and tool descriptions from traits.* They are
+  model-facing wording, each measured; a fact about a tool is not a
+  sentence that works on a small model.
+- *A rank for the order tools are dropped in single-agent mode.* It is
+  relative to the other tools and reads as one list in `tools/index.ts`.
+- *`acts` on `browse`.* It acts only with `ENIO_BROWSER_ACT=1`, a fixed
+  column cannot say that, and marking it would fail the researcher against
+  its own boundary. Left unmarked on purpose, with the reason on its row.
+- *Replacing the per-tool output parsers* (`artifacts.ts`, the hit lists in
+  `sources.ts`). Each is one tool's output format. A test ties `makes` to
+  what the artifact reader finds instead.
+- *Giving every tool a headline.* Sixteen have none and show their short
+  arguments, as before. Each new one changes a badge live and on restore.
+
+**Not decided, and left as found:**
+- **MCP tools have no row and read as nothing**: not a web reader, not
+  acting. A custom agent may still hold a web tool beside an MCP tool that
+  writes files. The other default refuses agents that save today.
+- **Agents already saved** are still checked only when next saved.
+- **Calendar, tasks and contacts.** `read_calendar`, `list_todos` and
+  `find_contact` read the connected account, and `reads` has no word for
+  that, so an answer built on one is still labelled as if nothing had been
+  read. What it should be called is a product decision: "from files" is
+  the nearest label and is not true of a calendar.
+- **The clock and the forecast** are `live`, which no label names either.
+- **Other readings with no word**: a command's output, a recipe's reading
+  of an app, a screenshot's reading of the screen.
+- **Strangers' text that is not the web.** Mail and shared files are tagged
+  as the user's own, and the boundary names only the web. The mail agent
+  reads messages and holds `send_email`. And `curl` is on the shell's
+  default allowlist with no limit on the host, so the coder, which the
+  boundary treats as having no web access, can fetch a page.
+- **`cites`, `held`, `needs`.** Which results become a source row, which
+  tools ride on every agent or on none, and what a tool is withheld
+  without, are still kept by hand where they are used. So is the list in
+  `assets.ts` of steps a legacy file's origin is read from, which leaves
+  out `edit_file`.

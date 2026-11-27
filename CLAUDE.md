@@ -365,6 +365,7 @@ src/
   agent.ts        the turn loop — tool calls, recovery, prompt assembly
   model.ts        client for the model server; JSON repair, <think> splitting
   specialists.ts  routing and per-specialist tool sets
+  tool-traits.ts  what each built-in tool is: reads, acts, makes, headline
   skills.ts       SKILL.md loading, progressive disclosure
   mentions.ts     /skill and @mention parsing
   notes.ts        the managed note store: transforms, comment anchors
@@ -414,9 +415,14 @@ measures — which is how it was caught, by a compaction test that suddenly had
 no headroom. A test that writes built-ins must redirect it too, or it writes
 into the repo.
 
-**Adding a tool:** define it in `src/tools/`, add it to `buildRegistry`, assign
-it to exactly one specialist, keep that specialist ≤6 tools. If it needs config,
-withhold the tool entirely when unconfigured.
+**Adding a tool:** define it in `src/tools/`, give it a row in
+`src/tool-traits.ts`, add it to `buildRegistry`, assign it to exactly one
+specialist, keep that specialist ≤6 tools. If it needs config, withhold the
+tool entirely when unconfigured. The row is not optional — the build fails
+without it — and it is where the tool says whether it reads the web and
+whether it acts, which is the boundary no agent may straddle. If either
+answer is yes, `web.test.ts` keeps its own copy of that list on purpose and
+must be changed too.
 
 **Adding a capability:** ask whether it's *know-how* or *capability*. Know-how is
 a skill — markdown, no code, one shared tool slot. Capability is a tool or an

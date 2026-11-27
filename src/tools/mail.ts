@@ -8,7 +8,7 @@ const onlyAgentMail = (agent: { spoken: string; label?: string; email: string })
   `No account of yours is connected. The only connected account is ${agent.spoken}, and that is my mail, not yours. ` +
   `Connect your account in [Connections](enio://panel/accounts/add), or ask for Enio's inbox by name (for example "check ${agent.label ?? agent.email}").`;
 import { callScript } from "../appsscript.js";
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 
 /**
  * Reading mail over IMAP. Strictly read-only.
@@ -79,7 +79,7 @@ const addressOf = (a: any): string =>
   a?.text ||
   "unknown";
 
-const searchTool: ToolDef = {
+const searchTool: BuiltinTool = {
   name: "search_email",
   description:
     "Search the mailbox and get back a list of matching messages: id, sender, subject, date and a short snippet. Use read_email afterwards to read one in full.",
@@ -217,7 +217,7 @@ const searchTool: ToolDef = {
   },
 };
 
-const readTool: ToolDef = {
+const readTool: BuiltinTool = {
   name: "read_email",
   description:
     "Read one message in full by the id from search_email. Returns the headers and the body as plain text.",
@@ -320,5 +320,5 @@ export function gmailLink(id: string): string {
   return `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(id)}`;
 }
 
-export const mailTools: ToolDef[] =
+export const mailTools: BuiltinTool[] =
   mailConfigured() || anyMailReadAccount() ? [searchTool, readTool] : [];

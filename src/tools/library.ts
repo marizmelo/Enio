@@ -1,4 +1,4 @@
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 import { libraryCategories, libraryRoot, searchLibrary } from "../library.js";
 
 /**
@@ -7,7 +7,7 @@ import { libraryCategories, libraryRoot, searchLibrary } from "../library.js";
  * disjoint: a hit must be able to answer the question on its own, with the
  * workspace-relative path as provenance the user can @mention to go deeper.
  */
-export const libraryTools: ToolDef[] = [
+export const libraryTools: BuiltinTool[] = [
   {
     name: "library_search",
     description:

@@ -4,7 +4,7 @@ import { shellFor } from "../platform.js";
 import { baseAllowedCommands, checkCommandAgainst, invokedExecutables } from "./allowlist.js";
 import { activeProject, attachmentMissing, missingAttachmentMessage, type Attachment } from "../project.js";
 import { DESKTOP_COMMANDS, desktopEnabled } from "./desktop.js";
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 
 /**
  * Shell access, deliberately constrained.
@@ -176,7 +176,7 @@ function refuseWideBind(command: string): string | null {
   );
 }
 
-export const shellTools: ToolDef[] = [
+export const shellTools: BuiltinTool[] = [
   {
     name: "run_command",
     description:

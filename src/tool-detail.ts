@@ -12,38 +12,20 @@
  * could disagree is by computing it twice.
  */
 
-/** The argument that IS the call, per tool. A closed list: a generic "first
- *  string field" would print a file's whole contents for write_file. */
-const HEADLINE: Record<string, string[]> = {
-  run_command: ["command"],
-  read_file: ["path"],
-  write_file: ["path"],
-  edit_file: ["path"],
-  search_code: ["query"],
-  list_dir: ["path"],
-  find_file: ["name", "query"],
-  web_search: ["query"],
-  web_fetch: ["url"],
-  web_fetch_rendered: ["url"],
-  browse: ["url", "action"],
-  read_image: ["path"],
-  read_skill: ["name"],
-  recall: ["query"],
-  remember: ["fact"],
-  library_search: ["query"],
-  read_email: ["id"],
-  search_email: ["query"],
-  run_pipeline: ["name"],
-};
+import { traitsOf } from "./tool-traits.js";
 
 export function callDetail(name: string, args: Record<string, unknown>): string {
-  const keys = HEADLINE[name] ?? [];
+  // The argument that IS the call, from the traits table. A closed list: a
+  // generic "first string field" would print a file's whole contents for
+  // write_file.
+  const keys = traitsOf(name)?.headline ?? [];
   for (const key of keys) {
     const value = args?.[key];
     if (typeof value === "string" && value.trim()) return clip(value.trim());
   }
-  // An unlisted tool (every MCP one) still says something rather than nothing:
-  // its short string arguments, which is what its parameters usually are.
+  // A tool with no headline (every MCP one) still says something rather
+  // than nothing: its short string arguments, which is what its parameters
+  // usually are.
   const parts = Object.entries(args ?? {})
     .filter(([, v]) => typeof v === "string" && v.length <= 120)
     .map(([k, v]) => `${k}: ${v}`);

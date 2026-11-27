@@ -1,4 +1,4 @@
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 
 /**
  * The time, as text and as something to look at.
@@ -13,7 +13,7 @@ import type { ToolDef } from "../types.js";
  * one. Being wrong about the time is unusually damaging because it is checkable
  * in a second, so this exists to keep the answer out of the model's hands.
  */
-export const timeTools: ToolDef[] = [
+export const timeTools: BuiltinTool[] = [
   {
     name: "current_time",
     description: "The current date and time on this machine.",

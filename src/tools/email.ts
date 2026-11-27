@@ -4,7 +4,7 @@ import { config } from "../config.js";
 import { scriptMailAccount } from "../accounts.js";
 import { callScript } from "../appsscript.js";
 import { placeNewFile } from "../assets.js";
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 
 /**
  * Sending email over SMTP.
@@ -32,7 +32,7 @@ function recipientAllowed(to: string): boolean {
   });
 }
 
-const emailTool: ToolDef = {
+const emailTool: BuiltinTool = {
   name: "send_email",
   description:
     "Send an email. Give the recipient, a subject, and the body as plain text. Confirm the recipient and content with the user before calling this — sending cannot be undone.",
@@ -125,5 +125,5 @@ const emailTool: ToolDef = {
 
 /** Withheld entirely when SMTP isn't configured — a tool that always fails
  *  just burns the model's limited attention on a dead end. */
-export const emailTools: ToolDef[] =
+export const emailTools: BuiltinTool[] =
   emailConfigured() || scriptMailAccount("send") ? [emailTool] : [];

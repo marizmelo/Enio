@@ -1,6 +1,6 @@
 import { agentOnlyAccount, anyAccountWith, scriptAccountWith, type PickedAccount } from "../accounts.js";
 import { callScript } from "../appsscript.js";
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 
 /**
  * The connected account's life beyond mail: calendar, todos, contacts.
@@ -35,7 +35,7 @@ function accountFor(grant: Parameters<typeof agentOnlyAccount>[0]): { account: P
 const standIn = (fallback: boolean) =>
   fallback ? " Nothing of yours is connected; connect yours in [Connections](enio://panel/accounts/add)." : "";
 
-const readCalendarTool: ToolDef = {
+const readCalendarTool: BuiltinTool = {
   name: "read_calendar",
   description:
     "Upcoming events from the connected calendar: title, time, location, and the Meet link when there is one.",
@@ -69,7 +69,7 @@ const readCalendarTool: ToolDef = {
   },
 };
 
-const addEventTool: ToolDef = {
+const addEventTool: BuiltinTool = {
   name: "add_event",
   description:
     "Add an event to the connected calendar. Confirm the details with the user before calling this. Set meet true to attach a Google Meet link.",
@@ -107,7 +107,7 @@ const addEventTool: ToolDef = {
   },
 };
 
-const listTodosTool: ToolDef = {
+const listTodosTool: BuiltinTool = {
   name: "list_todos",
   description: "The connected account's open todos (Google Tasks), grouped by list.",
   origin: "builtin",
@@ -134,7 +134,7 @@ const listTodosTool: ToolDef = {
   },
 };
 
-const addTodoTool: ToolDef = {
+const addTodoTool: BuiltinTool = {
   name: "add_todo",
   description: "Add a todo (Google Task) to the connected account.",
   origin: "builtin",
@@ -167,7 +167,7 @@ const addTodoTool: ToolDef = {
   },
 };
 
-const findContactTool: ToolDef = {
+const findContactTool: BuiltinTool = {
   name: "find_contact",
   description:
     "Look up a person in the connected account's contacts: name, email addresses, phone numbers.",
@@ -195,7 +195,7 @@ const findContactTool: ToolDef = {
   },
 };
 
-const searchDriveTool: ToolDef = {
+const searchDriveTool: BuiltinTool = {
   name: "search_drive",
   description:
     "Find files in the connected Google Drive by name: Docs, Slides, Sheets and uploads. Returns ids for read_drive.",
@@ -224,7 +224,7 @@ const searchDriveTool: ToolDef = {
   },
 };
 
-const readDriveTool: ToolDef = {
+const readDriveTool: BuiltinTool = {
   name: "read_drive",
   description:
     "Read a Drive file as text by the id from search_drive. Docs, Slides and Sheets are exported as text automatically.",
@@ -266,11 +266,11 @@ function shortType(mime: string | undefined): string {
  * registry cap, so they are registered near the mail tools rather than at
  * the tail, where the cap silently eats whatever comes last.
  */
-export const googleTools: ToolDef[] = [];
+export const googleTools: BuiltinTool[] = [];
 /** Recomputed whenever the registry is built, so an account connected while
  *  the agent runs shows its tools at the next build rather than the next
  *  restart. The array itself is kept, since callers hold it. */
-export function refreshGoogleTools(): ToolDef[] {
+export function refreshGoogleTools(): BuiltinTool[] {
   googleTools.splice(
     0,
     googleTools.length,

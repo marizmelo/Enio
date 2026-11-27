@@ -81,18 +81,16 @@ describe("the docs describe the code that exists", () => {
   test("every tool named in the docs is a real tool", async () => {
     const { buildRegistry } = await import("./tools/index.js");
     const registry = await buildRegistry();
-    // Tools withheld by configuration on this machine still exist as names.
     const { builtinRecipes } = await import("./tools/desktop.js");
-    const known = new Set([
+    const { BUILTIN_TOOL_NAMES } = await import("./tool-traits.js");
+    const known = new Set<string>([
       ...registry.all.map((t) => t.name),
       // Recipe names share the shape of tool names and are checked separately.
       ...builtinRecipes().map((r) => r.name),
-      // Real, but withheld on a machine without the relevant config or flag.
-      "web_search", "search_email", "read_email", "send_email",
-      "web_fetch_rendered", "run_applescript", "take_screenshot", "propose_plan",
-      // Withheld until a Google account is connected — and the redirected
-      // data dir above guarantees none is, on every machine alike.
-      "search_drive", "read_drive", "read_calendar", "list_todos",
+      // Real, but withheld on a machine without the relevant config, flag or
+      // account. The traits table holds every built-in's name whether or
+      // not this machine registers it, which a list kept here did not.
+      ...BUILTIN_TOOL_NAMES,
     ]);
 
     // Backticked lower_snake_case words are how the docs name tools. Anything

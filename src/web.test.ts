@@ -408,6 +408,18 @@ describe("untrusted page content cannot become an action", () => {
     "run_pipeline",
   ];
 
+  test("the traits table draws the boundary where this list does", async () => {
+    // The save check for custom agents reads the table; this file keeps the
+    // two lists written out. They have to be changed together, on purpose:
+    // a row flipped there by mistake would otherwise let an agent read the
+    // web and hold a shell with every test green. What this cannot catch
+    // is a NEW tool wrongly typed `acts: false`: both sides then agree by
+    // leaving it out. That one is caught by reading the row.
+    const { toolsWhere } = await import("./tool-traits.js");
+    assert.deepEqual([...toolsWhere((t) => t.reads === "web")].sort(), [...READS_UNTRUSTED].sort());
+    assert.deepEqual([...toolsWhere((t) => t.acts)].sort(), [...MUTATES].sort());
+  });
+
   test("no specialist both reads the web and can act", async () => {
     const { SPECIALISTS } = await import("./specialists.js");
     for (const s of SPECIALISTS) {

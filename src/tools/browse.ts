@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import { getSession, persistBrowserState, playwrightAvailable } from "./browser.js";
 import { isBlockedHost } from "./web.js";
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 
 /**
  * Reading the web as a session rather than as isolated fetches.
@@ -325,7 +325,7 @@ const actDescription =
   " The page's controls are numbered too: click one with control: <number>, type into it by " +
   "adding text, and enter: true presses Enter after typing (submits most search boxes).";
 
-const browseTool: ToolDef = {
+const browseTool: BuiltinTool = {
   name: "browse",
   description:
     "Open a web page and read it, keeping the session between calls. Returns the page text plus its links as a numbered list; follow one with link: <number> instead of guessing a URL. Use this to read a search result properly or to follow a trail across pages." +
@@ -467,4 +467,4 @@ const browseTool: ToolDef = {
 /** Withheld entirely when Playwright is absent, like the rendered fetch it
  *  sits beside: a tool that can only fail costs the model the attention of
  *  choosing it and answers too late to try another way. */
-export const browseTools: ToolDef[] = playwrightAvailable() ? [browseTool] : [];
+export const browseTools: BuiltinTool[] = playwrightAvailable() ? [browseTool] : [];

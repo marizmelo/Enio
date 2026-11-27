@@ -6,7 +6,7 @@ import { config } from "../config.js";
 import { activeProject } from "../project.js";
 import { MAX_RESULTS, searchProject, type SearchHit } from "../project-index.js";
 import { workspaceFiles } from "../mentions.js";
-import type { ToolDef } from "../types.js";
+import type { BuiltinTool } from "../types.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -121,7 +121,7 @@ async function searchWorkspace(query: string): Promise<SearchHit[]> {
   return hits;
 }
 
-export const searchTools: ToolDef[] = [
+export const searchTools: BuiltinTool[] = [
   {
     name: "search_code",
     description:

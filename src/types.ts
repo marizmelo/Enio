@@ -1,3 +1,5 @@
+import type { BuiltinToolName } from "./tool-traits.js";
+
 /** Shared shapes. Deliberately close to the OpenAI wire format so the
  *  server module can pass things through with minimal translation. */
 
@@ -117,15 +119,36 @@ export type ToolOutput =
 export const toolText = (out: ToolOutput): string =>
   typeof out === "string" ? out : out.text;
 
-export interface ToolDef {
+interface ToolShape {
   name: string;
   description: string;
   parameters: JsonSchema;
-  /** Where this tool came from, for display and for filtering. */
-  origin: "builtin" | "mcp";
   server?: string;
   run(args: Record<string, unknown>): Promise<ToolOutput>;
 }
+
+/**
+ * A tool this codebase defines. Its name has to be a row of the traits table
+ * (tool-traits.ts), so a definition nobody classified does not compile --
+ * including one this machine would withhold, which no test here could see.
+ */
+export interface BuiltinTool extends ToolShape {
+  name: BuiltinToolName;
+  origin: "builtin";
+}
+
+/** A tool an MCP server brought. No row: see traitsOf for what that means. */
+export interface McpTool extends ToolShape {
+  origin: "mcp";
+}
+
+/**
+ * Any tool. A union and not one shape with `origin: "builtin" | "mcp"`, so
+ * that "builtin" cannot be written beside a name the table does not hold:
+ * the guarantee sits on the definition, not on the one list in
+ * buildRegistry that a new path could route around.
+ */
+export type ToolDef = BuiltinTool | McpTool;
 
 /** OpenAI-format tool definition, i.e. what actually goes on the wire. */
 export interface WireTool {
