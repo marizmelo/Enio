@@ -10,6 +10,7 @@ import {
   type PortType,
 } from "./abilities.js";
 import { runTurn } from "./agent.js";
+import { STEP_ACCOUNT, setConversationAccount, stepAccount, type Grant } from "./accounts.js";
 import { config, projectRoot } from "./config.js";
 import { getDb } from "./memory/db.js";
 import { startSession } from "./memory/store.js";
@@ -41,7 +42,7 @@ import { extractArtifacts, type Artifact } from "./artifacts.js";
  *
  * Node prompts are guidance, not scripts: inside a node the specialist keeps
  * its whole tool loop, exactly as it would in chat. Which also means every
- * gate applies unchanged -- email stays dry-run, desktop actions still
+ * gate applies unchanged -- a written email waits for the person to send it, desktop actions still
  * propose plans for approval -- because there is no pipeline-shaped side
  * door into any tool. Deliberately NOT built on the plans table: planSteps()
  * coerces unknown kinds to applescript and runScript falls through to bash,
@@ -57,7 +58,23 @@ export interface PipelineNode {
   note?: string;
   /** Canvas position; stored verbatim, never interpreted server-side. */
   position?: { x: number; y: number };
+  /**
+   * Whose account this step uses: "agent" (Enio's own), "user" (the
+   * person's), or one connected account's id. Set by the person, on the
+   * step, from a list -- never by the composer, whose schema has no such
+   * field, and never copied into its examples. A step with none uses what
+   * a conversation would: the default, then by the kind of act.
+   */
+  account?: string;
 }
+
+/** The grant a step's ability is for, where it has one: what a chosen
+ *  account must hold for the step to be able to do its job at all. */
+const STEP_GRANT: Record<string, Grant> = {
+  "read-email": "mail.read",
+  "send-email": "mail.send",
+  calendar: "calendar.read",
+};
 
 export interface PipelineEdge {
   from: string;
@@ -114,6 +131,18 @@ export function validatePipeline(
     if (!ability) return { ok: false, reason: `Unknown ability "${node.abilityId}".` };
     if (ability.future) {
       return { ok: false, reason: `"${ability.title}" is not built yet and cannot run.` };
+    }
+    // The shape only. Whether that account is still connected is asked
+    // when the step runs: accounts come and go without the automation
+    // being saved again.
+    if (node.account !== undefined && (typeof node.account !== "string" || !STEP_ACCOUNT.test(node.account))) {
+      return { ok: false, reason: `Step ${node.id} has an account setting that is not one of the choices.` };
+    }
+    // Only on a step that uses an account. Anywhere else nothing shows the
+    // setting or lets it be cleared, and the step would fail over an
+    // account it never touches.
+    if (node.account !== undefined && !Object.hasOwn(STEP_GRANT, ability.id)) {
+      return { ok: false, reason: `Step ${node.id} is set to an account, and a "${ability.title}" step uses none.` };
     }
   }
   const seen = new Set<string>();
@@ -371,7 +400,7 @@ ${steps}
 
 ## Rules
 
-- Every step runs under its own approval gates (email stays dry-run, desktop
+- Every step runs under its own approval gates (a written email waits for the person to send it, desktop
   actions still propose plans), so triggering this is safe to do directly.
 - If run_pipeline answers that no pipeline has that name, it was renamed or
   deleted. Tell the user and stop — its refusal lists what IS available.
@@ -453,7 +482,9 @@ export function loadPipelineExamples(): PipelineExample[] {
       // The compose prompt rides in description; a hand-built pipeline falls
       // back to its name, which stems well enough ("ai-news-brief").
       prompt: pipeline.description || pipeline.name,
-      nodes: pipeline.nodes,
+      // Without the account a step is set to: these become the composer's
+      // examples, and an id shown there is an id it can copy.
+      nodes: pipeline.nodes.map(({ account: _account, ...node }) => node),
       edges: pipeline.edges,
     });
   }
@@ -789,6 +820,19 @@ export async function runPipeline(
       const sources: string[] = [];
       const skill = abilitySkill(ability);
       try {
+        // Each step starts from no account of its own. A name at the start
+        // of an earlier step's prompt is kept on the session, and the run
+        // has one session: without this, "check my work email" in step one
+        // chose the account for every step after it.
+        setConversationAccount(sessionId, null);
+        // The step's own setting, or the reason it cannot run. Thrown, so
+        // the step fails and says why; never another account in its place.
+        let account: string | undefined;
+        if (node.account) {
+          const chosen = stepAccount(node.account, STEP_GRANT[ability.id] ?? null);
+          if (!chosen.ok) throw new Error(chosen.reason);
+          account = chosen.account.id;
+        }
         const result = await runTurn(
           input,
           [],
@@ -807,6 +851,15 @@ export async function runPipeline(
           },
           {
             specialist: ability.specialist,
+            assembled: true,
+            account,
+            stepKey: nodeId,
+            // A run started from a conversation leaves the messages its
+            // steps write in that conversation, where a card can send
+            // them. Filed under the run's own session, which History does
+            // not list, they could be sent from a terminal and nowhere in
+            // the window.
+            draftSession: parentSession ?? undefined,
             skills: skill ? skills.filter((s) => s.name === skill) : [],
             files: incomingFiles.slice(0, 5),
             // The ability's declared server need, resolved against what is

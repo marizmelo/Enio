@@ -103,8 +103,9 @@ const TRAITS = {
   // reads mail and holds send_email. Left as found (DECISIONS.md).
   search_email: { reads: "files", acts: false, makes: null, headline: ["query"] },
   read_email: { reads: "files", acts: false, makes: null, headline: ["id"] },
-  // Acting even as a dry run: the draft is a file on disk, and with
-  // ENIO_EMAIL_SEND=1 the same call sends.
+  // Acting, though it sends nothing: it writes a message into the outbox
+  // and a file on disk, and puts a card in front of the person that one
+  // click sends. A web reader holding it could be made to write to anyone.
   send_email: { reads: null, acts: true, makes: "email_draft", headline: [] },
   search_drive: { reads: "files", acts: false, makes: null, headline: [] },
   read_drive: { reads: "files", acts: false, makes: null, headline: [] },

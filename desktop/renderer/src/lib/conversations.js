@@ -84,6 +84,11 @@ export async function discardConversations(ids, { keepFacts }) {
  *  restart, since the widget only ever travelled over the live stream. */
 export const pendingPlans = () => call("/plans/pending").then((d) => d.plans);
 
+/** Messages Enio wrote in this conversation that nobody has sent or
+ *  discarded yet: their cards, to re-draw for the same reason. */
+export const pendingDrafts = (sessionId) =>
+  call(`/outbox?session=${encodeURIComponent(sessionId)}`).then((d) => d.drafts);
+
 /** What the OS currently allows. Re-probed server-side on every call, so this
  *  is how a grant made in System Settings gets noticed without a restart. */
 export const permissions = () => call("/permissions");

@@ -1,5 +1,122 @@
 import { config } from "../config.js";
-import { agentOnlyMailAccount, anyMailReadAccount, findAccountByName, listAccounts, ownerWord, scriptAccountById, scriptMailAccount } from "../accounts.js";
+import {
+  agentOnlyMailAccount,
+  anyMailReadAccount,
+  askedOwnerThisTurn,
+  findAccountByName,
+  listAccounts,
+  noteMailRead,
+  noteNameRefused,
+  pinnedAccountNow,
+  ownerWord,
+  personNamed,
+  scriptAccountById,
+  scriptMailAccount,
+  speakerRelative,
+  type PickedAccount,
+} from "../accounts.js";
+
+/**
+ * Which mailbox each listed message came from, so opening one does not
+ * depend on where the turn's account points by then. A search of Enio's
+ * inbox followed by "read the second one" has no "your" in it, and the id
+ * was sent to whatever account the conversation meant: a message that is
+ * not there. Bounded, in listing order; an id that has fallen out is read
+ * the way it always was.
+ */
+const listedIn = new Map<string, string>();
+const LISTED_AT_MOST = 2000;
+function noteListed(messageId: string, accountId: string): void {
+  if (!messageId) return;
+  listedIn.delete(messageId);
+  listedIn.set(messageId, accountId);
+  if (listedIn.size > LISTED_AT_MOST) listedIn.delete(listedIn.keys().next().value!);
+}
+
+/**
+ * Which account a mail read uses, and what to say when it is not the one
+ * that was asked for.
+ *
+ * Two voices can ask. The person's, read by the harness from their message
+ * (askedOwnerThisTurn), is the one the picker already honoured. The model's
+ * is the `account` argument, and it is trusted only for what has one
+ * meaning whoever says it: a label, an address, "enio's", "the user's". A
+ * first- or second-person word there is dropped (speakerRelative) -- the
+ * same word points at either account depending on whose voice the model
+ * wrote it in. And a name counts only with the person's words this turn
+ * behind it (personNamed): the model also fills the argument in from its
+ * own prompt and from its last call.
+ *
+ * `forId` is a message being opened. Its own mailbox comes before
+ * anything but a named account, and an argument that names nothing is let
+ * go: the id already says which message is wanted.
+ */
+function mailReadAccount(
+  argument: unknown,
+  forId?: string,
+): { account: PickedAccount | null; preface: string; refusal: string | null } {
+  const written = typeof argument === "string" && !speakerRelative(argument) ? argument.trim() : "";
+  // The model's choice needs the person's words behind it (personNamed):
+  // it also fills this in from its own prompt and from its last call.
+  const wanted = written ? findAccountByName(written) : null;
+  const arg = written && personNamed(written, wanted) ? written : "";
+  const named = arg ? wanted : null;
+  // A label that matches nothing is refused with the list, for a search:
+  // searching some other mailbox instead would answer a question nobody
+  // asked. An owner word with no such account ("user's" when only Enio's
+  // own is connected) is a fact to state, then search what exists --
+  // refusing it left the model narrating "Searching…" over an error.
+  if (arg && !named && !ownerWord(arg) && forId === undefined) {
+    noteNameRefused();
+    return {
+      account: null,
+      preface: "",
+      refusal: `No connected account matches "${arg}". Connected: ${listAccounts().map((a) => a.label ?? a.email).join(", ") || "none"}.`,
+    };
+  }
+  if (named) {
+    const account = scriptAccountById(named.id, "mail.read");
+    return account
+      ? { account, preface: "", refusal: null }
+      : { account: null, preface: "", refusal: `${named.label ?? named.email} is connected without the read-mail grant.` };
+  }
+  const listed = forId !== undefined ? listedIn.get(forId) : undefined;
+  // A step set to one account opens what THAT account listed. An id
+  // listed by another step of the run, from another mailbox, is not its
+  // to open.
+  const pinned = pinnedAccountNow();
+  if (pinned && listed && listed !== pinned) {
+    return { account: null, preface: "", refusal: "That message was listed from another account, and this step is set to one. Nothing was opened: search this step's own account first." };
+  }
+  const fromListing = listed ? scriptAccountById(listed, "mail.read") : null;
+  if (fromListing) return { account: fromListing, preface: "", refusal: null };
+
+  let account = scriptMailAccount("read");
+  // And reads from it or from nothing: with no account here, what follows
+  // is the IMAP mailbox, or a message about accounts nobody is asking about.
+  if (pinned && !account) {
+    return { account: null, preface: "", refusal: "This step is set to an account that cannot read mail, so nothing was read. Choose another account for the step." };
+  }
+  const person = askedOwnerThisTurn();
+  // The person asked for their own and what would be read is Enio's: the
+  // conversation was left on it and nothing of theirs can read mail. Not
+  // read as theirs -- the rule of the fallback, reached another way. Only
+  // their own asking does this; a model's "user's" is stated, below.
+  if (person === "user" && account?.owner === "agent") account = null;
+  const asked = person ?? (arg ? ownerWord(arg) : null);
+  // Said only when something else stood in for what was asked -- which
+  // includes an account the model asked for and did not get. The result
+  // otherwise gives an address and no owner, and the model goes on to
+  // describe the mailbox it asked for: Enio's inbox as "you have one new
+  // message". Whose it is, in the words the ownership check listens for.
+  const preface =
+    asked && account && account.owner !== asked
+      ? `${asked === "user" ? "No account of yours is connected" : "I have no account of my own that can read mail"} — this is ${account.spoken}.\n\n`
+      : written && !arg && account && wanted?.id !== account.id
+        ? `This is ${account.spoken}.\n\n`
+        : "";
+  return { account, preface, refusal: null };
+}
 
 /** The honest answer when only Enio's own account can read mail: not the
  *  person's inbox, so not read as if it were. Named so the person can ask
@@ -115,28 +232,16 @@ const searchTool: BuiltinTool = {
     // A connected account outranks IMAP: it is the setup the user did most
     // recently and deliberately. The credential is attached HERE, harness
     // side -- the model asked to search, and never sees a URL or secret.
-    const named = args.account ? findAccountByName(String(args.account)) : null;
-    // An owner word with no such account ("user's" when only Enio's own is
-    // connected) is a fact to state, then search what exists — refusing it
-    // left the model narrating "Searching…" over an error. A label that
-    // matches nothing is still refused with the list.
-    const askedOwner = args.account && !named ? ownerWord(String(args.account)) : null;
-    if (args.account && !named && !askedOwner) {
-      return `No connected account matches "${String(args.account)}". Connected: ${listAccounts().map((a) => a.label ?? a.email).join(", ") || "none"}.`;
-    }
-    const account = named ? scriptAccountById(named.id, "mail.read") : scriptMailAccount("read");
-    if (named && !account) return `${named.label ?? named.email} is connected without the read-mail grant.`;
+    const { account, preface, refusal } = mailReadAccount(args.account);
+    if (refusal) return refusal;
     // Every path that found no account of the person's, including an owner
     // word like "user's" that matched nothing: say what exists, read nothing.
     if (!account) {
       const agentOnly = agentOnlyMailAccount();
       if (agentOnly) return { text: onlyAgentMail(agentOnly), notice: `No account of yours is connected; Enio's own was not read. Connect yours in [Connections](enio://panel/accounts/add).` };
     }
-    const preface =
-      askedOwner && account
-        ? `${askedOwner === "user" ? "No account of yours is connected" : "I have no account of my own connected"} — this is ${account.spoken}.\n\n`
-        : "";
     if (account) {
+      noteMailRead(account.owner);
       const parts: string[] = [];
       if (args.query) parts.push(String(args.query));
       if (args.from) parts.push(`from:${String(args.from)}`);
@@ -147,6 +252,7 @@ const searchTool: BuiltinTool = {
       });
       if (!result.ok) return `Mail search failed: ${result.error}`;
       const rows = (result.result as Array<Record<string, string>>) ?? [];
+      for (const m of rows) noteListed(String(m.id ?? ""), account.id);
       if (rows.length === 0) {
         return { text: `${preface}No messages matched in ${account.email}.`, notice: `Searched ${account.described} (${parts.join(" ")}): nothing matched.` };
       }
@@ -232,13 +338,14 @@ const readTool: BuiltinTool = {
     required: ["id"],
   },
   async run(args) {
-    const named = args.account ? findAccountByName(String(args.account)) : null;
-    const account = named ? scriptAccountById(named.id, "mail.read") : scriptMailAccount("read");
+    const { account, refusal } = mailReadAccount(args.account, String(args.id ?? ""));
+    if (refusal) return refusal;
     if (!account) {
       const agentOnly = agentOnlyMailAccount();
       if (agentOnly) return onlyAgentMail(agentOnly);
     }
     if (account) {
+      noteMailRead(account.owner);
       const result = await callScript(account.url, account.secret, "mail.read", {
         id: String(args.id ?? ""),
       });

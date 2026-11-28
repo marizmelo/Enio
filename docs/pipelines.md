@@ -53,9 +53,11 @@ one ordinary narrow turn with its agent pinned, and what a step produces
 
 A step's prompt is **guidance, not a script**: inside a step the agent keeps
 its normal tools and judgement, exactly as in chat. Which also means every
-safety gate applies unchanged — email stays dry-run until `ENIO_EMAIL_SEND=1`,
-Mac automations still arrive as plans you approve, and an automation can never
-reach a tool chat could not.
+safety gate applies unchanged — a step that writes an email does not send it:
+it waits for you, under the run's outcome when you ran it from a conversation
+and in the [outbox](accounts.md) (`enio outbox`) otherwise. Mac automations
+still arrive as plans you approve, and an automation can never reach a tool
+chat could not.
 
 Connections are typed: a step that produces a document can feed one that
 accepts documents, and a connection that makes no sense is refused when you
@@ -83,6 +85,26 @@ canvas — the status rings, each step's output (click a step to read it), and
 the files the run wrote, listed by path. Documents land in your workspace
 (`~/enio-workspace` unless you moved it with `ENIO_WORKSPACE`), or in the
 open project's own folder when one is open.
+
+**Whose account a step uses.** A step that reads email, sends email or
+works with the calendar has an **Account** choice under its guidance: *Not
+set*, *Enio's own*, *Mine*, or one connected account by name. A step runs
+with nobody there to ask and no conversation behind it, so this is where
+you say whose mailbox it reads or whose address it sends from.
+
+- *Not set* uses what a conversation would: your default account if you
+  chose one, otherwise your account for reading and Enio's own for sending.
+- *Enio's own* and *Mine* are resolved when the step runs, so they keep
+  working after you replace an account.
+- The setting is the choice. Guidance that opens "check the work inbox"
+  does not switch away from it, and the agent cannot pick another account
+  inside the step.
+- If the account was removed, or was connected without the permission the
+  step needs, the step **fails and says so**. It does not use a different
+  account instead.
+
+Each step starts fresh: an account named in one step's guidance applies to
+that step, not to the ones after it.
 
 ## Prompt steps
 
@@ -252,6 +274,8 @@ all you want, and a machine running headless has no panel at all:
 ```sh
 enio automation new morning-brief \
   --prompt "Summarise what is still open" --agent coder --cron "0 9 * * 1"
+enio automation new inbox-digest \
+  --prompt "Summarise new mail" --agent mail --account mine
 
 enio automations                              # what exists, and when it next runs
 enio automation run morning-brief             # now, ignoring the schedule
@@ -262,7 +286,10 @@ enio automation rm morning-brief              # removes it and any schedule
 ```
 
 `--agent` picks who runs the step, from the same six agents routing uses; the
-default is whoever the router would pick. Multi-step automations are built in
+default is whoever the router would pick. `--account` says whose account the
+step uses: `enio`, `mine`, or a connected account by its label or address
+(`--account work`). It is the same choice as the Account menu on a step in
+the app. Multi-step automations are built in
 the panel — a graph is not something to type — and everything above works on
 them just the same.
 

@@ -406,9 +406,13 @@ export const config = {
   emailFrom: env("EMAIL_FROM") ?? "",
 
   /**
-   * Off by default: sending is irreversible, and deciding to send is exactly
-   * the judgement a small model gets wrong. Until this is on, messages are
-   * rendered to a .eml in the workspace so you can read what it would have sent.
+   * Whether a person's Send can reach a mail transport. Off by default.
+   *
+   * It used to mean "the model's send_email call sends". No call sends
+   * now: the tool writes a draft into the outbox (outbox.ts) and only a
+   * person's Send, over an authenticated route or from a terminal, goes
+   * out. With this off the draft is still written, shown and kept, and
+   * Send answers that sending is switched off.
    */
   emailSend: env("EMAIL_SEND") === "1",
 

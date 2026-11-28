@@ -225,7 +225,7 @@ async function consumeStream(
   // Fallback path: the server didn't parse the tool call, so it came through as
   // literal text. Recover it and strip it out of what the user sees.
   if (toolCalls.length === 0) {
-    const recovered = scavengeToolCalls(content, tools);
+    const recovered = scavengeToolCalls(content, tools, !truncated);
     if (recovered.calls.length > 0) {
       toolCalls = recovered.calls;
       content = recovered.remaining;
@@ -354,6 +354,7 @@ function partialTagLength(s: string, tag: string): number {
 function scavengeToolCalls(
   text: string,
   tools: WireTool[] = [],
+  complete = true,
 ): { calls: ToolCall[]; remaining: string } {
   const calls: ToolCall[] = [];
   const remaining = text.replace(
@@ -379,17 +380,130 @@ function scavengeToolCalls(
   );
   if (calls.length > 0) return { calls, remaining };
 
-  return scavengeBareCalls(remaining, tools);
+  return scavengeBareCalls(remaining, tools, complete);
 }
 
-/** A line that is only `tool_name {json}` or `tool_name "arg"`. */
+/**
+ * `tool_name key="value" key=value`, when that is the WHOLE reply.
+ *
+ * The third shape, also found by watching: asked to send a note, the 4B
+ * answered with the single line
+ * `send_email to=ana@example.net subject="Meeting Update" body="…"` and
+ * that line was the reply. The tool, every required argument and their
+ * values were right; only the envelope was missing.
+ *
+ * Stricter than the two forms above, because this one carries a whole
+ * action in its arguments and the same text is also how a model SHOWS a
+ * call it wants agreement for:
+ *
+ * - The reply is the call and nothing else. One line of it among prose
+ *   ("Here is what I intend to send: … Shall I?") is a thing being shown,
+ *   and is left as text; so is one in backticks or a list.
+ * - Every key is a property of that tool, none twice, every required one
+ *   present, numbers and booleans as the schema types them.
+ * - A value is quoted, or one unbroken token that does not end in
+ *   sentence punctuation ("query=invoice." is prose).
+ * - A backslash in a quoted value is taken only before a quote or another
+ *   backslash. `\n` could be a line break in a message or two characters
+ *   of a path or a regex, and guessing either way rewrites what the model
+ *   wrote; that reply is left as text.
+ * - Not from a reply that was cut off: its last token may be half a value.
+ * - Not with a typographic quote, a placeholder or an ellipsis where a
+ *   value should be, an empty required value, or an argument that is not
+ *   a string, a number or a boolean.
+ */
+function keyValueCall(text: string, byName: Map<string, WireTool>): ToolCall["function"] | null {
+  const head = /^\s*([a-z_][a-z0-9_]{0,63})[ \t]+(?=[a-z_])/i.exec(text);
+  const tool = head && byName.get(head[1]!);
+  if (!head || !tool) return null;
+  const schema = tool.function.parameters as { properties?: Record<string, { type?: unknown }>; required?: unknown };
+  const properties = schema.properties ?? {};
+  const args: Record<string, unknown> = {};
+  const pair = /[ \t]*([a-z_][a-z0-9_]{0,63})=("(?:[^"\\]|\\[\s\S])*"|'(?:[^'\\]|\\[\s\S])*'|[^\s,"'`)]+)/iy;
+  let at = head[0].length;
+  let bareLast = "";
+  for (;;) {
+    pair.lastIndex = at;
+    const m = pair.exec(text);
+    if (!m) break;
+    const key = m[1]!;
+    if (!Object.hasOwn(properties, key) || Object.hasOwn(args, key)) return null;
+    const raw = m[2]!;
+    const quoted = raw[0] === '"' || raw[0] === "'";
+    if (quoted && raw.replace(/\\["'\\]/g, "").includes("\\")) return null;
+    const value = quoted ? raw.slice(1, -1).replace(/\\(["'\\])/g, "$1") : raw;
+    bareLast = quoted ? "" : raw;
+    // A bare token that is really a typographic quote, a placeholder or
+    // an ellipsis is the model writing ABOUT a call: subject=“Late”,
+    // subject=<subject>, body=…
+    if (!quoted && /^[\u201C\u201D\u2018\u2019\u00AB<\u2026]/.test(raw)) return null;
+    const type = properties[key]?.type;
+    // Only the kinds a single token can be. A list, an object or a union
+    // would be handed a string.
+    if (type !== "string" && type !== "number" && type !== "integer" && type !== "boolean") return null;
+    if (type === "number" || type === "integer") {
+      if (!/^-?\d+(?:\.\d+)?$/.test(value) || (type === "integer" && value.includes("."))) return null;
+      args[key] = Number(value);
+    } else if (type === "boolean") {
+      if (value !== "true" && value !== "false") return null;
+      args[key] = value === "true";
+    } else {
+      args[key] = value;
+    }
+    at = pair.lastIndex;
+  }
+  if (text.slice(at).trim() !== "" || /[.?!;:]$/.test(bareLast)) return null;
+  const required = Array.isArray(schema.required) ? schema.required : [];
+  if (Object.keys(args).length === 0 || !required.every((r) => typeof r === "string" && Object.hasOwn(args, r) && args[r] !== "")) return null;
+  return { name: head[1]!, arguments: JSON.stringify(args) };
+}
+
+/**
+ * `tool_name Value`, unquoted, when that is the WHOLE reply.
+ *
+ * The fourth shape, watched on the 4B three times in three: asked to
+ * "write a note with my grocery list" the operator's entire reply was
+ * `open_app Notes`, and asked to "open chrome and check my email there",
+ * `open_app Chrome`. The quoted form of the same line was already
+ * recovered; without the quotes it was shown to the person as the answer.
+ *
+ * As narrow as the others: the reply is that one line and nothing else,
+ * the tool takes exactly one required argument and it is a string, and
+ * what follows the name is a short value, not a sentence -- at most four
+ * words, no closing punctuation, no quote, bracket or `=`, and not the
+ * start of a remark about the tool ("open_app is the tool that opens
+ * apps", "web_search for the weather would work").
+ */
+function bareWordCall(text: string, byName: Map<string, WireTool>): ToolCall["function"] | null {
+  const m = /^\s*([a-z_][a-z0-9_]{0,63})[ \t]+(\S[^\n]{0,58})\s*$/i.exec(text);
+  const tool = m && byName.get(m[1]!);
+  if (!m || !tool) return null;
+  const schema = tool.function.parameters as { properties?: Record<string, { type?: unknown }>; required?: unknown };
+  const required = Array.isArray(schema.required) ? schema.required : [];
+  if (required.length !== 1 || typeof required[0] !== "string") return null;
+  if (schema.properties?.[required[0]]?.type !== "string") return null;
+  const value = m[2]!.trim();
+  if (value.split(/\s+/).length > 4) return null;
+  if (/[.?!;:,]$/.test(value) || /["'`=(){}[\]<>\u201C\u201D\u2018\u2019\u00AB\u2026]/.test(value)) return null;
+  if (/^(?:is|are|was|were|can|could|will|would|should|might|may|to|for|and|or|then|if|tool|call|with|on|in)\b/i.test(value)) return null;
+  return { name: m[1]!, arguments: JSON.stringify({ [required[0]]: value }) };
+}
+
+/** A line that is only `tool_name {json}` or `tool_name "arg"`, or a
+ *  whole reply that is `tool_name key="value"` or `tool_name Value`. */
 function scavengeBareCalls(
   text: string,
   tools: WireTool[],
+  complete: boolean,
 ): { calls: ToolCall[]; remaining: string } {
   if (tools.length === 0) return { calls: [], remaining: text };
   const byName = new Map(tools.map((t) => [t.function.name, t]));
   const calls: ToolCall[] = [];
+
+  const whole = complete ? (keyValueCall(text, byName) ?? bareWordCall(text, byName)) : null;
+  if (whole) {
+    return { calls: [{ id: "call_scavenged_0", type: "function", function: whole }], remaining: "" };
+  }
 
   const kept = text
     .split("\n")

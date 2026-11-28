@@ -350,7 +350,7 @@ export const ABILITIES: Ability[] = [
     // pick abilities by id, and a graph that sends mail still needs this one.
     launcherHidden: true,
     title: "Send email",
-    description: "Draft and send email — dry-run until you enable real sending.",
+    description: "Write an email for you to send.",
     icon: "send",
     specialist: "mail",
     promptTemplate: "@mail Send an email to ___",
@@ -366,7 +366,7 @@ export const ABILITIES: Ability[] = [
       summary: "Sending mail needs SMTP configured.",
       steps: [
         "Set ENIO_SMTP_HOST, ENIO_SMTP_USER, ENIO_SMTP_PASS and ENIO_EMAIL_FROM.",
-        "Drafts stay dry-run until ENIO_EMAIL_SEND=1.",
+        "Enio writes the message and you send it. Sending works once ENIO_EMAIL_SEND=1 is set.",
       ],
       docs: "docs/configuration.md",
     },

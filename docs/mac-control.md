@@ -53,7 +53,7 @@ That line is not negotiable by any setting.
 Reading is not irreversible, so it needs no flag — macOS's own permission
 prompts are the consent that protects your data.
 
-**Opening an app** needs no flag either, and no plan:
+**Opening an app you asked for** needs no flag either, and no plan:
 
 ```
 you › open Spotify
@@ -64,14 +64,23 @@ the real list rather than guessed at. Partial names work — "chrome" finds
 Google Chrome. Quitting the app undoes it, which is the whole test the
 `ENIO_DESKTOP` gate applies.
 
+**An app you did not ask for is not opened.** When Enio decides on its own
+that something needs an app — you asked what is on a web page, and it reaches
+for the browser — it does not open it. If the app is already open it carries
+on; if not, you get a one-step plan, "Open Google Chrome", with **Run** and
+**Discard** on the card. Run it, say "go on", and Enio plans the rest. This
+one plan runs without desktop control switched on, because it does exactly
+what "open Chrome" would have done had you typed it.
+
 **Reading from apps** goes through `mac_recipe`, which runs tested scripts
 selected by name rather than written on the spot:
 
 | Script | Returns | Needs |
 |---|---|---|
-| `recent_emails` | Subject and sender of recent inbox messages | Automation |
-| `unread_count` | How many unread messages | Automation |
-| `latest_email_body` | Full text of the most recent message | Automation |
+| `recent_emails` | The most recent messages in the Mail app's inbox: how old, read or unread, sender, subject | Automation |
+| `unread_emails` | The unread messages in the Mail app's inbox, newest first | Automation |
+| `unread_count` | How many unread messages are in the Mail app's inbox | Automation |
+| `latest_email_body` | Full text of the most recent message in the Mail app | Automation |
 | `todays_events` | Calendar events starting today | Automation |
 | `open_reminders` | Reminders not yet completed | Automation |
 | `recent_notes` | Titles of recent notes | Automation |
@@ -81,6 +90,23 @@ selected by name rather than written on the spot:
 | `menu_items` | An app's menu commands, as `File > Save` lines | Accessibility |
 
 The last two are the only ones withheld without Accessibility permission.
+
+The mail scripts read the **Mail app**, and say so at the top of what they
+return. They cannot read mail shown on a web page: asked for mail "in
+Safari", the script refuses instead of reading the Mail app under another
+name ("Gmail" is not the Mail app either). Every result opens with how
+many messages the inbox holds and how old the newest one is, each row says
+how many days old its message is, and when the newest message in the
+whole inbox is more than two days old the result says the Mail app is not
+showing recent mail — an account that stopped syncing looks like an inbox
+otherwise. You see that as a note beside the reply as well.
+
+**"The browser" is yours.** Asked to open "the browser", Enio opens the one
+you named; otherwise the one you already have open; otherwise the one your
+Mac opens links in. It does not pick one itself, and the result says which
+it used and why. A short name finds the app, not a tool for the app:
+"Chrome" is Google Chrome, never an uninstaller that happens to start with
+the word.
 
 **Screenshots show up in the thread.** The reply's text is the vision
 model's reading of the screen; the desktop also shows the captured image
@@ -126,7 +152,26 @@ public API.
 ## Plans, and the approval sheet
 
 When no saved script covers what you asked, Enio writes down what it *would* do and
-stops. It cannot run it; only you can.
+stops. It cannot run it; only you can. The reply lists the steps and says
+nothing has run; the card under it is where you decide. There are four things
+to do with a plan:
+
+- **Run it** — from the sheet, after reading what each step runs.
+- **Change it** — edit a step's text, or describe a change and have the steps
+  rewritten.
+- **Discard it.**
+- **Try again** — set this plan aside and have Enio write a new one for the
+  same request. Your request is asked again in the conversation, and Enio is
+  told which plan you turned down so the new one is not the same plan twice.
+
+In the terminal there is no card: `/run` prints every step with the exact
+text it would run, `/run ID` (the id it printed) runs it, and `/discard`
+drops it.
+
+When a plan has run, what it did is written into the conversation: each step,
+whether it worked, and what it printed. A plan that stopped part-way says
+where, which steps already ran and which did not. Because the output is in
+the thread, you can ask about it afterwards.
 
 A step is one action, and can be any of these:
 
@@ -170,6 +215,20 @@ it is deterministic with no model involved.
 A script is only saved **after every step ran successfully**. A script that
 never worked would otherwise be re-run verbatim forever, failing identically,
 with nothing positioned to notice.
+
+**The same request later finds the script.** A saved script remembers what
+you asked for when the plan was written. Ask for the same thing again and
+Enio offers the script straight away, with no new plan written: the card
+names it and has **Run** on it. "The same thing" is strict: the same words
+in the same order, with the same numbers and quoted names. Only the dressing
+may differ — "please", "can you", "the", a plural, capitals, accents. One
+word changed is a different request ("turn *off* dark mode" is not "turn
+*on* dark mode") and goes to Enio as usual, which can still pick the script
+by name. It is never run from the match alone; one press is the
+confirmation. If the script is not what you meant, **Try again** has Enio
+write a fresh plan instead. A script saved from an "Open X" plan that Enio
+proposed on its way to something else is not found this way: opening the
+app was a first step, not the answer to what you asked.
 
 Tick **"safe to run on its own"** while saving, and with auto-run enabled Enio
 uses that script without asking. Saving records that a script *worked*; ticking

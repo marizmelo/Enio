@@ -1,41 +1,53 @@
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { config } from "../config.js";
 import { scriptMailAccount } from "../accounts.js";
-import { callScript } from "../appsscript.js";
-import { placeNewFile } from "../assets.js";
+import { addressesIn, ccNote, recipientAllowed, renderDraft, smtpConfigured, writeDraft, type Draft } from "../outbox.js";
 import type { BuiltinTool } from "../types.js";
 
 /**
- * Sending email over SMTP.
+ * Writing email. Not sending it.
  *
- * Works with any provider or your own server. Not an MCP server: it is one
- * dependency and about thirty lines, and a separate process would cost a tool
- * slot for no benefit.
+ * `send_email` keeps its name and its arguments, and no longer reaches a
+ * mail transport: it writes the message into the outbox (outbox.ts) and
+ * the turn ends there, on a sentence the harness writes. A person sends
+ * it, from the card, the terminal or an authenticated request.
  *
- * The default is DRY RUN, and that is deliberate. Sending is irreversible, and
- * the model deciding to send is exactly the kind of judgement a ~1B-active
- * model gets wrong. Until you set ENIO_EMAIL_SEND=1, the message is rendered
- * and written to the workspace as a .eml you can open and read, so you find out
- * what it would have said before it says it to anyone.
+ * The name is kept because it is model-facing: the router's examples, the
+ * abilities and the model's own habit all say send_email, and a renamed
+ * key is a working classifier re-learned. What changed is what calling it
+ * does, and the description says so.
  */
 
-export const emailConfigured = () => Boolean(config.smtpHost && config.emailFrom);
+export const emailConfigured = smtpConfigured;
+export { addressesIn, recipientAllowed };
 
-function recipientAllowed(to: string): boolean {
-  if (config.emailAllowedTo.length === 0) return true;
-  const address = to.toLowerCase().trim();
-  return config.emailAllowedTo.some((allowed) => {
-    const rule = allowed.toLowerCase().trim();
-    // A bare domain rule permits everyone at that domain.
-    return rule.startsWith("@") ? address.endsWith(rule) : address === rule;
-  });
+/** What the person reads when a message has been written. The whole
+ *  message is in it, so a surface with no card (the terminal, a plain API
+ *  client, a step of an automation) shows the same thing the card does. */
+export function writtenReply(draft: Draft, replaced: boolean, noCard = false): string {
+  // Said before the press, not after it: on a connected account a Cc is
+  // not delivered (the bridge sends to To only) and a line naming those
+  // people is added to the body. Shown only in the outcome, the person
+  // learned it once the message had gone.
+  const cc = ccNote(draft);
+  return (
+    `I wrote this message. It has not been sent.${replaced ? " It replaces the one I wrote before." : ""}\n\n` +
+    `${renderDraft(draft)}\n\n` +
+    (cc ? `${cc}\n\n` : "") +
+    // A run nobody started from a conversation has no card: say where
+    // the message is, in words that are true there.
+    (noCard
+      ? "It is waiting in the outbox for you to send. In a terminal, `enio outbox` lists it." +
+        (config.emailSend ? "" : " Sending is switched off on this machine (ENIO_EMAIL_SEND=1 turns it on).")
+      : config.emailSend
+        ? "It is waiting for you: send it, change it, or discard it."
+        : "It is waiting for you. Sending is switched off on this machine (ENIO_EMAIL_SEND=1 turns it on), so for now it can be changed or discarded, and it is saved as a draft.")
+  );
 }
 
 const emailTool: BuiltinTool = {
   name: "send_email",
   description:
-    "Send an email. Give the recipient, a subject, and the body as plain text. Confirm the recipient and content with the user before calling this — sending cannot be undone.",
+    "Write an email for the user to send. Give the recipient, a subject, and the body as plain text. This does not send: the user is shown the message and sends it themselves. Call it as soon as you know who it is for and what to say; to change a message, call it again with the whole new message. Never write the message out in your reply.",
   origin: "builtin",
   parameters: {
     type: "object",
@@ -48,82 +60,38 @@ const emailTool: BuiltinTool = {
     required: ["to", "subject", "body"],
   },
   async run(args) {
-    const to = String(args.to ?? "").trim();
-    const subject = String(args.subject ?? "").trim();
-    const body = String(args.body ?? "");
-
-    if (!to.includes("@")) return `"${to}" is not an email address.`;
-    if (!subject) return "Refusing to send with no subject.";
-
-    if (!recipientAllowed(to)) {
-      return (
-        `Refused: ${to} is not in the allowed recipient list ` +
-        `(${config.emailAllowedTo.join(", ")}). Change ENIO_EMAIL_ALLOWED_TO to permit it.`
-      );
-    }
-
-    const account = scriptMailAccount("send");
-    const rendered =
-      `From: ${account?.email || config.emailFrom}\nTo: ${to}\n` +
-      (args.cc ? `Cc: ${args.cc}\n` : "") +
-      `Subject: ${subject}\n\n${body}\n`;
-
-    if (!config.emailSend) {
-      // Dry run: write it out so it can actually be inspected.
-      // The draft is something Enio made, so it is an asset of this turn.
-      const file = placeNewFile(`draft-${Date.now()}.eml`);
-      await writeFile(file, rendered, "utf8");
-      return (
-        `DRY RUN — nothing was sent.\n\n${rendered}\n` +
-        `Saved to ${file}\n` +
-        `Set ENIO_EMAIL_SEND=1 to send for real.`
-      );
-    }
-
-    // The connected account outranks SMTP, and the send grant is checked by
-    // scriptMailAccount itself: a read-only account is not a send path, which
-    // is the read/act line enforced where the send happens rather than in a
-    // prompt. The ENIO_EMAIL_SEND dry-run gate above applies to both
-    // backends identically -- an irreversible act stays opt-in whatever
-    // carries it.
-    if (account) {
-      const result = await callScript(account.url, account.secret, "mail.send", {
-        to,
-        subject,
-        body: args.cc ? `${body}\n\n(cc requested: ${args.cc})` : body,
-      });
-      return result.ok
-        ? { text: `Sent to ${to} from ${account.email}.`, notice: `Sent from ${account.described}.` }
-        : `Could not send: ${result.error}`;
-    }
-
-    try {
-      const nodemailer = await import("nodemailer");
-      const transport = nodemailer.createTransport({
-        host: config.smtpHost,
-        port: config.smtpPort,
-        // Port 465 is implicit TLS; 587 and 25 start plaintext and upgrade
-        // with STARTTLS, which nodemailer does automatically.
-        secure: config.smtpPort === 465,
-        auth: config.smtpUser ? { user: config.smtpUser, pass: config.smtpPass } : undefined,
-      });
-
-      const info = await transport.sendMail({
-        from: config.emailFrom,
-        to,
-        cc: args.cc ? String(args.cc) : undefined,
-        subject,
-        text: body,
-      });
-
-      return `Sent to ${to} — message id ${info.messageId}`;
-    } catch (err) {
-      return `Could not send: ${(err as Error).message}`;
-    }
+    const written = writeDraft({
+      to: String(args.to ?? ""),
+      cc: args.cc === undefined ? undefined : String(args.cc),
+      subject: String(args.subject ?? ""),
+      body: String(args.body ?? ""),
+    });
+    if (!written.ok) return written.reason;
+    const draft = written.draft;
+    return {
+      // The artifact line first: a long body is cut at the tool-output
+      // limit, and after the body the line that names the file was the
+      // part that went.
+      text:
+        `Written, not sent.${draft.file ? `\nSaved to ${draft.file}` : ""}\n\n${renderDraft(draft)}\n\n` +
+        "The user has been shown this message and will send it themselves. Do not call another tool.",
+      widget: {
+        type: "mail",
+        id: draft.id,
+        revision: draft.revision,
+        from: draft.from,
+        to: draft.to,
+        cc: draft.cc,
+        subject: draft.subject,
+        body: draft.body,
+        sendingOn: config.emailSend,
+      },
+      final: writtenReply(draft, false),
+    };
   },
 };
 
-/** Withheld entirely when SMTP isn't configured — a tool that always fails
+/** Withheld entirely when nothing could send — a tool that always fails
  *  just burns the model's limited attention on a dead end. */
 export const emailTools: BuiltinTool[] =
   emailConfigured() || scriptMailAccount("send") ? [emailTool] : [];

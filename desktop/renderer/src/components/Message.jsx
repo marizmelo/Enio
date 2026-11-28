@@ -343,7 +343,11 @@ export function Message({
           {widgets
             .filter((w) => w.type !== "image")
             .map((w, i) => (
-              <Widget key={`${w.type}-${i}`} widget={w} onOpenFile={onOpenFile} sessionId={sessionId} />
+              // By the thing it is, not where it sits: the thread is keyed
+              // by position, so a card kept its state across a change of
+              // conversation and could run the steps of the plan that had
+              // been in its place.
+              <Widget key={w.id ? `${w.type}-${w.id}` : `${w.type}-${i}`} widget={w} onOpenFile={onOpenFile} sessionId={sessionId} />
             ))}
         </div>
       )}

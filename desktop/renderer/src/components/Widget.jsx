@@ -4,6 +4,7 @@ import { PlanWidget } from "@/components/widgets/PlanWidget";
 import { ImageWidget } from "@/components/widgets/ImageWidget";
 import { FoundFilesWidget } from "@/components/widgets/FoundFilesWidget";
 import { FlowWidget } from "@/components/widgets/FlowWidget";
+import { MailWidget } from "@/components/widgets/MailWidget";
 
 /**
  * Dispatches a widget payload to its renderer.
@@ -21,6 +22,7 @@ const RENDERERS = {
   image: ImageWidget,
   found_files: FoundFilesWidget,
   flow: FlowWidget,
+  mail: MailWidget,
 };
 
 export function Widget({ widget, onOpenFile, sessionId = null }) {

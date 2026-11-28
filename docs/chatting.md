@@ -44,6 +44,8 @@ of the catalogue, run only when you name them.
 | `/pref` | list them |
 | `/unpref 3` | remove one |
 | `/think` | show the model's reasoning |
+| `/send`, `/drop` | send or discard the [message Enio wrote](accounts.md) in this conversation |
+| `/run`, `/discard` | show and run, or discard, the [plan Enio proposed](mac-control.md) in this conversation |
 | `/stats` | what memory holds |
 | `/clear` | forget this conversation (not what's on disk) |
 | `/quit` | exit and fold this conversation into memory |

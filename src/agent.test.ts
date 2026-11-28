@@ -249,6 +249,64 @@ describe("streaming and <think> handling", () => {
     }
   });
 
+  test("recovers a call written as the tool's name and a bare value, when it is the whole reply", async () => {
+    // Watched on the 4B, three times in three: the operator's whole reply
+    // to "write a note with my grocery list" was this line.
+    for (const [text, app] of [
+      ["open_app Notes", "Notes"],
+      ["open_app Chrome", "Chrome"],
+      ["  open_app Visual Studio Code\n", "Visual Studio Code"],
+      ["open_app System Settings", "System Settings"],
+    ] as const) {
+      stubStream([text]);
+      const result = await complete([{ role: "user", content: "?" }], OPEN_APP);
+      assert.equal(result.toolCalls.length, 1, text);
+      assert.deepEqual(JSON.parse(result.toolCalls[0]!.function.arguments), { app }, text);
+      assert.equal(result.content, "", text);
+    }
+    // Anything that is a remark, a sentence, more than the one line, or
+    // more than a short value is left as text.
+    for (const text of [
+      "open_app is the tool that opens apps",
+      "open_app would open Notes for you",
+      "open_app Notes.",
+      "open_app Notes?",
+      "open_app Notes, then type the list",
+      "open_app Notes and Calendar and Mail too",
+      "open_app the app you asked about earlier today",
+      "open_app (Notes)",
+      "open_app app=",
+      "open_app <app name>",
+      "I will call open_app Notes",
+      "open_app Notes\nThen I will type the list",
+      "First:\nopen_app Notes",
+      "open_app to open it",
+      "open_app",
+    ]) {
+      stubStream([text]);
+      const result = await complete([{ role: "user", content: "?" }], OPEN_APP);
+      assert.equal(result.toolCalls.length, 0, `must not fire on: ${text}`);
+    }
+  });
+
+  test("a bare value is not guessed into a tool that needs more than one argument", async () => {
+    const twoRequired = [
+      {
+        type: "function" as const,
+        function: { name: "send_email", description: "", parameters: { type: "object" as const, properties: { to: { type: "string" }, body: { type: "string" } }, required: ["to", "body"] } },
+      },
+      {
+        type: "function" as const,
+        function: { name: "set_volume", description: "", parameters: { type: "object" as const, properties: { level: { type: "number" } }, required: ["level"] } },
+      },
+    ];
+    for (const text of ["send_email ana@example.net", "set_volume 40"]) {
+      stubStream([text]);
+      const result = await complete([{ role: "user", content: "?" }], twoRequired);
+      assert.equal(result.toolCalls.length, 0, text);
+    }
+  });
+
   test("a name that is not a real tool is left as text", async () => {
     stubStream(['make_coffee "espresso"']);
     const result = await complete([{ role: "user", content: "?" }], OPEN_APP);
@@ -276,6 +334,142 @@ describe("streaming and <think> handling", () => {
     stubStream(['move_file "notes.txt"']);
     const result = await complete([{ role: "user", content: "?" }], twoRequired);
     assert.equal(result.toolCalls.length, 0);
+  });
+
+  const SEND_AND_SEARCH = [
+    {
+      type: "function" as const,
+      function: {
+        name: "send_email",
+        description: "",
+        parameters: {
+          type: "object" as const,
+          properties: { to: { type: "string" }, subject: { type: "string" }, body: { type: "string" }, cc: { type: "string" } },
+          required: ["to", "subject", "body"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "search_email",
+        description: "",
+        parameters: {
+          type: "object" as const,
+          properties: { query: { type: "string" }, limit: { type: "number" }, days: { type: "integer" }, unread: { type: "boolean" }, labels: { type: "array" } },
+          required: [],
+        },
+      },
+    },
+  ];
+  const recovered = async (text: string) => {
+    stubStream([text]);
+    return complete([{ role: "user", content: "?" }], SEND_AND_SEARCH);
+  };
+
+  test("recovers a call written as key=value pairs, when it is the whole reply", async () => {
+    // Watched on the 4B: asked to send a note, the whole reply was this
+    // line. Tool, arguments and values right; the envelope missing.
+    const line = await recovered('send_email to=ana@example.net subject="Meeting Update" body="I will be ten minutes late on Friday."');
+    assert.equal(line.toolCalls.length, 1);
+    assert.equal(line.toolCalls[0]!.function.name, "send_email");
+    assert.deepEqual(JSON.parse(line.toolCalls[0]!.function.arguments), {
+      to: "ana@example.net",
+      subject: "Meeting Update",
+      body: "I will be ten minutes late on Friday.",
+    });
+    assert.equal(line.content.trim(), "", "the line is consumed, not left as the reply");
+
+    // A body runs over several lines inside its quotes; a quote inside is escaped.
+    const multi = await recovered('send_email to=ana@example.net subject="Late" body="Hi Ana,\n\nShe said \\"eight\\".\n\nSam"\n');
+    assert.equal(JSON.parse(multi.toolCalls[0]!.function.arguments).body, 'Hi Ana,\n\nShe said "eight".\n\nSam');
+
+    // Typed by the schema.
+    const typed = await recovered("search_email query=invoice limit=5 unread=true");
+    assert.deepEqual(JSON.parse(typed.toolCalls[0]!.function.arguments), { query: "invoice", limit: 5, unread: true });
+    const single = await recovered("search_email query='q4 invoice' days=7");
+    assert.deepEqual(JSON.parse(single.toolCalls[0]!.function.arguments), { query: "q4 invoice", days: 7 });
+  });
+
+  test("key=value text that is not exactly a call is left as text", async () => {
+    const call = 'send_email to=ana@example.net subject="Late" body="Ten minutes."';
+    for (const text of [
+      // Shown, not made: prose before or after it, on the line or around it.
+      `I would call ${call}`,
+      `${call} and then tell you`,
+      `Here is the message I intend to send:\n\n${call}\n\nShall I send it?`,
+      `Looking.\n${call}`,
+      `${call}\n${call}`,
+      // In backticks, a list or brackets.
+      "`search_email query=invoice`",
+      "search_email query=invoice`",
+      "- search_email query=invoice",
+      "search_email(query=invoice)",
+      // A required argument missing (three given, one of them not required),
+      // a key the tool does not have, a key twice.
+      'send_email to=ana@example.net subject="Late"',
+      'send_email to=ana@example.net subject="Late" cc=tom@example.net',
+      `${call} priority=high`,
+      'send_email to=a@example.net to=b@example.net subject="Late" body="x"',
+      // A value of the wrong kind.
+      "search_email query=invoice limit=five",
+      "search_email query=invoice days=2.5",
+      "search_email unread=maybe",
+      // A value that is the end of a sentence, or of a reply that was cut off mid-quote.
+      "search_email query=invoice.",
+      "search_email query=invoice?",
+      'send_email to=ana@example.net subject="Late" body="Ten min',
+      // A backslash that might be a line break or two characters of a path.
+      'send_email to=ana@example.net subject="Late" body="Hi Ana,\\n\\nTen minutes."',
+      'search_email query="C:\\new\\table.txt"',
+      // Written about a call, not as one: typographic quotes, placeholders,
+      // an ellipsis, an empty required value.
+      "send_email to=ana@example.net subject=\u201CLate\u201D body=\u201CSorry!\u201D",
+      "send_email to=ana@example.net subject=<subject> body=<body>",
+      "send_email to=ana@example.net subject=\u2026 body=\u2026",
+      'send_email to=ana@example.net subject="Late" body=""',
+      // An argument that is not a single value.
+      "search_email query=invoice labels=inbox",
+      // A tool that does not exist, and a sentence that starts with a name.
+      'post_message to=ana text="hi"',
+      "search_email is the tool for that",
+    ]) {
+      const result = await recovered(text);
+      assert.equal(result.toolCalls.length, 0, `must not fire on: ${text}`);
+      assert.equal(result.content, text.trim(), "left as the reply");
+    }
+  });
+
+  test("a reply that was cut off is not read as a key=value call", async () => {
+    // Its last token may be half a value: "query=invo" for "query=invoice".
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream({
+          start(c) {
+            const enc = new TextEncoder();
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: "search_email query=invo" } }] })}\n\n`));
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "length" }] })}\n\n`));
+            c.enqueue(enc.encode("data: [DONE]\n\n"));
+            c.close();
+          },
+        }),
+        { status: 200 },
+      )) as unknown as typeof fetch;
+    try {
+      const cut = await complete([{ role: "user", content: "?" }], SEND_AND_SEARCH);
+      assert.equal(cut.truncated, true);
+      assert.equal(cut.toolCalls.length, 0);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("a long run of letters costs nothing to rule out", async () => {
+    const started = performance.now();
+    const result = await recovered("a".repeat(60_000));
+    assert.equal(result.toolCalls.length, 0);
+    assert.ok(performance.now() - started < 500, "linear, not quadratic");
   });
 });
 

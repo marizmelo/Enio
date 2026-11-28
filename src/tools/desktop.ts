@@ -4,10 +4,14 @@ import { basename, join } from "node:path";
 import { config } from "../config.js";
 import { detectPlatform } from "../platform.js";
 import { readImage } from "../vision.js";
-import type { BuiltinTool } from "../types.js";
-import { listSavedRecipes, osascriptFailure, proposePlan, runScript, type PlanKind } from "../plans.js";
+import type { BuiltinTool, Widget } from "../types.js";
+import { listSavedRecipes, osascriptFailure, proposePlan, runScript, type PlanKind, type SavedRecipe } from "../plans.js";
 import { autoRunEnabled, desktopControlStored } from "../automation.js";
 import { placeNewFile } from "../assets.js";
+import { anyBrowser, browsersNamed, chooseBrowser, defaultBrowser, isBrowser } from "../browsers.js";
+// The person's own message this turn. Kept with the account state because
+// that is where a turn's words were first needed; it is not about accounts.
+import { turnMessageNow, turnMessageSaid } from "../accounts.js";
 import {
   assistiveAccessGranted,
   axBridge,
@@ -342,6 +346,15 @@ const appleScriptTool: BuiltinTool = {
 interface Recipe {
   summary: string;
   script: (ctx: { count: number; app: string }) => string;
+  /** The one app this recipe reads, when it reads one. Said at the top of
+   *  the result, and what an `app` argument naming something else is held
+   *  against: asked for mail "in Safari" the model ran recent_emails with
+   *  app "Safari", the argument was ignored, and Mail's inbox was reported
+   *  as what the browser showed. */
+  reads?: string;
+  /** Rows that open with "N days ago": the newest is checked, so that a
+   *  mailbox that stopped syncing months back is not read out as today's. */
+  dated?: true;
   /** Needs an app; the *resolved* name is interpolated, never the raw input. */
   needsApp?: true;
   /** Reads the accessibility tree, so it is withheld until macOS allows that. */
@@ -352,21 +365,112 @@ interface Recipe {
 }
 
 const RECIPES: Record<string, Recipe> = {
+  // Every Mail recipe opens with the same line, counted by Mail: how many
+  // messages the inbox holds and how old the newest is. It is what says an
+  // account stopped syncing, and it has to come from the whole inbox: the
+  // newest UNREAD message being a month old says nothing about that.
   recent_emails: {
-    summary: "Subject and sender of the most recent inbox messages",
+    summary: "The most recent messages in the Mail app's inbox: how old, read or unread, sender, subject",
+    reads: "Mail",
+    dated: true,
+    // Age in days computed by Mail itself, not a date string to parse: the
+    // string is in the machine's locale. And never past the end of the
+    // inbox: "messages 1 thru 5" of an inbox of three is an error.
     script: ({ count }) =>
-      `tell application "Mail" to get {subject, sender} of messages 1 thru ${count} of inbox`,
+      `tell application "Mail"\n` +
+      `\tset out to {}\n` +
+      `\tset today to current date\n` +
+      `\tset total to count of messages of inbox\n` +
+      `\tif total > 0 then\n` +
+      `\t\tset head to "Inbox: " & total & " messages, newest " & ((today - (date received of message 1 of inbox)) div days) & " days ago"\n` +
+      `\telse\n` +
+      `\t\tset head to "Inbox: 0 messages"\n` +
+      `\tend if\n` +
+      `\tset upto to ${count}\n` +
+      `\tif total < upto then set upto to total\n` +
+      `\trepeat with i from 1 to upto\n` +
+      `\t\tset m to message i of inbox\n` +
+      `\t\tset age to ((today - (date received of m)) div days)\n` +
+      `\t\tif read status of m then\n` +
+      `\t\t\tset seen to "read"\n` +
+      `\t\telse\n` +
+      `\t\t\tset seen to "UNREAD"\n` +
+      `\t\tend if\n` +
+      `\t\tset end of out to (age as string) & " days ago | " & seen & " | " & (sender of m) & " | " & (subject of m)\n` +
+      `\tend repeat\n` +
+      `\tset AppleScript's text item delimiters to linefeed\n` +
+      `\treturn head & linefeed & (out as string)\n` +
+      `end tell`,
+  },
+  unread_emails: {
+    summary: "The unread messages in the Mail app's inbox, newest first: how old, sender, subject",
+    reads: "Mail",
+    dated: true,
+    script: ({ count }) =>
+      `tell application "Mail"\n` +
+      `\tset out to {}\n` +
+      `\tset today to current date\n` +
+      `\tset total to count of messages of inbox\n` +
+      `\tif total > 0 then\n` +
+      `\t\tset head to "Inbox: " & total & " messages, newest " & ((today - (date received of message 1 of inbox)) div days) & " days ago"\n` +
+      `\telse\n` +
+      `\t\tset head to "Inbox: 0 messages"\n` +
+      `\tend if\n` +
+      `\tset waiting to (messages of inbox whose read status is false)\n` +
+      `\tset unreadTotal to count of waiting\n` +
+      `\tset upto to ${count}\n` +
+      `\tif unreadTotal < upto then set upto to unreadTotal\n` +
+      `\trepeat with i from 1 to upto\n` +
+      `\t\tset m to item i of waiting\n` +
+      `\t\tset age to ((today - (date received of m)) div days)\n` +
+      `\t\tset end of out to (age as string) & " days ago | UNREAD | " & (sender of m) & " | " & (subject of m)\n` +
+      `\tend repeat\n` +
+      `\tset AppleScript's text item delimiters to linefeed\n` +
+      `\treturn head & linefeed & (unreadTotal as string) & " unread" & linefeed & (out as string)\n` +
+      `end tell`,
   },
   unread_count: {
-    summary: "How many unread messages are in the inbox",
-    script: () => `tell application "Mail" to get unread count of inbox`,
+    summary: "How many unread messages are in the Mail app's inbox",
+    reads: "Mail",
+    dated: true,
+    script: () =>
+      `tell application "Mail"\n` +
+      `\tset today to current date\n` +
+      `\tset total to count of messages of inbox\n` +
+      `\tif total > 0 then\n` +
+      `\t\tset head to "Inbox: " & total & " messages, newest " & ((today - (date received of message 1 of inbox)) div days) & " days ago"\n` +
+      `\telse\n` +
+      `\t\tset head to "Inbox: 0 messages"\n` +
+      `\tend if\n` +
+      `\treturn head & linefeed & ((unread count of inbox) as string) & " unread"\n` +
+      `end tell`,
   },
   latest_email_body: {
-    summary: "Full text of the single most recent message",
-    script: () => `tell application "Mail" to get content of message 1 of inbox`,
+    summary: "Full text of the single most recent message in the Mail app",
+    reads: "Mail",
+    dated: true,
+    script: () =>
+      `tell application "Mail"\n` +
+      `\tset today to current date\n` +
+      `\tset total to count of messages of inbox\n` +
+      `\tif total > 0 then\n` +
+      `\t\tset head to "Inbox: " & total & " messages, newest " & ((today - (date received of message 1 of inbox)) div days) & " days ago"\n` +
+      `\telse\n` +
+      `\t\tset head to "Inbox: 0 messages"\n` +
+      `\tend if\n` +
+      `\tif total = 0 then return head\n` +
+      `\tset m to message 1 of inbox\n` +
+      `\tif read status of m then\n` +
+      `\t\tset seen to "read"\n` +
+      `\telse\n` +
+      `\t\tset seen to "UNREAD"\n` +
+      `\tend if\n` +
+      `\treturn head & linefeed & seen & " | " & (sender of m) & " | " & (subject of m) & linefeed & linefeed & (content of m)\n` +
+      `end tell`,
   },
   todays_events: {
-    summary: "Calendar events starting today",
+    summary: "Events starting today in the Calendar app",
+    reads: "Calendar",
     script: () =>
       `tell application "Calendar"\n` +
       `\tset d to current date\n` +
@@ -560,6 +664,98 @@ function capped(text: string, limit = 6000): string {
   return `${text.slice(0, limit)}\n… truncated. Narrow it down or ask about one part of the window.`;
 }
 
+/**
+ * Where a reading came from, and how fresh it is, said above the rows.
+ *
+ * The reply has nowhere else to learn either. Asked for unread mail "in
+ * the browser", the operator read the Mail app and reported five subjects
+ * as today's unread: the newest was 173 days old and three had been read.
+ * The app had stopped syncing months before and nothing in the result
+ * said so. Staleness is a count the script already made (the leading
+ * "N days ago"), so it is stated here and not left to be noticed.
+ */
+/**
+ * How many days old the newest message in the inbox is, or null when the
+ * result does not say. Read from the line the script opens with, which
+ * counts the whole inbox. Not from the rows: for unread_emails those are
+ * the unread ones only, and "the newest message there is 30 days old" was
+ * said of a healthy inbox with two old newsletters left unread.
+ */
+function newestAge(recipe: Pick<Recipe, "dated">, text: string): number | null {
+  if (!recipe.dated) return null;
+  const head = /^Inbox: \d+ messages?, newest (-?\d+) days ago$/m.exec(text);
+  return head ? Number(head[1]) : null;
+}
+
+/**
+ * The same two facts for the person, as a notice beside the reply. The
+ * line above is for the model, and replayed on the 4B with it in place
+ * the reply gave the ages and still called the Mail app's inbox "your
+ * email inbox" to someone who had asked about their browser. A notice is
+ * the harness speaking, so it is said whether or not the model says it.
+ */
+export function sourceNotice(recipe: Pick<Recipe, "reads" | "dated">, text: string): string {
+  const newest = newestAge(recipe, text);
+  return (
+    `Read the ${recipe.reads} app on this Mac, not a web page.` +
+    (newest !== null && newest > 2 ? ` The newest message in that inbox is ${newest} days old.` : "")
+  );
+}
+
+export function sourceLine(recipe: Pick<Recipe, "reads" | "dated">, text: string): string {
+  const from = `From the ${recipe.reads} app on this Mac — not a web page, and not a connected account.`;
+  const newest = newestAge(recipe, text);
+  if (newest === null) return from;
+  return newest > 2
+    ? `${from} The newest message in that inbox is ${newest} days old: the ${recipe.reads} app is not showing recent mail, so say how old this is and do not present it as new.`
+    : from;
+}
+
+/**
+ * A proposed plan, as the person reads it in the thread.
+ *
+ * Said by the harness, with the steps in it: the card under the reply is
+ * where the plan is run, changed or discarded, but a surface with no card
+ * (the terminal, an API client) still has to show what would happen.
+ */
+export function planReply(summary: string, steps: Array<{ summary: string }>): string {
+  return (
+    `Here is what I would do. Nothing has run yet.\n\n${summary}\n` +
+    steps.map((s, i) => `${i + 1}. ${s.summary}`).join("\n") +
+    `\n\nIt is waiting for you: run it, change it, discard it, or have me try again.`
+  );
+}
+
+/**
+ * Offer a script the person saved, as a plan of one step waiting to run.
+ *
+ * The same thing whether the model picked the script by name or the
+ * harness matched the request to it (agent.ts): a card that says which
+ * script it is and can be run with one press, because this text has run
+ * before and was kept by the person now reading it.
+ */
+export function offerSavedRecipe(
+  saved: SavedRecipe,
+  request: string | null,
+): { reply: string; widget: Extract<Widget, { type: "plan" }> } {
+  const summary = saved.summary || `Run the ${saved.name} script`;
+  const steps = [{ summary: saved.summary || saved.name, script: saved.script, kind: saved.kind }];
+  const plan = proposePlan({
+    sessionId: currentSessionId || null,
+    summary,
+    kind: saved.kind,
+    steps,
+    request,
+    source: `saved:${saved.name}`,
+  });
+  return {
+    reply:
+      `You saved a script for this: ${saved.name}. Nothing has run yet.\n\n${summary}\n\n` +
+      `It is waiting for you: run it, look at it first, or have me try again and write a new plan.`,
+    widget: { type: "plan", id: plan.id, summary, steps, request: plan.request, source: plan.source },
+  };
+}
+
 const recipeTool: BuiltinTool = {
   name: "mac_recipe",
   // Rebuilt on read so a recipe saved this session is offered on the next turn
@@ -626,23 +822,14 @@ const recipeTool: BuiltinTool = {
           : `"${name}" failed: ${out.output}`;
       }
 
-      const plan = proposePlan({
-        sessionId: currentSessionId || null,
-        summary: saved.summary || `Run the ${name} recipe`,
-        kind: saved.kind,
-        steps: [{ summary: saved.summary || name, script: saved.script, kind: saved.kind }],
-      });
+      const offered = offerSavedRecipe(saved, turnMessageSaid());
       return {
         text:
           `"${name}" is saved but not marked safe to run on its own` +
           `${autoRunEnabled() ? "" : ", and automatic running is off"}, so it is ` +
-          `waiting for the user to approve it. Tell them briefly and call nothing else.`,
-        widget: {
-          type: "plan",
-          id: plan.id,
-          summary: saved.summary || `Run the ${name} recipe`,
-          steps: [{ summary: saved.summary || name, script: saved.script, kind: saved.kind }],
-        },
+          `waiting for the user to approve it. Call nothing else.`,
+        widget: offered.widget,
+        final: offered.reply,
       };
     }
     if (recipe.needsAx && !assistiveAccessGranted()) {
@@ -658,6 +845,27 @@ const recipeTool: BuiltinTool = {
     // freely.
     const raw = Number(args.count ?? 5);
     const count = Number.isFinite(raw) ? Math.min(50, Math.max(1, Math.floor(raw))) : 5;
+
+    // A recipe that reads one app, asked for another: it cannot, and
+    // running it anyway answers a different question under the same name.
+    // Held to the app's own name, not to a shared substring: "Gmail" and
+    // "Proton Mail" hold "mail" and are not the Mail app. A placeholder is
+    // no argument at all.
+    const elsewhere = String(args.app ?? "").trim();
+    const asked = elsewhere
+      .toLowerCase()
+      .replace(/^the\s+/, "")
+      .replace(/^apple\s+/, "")
+      .replace(/(?:\s+app|\.app)$/, "");
+    if (recipe.reads && asked && !/^(?:null|none|n\/a|undefined)$/.test(asked) && asked !== recipe.reads.toLowerCase()) {
+      return {
+        text:
+          `${name} reads the ${recipe.reads} app on this Mac. It cannot read ${elsewhere}, and nothing was read. ` +
+          `Tell the user that: what a web page shows is not something a recipe can read. ` +
+          `Offer the ${recipe.reads} app instead, or their connected account through the ${recipe.reads === "Mail" ? "mail" : "planner"} agent.`,
+        notice: `Nothing was read: ${name} reads the ${recipe.reads} app, not ${elsewhere}.`,
+      };
+    }
 
     // The resolved name goes into the script, never what the model wrote. That
     // is what keeps the interpolation safe: the string comes from the system's
@@ -692,7 +900,17 @@ const recipeTool: BuiltinTool = {
         timeout: config.shellTimeoutMs,
         maxBuffer: 4_000_000,
       });
-      return capped((stdout || stderr).trim()) || "(nothing to report)";
+      const text = capped((stdout || stderr).trim());
+      // An empty reading still says where it looked: "(nothing to report)"
+      // alone reads as "you have no mail".
+      if (!text) {
+        return recipe.reads
+          ? { text: `${sourceLine(recipe, "")}\n\n(nothing there)`, notice: sourceNotice(recipe, "") }
+          : "(nothing to report)";
+      }
+      return recipe.reads
+        ? { text: `${sourceLine(recipe, text)}\n\n${text}`, notice: sourceNotice(recipe, text) }
+        : text;
     } catch (err) {
       const message = osascriptFailure(err);
       return permissionHint(message) ?? `Could not read that: ${message}`;
@@ -712,6 +930,70 @@ const STEP_ACTIONS: Array<[key: string, kind: ActionKind]> = [
   ["type_text", "type"],
   ["press", "key"],
 ];
+
+/** The app's own executable, not anything under its bundle: a widget or
+ *  share extension runs from inside Notes.app with Notes closed, and
+ *  matched on the bundle alone a cold launch was reported as "already
+ *  open" for sixteen of thirty stock apps. */
+const processPattern = (name: string) => `/${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.app/Contents/MacOS/`;
+
+/** Asked of the process table: "already open" is a fact about the machine
+ *  the person can check. */
+async function appIsRunning(name: string): Promise<boolean> {
+  try {
+    // -a: pgrep leaves out its own ancestors unless told not to, and the
+    // terminal or editor Enio was started from is one. Asked about it,
+    // Enio said it was not open and proposed opening it.
+    await run("pgrep", ["-a", "-f", processPattern(name)], { timeout: 5_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Which installed app a name means, for opening.
+ *
+ * One answer for the tool and for a plan's `open` step: a plan used to
+ * take the name as the model wrote it, so "the browser" in a plan was
+ * handed to `open -a` as those two words while the tool beside it knew to
+ * ask which browser is the person's.
+ */
+async function resolveOpenTarget(asked: string): Promise<{ ok: true; name: string; note: string } | { ok: false; reason: string }> {
+  const apps = await installedApps();
+  let wanted = asked;
+  let note = "";
+  // A browser is the person's, not the model's pick (browsers.ts). The
+  // running list is asked for only here: it needs Automation, and an
+  // ungranted machine still has a default browser to go by.
+  // By the short name too: the model writes "Chrome" and "Edge", not
+  // the name on the bundle.
+  // Not when what was written is already an installed app's whole name:
+  // "Firefox Nightly" holds "firefox" and is not Firefox.
+  const exact = apps.some((a) => a.toLowerCase() === wanted.trim().toLowerCase());
+  const short = anyBrowser(wanted) || exact ? [] : browsersNamed(`open ${wanted}`);
+  if (short.length === 1 && wanted.trim().split(/\s+/).length <= 2) wanted = short[0]!;
+  if (anyBrowser(wanted) || isBrowser(wanted)) {
+    let running: string[] = [];
+    try {
+      running = await runningApps();
+    } catch {
+      /* no list: the default decides */
+    }
+    const choice = chooseBrowser({
+      asked: wanted,
+      message: turnMessageNow(),
+      running,
+      installed: apps,
+      dflt: await defaultBrowser(),
+    });
+    if (choice.name === null) return { ok: false, reason: choice.why };
+    if (choice.why) note = ` (${choice.why}${isBrowser(wanted) && choice.name.toLowerCase() !== wanted.trim().toLowerCase() ? `, not ${wanted.trim()}` : ""})`;
+    wanted = choice.name;
+  }
+  const resolved = resolveApp(wanted, apps, "installed");
+  return resolved.ok ? { ok: true, name: resolved.name, note } : { ok: false, reason: resolved.reason };
+}
 
 const openAppTool: BuiltinTool = {
   name: "open_app",
@@ -739,25 +1021,59 @@ const openAppTool: BuiltinTool = {
    * recorded on the `open` plan action.
    */
   async run(args) {
-    const apps = await installedApps();
-    const resolved = resolveApp(String(args.app ?? ""), apps, "installed");
-    if (!resolved.ok) return resolved.reason;
+    const target = await resolveOpenTarget(String(args.app ?? ""));
+    if (!target.ok) return target.reason;
+    const resolved = { name: target.name };
+    const note = target.note;
+    const pattern = processPattern(resolved.name);
+    const wasOpen = await appIsRunning(resolved.name);
+
+    // The person did not ask for this app to be opened: the model chose
+    // to, on the way to something else. The harness says so on the call
+    // (agent.ts, `asked`), never the model. Nothing runs here.
+    if (args.asked === false) {
+      // Already open: there is nothing to do and nothing to approve, and
+      // the model can go on to read from it. Not brought to the front --
+      // that is a change to the screen nobody asked for.
+      if (wasOpen) {
+        return (
+          `${resolved.name}${note} is already open. Nothing was opened or brought forward: the user did not ask for that. ` +
+          `Carry on with what they asked: read from it, or propose the plan.`
+        );
+      }
+      const summary = `Open ${resolved.name}${note}`;
+      const compiled = compileAction("open", resolved.name, resolved.name);
+      if (!compiled.ok) return compiled.reason;
+      const steps = [{ summary, script: compiled.script }];
+      const request = turnMessageSaid();
+      const plan = proposePlan({ sessionId: currentSessionId || null, summary, kind: "applescript", steps, request, source: "open" });
+      return {
+        text:
+          `Not opened. The user did not ask to open ${resolved.name}, so it is proposed as a plan and waiting for them to run it. ` +
+          `Do not call another tool.`,
+        widget: { type: "plan", id: plan.id, summary, steps, request: plan.request, source: "open" },
+        final:
+          `To do that I would open ${resolved.name}${note}. It is not open, and you did not ask me to open it, so nothing has run: ` +
+          `it is waiting for you below. Run it and say "go on", or discard it.`,
+      };
+    }
+
     try {
       await run("open", ["-a", resolved.name], { timeout: 15_000 });
     } catch (err) {
       return `Could not open ${resolved.name}: ${(err as Error & { stderr?: string }).stderr?.trim() || (err as Error).message}`;
     }
+    if (wasOpen) return `${resolved.name}${note} was already open — brought to the front.`;
 
     // `open` exiting 0 means LaunchServices accepted the request, not that
     // the app came up. The status check is the process table -- matched on
     // the bundle path, which survives process names that differ from app
     // names -- because "Opened X" from a tool should mean X is running, not
     // that a launch was requested.
-    const pattern = `/${resolved.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.app/`;
     for (let i = 0; i < 6; i++) {
       try {
-        await run("pgrep", ["-f", pattern], { timeout: 5_000 });
-        return `Opened ${resolved.name} — running.`;
+        await run("pgrep", ["-a", "-f", pattern], { timeout: 5_000 });
+        return `Opened ${resolved.name}${note} — running.`;
       } catch {
         await new Promise((r) => setTimeout(r, 500));
       }
@@ -868,6 +1184,7 @@ const proposeTool: BuiltinTool = {
     // it is not in the process list yet -- by the time that step runs, the
     // open step before it will have started the app.
     const opened: string[] = [];
+    const openedAs = new Map<string, string>();
 
     for (const s of raw) {
       const stepSummary = String(s?.summary ?? "").trim();
@@ -876,31 +1193,55 @@ const proposeTool: BuiltinTool = {
       if (action) {
         const [key, kind] = action;
         let appName: string;
+        let renamed = "";
 
         if (kind === "open") {
-          // Opening is the one action whose app need not be running; the name
-          // is taken as written, and the compiled script is what the user
-          // approves.
-          appName = String(s[key]).trim() || String(s.app ?? lastApp).trim();
-          if (appName) opened.push(appName);
+          // Opening is the one action whose app need not be running. The
+          // name is resolved against what is installed, as open_app does:
+          // taken as written, "the browser" reached `open -a` as those
+          // two words, and a plan the user approved failed at its first
+          // step on a name the tool beside it would have understood.
+          const target = await resolveOpenTarget(String(s[key]).trim() || String(s.app ?? lastApp).trim());
+          if (!target.ok) return `Cannot propose "${stepSummary}": ${target.reason}`;
+          appName = target.name;
+          opened.push(appName);
+          // What the model wrote may be the short name; later steps that
+          // say it again mean this app.
+          const written = String(s[key]).trim();
+          if (written && written.toLowerCase() !== appName.toLowerCase()) openedAs.set(written.toLowerCase(), appName);
+          // Another app than the one written (the person's browser, not
+          // the model's pick): the step says which, in the harness's
+          // words, and a script elsewhere in the plan that still drives
+          // the one the model wrote would open both. Sent back to be
+          // written for the app that will open.
+          if (target.note) {
+            const others = raw.filter((o) => o !== s).map((o) => [o?.script, o?.shell, o?.python].filter((v) => typeof v === "string").join("\n")).join("\n");
+            if (written && new RegExp(`\\b${written.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(others) && !new RegExp(appName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(written)) {
+              return `Cannot propose "${stepSummary}": this would open ${appName}${target.note}, and another step is written for ${written}. Write every step for ${appName}.`;
+            }
+            renamed = `Open ${appName}${target.note}`;
+          }
         } else {
           const wanted = String(s.app ?? lastApp);
           const resolved = resolveApp(wanted, running);
-          const openedMatch = opened.find((o) => o.toLowerCase() === wanted.trim().toLowerCase());
+          const openedMatch =
+            openedAs.get(wanted.trim().toLowerCase()) ?? opened.find((o) => o.toLowerCase() === wanted.trim().toLowerCase());
           // Refused whole rather than stored with a broken step: a plan the
           // user is asked to approve should never contain one that cannot
           // work.
           if (!resolved.ok && !openedMatch) {
             return `Cannot propose "${stepSummary}": ${resolved.reason}`;
           }
-          appName = resolved.ok ? resolved.name : openedMatch!;
+          // The app this plan opens, before one that merely shares the
+          // written name and happens to be running.
+          appName = openedAs.get(wanted.trim().toLowerCase()) ?? (resolved.ok ? resolved.name : openedMatch!);
         }
         lastApp = appName;
 
-        const compiled = compileAction(kind, appName, String(s[key]));
+        const compiled = compileAction(kind, appName, kind === "open" ? appName : String(s[key]));
         if (!compiled.ok) return `Cannot propose "${stepSummary}": ${compiled.reason}`;
         steps.push({
-          summary: stepSummary || `${key} ${String(s[key])}`,
+          summary: renamed || stepSummary || `${key} ${String(s[key])}`,
           script: compiled.script,
         });
         continue;
@@ -954,17 +1295,21 @@ const proposeTool: BuiltinTool = {
       summary,
       kind: "applescript",
       steps,
+      request: turnMessageSaid(),
     });
 
     // The widget is what the user acts on; the text is what the model reads,
     // and it says the work is not done so the model does not report success.
+    // The turn ends here, on the harness's account of the plan (`final`):
+    // told to "reply in a sentence and stop", the model sometimes called
+    // another tool instead, and sometimes reported the plan as done.
     return {
       text:
         `Proposed, not run. The user has been shown this plan and must approve it:\n\n` +
         steps.map((s, i) => `${i + 1}. ${s.summary}`).join("\n") +
-        `\n\nTell them briefly what you are proposing and that it is waiting for them. ` +
-        `Do not try to run it yourself and do not call another tool.`,
-      widget: { type: "plan", id: plan.id, summary, steps },
+        `\n\nDo not try to run it yourself and do not call another tool.`,
+      widget: { type: "plan", id: plan.id, summary, steps, request: plan.request },
+      final: planReply(summary, steps),
     };
   },
 };

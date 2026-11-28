@@ -38,6 +38,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { listAccounts } from "@/lib/accounts";
 import {
   composePipeline,
   deletePipeline,
@@ -134,6 +135,9 @@ function layout(nodes, edges) {
   });
 }
 
+/** The steps that use a connected account, and so can be told whose. */
+const ACCOUNT_STEPS = new Set(["read-email", "send-email", "calendar"]);
+
 export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipes = false, draft = null }) {
   const [saved, setSaved] = useState([]);
   const [view, setView] = useState("list"); // list | canvas
@@ -186,6 +190,25 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipe
   const counter = useRef(0);
 
   const byId = useMemo(() => new Map(abilities.map((a) => [a.id, a])), [abilities]);
+  // The connected accounts, for the picker on a step that uses one. Asked
+  // for each time the dialog opens: accounts are connected and removed in
+  // another panel while this one is closed.
+  const [accounts, setAccounts] = useState([]);
+  // Whether the list is known. Until it is, a step's stored account cannot
+  // be called "no longer connected": it has simply not been looked up yet.
+  const [accountsKnown, setAccountsKnown] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    setAccountsKnown(false);
+    listAccounts()
+      .then((d) => {
+        // Only the kind a step can use: an account connected another way
+        // is listed in Connections and cannot run a step.
+        setAccounts((d.accounts ?? []).filter((a) => a.provider === "appsscript"));
+        setAccountsKnown(true);
+      })
+      .catch(() => setAccounts([]));
+  }, [open]);
   const composable = abilities.filter((a) => a.availability === "available" && a.id !== "chat");
 
   const refresh = useCallback(() => {
@@ -279,6 +302,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipe
             title: byId.get(n.abilityId)?.title ?? n.abilityId,
             icon: byId.get(n.abilityId)?.icon,
             prompt: n.prompt,
+            account: n.account,
             status: null,
           },
         })),
@@ -298,7 +322,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipe
   useEffect(() => {
     if (!open || !draft?.nodes?.length) return;
     toFlow(
-      draft.nodes.map((n) => ({ id: n.id, abilityId: n.abilityId, prompt: n.prompt, position: undefined })),
+      draft.nodes.map((n) => ({ id: n.id, abilityId: n.abilityId, prompt: n.prompt, account: n.account, position: undefined })),
       draft.edges ?? [],
     );
     setComposedFrom(draft.request ?? "");
@@ -324,6 +348,9 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipe
         id: n.id,
         abilityId: n.data.abilityId,
         prompt: n.data.prompt,
+        // Left out when not set, so a step with no choice stays a step
+        // with no field.
+        ...(n.data.account ? { account: n.data.account } : {}),
         position: n.position,
       })),
       edges: edges.map((e) => ({ from: e.source, to: e.target })),
@@ -346,6 +373,7 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipe
             id: n.id,
             abilityId: n.abilityId,
             prompt: n.prompt,
+            ...(n.account ? { account: n.account } : {}),
             title: byId.get(n.abilityId)?.title ?? n.abilityId,
           })),
           edges: g.edges,
@@ -997,6 +1025,45 @@ export function PipelinesDialog({ open, onOpenChange, abilities = [], showRecipe
                       )
                     }
                   />
+                  {ACCOUNT_STEPS.has(selected.data.abilityId) ? (
+                    <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+                      Account
+                      <select
+                        className="rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+                        value={selected.data.account ?? ""}
+                        disabled={running}
+                        onChange={(e) =>
+                          setNodes((ns) =>
+                            ns.map((n) =>
+                              n.id === selected.id
+                                ? { ...n, data: { ...n.data, account: e.target.value || undefined } }
+                                : n,
+                            ),
+                          )
+                        }
+                      >
+                        <option value="">Not set (use the default)</option>
+                        <option value="agent">Enio's own</option>
+                        <option value="user">Mine</option>
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.label ? `${a.label} (${a.email})` : a.email}
+                          </option>
+                        ))}
+                        {/* A choice whose account has since been removed is
+                            still shown, so that saving does not quietly
+                            turn it into another one. The step says why it
+                            cannot run when it is run. */}
+                        {selected.data.account &&
+                        !["agent", "user"].includes(selected.data.account) &&
+                        !accounts.some((a) => a.id === selected.data.account) ? (
+                          <option value={selected.data.account}>
+                            {accountsKnown ? "An account that is no longer connected" : "Loading…"}
+                          </option>
+                        ) : null}
+                      </select>
+                    </label>
+                  ) : null}
                   {selected.data.reply ? (
                     <div className="min-h-0 flex-1 overflow-y-auto rounded-md border bg-muted/40 p-2">
                       <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">

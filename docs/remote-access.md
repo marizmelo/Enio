@@ -23,6 +23,8 @@ The token is a 32-byte random value in `~/.enio/token`, mode 0600, generated on 
 
 Auth is enforced even on loopback, deliberately. A web page you have open *can* issue requests to `127.0.0.1`, and origin checks aren't a real boundary against no-cors posts or DNS rebinding.
 
+What the key can do is what the app can do, and that includes the outbox: whoever holds it can list the messages Enio has written (`GET /outbox`), edit one, and send one (`POST /outbox/<id>/send`) when sending is switched on with `ENIO_EMAIL_SEND=1`. No route writes a new message — one can only come from a turn — but a waiting message is one request away from being sent, so treat the key as you would the mailbox's own password.
+
 `/ping` is the one unauthenticated route. It returns `{"ok":true}` and nothing else — no tool count, no model, no version — so clients can check liveness before they have a key.
 
 ---

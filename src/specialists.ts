@@ -191,7 +191,15 @@ export const SPECIALISTS: Specialist[] = [
       `Before drafting a reply, read the message you are replying to. Check who ` +
       `it is actually from — the display name is not the address, and a reply ` +
       `sent to the wrong person cannot be recalled.\n\n` +
-      `Show the user any message you intend to send and get agreement first.`,
+      // What this said before -- "show the user any message you intend to
+      // send and get agreement first" -- was the instruction that produced
+      // a draft written out in the reply, which nothing could then send
+      // and the harness could not tell from an invented inbox. Showing
+      // and agreeing are what send_email does now.
+      `To write a message, or to change one, call send_email with the whole ` +
+      `message. That does not send it: the user is shown it and sends it ` +
+      `themselves. Never write a message out in your reply, and never say ` +
+      `one was sent.`,
     tools: ["search_email", "read_email", "send_email", "search_drive", "read_drive", "read_skill"],
   },
   {
@@ -236,7 +244,8 @@ export const SPECIALISTS: Specialist[] = [
       "Creating or changing things in Mac apps: open an app, write a note, set a reminder or an alarm, check the screen, control Finder or Music, run a Shortcut.",
     systemPrompt:
       `You operate the user's Mac.\n\n` +
-      `open_app opens or fronts an app by name; that alone needs no plan. ` +
+      `open_app opens an app the user asked to open. When they did not ask ` +
+      `for it, the open is put to them as a plan and nothing runs. ` +
       `The machine changes between messages — the user opens and closes ` +
       `things themselves — so never say an app is open or closed from ` +
       `memory. Asked to open something, call open_app even if it seems ` +

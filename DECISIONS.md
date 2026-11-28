@@ -5072,3 +5072,913 @@ reason. The table is frozen at load.
   without, are still kept by hand where they are used. So is the list in
   `assets.ts` of steps a legacy file's origin is read from, which leaves
   out `edit_file`.
+
+### "My" and "your" choose whose account is read, for one turn (November 2026)
+
+**Chose:** the harness reads a possessive from the person's own message
+(`ownerAsked`, `src/accounts.ts`): "check your email" reads Enio's own
+account, "what's on my calendar" reads theirs. It applies to that turn, and
+only to reading mail and the calendar. Nothing is stored on the
+conversation, and a send, a calendar entry or a Drive search goes where it
+would have gone.
+
+**What was wrong.** Both words were thrown away as naming nothing. "Check
+your email" fell through to "reading means the person's account" and read
+their mailbox, unless the model added an `account` argument of its own
+accord. That argument could not carry it either: "your" was not understood
+at all, and "my" was read as the person's although the model is the one
+writing it, and in its own voice "my" is Enio's.
+
+**Why the person's message.** It is the one place the two words have a
+fixed meaning. Read from the model's argument they depend on whose voice
+it wrote in, so a first- or second-person word there is now dropped
+(`speakerRelative`); a label, an address, "enio's" and "the user's" still
+name an account.
+
+**What review took back.** Two rounds, each with a skeptic on every
+finding; 73 findings, none refuted.
+
+- *Kept on the conversation.* Built that way first, so that "read the
+  second one" would open a message from the mailbox just listed. Review
+  showed what else rode along: after "check my email", a later "send it"
+  went out from the person's own address where it had gone from Enio's,
+  and after "anything in your inbox?" a later "add lunch Thursday" was
+  written to Enio's calendar. A grammar's guess had become where mail is
+  sent from. The follow-up is solved where it belongs: a listed message
+  remembers its mailbox (`listedIn`, `tools/mail.ts`).
+- *Steering every call.* `pickAccount` honours the asked owner for
+  `mail.read` and `calendar.read` only. Not writes or sends, which a wrong
+  read must not reach; and not Drive, todos or contacts, whose results do
+  not say whose account they came from.
+- *"switch to your account", "go back to mine" as a stored move.* Added in
+  the rework as the deliberate version, and removed: "go back to your
+  email and fix the typo" stored a move too, and the next send followed.
+  The stored move stays what it was, the chip and the account's name.
+- *Tidying the switch by name.* The name before "email" was limited to
+  words that could be one, to stop "Look in my documents folder for the
+  calendar export" asking for an account called "documents folder for
+  the". It stored `work` for an account labelled `old work`, and "use my
+  work email to reply to Ana" stopped switching, so the reply left from
+  Enio's address. The reader is as it was; only the notice is narrowed, to
+  a short name behind "use" or "switch to".
+
+**The rule that came out of that:** a stored choice is never read by a
+grammar that was loosened here. Everything this change guesses at lasts
+one turn and reads.
+
+**How a misread is kept small:**
+- Words that are probably not the person's own are set aside first:
+  quotations, what follows a reporting verb ("Google says check your
+  email", where "your" is the user, read exactly backwards) or a colon,
+  anything on a second line, anything over 400 characters.
+- Such a cut may silence a reading and never choose one. If what was set
+  aside names the other owner, the answer is nothing: it may have been the
+  person correcting themself.
+- A message that names both owners chooses neither.
+- A message that opens by having Enio write to someone never reads as
+  Enio's: "your" in it is the recipient.
+
+**Measured, and how.** Four sets of about 110 messages each, written by
+models playing users from different angles and never shown the rule;
+each labelled a second time, blind, and kept only where both readers were
+sure. The rule was written against one, scored on the next, changed, and
+scored on a new one:
+
+| | their account found | Enio's found | traps misread |
+|---|---|---|---|
+| first rule, on set 2 (unseen) | 12 of 37 | 8 of 32 | 11 of 45, 3 as Enio's |
+| reworked, on set 3 (unseen) | 15 of 30 | 16 of 29 | 1 of 51, as theirs |
+| again, on set 4 (unseen) | 22 of 30 | 19 of 28 | 1 of 49, as Enio's |
+| as committed, sets 1 to 3 | 78 of 99 | 68 of 89 | 2 of 153, both as theirs |
+| as committed, set 4 | 20 of 30 | 17 of 28 | 0 of 49 |
+
+The first row is the lesson: tuned on one set, a grammar found a quarter
+of the requests in the next. The last two rows are lower than the row
+above them on purpose: "reply from my account" and "send it from yours"
+were found, and are no longer looked for, since sending is not steered.
+
+**What the numbers do not show:**
+- **Nobody real wrote these.** The phrases are models imagining users.
+- **Set 4 is unseen for recall only.** Its one misread trap ("How often do
+  you look at your inbox when I'm not asking?") was fixed afterwards, and
+  the rule changed again after both reviews, so no clean held-out figure
+  exists for the committed rule on either measure.
+- **The reviews found whole classes no set held**: text Enio is asked to
+  write to someone, what a site or a person said, talk ("how about
+  yours?"), questions about the feature ("does your calendar support
+  recurring events?"), a complaint about the last read ("that was in your
+  inbox, I wanted mine"). Each is closed. Known and left: a draft called
+  "your email" ("check your email again, you got the date wrong"), a
+  short paste with no mark of being one, and reporting verbs the list does
+  not hold. There will be others.
+- **The grammar was never the whole of it.** These sets score a rule on a
+  sentence. What the model does with the account afterwards was not looked
+  at until the run below, and that is where the wrong mailbox was.
+
+**Why a wrong read is cheap.** It is one turn's read of the other mailbox
+or calendar, and those results name whose it was. Nothing is stored,
+nothing is sent, nothing is written.
+
+**Also changed, found on the way:**
+- The mail agent's role said which account was "in use" before the turn's
+  account was set, so after any switch the prompt named the previous one.
+  The account is settled before the role is built, and an account read
+  only because of a "your" is marked "being read for this request".
+- An account labelled with an owner word ("personal") is found by its
+  label. With two of the person's accounts it was whichever came first.
+- "use my own account" was read as Enio's: "own" as a name.
+- The correction for calling Enio's account "yours" is not armed when the
+  person asked for Enio's: its text says nothing of theirs is connected.
+
+**On the model.** `scripts/whose-account-live.mjs`: the real turn, router
+and all, on the 4B, with the Apps Script bridge replaced by three fake
+mailboxes (Enio's, the person's, the person's "work") so that which
+account each call reached is recorded. Short conversations that I wrote;
+the model is close to deterministic, so passes mostly repeat.
+
+| | right account | no call | wrong account |
+|---|---|---|---|
+| the commit before this change, 1 pass (15 turns) | 6 | 5 | 4 |
+| the change as first finished, 1 pass (15 turns) | 6 | 6 | 3 |
+| with the two fixes below, 3 passes (54 turns) | 35 | 15 | 4 |
+
+The last row has a fifth conversation the first two did not, for
+requests the grammar does not hear. The 15 with no call, read one by one:
+8 are fair answers from a message opened earlier in the conversation; 3
+are "any new mail?" answered without looking, one of them from Enio's
+messages with no word of whose they were (no owner was asked, so nothing
+here applies); 3 are the router sending "any news from the bank?" to a
+web search; 1 is the harness's own "ask again and I will check". Of the 4
+wrong, 3 are one phrase three times ("has Lena replied to you yet?": the
+grammar does not hear it and the model named no account, so the person's
+inbox was searched, as before this change) and 1 is the model opening
+the wrong message altogether.
+
+The middle row is the finding. The grammar chose correctly on every turn
+it was meant to hear, and three still read the wrong mailbox:
+
+- *The model fills in `account` when nobody named one.* It is for "when
+  the user named one". Asked "check my email" in a conversation on Enio's
+  account it passed "enio's", the account its own prompt had just named;
+  on "ok now check my email" it passed "work"; on "any new mail?" it
+  repeated the "enio's" of its previous call. A named account outranks
+  everything. No test showed this because every scripted model passed
+  `{}`.
+- *It answers from the conversation instead of looking.* After a look at
+  the work inbox, "did anyone write to you?" was answered "Yes, Tom
+  Hale…" from that listing; "check my email" on Enio's account was
+  answered by opening a message from Enio's listing again. The picker had
+  the right account and no call reached it.
+
+**Two fixes.**
+
+- *The model's account needs the person's words behind it*
+  (`personNamed`). Kept when the message holds the account's label or
+  address (or the distinctive part of its domain), or, for Enio's own
+  account and for an owner word, when the message speaks of that owner
+  ("your", "yours", "to you", "Enio"; "my", "mine", "me") and the
+  possessive rule did not hear the other one. Dropped otherwise, and the
+  result then says whose mailbox was read. Not in an automation step,
+  whose text is nobody's words: there the argument stands as before.
+- *A mailbox asked for and not looked in is read by the harness*
+  (`unreadAsked`), the way the calendar denial already is: the search is
+  seeded and the answer written from it. Known by account, not by tool,
+  so opening a message in the mailbox that was asked for is not a miss.
+
+**What review took back, again.** The first version of the first fix
+held the argument to the literal name. A third review (22 findings, 8
+refuted as no worse than before, 14 standing) showed the cost: the
+model's "enio's" is also what carries every request the grammar misses.
+Against the labelled phrases, of the 32 requests for Enio's that
+`ownerAsked` does not hear, the literal rule kept the model's "enio's"
+for 3; it had been 32 before any of this. It also dropped the argument
+in automation steps and watches, which run unattended and had no other
+way to reach Enio's account. As committed: 30 of those 32, all 31 of the
+missed requests for the person's own keep "user's", and none of the 98
+heard as the person's lets "enio's" through. Of 200 phrases that ask for
+no mailbox, 57 hold a word that would let a model's "enio's" stand
+("Your email to the landlord was too long"). That is the exposure left;
+before, it was all 200.
+
+The lesson is the earlier one from the other side. A grammar must not
+store a choice, and it must not be the only thing allowed to make one
+either: where it is silent the model's reading is the best there is. The
+check that survives is the narrow one, the model's reading against the
+person's words, or with nothing of theirs behind it.
+
+**Seen on the way and left**, none of it this change's:
+- *A request to send fails in a conversation that has read mail.* Fixed
+  next: see "A message being written is not mail that was never read".
+- *The names notice joins a name to the next sentence.* "Not found in
+  this turn's sources: Lena Would", on most turns that open a message.
+- *The mail tools are decided when the module loads.* The calendar tools
+  are rebuilt with the registry; these are not, so the first account
+  connected while the app runs has no mail tools until a restart.
+- *A bare follow-up goes to the researcher.* "anything new?" and "any
+  news from the bank?" in a mail conversation were web searches.
+
+**Not shown by this run:** five conversations that I wrote, on one model,
+with mailboxes of three messages. It is a check that the mechanism works
+end to end, not a rate. The fix after the third review, and the seeded
+search, have tests and mutation checks (34 of 34 caught) and have not
+been read by anyone independent.
+
+**Rejected:**
+- *Removing the `account` argument from the mail tools.* Proposed, then
+  kept: it is how a label said mid-sentence reaches the tool. The run on
+  the model showed what keeping it cost and it is now held to the
+  person's words (below), which is the same end by a smaller change: the
+  wire schema and its wording are as they were.
+- *Asking the model whose mailbox is meant*, as a closed choice of three.
+  It is the lever that would find the roundabout requests a grammar
+  misses, and it costs a model call on every mail turn. Worth it if the
+  misses turn out to matter in use; not measured.
+- *Steering writes when the possessive is unmistakable* ("put it on your
+  calendar, not mine"). Today the calendar READ in that turn looks at
+  Enio's and the entry is written to the conversation's, so the check and
+  the write can be on different calendars. Both results name whose. Left,
+  because "unmistakable" is what the grammar cannot promise.
+- *Steering Drive, todos and contacts*, until their results say whose
+  account was read and a listed Drive file remembers where it was listed,
+  as a message now does.
+
+**Not done:**
+- (Since done: the asked owner and the active account were one value each
+  for the process, so two turns at once could read each other's. They are
+  now kept per turn; see "A step of an automation is set to an account".)
+- A watch's prompt is wrapped by the harness in text ending in a colon, so
+  a possessive in a watch is never read. It behaves as it did.
+- Which mailbox a message was listed from is process memory: after a
+  restart, "read the second one" is sent to the conversation's account
+  again.
+- The Google tools do not say when the account they read is not the owner
+  that was asked for; only the mail tools do.
+- The planner has no seeded read for a calendar that was asked for and
+  not looked in. It did not need one in the run (6 of 6); the mail agent
+  did.
+- "has Lena replied to you yet?" and its kind stay unheard. Adding the
+  shape is a change to a measured grammar and wants its own scoring.
+
+
+### A message being written is not mail that was never read (November 2026)
+
+**Chose:** three changes, all found by replaying send requests on the 4B
+(`scripts/whose-account-live.mjs … send`). A draft the person asked for
+is shown and not withdrawn as an invented inbox email; a send the model
+wrote out as text is made when that text is its whole reply; and after a
+dry run the reply has to say the message is a draft.
+
+**What was wrong.** The mail agent is told to show what it intends to
+send and get agreement first. When it did, `quotedUnreadMail` took the
+draft for an email "presented but not read", told the model to open it
+with `read_email`, and the turn ended on "I answered that without looking
+anything up". On the commit before: "send ana@… a note saying I will be
+late" after mail had been read, 3 of 3; "make it shorter" after a draft.
+In a fresh conversation the whole reply was the line
+`send_email to=ana@example.net subject="…" body="…"`. And told "looks
+good, send it", it ran the dry run and answered "The email has been sent
+to Ana Costa".
+
+**The draft check, and why it took three versions.** A draft and an
+invented email have the same subject, greeting and sign-off. Two rules
+were written, and two independent reviews (30 findings, then 12; none
+refuted) each found ways to pass an invented inbox through them:
+
+- *Spared for what it lacked* (no From, no Date). "Reply to Ana that
+  eight works" answered with an invented "Hi Sam, bring your passport
+  number… Regards, Ana" has neither.
+- *Spared for an ask to send, an offer to draft, or a shared subject.*
+  "Shall I send a reply?" and "I can write a draft" are what the agent
+  says under mail it has just read aloud; and mail that arrives in a
+  thread has the draft's subject by construction. A dry run of a reply
+  to Ana, then "has Ana answered?", and "Subject: Re: Dinner — Hi Sam,
+  bring your card details" went through as a revision.
+
+As committed, a reply is spared only when it shows no sign of mail that
+arrived (`presentsReceivedMail`: a From that is not ours, a Date, "Ana
+wrote:", "her message:", a numbered list of From lines, "here is the
+latest email") and one of two things holds: it was asked for (a request
+to compose, or an offer to WRITE taken up by a message that is only the
+yes) and is announced as a draft outside any offer (`announcesDraft`);
+or it revises the draft the turn before left, greeting the same person
+(`sameMessage`). What is spared goes out under a notice that it is a
+draft Enio wrote and no email was read, which is true of anything this
+lets through.
+
+It is a heuristic and is recorded as one. Known to pass: an invented
+message that greets the same name as the draft on the table (a group
+greeting, "Hi Team"). Known to still withdraw a real draft: one
+introduced with no word for what it is ("Here is the email to Tom: …
+Shall I send it?"), a revision that changes both subject and greeting,
+and a request the verb list does not hold ("email Ana that…", "tell
+Ana…"). On the model, 1 of the 12 turns that showed a first draft was
+withdrawn. Nobody independent has read the third version.
+
+**A send written as text.** `keyValueCall` (`model.ts`) recovers
+`tool_name key="value" key=value` as a call, and only when that is the
+entire reply. The first version also took such a line among prose, and
+review showed the cost: "Here is the message I intend to send: [the
+line] Shall I send it?" was executed, which with sending switched on is
+a send nobody confirmed. Also refused: a reply that was cut off, an
+unknown or repeated key, a missing or empty required value, a value in
+typographic quotes or that is a placeholder, a backslash that could be
+a line break or part of a path, and any argument that is not a string, a
+number or a boolean.
+
+**After a dry run.** `dryRunReport` reads the settled reply as one of
+three things. It *claims* the message went: one corrective round with no
+tools (offered them, the model sent the draft again), then the harness's
+own sentence. It is *silent* about what happened: the answer is kept,
+since the turn may have been about something else, and the fact is
+added. Or it is *honest*: it calls the message a draft, or says outright
+that nothing was sent, which settles it whatever the message's own words
+are ("…saying the invoice was sent on Monday. Nothing was sent"). Asked
+that way round because the first version listed ways of saying "sent"
+and passed "it is on its way". The check runs once more on the final
+reply: a dry run made inside some other correction was otherwise
+followed by a reply nothing looked at.
+
+"Sent" with no send made at all, when sending was asked, is replaced by
+the harness with no corrective round. The generic correction there is
+"do it now with the tools you have", and review showed it firing on a
+draft whose body said "the invoice was sent on Monday": with sending on,
+that is the harness pushing a send.
+
+**On the model**, three passes of six conversations (60 turns), dry run
+throughout. The fresh send was made and reported as saved, 3 of 3. The
+reply after reading, and draft → shorten → send, worked 3 of 3. The
+conversation that first failed worked 3 of 3. "Yes, send it" after a dry
+run was answered "sent" each time and corrected each time. Plain
+questions holding a composing verb ("did Ana write anything about
+Friday?") were answered as before. One first draft in one pass was
+withdrawn.
+
+**Two weaknesses closed afterwards**, both in code that was there before
+any of this:
+- *The recipient allow-list was asked one question of the whole To
+  string*: does it end with the rule. "x@evil.example, ana@corp.com" ends
+  with "@corp.com" and both got the mail; Cc was never asked. To and Cc
+  are now taken apart into single addresses (`addressesIn`), every one is
+  checked, and what is rendered and sent is the parsed list.
+- *A send line quoted from an email could run.* The client recovers a
+  call the model wrote as text, and a line that is only
+  `send_email {…}` quoted out of a message is that text. A recovered
+  send now runs only when every address in its To and Cc is one the
+  person wrote in their own message this turn, or is in the draft the
+  turn before left; never in a step of an automation, whose text holds
+  other steps' output; and it is judged on the tool that would run, since
+  a near-miss of the name ("send_mail") is corrected to `send_email`
+  afterwards. The first version asked whether the turn "asked for mail to
+  be written" and review opened it both ways: "Write a summary of my
+  unread emails" let a quoted send through, and "email ana@… that the
+  meeting moved" had its own send refused.
+- *Left as it was:* every other acting tool recovered from quoted text
+  (`remember`, `add_event`, `write_file`, `run_command`) still runs. The
+  same rule by trait would refuse a recovered write after any read, and
+  recovering a call from text is the main repair path when the server's
+  parser misses, so it is not a change to make in passing. Neutralising
+  `<tool_call>` in tool results, as control tokens are, would close the
+  block form for all of them at the cost of files that hold the tag.
+- *On a connected account a Cc is not sent.* The bridge sends to To
+  only and the addresses are noted in the body. The result now says so.
+  A line break in a subject no longer becomes header lines in the draft.
+
+**Seen and left:**
+- *Revising after a dry run goes to another agent.* "add that I will
+  bring the wine" was routed to the planner and "add a PS that I am
+  sorry" to the operator, 3 of 3, and each answered with a draft or a
+  claim of its own that none of this looks at. Routing a follow-up by
+  its bare words is the hole already recorded.
+- *The dry run speaks to a developer.* The model repeats "set the
+  environment variable ENIO_EMAIL_SEND=1" to the person and then offers
+  to "send it now", which saves the same draft again.
+
+**Rejected:**
+- *More patterns.* Each of two rounds of them was broken within the
+  hour. The version kept is the one that asks for the fewest signs and
+  says so on the page.
+- *A draft as a tool call*, so that a shown draft has a call behind it
+  and the unread-mail check can stay strict: the structural answer, and
+  the one this should become. The mail agent is at its six tools, and
+  the honest form of it is `send_email` proposing and the person
+  approving in the app, as a plan is. A design of its own.
+- *Leaving the unread-mail check as it was.* It closed the hole it was
+  written for by breaking the thing the agent is told to do before every
+  send.
+
+
+### Computer use: the app that was asked for, and where a reading came from (November 2026)
+
+**What happened.** Asked "check my email on browser and see last 5 unread
+messages and give me a summary", the operator called `open_app` with
+"Safari" on a machine whose default browser is Chrome, then `mac_recipe`
+`recent_emails` with app "Safari", and reported five subjects as unread
+mail in the browser. Asked to "try again on chrome", `open_app` "Chrome"
+returned "Opened Chrome Remote Desktop Host Uninstaller — running.", whose
+window is an alert offering to remove Remote Desktop, and the same recipe
+ran again with app "Chrome". Both are in the trace as turns of one
+conversation. Four separate faults, none of them the model being unlucky:
+
+- *The wrong app.* `resolveApp` tried a unique PREFIX match before a
+  substring match. One installed name began with "chrome", and it was the
+  uninstaller.
+- *The wrong browser.* Which browser "browser" means was left to the
+  model, which picked the one it has read about most.
+- *The wrong source.* `recent_emails` reads the Mail app and takes no app.
+  The `app` argument was silently dropped, so Mail's inbox was returned
+  for a question about Safari, under a result that named neither.
+- *No dates.* The recipe returned subject and sender. Run for real, the
+  newest message in that Mail app was 173 days old and two were unread:
+  an account that stopped syncing months ago looks exactly like an inbox.
+
+**Chose:**
+
+- *A whole-word match ranks with a prefix, and a tool for an app gives
+  way to the app.* "Chrome" finds Google Chrome. Names that say they are
+  an uninstaller, updater, helper, handler and the like (a closed list,
+  read through run-together names such as ZoomUpdater) are set aside when
+  a real app also matches, and are never the answer to a word that did
+  not ask for one: with only the uninstaller installed, "chrome" is
+  refused and says what it found. Two real apps are still a question.
+- *The browser is the person's* (`browsers.ts`): the one they named, else
+  one already open, else the one the system opens links in. The model's
+  pick stands only when their words leave room for it; when they said
+  "browser" or named another, the answer is looked up, and the result
+  says which was used and why ("your default browser, not Safari").
+- *The default is asked of the system*, through NSWorkspace
+  (`URLForApplicationToOpenURL`), not read from the LaunchServices
+  preference file. On this machine that file has no entry for the https
+  scheme at all: the choice is recorded under a content type, in a shape
+  that has changed between releases. Asking sends no Apple Event and
+  needs no permission.
+- *A Mail recipe says it read the Mail app*, as its first line for the
+  model and as a notice for the person, and refuses when asked for
+  another app, saying that mail on a web page is not something a recipe
+  can read.
+- *Rows carry their age and read status*, counted in days by Mail itself
+  (a date string is in the machine's locale). When the newest is more
+  than two days old the result says the app is not showing recent mail.
+  `unread_emails` is new: "the last five unread" had no recipe.
+
+**What review took back** (24 findings on this and the next entry, none
+refuted):
+- *The list of tool words was too wide.* It also held host, agent, setup,
+  update, migration, diagnostics and cleaner, which are parts of real
+  apps' names: Migration Assistant was set aside so "assistant" silently
+  became Boot Camp Assistant, and "midi" was refused because Audio MIDI
+  Setup was "not the app itself". The list is now only words that mean a
+  tool for another app, and a word merely INSIDE a tool's name
+  ("installer" in Uninstaller) does not ask for the tool.
+- *"Already open" was said of apps that were not.* The check matched any
+  process under the bundle, and a widget extension runs from inside
+  Notes.app with Notes closed: sixteen of thirty stock apps. It now
+  matches the app's own executable.
+- *Six browsers are named with ordinary words.* "Be brave and open my
+  inbox" opened Brave. Arc, Brave, Edge, Opera, Orion and Zen count only
+  where a browser is being spoken of.
+- *Staleness was read off the rows shown.* For `unread_emails` those are
+  the unread ones, so two old newsletters in a healthy inbox made the
+  notice say the newest message was 30 days old. Every Mail recipe now
+  opens with one line counted from the whole inbox, and that line is what
+  is read. An empty reading keeps its source.
+- *"Gmail" passed as the Mail app*, by a shared substring. The app
+  argument is held to the app's own name.
+
+**On the model**, the failed turn replayed three times with the real
+memory, skills and settings and every operator tool replaced by a
+stand-in answering as the fixed tools answer (nothing opened, no mail
+read): each pass made the original two calls, got Chrome with the reason
+and the refusal with its notice, and replied that mail in the browser
+cannot be read and offered the Mail app. None presented anything as
+unread mail. The first attempt at this replay, without the bundled
+skills, did not reproduce the turn at all: the operator redirected to
+the mail agent. It is the `computer-control` skill's "show my emails"
+that makes the operator treat mail as its own.
+
+**Not fixed, and why:**
+- *There is still no way to read a page in the person's own browser.*
+  That is what was asked. The honest outcome today is the refusal. A read
+  of the front tab is possible (Safari exposes a tab's text; Chrome needs
+  a developer setting or the accessibility tree), and it would hand text
+  that strangers wrote to the one agent whose tools act. That is the
+  read/act boundary, and the Mail recipes already sit on the wrong side
+  of it. It wants its own decision, not a recipe added in passing.
+- *Nothing was proposed for approval.* `open_app` and the built-in reads
+  run directly, by design. Whether a request to do things should first
+  produce a plan is the owner's open question.
+- *The request belonged to the mail agent.* A connected account answers
+  "my last five unread" properly. The operator took it because of the
+  word "browser" and the skill above; routing was not touched.
+- *The substring tier is as loose as it was*: "word" still finds
+  Passwords when Microsoft Word is not installed.
+- *Only this turn's words are read for the browser.* "Use Firefox" two
+  messages ago, a skill or a project instruction is not, so "open the
+  browser again" goes to the open or default one.
+- *The notice reaches the chat window and the terminal only.* A step of
+  an automation, a watch and a non-streaming API reply have nowhere to
+  show one; the line in the result is all they get.
+
+### A step of an automation is set to an account (November 2026)
+
+**Chose:** a step that reads mail, sends mail or uses the calendar may
+carry `account`: "agent" (Enio's own), "user" (the person's), or one
+connected account's id. The person sets it, from a menu on the step or
+with `--account` at the command line. The run resolves it before the
+step's turn and the turn is held to it.
+
+**Why a step needs one.** Everything that chooses an account elsewhere is
+a conversation's: its stored choice, the person's "my" and "your", a name
+they said. A step has a fresh session and no person's words, so it got the
+machine default or the by-act rule and nothing could say otherwise. A
+digest of Enio's own inbox could not be built.
+
+**Squared with the per-node server field that was rejected** (above,
+"Pipeline nodes inherit their ability's server"). That one was refused
+because a draft or the composer could widen its own reach by writing it.
+This one cannot be written by either: the composer's schema has no such
+field, saved automations are stripped of it before they become the
+composer's examples, and the value is a closed shape checked on save.
+And it does not widen anything. Every account it can name is one the
+person connected, with the grants they gave it.
+
+**The setting is the choice, in three ways that were each not true at
+first:**
+- *Nothing else chooses.* A name at the start of the step's prompt does
+  not switch away from it, and an account the model names in a tool call
+  is dropped unless it is that account.
+- *Nothing stands in.* If the account was removed, or lacks the grant the
+  step is for, the step fails and says so. Inside the turn a tool that
+  needs a grant the account lacks has no account, and a send does not
+  fall back to SMTP under another address. In a conversation the fallback
+  is right, because the reply names the account and somebody is reading.
+- *Each step starts from none.* A name in one step's prompt used to be
+  stored on the run's one session and chose for every step after it.
+
+"Mine" and "Enio's own" are resolved when the step runs, not stored as an
+id: accounts are replaced without the automation being saved again.
+
+**Turn state is the turn's.** The account in use, the one a step is set
+to, whose mailbox was asked for, the person's message and the mailboxes
+read were variables of the module, and the first version of this saved
+them and put them back around each turn. That holds only while turns do
+not overlap, and they do: review ran a chat turn across a step of an
+automation, the chat turn ended while the step waited on the model, put
+back what it had found, and the step read the person's mailbox where it
+was set to Enio's. They are now kept in the async context each turn runs
+in (`inTurn`), so there is nothing to put back and nothing of another
+turn's to find. That also closes what the entry above listed as not
+done.
+
+**Also from review:** Enio's own account does not stand in inside a set
+step (a calendar step set to the person's account had written to Enio's
+calendar); a set step opens only a message its own account listed; an
+account that cannot read mail reads none, where it fell to IMAP; the
+setting is refused on a step that uses no account; and the menu lists
+only accounts a step can use.
+
+**Not done:** a plan drafted in chat does not carry "my" or "your" from
+the person's message onto its steps; the account menu is the only way.
+Drive, todos and contacts have no step of their own and so no menu,
+though a mail or calendar step's setting holds for them too.
+
+
+### Enio writes a message and a person sends it: the outbox (November 2026)
+
+`send_email` reached the mail transport. `ENIO_EMAIL_SEND=1` meant "the
+model's call sends", and with it off the call was a dry run. Everything
+between "send Ana a note" and a message that cannot be recalled was the
+model's judgement about whether to show it first, and "showing" was prose
+in a reply that the harness then had to tell apart, by its shape, from an
+invented inbox email. The entry "A message being written is not mail that
+was never read" records three versions of that check, two reviews and 42
+findings, and ends on "a draft as a tool call … a design of its own". This
+is that design. The owner asked for it to be built.
+
+**What it is now.**
+- `send_email` writes a row in the `outbox` table (`src/outbox.ts`) and
+  returns. Nothing is sent, with the flag on or off.
+- The turn ends there. A tool result may carry `final`
+  (`ToolOutput.final`), and the turn's reply is then the harness's own
+  account: the whole message, that it has not been sent, and that it is
+  waiting. The model is not asked again.
+- The only code that talks to SMTP or a connected account is `sendDraft`.
+  It is reached from `POST /outbox/:id/send`, `enio outbox send`, `/send`
+  in the terminal and the card's button. No tool, step or schedule calls it.
+- `ENIO_EMAIL_SEND` means "Send works". Off, the draft is still written,
+  shown and kept, and Send answers that sending is switched off.
+- What a person did is written into the conversation by the harness
+  (`recordDraftOutcome`): "You sent the message to …", "You discarded …".
+
+**Decisions inside it.**
+- *The name is kept.* It is model-facing: the router's examples, the
+  abilities and the model's habit all say `send_email`. What changed is
+  the description and one sentence of the mail agent's prompt.
+- *The turn ends on the tool.* Given a round after a dry run, the model
+  said "sent". With nothing after the call there is no reply of the
+  model's to check, which is why `dryRunReport`, `saysNotSent`, the
+  `claimedSend` chain, `showsRequestedDraft` and `sentWithoutSending` could
+  be deleted and not rewritten.
+- *A message written out in a reply is never right.* It cannot be sent
+  from there. The model is sent back to make the call, whatever the reply
+  looks like, so the rule that spared a draft by its shape is gone.
+- *A new version replaces the waiting one only from the same place to the
+  same people* (`placeDraft`): this conversation, or this step of this
+  run, and an identical To. Two steps that both write to Ana are two
+  messages.
+- *What is sent is the stored row at the revision the person saw.* An edit
+  bumps the revision; a send names one and is refused if it has moved. The
+  claim is one UPDATE, so of two Sends one finds nothing to claim.
+- *Everything is asked again at send*: the flag, each address against the
+  allow-list (a person may have edited them), the account and its grant.
+- *A failed send goes back to waiting* with the reason on it and a new
+  revision, and says when it may have gone anyway. A send that never came
+  back is released by age (five minutes), not at start-up: the server, the
+  scheduler and a terminal share the table.
+- *"Send it" is answered by the harness.* The model cannot send, and asked
+  again it wrote the message a second time. A bare "yes" counts only
+  straight after the message was shown.
+- *A send nobody asked for, after reading other people's text, is not
+  written.* Writing it would end the turn on a card addressed by whoever
+  wrote the page. Only after a read: "tell Ana I'm late" needs no verb from
+  a list to be a request.
+- *No route writes a draft.* A message that goes out was written in a turn
+  someone can read. The token holder can still edit and send a waiting
+  one; `docs/remote-access.md` says so.
+
+**On the model** (`scripts/whose-account-live.mjs 3 out.json send`, the 4B,
+sending switched ON, the bridge standing in for the account), 60 turns
+in six conversations, three passes:
+- No turn reached the bridge's `mail.send`: 0 of 60.
+- Asked for a message, one was written and left waiting in 15 of 15 turns
+  (a fresh send, a reply after reading, a send after Enio's inbox, and
+  the first two turns of a draft revised twice).
+- "Yes, send it", "looks good, send it" and "yes", straight after: 9 of 9
+  answered by the harness, no model round.
+- Three plain questions with composing verbs in them wrote nothing, 9 of 9.
+- Wrong: the three things below.
+
+**Found by that run and fixed:**
+- *A draft written out after a read.* "Draft an email to Tom asking when
+  invoice 4471 is due": the model searched, read Tom's mail and wrote the
+  draft into its reply. The written-out check only ran when no tool had,
+  so nothing was left to send. It now runs after a read too, and spares
+  only mail that arrived, quoted (`wroteOutAfterReading`).
+- *A revision routed away.* "Add that I will bring the wine" went to the
+  planner and "add a PS that I am sorry" to the operator, 3 of 3, and each
+  answered that it had no `send_email`. This is the hole recorded twice
+  before (a follow-up routed on its bare words). There is now a fact to
+  decide it by: a message is waiting in this conversation. With one
+  waiting, a closed list of the ways a change is asked (`revisesMessage`)
+  keeps the turn with the mail agent; anything naming another kind of
+  thing ("add that to my todos") is routed as before.
+- *"Send it" turns later* was answered from whatever the last reply had
+  been. It is answered by the harness whenever a message is waiting.
+
+**After those**, the same 60 turns: 0 reached `mail.send`. Every turn of
+the draft revised twice stayed with the mail agent and replaced the
+waiting message, 15 of 15 (6 of 15 before). "Send it" two turns after the
+message was written: answered by the harness, 3 of 3.
+
+**Seen and left:** "draft an email to Tom asking when invoice 4471 is
+due" was written in 2 of 3 passes (each time after the harness sent a
+written-out draft back). In the third the model read Tom's mail and
+answered the question the draft would have asked: "The invoice 4471 is
+due on 15 December." Nothing was written. Holding every compose request
+to a written message would force one out of "can you reply to her?",
+where asking what to say is the right answer.
+
+**Found by review** (five reviewers over both features, each finding
+checked by a second: 41 findings, 33 confirmed, 8 refuted) and fixed:
+- *The harness's own reply was judged like a model's.* Two messages
+  written in one turn share their closing lines; the repetition check
+  replaced the reply with "I got stuck repeating myself" above two cards.
+- *A message left waiting made every later turn a writing turn.* It was
+  handed to each turn as the draft on the table. "When did Tom send the
+  invoice?" was replaced with "I did not send anything"; an honest quote
+  of read mail was withdrawn as a message written out; a send steered by
+  what was read was let through. It now counts only when the reply before
+  was about the message, or the words are a change to it.
+- *A send that outlived its claim wrote over the row.* A slow send was
+  released as stale at five minutes while still open (the transports'
+  own limits are five and ten); sent again, edited or discarded, the row
+  was then overwritten by the first send's late answer. A send is now cut
+  at ninety seconds, and both of its endings are written only to the row
+  as its own claim left it.
+- *A message still written out after the correction stood*, when a read
+  had come first: the test for "did it get fixed" was "did a tool run".
+- *"Sent" after a `send_email` that failed on its address was not
+  corrected*: any `send_email` step disarmed the check.
+- *"Yes, send it" to an offer to write a reply* was answered about the
+  older waiting message. *A change* ("make it faster") was sent to the
+  mail agent three topics later; it is kept there only while the
+  conversation is still on the message.
+- *A message to someone the person wrote down was refused* after a read
+  when the verb was not on the list ("ask tom@… when it is due").
+- *A message written by a step of a run had no Send in the window.* It
+  was filed under the run's own session. A run started from a
+  conversation now files it there and its card comes with the outcome; a
+  scheduled run's reply says it is in the outbox and how to list it.
+- *What a Cc means on a connected account was said after the send.* It
+  is now in the reply and on the card before it.
+- *The card*: text typed in the sheet and not saved was dropped on
+  close, and Send on the card then sent the older text; a refusal left
+  it on a stale revision. *The terminal*: `/send 1` sent whichever id
+  began with a 1.
+
+**Rejected:**
+- *A second tool, `draft_email`.* The mail agent holds exactly six, and two
+  tools that differ in whether they send is the judgement taken away here.
+- *Sending from the turn on a typed "send it".* A typed word is consent,
+  but to what: the turn would have to decide which stored message at which
+  revision the person meant, and a "yes" typed under injected text is the
+  case that cannot be told apart. The button names its revision.
+- *Auto-send to "safe" recipients.* Nothing asked for it, and it is the
+  judgement of whether a message is fine to go, made once for all future
+  messages.
+- *Keeping the dry run beside the outbox.* Two meanings of one flag.
+- *A confirm dialog after Send.* The button says who it goes to. A second
+  click on every send is the click that stops being read.
+
+**Not built:** an Outbox view listing every waiting message across
+conversations; rewrite-by-prompt in the sheet with a diff, as plans have;
+a Cc on a connected account (the bridge sends to To only; it is noted in
+the body and said in the outcome); attachments; sending later.
+
+**Not verified:** the card in the running app. It is linted and its
+requests are the tested routes, but nothing here pressed the button.
+
+
+### An app nobody asked for is proposed, a plan ends the turn, and a run reports back (November 2026)
+
+Asked to "check browser for my email and give me a summary", the operator
+opened a browser the person had not asked for (the wrong one), then an
+uninstaller, then read the Mail app. The matcher and the readings were
+fixed in "Computer use: the app that was asked for". The owner's other
+point was this: when a request is about doing things, show the plan first
+and let them run it, change it, discard it or have it written again — and
+make a saved one quicker. They had assumed that existed. Part did: script
+plans, the sheet, edit, test, rewrite, decline, save. What did not:
+
+1. `open_app` ran the moment the model called it.
+2. A proposed plan did not end the turn. The model was told to "reply in a
+   sentence and stop" and sometimes called another tool or said it was done.
+3. There was no "try again", and a plan did not record what it was for.
+4. A run's outcome stayed in the sheet. The thread never learned of it.
+5. A saved script was found only by the model picking its name.
+
+**What changed, and the three recorded positions it touches.**
+- *"open_app is direct and ungated; the gate is about irreversibility."*
+  Still true for an app the person asked to open. An app they did not ask
+  for is now proposed. This is not the irreversibility gate moving:
+  opening is as undoable as ever, and that one plan runs with desktop
+  control off. The complaint was that they did not choose it.
+- *"Rejected: the approval sheet per action"* (browser clicks: a sheet per
+  click is rubber-stamped and poisons the sheet where it protects
+  something). That argument applies to a one-step "Open Chrome" plan too,
+  and it is being accepted knowingly. What limits it: only an open the
+  person did not ask for, only when the app is not already running, and
+  it is run from the card with one press, not from the sheet.
+- *"The turn end is not enforced"* after `propose_plan`. It is now: the
+  tool returns `final` and the reply is the harness's list of the steps.
+
+Not changed: a summarising step stays rejected (the outcome is assembled
+from the steps' results); auto-run still covers only scripts a person
+marked safe; a plan the model has just composed is still run from the
+sheet, where its scripts are.
+
+**How "asked" is decided** (`openAsked`): the message has a word for
+opening (open, launch, start, switch to, bring up …) and, after it, names
+the app by a word of its name, or says "the browser" for a browser. "Open
+it" counts when the reply before named the app. The harness writes the
+answer onto the call (`asked`), over anything the model put there. It is a
+check of words and leans towards the plan: "run" is not an opening word
+("run the numbers" is not Numbers), a maker's name is not the app ("open
+google"), and an app named before the opening word is not asked for ("is
+Chrome why my laptop won't start"). Wrong in that direction costs a press.
+
+**Unasked and already open: nothing happens.** The model is told the app
+is open and to carry on. It is not brought to the front either; that is
+also a change to the screen nobody asked for. This is the answer to "did
+not check if the browser was open".
+
+**Not in a step of an automation.** The person ran that, and a plan
+proposed inside a run has no card to be approved on (a hole that was
+already there for `propose_plan`, and still is).
+
+**Try again** sets the plan aside (declined, with the reason kept) and the
+card asks the same request again as an ordinary message. Not generated on
+the server: a plan is written by a turn, with every guard a turn has, and
+the thread shows it was asked twice. Asked the same thing, the model is
+likely to propose the same plan, so the harness adds one line to the
+message it reads: the steps that were set aside, and "propose a different
+way". Not a critique of them, which nobody gave.
+
+**The same request again finds the saved script** (`matchSavedRecipe`). A
+script saved from a plan keeps the plan's request, as typed. A later
+request with the same content words in the same order, and every number
+and quoted phrase identical, is offered that script with no model round:
+the card names it and has Run on it. Only dressing may differ ("please",
+an article, a plural, capitals, accents). Two scripts saved for the same
+words are no match. It never runs from the match, whatever auto-run says:
+the match is the harness's guess from words. Try again on that card
+reaches the model.
+
+The first version was looser — four in five of the content words in
+common, as a set — and review showed what that offers, with no model
+between it and a Run button: the script saved for "turn on dark mode" to
+someone asking to turn it off ("on" had been dropped as filler and "off"
+kept), the one that moves a file from Desktop to Documents for the request
+to move it back. So the words that turn a request around (on, off, up,
+down, to, from, with, without, in, out, not) count, order counts, and one
+word changed is a different request that goes to the model. A plan that
+was only "open the app" on the way to something else is saved without its
+request: kept, the question that led to it was answered from then on by an
+offer to open the app.
+
+**A plan's `open` step is resolved** like `open_app`. It used to take the
+name as the model wrote it, so "the browser" reached `open -a` as those
+two words. An app that is not installed is refused when proposed.
+
+**On the model** (the 4B, the operator named, every desktop tool a
+stand-in that answers as the real one does, three passes with the browser
+closed and three with it open; 42 turns):
+- An app was opened in 6 turns, all of them "open chrome and check my
+  email there". Nothing else opened anything.
+- "Check my email on browser and … give me a summary": nothing opened, 6
+  of 6. The Mail app was read and the reply gave its age (173 days).
+- "Try again on chrome": with the browser closed, a one-step plan, 3 of 3.
+  With it open, nothing was opened or brought forward, and the reply said
+  a page cannot be read, 3 of 3.
+- "Write a note with my grocery list: milk, eggs and bread": the open of
+  Notes was proposed, 6 of 6. "Create a new note in Notes that says buy
+  milk": the open proposed in 3 of 6, and a whole plan through
+  `propose_plan` in the other 3.
+- The one changed sentence of the operator's prompt was replayed against
+  the old one on five requests, three passes each: no difference that
+  could be seen in what was called.
+- The whole path, three passes: the open of Notes proposed; the plan
+  taken as run (Notes running, the outcome in the thread); then "go on".
+  A plan for the rest through `propose_plan`, 3 of 3 (`File > New Note`,
+  then the list typed), with nothing opened. It proposed the menu name
+  without reading the menus first, which the prompt tells it to do. In
+  the app "go on" is routed first; that was not replayed.
+
+**Found by that run and fixed:** the operator's whole reply to "write a
+note with my grocery list" was the line `open_app Notes`, 3 of 3, with
+the old sentence and the new. The quoted form of that line was already
+recovered as a call; unquoted it was shown to the person as the answer.
+It is recovered now when it is the entire reply, the tool takes one
+string, and what follows the name is a short value and not a sentence
+(`bareWordCall` in `model.ts`).
+
+**Seen and left:** "set a reminder to call Tom at 5pm" ended on prose
+("Proposed action: … please confirm") with no plan behind it, 6 of 6.
+"Play some jazz" said it cannot and offered to open a music app, 6 of 6.
+
+**Found by review and fixed:**
+- *The match offered the opposite script* (above).
+- *A plan kept the folded request* (lower case, no accents), written for
+  comparing account names: Try again asked for a file called "relatorio
+  sao paulo.txt". It keeps the words as typed.
+- *The desktop-off exception trusted the plan's label.* A step can be
+  edited and stored while the label stays; the exception is now decided
+  by the stored script being exactly an app-open, and a save's name is
+  checked before any edit is stored.
+- *"Open it" was read against the model's own sentence from the same
+  turn.* "I will open Chess to look for it" made "…and open it" a
+  request for Chess. The reply before is read once, before the turn.
+- *An app with no word of three letters was never "asked for"* ("open TV
+  and play the next episode"), nor one typed joined ("vscode").
+- *"Open the browser"*, typed alone, opened whichever app had "Browser"
+  in its name. *A plan's open step* that resolved to another browser kept
+  the model's summary, and a later script step still drove the first
+  one. *The terminal Enio runs in* was reported not open (`pgrep` leaves
+  out its own ancestors). *"Firefox Nightly"* was rewritten to Firefox.
+- *The card*: keyed by position, it kept its state across a change of
+  conversation and its Run could post the steps of the plan that had been
+  in its place. Cards are keyed by what they are, and an unedited plan is
+  run from the stored text. Enter held in the name field ran a plan
+  twice. Try again while a reply was streaming set the plan aside and
+  never asked again.
+
+**Rejected:**
+- *A plan for every operator turn, reads included.* A read changes
+  nothing; an approval before "what is on my calendar" is the press that
+  stops being read.
+- *A classifier for "is this about doing".* That is the judgement. What is
+  asked instead is a fact about a call the model already made.
+- *Opening and carrying on in the same turn once approved.* The run
+  happens outside any turn; the outcome goes into the thread and "go on"
+  is one message.
+- *Regenerating on the server.* Above.
+- *Running a matched script when it is marked safe and auto-run is on.*
+  A model picking the script by name still does that. A match on words
+  is not that pick.
+
+**Still open:** two approvals when the app was closed (open it, then the
+plan for the rest) is clumsy, and whether it gets rubber-stamped is not
+known. A plan proposed inside an automation step has no card. Nothing can
+read a page in the person's own browser, so "check my email in the
+browser" still ends on "I cannot read that" — honestly now, and without
+opening anything. The terminal can read, run and discard a plan (`/run`,
+`/discard`) but not edit one.

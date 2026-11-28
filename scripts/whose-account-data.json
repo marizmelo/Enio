@@ -1,0 +1,2242 @@
+[
+ {
+  "text": "check my email",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "check your email",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Can you read my inbox please?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "search my inbox for the lease",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "search your inbox for the lease",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "any news in my mail",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "anything new in your inbox",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "what's on my calendar tomorrow",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "do I have any new emails",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "what's in your mailbox",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Pull up my gmail and show me what came in today.",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Can you open your own inbox and tell me who wrote to you?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "um can you go through my emails and uh tell me if there's anything from the dentist",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "open my mailbox",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "any news in your gmail",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "um so check your email I think Ana sent the, uh, the photos there",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "my inbox",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "your inbox",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "look in my account for the flight confirmation",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "look in Enio's inbox for the receipt",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "show me my messages from this week",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "anything new in my inbox?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Please go through your mail and summarize anything that arrived overnight.",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "pull up your calendar",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Could you please look through my own mail, not yours, and find the invoice from Carlos?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "do you have anything from the bank in your account",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "what's in my calendar for friday",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "show me what's in your email",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "search my email for \"tracking number\"",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "I forwarded the contract to you. Look in your inbox for it.",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "hey so like could you check my calendar and see if I'm free thursday afternoon",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "whats on your calendar this week",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Read me my latest emails.",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "is there anything from the landlord in my gmail",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Search your own mail for anything from Marta about the trip.",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Go through my inbox and tell me what needs a reply. Start with the oldest.",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "not mine, yours. check your inbox again",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "use my account to look up when the dentist appointment is",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Check my work email for the invoice from Ana",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Check my personal email, not work, for the Airbnb receipt",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Check my work calendar for conflicts on the 12th",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Read my email to Paulo before I send it and tell me if it sounds rude",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Read your reply to the recruiter out loud",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Check your email draft for typos before it goes out",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Use my email address as the reply-to on that",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Use my personal account for this one, not work",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Use your own words, don't just copy my email",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Open my personal calendar and show me next week",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Look in my documents folder for the calendar export from last year",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Look in your settings, is my work account still connected?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Check that my email address is spelled right on the signup form",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Read the part again where it says \"your mailbox will be deleted in 24 hours\"",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Check your calendar invite wording, it says Tuesday twice",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Open the draft and change \"check your inbox\" to \"check your spam folder\"",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "What's your email again? I want to give it to my accountant",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Send the summary to my email when you're done",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "forward that PDF to my personal email",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Did you get my email with the photos attached?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Your email to the landlord was too long, cut it in half",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Can you read my email or only your own?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Do you have access to my calendar yet?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "I changed my email password, do I need to reconnect anything?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "How do I disconnect my personal account from you?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Ana wrote \"check your inbox, I sent the contract\" - what should I say back?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Is it too stiff to end an email with \"at your earliest convenience\"?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Write back saying I'll check my calendar and let her know by Friday",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Remind me Sunday night to clean out my inbox",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Draft an email to the bank asking why my account was charged twice",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "What's the difference between your account and mine?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Does mail sent to your address ever show up in mine?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Stop signing emails \"your assistant, Enio\", just put Enio",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "My calendar app keeps crashing on the phone, any idea why?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Put your email address in cc so you get a copy too",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Translate to Portuguese: \"Please check your calendar and confirm a time\"",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "I think my Google account got hacked, what should I do first?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Mine is the gmail one and yours is the enio one, right?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "How many of my accounts are connected right now?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Which of my accounts did you send that from?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Give Rita your email so she can send the files straight to you",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Is this a scam? It says \"your account has been suspended, verify your mailbox now\"",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Should I keep my calendar public or is that a bad idea?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Add my email to the bottom of the letter under my name",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check your inbox and tell me if my invoice arrived",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "what's your email address?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "chek my emial",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "anything in your inbox today?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "send it to my email",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "don't look in your inbox, look in mine",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "did you get my email?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check you're email",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "your email to Ana was too long",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check my work email",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "switch to my account",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "use your own account for this",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "whats on my calendar tomorrow",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "don't look in my email, look in yours",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "any new mail?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "use my own account",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "use my personal account",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "no not yours, my own inbox",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "put your address in cc when you write to Ana",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "look in my inbox and see if the summary you sent me yesterday got there",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "look in Enio's inbox for the signup confirmation",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "check your work on that summary, my numbers don't match",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "am i free friday afternoon? check my calender",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "I forwarded the receipt to you, see if its in your inbox yet",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "is this your account or mine?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "chek ur inbox, my boss says he emailed you",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "switch accounts",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "search my mail for the invoice from Ana, she was supposed to send it to you but used my address",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "switch to your account",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "what's my email address again?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check mine email please",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "search your male for anything from the hotel",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "how do i set up an out of office reply in gmail",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "you already told me your inbox is empty, so what about mine?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "stop using my account and read the newest thing in your own",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Morning. What's in my inbox?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "anything urgent come into my email overnight",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "What's on my calendar today?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Check my work email first, I'm expecting the contract from legal.",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Go through my unread and tell me which ones actually need a reply before lunch.",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Has anything landed in your inbox since yesterday?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Paulo says he sent the quote straight to you instead of me. Have a look in your mailbox and tell me the total.",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "What's your email address again? The caterer wants it.",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Search my mail for the Hetzner invoice, should be from last week.",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "When you're done, send the summary to my email.",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Do I have anything on my calendar Thursday afternoon?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "check my personal calendar for the weekend, I think there's a birthday",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Email is eating my whole morning, honestly.",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Look in my sent folder, did I ever answer Rafael about the lease?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Still nothing from the auditors? Look again, in mine this time.",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Check the inbox.",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Did the DocuSign thing arrive?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "I told the recruiter to write to you from now on. Anything from her in yours yet?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Sign up for the webinar with your account, not mine.",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Reply to Carla from my account, she doesn't know you exist.",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Send it from your own account, I don't want the replies landing on me.",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "That email you sent Jorge was good, by the way. Right length.",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "The accountant emailed me the forms on Monday. Find them in my mail and forward them to yourself so you have them on file.",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Remind me at four to call my mother.",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Did Inês reply?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Look at my calendar for next week, I need two free mornings for the board prep.",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Okay so the plumber's office says they emailed the estimate to the assistant address. Is it in your inbox?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "How many unread do you have in your own mailbox right now?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Your calendar invite to the team had the wrong timezone, fix it and resend.",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Draft a reply to Sofia saying I'm out Friday.",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Who's written to your address this week that I haven't seen yet?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Enio, check the Enio account for the Stripe receipt, I had it sent there.",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "hey can you um look in my inbox and see if the thing from the bank came through",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Move everything on my calendar after two to tomorrow, I need the afternoon clear.",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Is the vendor call on your calendar? I think they invited you and not me. Check yours.",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Can you check email real quick?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Before I head out, anything new in my mail since four?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "check your email signature, it still says \"sent by an assistant\"",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "read my email back to me before it goes out",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "use my email as the username on that signup form",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check my account balance at the bank",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "read your email policy out loud, the part about attachments",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "search my email provider's help page for how to turn on forwarding",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "can you check my email for typos, it's the draft right above",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check your email to Ana again, I think the tone was off",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "open the calendar app on my Mac",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "look in my account on Netflix and tell me what plan I'm on",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check your calendar invite wording, it says 2pm and I meant 3",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "open my email attachment, the PDF in the downloads folder",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check my work inbox for the signed contract",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "look in my personal calendar for the dentist appointment",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check my email is spelled right on the invoice",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "should I check my email less often? it's eating my mornings",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "use your email as the reply-to on the newsletter",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "look in my account of yesterday's meeting and pull out the action items",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check your calendar math, the 14th is a Saturday not a Friday",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "has anything landed in your inbox?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "tell me what came in to you overnight",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "did anyone write to you today?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "what's waiting for you in the Enio mailbox?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "go through whatever people have sent you this week and list the senders",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "is there anything on your own calendar for Friday?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "any replies come back to the address you send from?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "who's emailed you since Monday?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "pull up Enio's unread stuff",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "I want to know what's sitting in my inbox",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "go and see what my calendar looks like tomorrow",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "what's come into my mail since lunch?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "what have I got on tomorrow, according to my own calendar?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "did Ana ever reply? dig through my mail and find out",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "find the Delta receipt, it's somewhere in my email",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "not yours, mine. what's unread?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "is my inbox a mess right now? give me the count",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "see if the dentist confirmed, it would have gone to my own address",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "scan through everything that hit my mail today and flag anything urgent",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "um can you check my inbox see if anything came in",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "whats you're email address again i need to give it to someone",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check you're inbox did anyone write to you",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "would you mind having a look in my in box when you get a second",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "just send it to my email when your done",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check my no check your inbox i told ana to write to you directly",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "check my work email for the the contract from legal",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "whats on my calendar tomorrow like do i have anything before noon",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "did you get my email i sent it like an hour ago",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "has anything come in to your in box today",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "check my male for anything from the landlord",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "your email to ana was way too long can you can you shorten it next time",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "look in your own male and see if the vendor replied",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "check your no sorry check my inbox for the invoice from daniel",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "whats on my personal calendar this weekend",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "whats in enios inbox right now",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "search my email for the the flight confirmation and also remind me to call mom at five",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "check the inbox anything new",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "can you look at your calendar and tell me what you have scheduled for this week",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "i hate email honestly theres just too much of it",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "hey so i i think theres something in my own mailbox about the dentist can you look",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "would you be so kind as to have a look in your mailbox when you get a moment i think the the newsletter signup confirmation went there",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "check my inbox no wait the work one",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "open my calendar and tell me when im free thursday",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "search your email for the the tracking number and then whats the weather tomorrow",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "you're checking mail way too often can you slow that down",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "look through my inbox not yours for the receipt from apple",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "anything new in you're email account since last night",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "did my email to pedro go out or is it stuck",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "any new mail for me in my inbox this morning",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "go through your inbox not mine and find the reply from the plumber",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "forward that to your address so you have a copy",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "can you please go into my email account and find the the password reset thing from github",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "enio check your own mail please i i forwarded you the pdf",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "am i free friday afternoon check my calender",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "so the the signup i did with your address did the confirmation show up in your inbox",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "did the male come yet the the package from amazon",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "read me whatever's unread in my gmail",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "open your calendar is the invite from carla on there",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Has anything come in to your inbox from the Ferreira studio since yesterday?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "check my inbox for the signed contract from Halden & Co",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Did you get my email with the invoice template?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "What's your email address again? I need to put it on my website",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "ok check the enio account, did the brief from Lumen arrive",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Check my work email for anything from the accountant",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Send the quote to my email so I can look it over first",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Am I free Thursday afternoon? Look at my calendar",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Put the Okafor kickoff on your calendar, not mine, clients should see it coming from you",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "your email to Ana was way too long, shorten the next one",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "How many unread emails do I have right now?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Search your sent mail for what you told Dario about the deadline",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Draft a polite reminder for late invoices, 30 days overdue",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Check the mail.",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "can you check my email for the field trip permission slip from Mrs. Dalton",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "What's on my calendar tomorrow morning?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Add the parent-teacher conference to my calendar, Tuesday at 4:30",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "check my personal email for the soccer schedule",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Forward the school newsletter to my email",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Go through my inbox and tell me what's from the school this week, everything else can wait",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "I gave the pediatrician your address, so keep an eye on your inbox for the vaccination forms",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Remind me to pack Mia's swim bag Thursday night",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Is there anything on your calendar that clashes with pickup at 3?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "What time does the pharmacy on Elm close?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Look in mine, not yours, the school only has my address",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Email's been so overwhelming lately, I honestly dread opening it",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Could you please have a look at my emails and see if my daughter has written?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "Do you have your own email, dear? What is it?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Has anybody written to you, Enio?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "See what's in your mailbox would you, the garden club said they'd send the minutes to you",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "Open up my calendar and read me what I've got on Friday",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "I can never remember, is the email the same thing as the internet?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Send the photos of the roses to my email, the one I use for family",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "The email, mine I mean, can you see if the pension people have answered",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "what about in mine",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "ok and on my calendar",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "is it in mine then",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "now do the same search in my mail",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "no, look in my inbox, not yours",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "ok now search my own account for the same thing",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "hmm then it must be in my mailbox, can you look",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "and does my calendar have anything that day",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "try my account instead",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "ok then look through my sent mail for it",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "check my inbox too",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "same thing but your inbox",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "try your account instead",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "and in your inbox?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "ok check your own mail for it then",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "did anything new land in your inbox since then",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "what about Enio's calendar",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "no not mine, search yours",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "now look in your sent folder",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "and is it on your calendar too",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "maybe they wrote to you instead, look in your mailbox",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "do the same for the enio account",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "ok so use your account for that one",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "run that again but in your own email this time",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "anything from Ana?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "read the second one",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "is that your final answer",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "send that to my phone",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "ok forward it to my email",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "and what's your address again",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "what about the work one",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "try my personal account instead",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "did you get my reply?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "your last email to her was fine, send it",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "which one is it in",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "is it in mine or yours?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "and my work calendar?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "how much is left in my bank account after rent went out",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "can you log into my Amazon account and see where the parcel is",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "give me your account of what happened in yesterday's standup",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "remind me to flip the wall calendar in the kitchen to December",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "open the Mail app's settings and turn off the new message sound",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "draft me an email template for chasing late invoices",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "my email is my login for Netflix, right?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check my voicemail, I think the garage called",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "the mailbox outside the house is jammed full, remind me to empty it tonight",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "has the mail come yet? I'm waiting on a letter from the tax office",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "how many working days are left in my company's calendar year",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "anything unread in my Slack inbox?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "check my Notion calendar for the launch date",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "taking my budget into account, which laptop should I get",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "my Spotify account got charged twice this month, what do I do",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "set up a new mail account in the Mail app for me",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "how do I change the password on my account",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "find my kid's school academic calendar online and tell me when term ends",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "did the mail carrier leave anything in my mailbox today",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "could you have a rummage in my inbox for the dentist's confirmation",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "what does my calendar say about Tuesday",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "anything new land in my mail overnight?",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "dig through my own email for the flight receipt",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "is my calendar clear after three on Friday",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "pop open my account and tell me what's unread",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "mine, not yours, look in the inbox for the invoice from Clara",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "my calendar, what's it got for me the week of the 7th",
+  "label": "user",
+  "set": "tuned"
+ },
+ {
+  "text": "your mailbox, anything in it?",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "has anybody written to your inbox since this morning",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "peek at your own calendar, is the sync invite on there",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "go through Enio's mail and list who's been writing",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "what's sitting in your account right now, unread-wise",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "look in yours for the plumber's reply, I gave him your address",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "search your email for anything from the landlord",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "did anything bounce back into your inbox after that send",
+  "label": "agent",
+  "set": "tuned"
+ },
+ {
+  "text": "check my work calendar for Thursday",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "look through my personal mail for the gym receipt",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "is there anything in the inbox from Ana?",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "did my email about the tiles ever reach you",
+  "label": "none",
+  "set": "tuned"
+ },
+ {
+  "text": "Check my inbox, has the bookkeeper sent the VAT figures yet?",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "What's your email address again? I need to give it to the new glaze supplier",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Anything come into your mailbox overnight?",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "Send the updated price list to my email",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Did you get my email about the Henderson order?",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Search your mail for the tracking number from Parcelwise",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "Check my work email for the bookkeeper's reply",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Email Marcus and tell him the samples ship Monday",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "am I free thursday afternoon, have a look at my diary",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "Your email to Ana was far too long, keep it to three lines next time",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Send the invite from your account, not mine",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "Look through my mailbox for anything from the landlord about the lease renewal",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "Put the supplier call in the calendar for Tuesday at ten",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "have a look in my own inbox not yours, the courier said they emailed me directly",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "Tell the bookkeeper to use your address for receipts from now on",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "What's in your calendar for Friday?",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "What's on my personal calendar this weekend?",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Go through your inbox and list everyone who's asked for a quote this week",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "Draft a reply to Mrs Okafor saying the refund is on its way",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Reply to her from my account so it looks like it came from me",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "Copy me in on anything you send to suppliers",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Has anything arrived at Enio's address from the bookkeeper?",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "Did my email to the bookkeeper actually go out?",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Check the inbox for the Harlow invoice",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Is the dentist on my calendar for next week?",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "That should have come to you, not me, the bookkeeper keeps using the wrong address",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "look in your own account for the complaint about the cracked mugs, she wrote to you not me",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "Remind me to email the landlord on Monday",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Anything new in my email since lunch?",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "Add my mobile number to your signature",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Book the trade fair into my calendar, the 14th to the 16th",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "I get far too much email from that packaging firm",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Put the stock take in your calendar, not mine, I just want you to chase it",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "Whose inbox did the Harlow invoice end up in?",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "My accountant wants last quarter's sales by product, can you put that in a spreadsheet",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Search my mail for the quote from Harlow Packaging, I think it came in October",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "check my inbox",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "check inbox",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "check your inbox",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "whats your email",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "whats on my calendar",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "calendar today",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "your calendar today",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "send to my email",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "my calendar tmrw",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "whats in your mailbox",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "any new mail",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "search my mail for invoices",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "got my email",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "search your mail for ana",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "personal cal tmrw",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "open my inbox",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "your email was too long",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "open enios inbox",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "my email addr",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "unread in my gmail",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "check ur email",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "my inbox pls",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "email is the worst",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "look in your own inbox",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "look in my own mail",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "your inbox or mine",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "unread in your account",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "fwd to your address",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "my cal this week",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "weather tmrw",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "use your account",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "unread",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "anything in my email today",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "add to calendar",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "any new mail in yours",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "use my account",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "Has the landlord's reply landed in my inbox yet?",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "Has the landlord's reply landed in my work inbox yet?",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "I gave the contractor your address, has he written to you yet?",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "What address do people write to you at?",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "I told Marta to write to me directly, not to you. See if she has.",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "I told Marta to write to one of us, see if she has.",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Has anything come into your inbox since this morning?",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "How often do you look at your inbox when I'm not asking?",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "What have I got in my diary Thursday afternoon?",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "What have I got in my personal diary Thursday afternoon?",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Ana says she forwarded the contract to your address, look whether it's there.",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "The boarding pass you forwarded to me had no attachment.",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "The airline said the boarding pass would come to my address, is it there?",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "Forward the contract to my address when it's signed.",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "What's on your calendar next week?",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "How many unread are sitting in my inbox right now?",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "My inbox is a disaster, I get two hundred a day and read ten.",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "I put Enio's address on the signup form, see whether the confirmation showed up there.",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "Tell the contractor to write to you from now on, not to me.",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "There should be an invoice from the plumber somewhere in my mail, dig it out.",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "Somebody should have sent the lease by now, is it there?",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "People were supposed to RSVP to you, how many replies have arrived?",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "Did the landlord ever write back?",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Did the dentist's invite ever make it onto my calendar?",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "Look in your sent folder and tell me what went out yesterday.",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "Your reply to Ana was far too long.",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Look through my own inbox, not yours, for the tax form.",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "Did the newsletter I subscribed you to start arriving?",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "Is there anything in my sent folder to Paulo from last week?",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "Is my Slack inbox quiet today?",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Is there an invite sitting in your diary from Carlos?",
+  "label": "agent",
+  "set": "unseen"
+ },
+ {
+  "text": "Any new texts on my phone from Marta?",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Send that reply from my own account, not from yours.",
+  "label": "user",
+  "set": "unseen"
+ },
+ {
+  "text": "Which of my accounts are you actually connected to?",
+  "label": "none",
+  "set": "unseen"
+ },
+ {
+  "text": "Send the RSVP from your own account, I don't want it coming from me.",
+  "label": "agent",
+  "set": "unseen"
+ }
+]

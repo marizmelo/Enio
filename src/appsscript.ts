@@ -451,12 +451,17 @@ export async function callScript(
   secret: string,
   op: Operation,
   args: Record<string, unknown> = {},
+  /** How long to wait. Unset, the runtime's own limit applies (minutes);
+   *  a send gives one, so that a send still open cannot be mistaken for
+   *  one whose process died (outbox.ts). */
+  timeoutMs?: number,
 ): Promise<{ ok: true; result: unknown } | { ok: false; error: string }> {
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ secret, op, args }),
+      ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
       // Apps Script answers a web app call with a 302 to a googleusercontent
       // URL; without following it the body never arrives.
       redirect: "follow",

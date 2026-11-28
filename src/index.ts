@@ -483,6 +483,53 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "outbox": {
+      // The messages Enio wrote and nobody has sent yet, from a terminal:
+      // a headless install has no card to press Send on. The same store
+      // and the same checks as the window's buttons.
+      const box = await import("./outbox.js");
+      const sub = rest[0];
+      const show = (d: ReturnType<typeof box.getDraft> & object) =>
+        `${d.id.slice(0, 8)}  ${d.status.padEnd(9)} from ${box.draftSender(d)}\n` +
+        box
+          .renderDraft(d)
+          .split("\n")
+          .map((l) => `    ${l}`)
+          .join("\n") +
+        (d.lastError ? `\n    ! ${d.lastError}` : "") +
+        (d.result ? `\n    ${d.result}` : "");
+      if (sub === "show" || sub === "send" || sub === "drop") {
+        const draft = rest[1] ? box.findDraft(rest[1]) : null;
+        if (!draft) {
+          console.error(rest[1] ? `No one waiting message starts with "${rest[1]}". List them with: enio outbox` : `Usage: enio outbox ${sub} ID`);
+          process.exit(1);
+        }
+        if (sub === "show") {
+          console.log(show(draft));
+          break;
+        }
+        // The revision read here is the one acted on: this command printed
+        // nothing first, so what goes is what the list showed.
+        const done = sub === "send" ? await box.sendDraft(draft.id, draft.revision) : box.discardDraft(draft.id);
+        if (!done.ok) {
+          console.error(done.message);
+          process.exit(1);
+        }
+        console.log(box.recordDraftOutcome(done.draft) || done.draft.result || done.draft.status);
+        break;
+      }
+      const drafts = box.listDrafts({ status: sub === "all" ? undefined : "pending" });
+      if (drafts.length === 0) {
+        console.log(sub === "all" ? "Nothing has been written." : "Nothing is waiting to be sent.");
+        break;
+      }
+      console.log(drafts.map(show).join("\n\n"));
+      console.log(
+        `\n  enio outbox show ID    the whole message\n  enio outbox send ID    send it${config.emailSend ? "" : " (sending is off: set ENIO_EMAIL_SEND=1)"}\n  enio outbox drop ID    discard it\n  enio outbox all        sent and discarded ones too`,
+      );
+      break;
+    }
+
     case "gaps": {
       // What was asked that nothing covered: the questions memory should
       // have had an answer to. Most asked first.
@@ -707,7 +754,22 @@ async function main(): Promise<void> {
       if (action === "new") {
         const prompt = flag("--prompt");
         if (!name || !prompt) {
-          console.error(`Usage: enio automation new NAME --prompt "..." [--agent NAME] [--cron "0 9 * * 1"]`);
+          console.error(`Usage: enio automation new NAME --prompt "..." [--agent NAME] [--account WHOSE] [--cron "0 9 * * 1"]`);
+          process.exit(1);
+        }
+        // Whose account the step uses: enio, mine, or a connected account
+        // by its label or address. The same closed choice as the app's
+        // dropdown, typed.
+        const whose = flag("--account");
+        if (opts.includes("--account") && (whose === undefined || whose.startsWith("--"))) {
+          console.error("--account needs a value: enio, mine, or a connected account's label or address.");
+          process.exit(1);
+        }
+        const { stepAccountFor, listAccounts } = await import("./accounts.js");
+        const account = whose === undefined ? undefined : stepAccountFor(whose);
+        if (account === null) {
+          const names = listAccounts().map((a) => a.label ?? a.email);
+          console.error(`No account called "${whose}". Use enio, mine${names.length > 0 ? `, or one of: ${names.join(", ")}` : ""}.`);
           process.exit(1);
         }
         const agent = flag("--agent");
@@ -720,10 +782,13 @@ async function main(): Promise<void> {
         try {
           const pipeline = savePipeline({
             name: name!,
-            nodes: [{ id: "n1", abilityId: ability.id, prompt }],
+            nodes: [{ id: "n1", abilityId: ability.id, prompt, ...(account ? { account } : {}) }],
             edges: [],
           });
-          console.log(`Created "${pipeline.name}" — one step, ${ability.title}.`);
+          console.log(
+            `Created "${pipeline.name}" — one step, ${ability.title}` +
+              `${account ? `, using ${account === "agent" ? "Enio's own account" : account === "user" ? "your account" : `the account ${whose}`}` : ""}.`,
+          );
           const cron = flag("--cron");
           if (cron) console.log(schedulePipeline(pipeline.id, pipeline.name, cron));
           else console.log(`Schedule it with: enio automation schedule ${pipeline.name} --cron "0 9 * * 1"`);
@@ -1866,8 +1931,11 @@ enio — a local agent with tools and persistent memory
   enio personality        how replies are shaped: derived from memory, or set an axis
   enio examples           list saved answer examples
 
+  enio outbox              messages Enio wrote that are waiting for you to send
+  enio outbox send|drop|show ID
+
   enio automations         list automations and when they run
-  enio automation new NAME --prompt "..." [--agent NAME] [--cron "0 9 * * 1"]
+  enio automation new NAME --prompt "..." [--agent NAME] [--account WHOSE] [--cron "0 9 * * 1"]
   enio automation schedule|unschedule|run|runs|rm NAME
   enio daemon              run the scheduler
   enio suggest [--write]   find what is worth automating

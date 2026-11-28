@@ -40,7 +40,7 @@ export function FlowWidget({ id, request, nodes = [], edges = [], ran = null, se
 
   useEffect(() => {
     const shape = (g) =>
-      JSON.stringify([g.nodes.map((n) => [n.id, n.abilityId, n.prompt]), (g.edges ?? []).map((x) => [x.from, x.to])]);
+      JSON.stringify([g.nodes.map((n) => [n.id, n.abilityId, n.prompt, n.account ?? ""]), (g.edges ?? []).map((x) => [x.from, x.to])]);
     const onEdited = (e) => {
       if (e.detail?.id !== id || !Array.isArray(e.detail.nodes) || e.detail.nodes.length === 0) return;
       const next = { nodes: e.detail.nodes, edges: e.detail.edges ?? [] };
@@ -78,7 +78,14 @@ export function FlowWidget({ id, request, nodes = [], edges = [], ran = null, se
     try {
       await runDraft(
         {
-          nodes: graph.nodes.map((n) => ({ id: n.id, abilityId: n.abilityId, prompt: n.prompt })),
+          // The account a step was set to on the canvas rides along, or a
+          // plan edited there and run here would run without it.
+          nodes: graph.nodes.map((n) => ({
+            id: n.id,
+            abilityId: n.abilityId,
+            prompt: n.prompt,
+            ...(n.account ? { account: n.account } : {}),
+          })),
           edges: graph.edges,
           // Names the conversation, so the server writes the outcome into it.
           sessionId,
@@ -106,7 +113,8 @@ export function FlowWidget({ id, request, nodes = [], edges = [], ran = null, se
           } else if (event.type === "outcome") {
             window.dispatchEvent(
               new CustomEvent("enio:flow-outcome", {
-                detail: { sessionId, flowId: id, reply: event.reply, artifacts: event.artifacts ?? [] },
+                // The cards of any message a step wrote ride with the reply.
+                detail: { sessionId, flowId: id, reply: event.reply, artifacts: event.artifacts ?? [], widgets: event.widgets ?? [] },
               }),
             );
           }

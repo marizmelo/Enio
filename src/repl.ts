@@ -21,6 +21,9 @@ import {
   removePreference,
 } from "./memory/learning.js";
 import type { Message } from "./types.js";
+import { discardDraft, listDrafts, recordDraftOutcome, renderDraft, sendDraft } from "./outbox.js";
+import { approvePlan, getPlan, listPendingPlans, recordPlanOutcome, settlePlan } from "./plans.js";
+import { desktopEnabled } from "./tools/desktop.js";
 import { canRunMaple, platformLabel, whyNoMaple } from "./platform.js";
 
 /** The advice differs by platform: telling a Linux user to run `enio up` when
@@ -160,7 +163,7 @@ export async function repl(opts: { showThinking: boolean; resume?: string }): Pr
     if (!input) continue;
 
     if (input.startsWith("/")) {
-      const handled = await handleCommand(input, { history, showThinking, lastExchange });
+      const handled = await handleCommand(input, { history, showThinking, lastExchange, sessionId });
       if (handled.exit) break;
       if (handled.toggleThinking !== undefined) showThinking = handled.toggleThinking;
       continue;
@@ -183,6 +186,7 @@ export async function repl(opts: { showThinking: boolean; resume?: string }): Pr
 
     let streamedAny = false;
     let inThinking = false;
+    const turnStartedAt = Date.now();
 
     try {
       const turn = await runTurn(mentions.text || input, history, registry, sessionId, {
@@ -233,6 +237,12 @@ export async function repl(opts: { showThinking: boolean; resume?: string }): Pr
       });
       lastExchange = { question: turn.question, answer: turn.reply };
       stdout.write(streamedAny ? "\n\n" : dim("\n(no response)\n\n"));
+      // The window has buttons under a written message; this is where the
+      // terminal's are.
+      if (turn.reply.startsWith("I wrote this message.")) stdout.write(dim("  /send to send it · /drop to discard it\n\n"));
+      else if (listPendingPlans().some((p) => p.sessionId === sessionId && p.createdAt >= turnStartedAt)) {
+        stdout.write(dim("  /run to see what it would run · /discard to drop it\n\n"));
+      }
     } catch (err) {
       stdout.write(`\n${yellow("Error:")} ${(err as Error).message}\n\n`);
     }
@@ -247,6 +257,7 @@ async function handleCommand(
     history: Message[];
     showThinking: boolean;
     lastExchange: { question: string; answer: string } | null;
+    sessionId: string;
   },
 ): Promise<{ exit?: boolean; toggleThinking?: boolean }> {
   const [cmd, ...args] = input.split(/\s+/);
@@ -261,6 +272,10 @@ async function handleCommand(
           "  @<name>     send to an agent, attach a file, or allow an MCP server",
           "",
           "  /help       this message",
+          "  /send       send the message Enio wrote in this conversation",
+          "  /drop       discard it",
+          "  /run        run the plan Enio proposed in this conversation",
+          "  /discard    discard it",
           "  /good       save the last answer as an example to imitate",
           "  /pref TEXT  add a standing instruction (no TEXT lists them)",
           "  /unpref ID  remove one",
@@ -272,6 +287,89 @@ async function handleCommand(
         ].join("\n"),
       );
       return {};
+
+    case "/send":
+    case "/drop": {
+      // The terminal's Send and Discard. With no card to press, the
+      // message is printed again first and the command is the consent --
+      // which is why it acts only when exactly one is waiting here, or
+      // the one is named: "send" must never mean "whichever".
+      const waiting = listDrafts({ status: "pending", sessionId: ctx.sessionId });
+      // By id: at least four characters, and only when one waiting
+      // message starts that way (findDraft's rule). "/send 1" typed for
+      // "the first one" sent whichever id began with a 1.
+      const starts = rest.length >= 4 ? waiting.filter((d) => d.id.startsWith(rest.toLowerCase())) : [];
+      const draft = rest ? (starts.length === 1 ? starts[0] : undefined) : waiting.length === 1 ? waiting[0] : undefined;
+      if (!draft) {
+        console.log(
+          waiting.length === 0
+            ? dim("  no message is waiting in this conversation\n")
+            : "\n" + waiting.map((d) => `  ${d.id.slice(0, 8)}  to ${d.to.join(", ")}: ${d.subject}`).join("\n") + dim(`\n  ${rest ? "no one waiting message has that id" : "more than one is waiting"}: ${cmd} ID, with the id as shown\n`),
+        );
+        return {};
+      }
+      console.log("\n" + renderDraft(draft).split("\n").map((l) => `  ${l}`).join("\n") + "\n");
+      const done = cmd === "/send" ? await sendDraft(draft.id, draft.revision) : discardDraft(draft.id);
+      if (!done.ok) {
+        console.log(yellow(`  ${done.message}\n`));
+        return {};
+      }
+      const said = recordDraftOutcome(done.draft);
+      // The next turn's model reads the thread, so it is told too.
+      ctx.history.push({ role: "assistant", content: said });
+      console.log(green(`  ${said}\n`));
+      return {};
+    }
+
+    case "/run":
+    case "/discard": {
+      // The terminal's Run and Discard for a proposed plan. The window
+      // shows each step's script in a sheet before it runs; here they are
+      // printed, whole, and running takes the command a second time with
+      // the plan's id -- reading what will run comes before consenting to
+      // it, and one command cannot be both.
+      const waiting = listPendingPlans().filter((p) => p.sessionId === ctx.sessionId);
+      const begun = rest.length >= 4 ? waiting.filter((p) => p.id.startsWith(rest.toLowerCase())) : [];
+      const plan = rest ? (begun.length === 1 ? begun[0] : undefined) : waiting.length === 1 ? waiting[0] : undefined;
+      if (!plan) {
+        console.log(
+          waiting.length === 0
+            ? dim("  no plan is waiting in this conversation\n")
+            : "\n" + waiting.map((p) => `  ${p.id.slice(0, 8)}  ${p.summary}`).join("\n") + dim(`\n  more than one is waiting: ${cmd} ID\n`),
+        );
+        return {};
+      }
+      if (cmd === "/discard") {
+        settlePlan(plan.id, "declined");
+        const said = `You discarded the plan: ${plan.summary}. Nothing ran.`;
+        ctx.history.push({ role: "assistant", content: said });
+        console.log(dim(`  ${said}\n`));
+        return {};
+      }
+      if (!rest) {
+        console.log(
+          "\n" +
+            plan.steps.map((st, i) => `  ${i + 1}. ${st.summary}\n${st.script.split("\n").map((l) => `       ${l}`).join("\n")}`).join("\n") +
+            dim(`\n\n  nothing has run. To run exactly this: /run ${plan.id.slice(0, 8)}\n`),
+        );
+        return {};
+      }
+      // As the approve route: a composed plan needs desktop control, and
+      // the one that only opens an app nobody asked for does not.
+      if (!desktopEnabled() && plan.source !== "open") {
+        console.log(yellow("  Desktop control is switched off, so this plan cannot run. Start enio with ENIO_DESKTOP=1.\n"));
+        return {};
+      }
+      const stored = getPlan(plan.id);
+      if (!stored || stored.status !== "pending") {
+        console.log(dim("  that plan is no longer waiting\n"));
+        return {};
+      }
+      const said = recordPlanOutcome(stored, await approvePlan(stored));
+      ctx.history.push({ role: "assistant", content: said });
+      console.log(`\n${said.split("\n").map((l) => `  ${l}`).join("\n")}\n`);
+      return {};
+    }
 
     case "/good": {
       if (!ctx.lastExchange) {

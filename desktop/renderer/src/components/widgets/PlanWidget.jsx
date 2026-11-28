@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, ListChecks, Play, X } from "lucide-react";
+import { Check, ListChecks, Play, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -31,8 +31,19 @@ const KIND_LABEL = { applescript: "AppleScript", shell: "shell", python: "Python
  * Each step can also be run on its own. Approving a whole plan to discover
  * whether its third step works is a bad trade once steps have side effects,
  * and worse now that a step can be Python.
+ *
+ * Four things can be done with a plan: run it, change it, discard it, or
+ * have it written again. "Try again" sets this one aside and asks the
+ * same request again in the thread, so the new plan arrives as any plan
+ * does. A plan that is one known step -- a script the person saved, or an
+ * app Enio would open -- can be run from the card: there is nothing in
+ * the sheet they have not already read or kept. A plan the model has just
+ * composed is run from the sheet, where its scripts are.
+ *
+ *   enio:flow-outcome  this card → thread: what the run did, as a reply
+ *   enio:resend        this card → thread: the request, asked again
  */
-export function PlanWidget({ id, summary, steps: proposed = [] }) {
+export function PlanWidget({ id, summary, steps: proposed = [], request = null, source = null, sessionId = null }) {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState("pending");
   const [results, setResults] = useState([]);
@@ -51,7 +62,10 @@ export function PlanWidget({ id, summary, steps: proposed = [] }) {
   const [revising, setRevising] = useState(false);
   const [undo, setUndo] = useState(null);
 
-  const settled = ["approved", "saved", "declined", "failed"].includes(state);
+  const settled = ["approved", "saved", "declined", "failed", "retried"].includes(state);
+  const savedName = typeof source === "string" && source.startsWith("saved:") ? source.slice(6) : null;
+  // One step whose text the person has already seen: run from the card.
+  const known = savedName !== null || source === "open";
   const edited = JSON.stringify(steps) !== JSON.stringify(proposed);
 
   const post = async (path, body) => {
@@ -70,14 +84,42 @@ export function PlanWidget({ id, summary, steps: proposed = [] }) {
   };
 
   const act = async (action, extra) => {
+    // One at a time: Enter held in the name field ran a plan twice.
+    if (state === "running") return;
     setState("running");
     setError("");
     try {
       // The edited steps travel with the decision: what is on screen is what
       // is being approved.
-      const data = await post(`/plans/${id}/${action}`, { ...extra, steps });
+      // Only when they were changed. Unchanged, the server runs the text
+      // it stored, so a card can never run steps it is not showing.
+      const data = await post(`/plans/${id}/${action}`, { ...extra, ...(edited ? { steps } : {}) });
       setResults(data.results ?? []);
       setState(data.status ?? "approved");
+      // What ran is said in the thread, by the server that ran it.
+      if (data.reply && (data.sessionId ?? sessionId)) {
+        window.dispatchEvent(
+          new CustomEvent("enio:flow-outcome", {
+            detail: { sessionId: data.sessionId ?? sessionId, reply: data.reply },
+          }),
+        );
+      }
+    } catch (err) {
+      setState("pending");
+      setError(String(err?.message ?? err));
+    }
+  };
+
+  const tryAgain = async () => {
+    setState("running");
+    setError("");
+    try {
+      const data = await post(`/plans/${id}/retry`);
+      setState("retried");
+      setOpen(false);
+      window.dispatchEvent(
+        new CustomEvent("enio:resend", { detail: { sessionId, text: data.request ?? request } }),
+      );
     } catch (err) {
       setState("pending");
       setError(String(err?.message ?? err));
@@ -126,7 +168,8 @@ export function PlanWidget({ id, summary, steps: proposed = [] }) {
   const label = {
     approved: "Ran",
     saved: "Saved and ran",
-    declined: "Declined",
+    declined: "Discarded",
+    retried: "Set aside",
     failed: "Stopped part-way",
   }[state];
 
@@ -139,12 +182,31 @@ export function PlanWidget({ id, summary, steps: proposed = [] }) {
           <p className="text-xs text-muted-foreground">
             {settled
               ? label
-              : `${steps.length} step${steps.length === 1 ? "" : "s"} · nothing has run`}
+              : savedName
+                ? `Your saved script “${savedName}” · nothing has run`
+                : `${steps.length} step${steps.length === 1 ? "" : "s"} · nothing has run`}
           </p>
+          {!open && error && <p className="text-xs text-destructive">{error}</p>}
         </div>
-        <Button size="sm" variant={settled ? "ghost" : "default"} onClick={() => setOpen(true)}>
+        {known && !settled && (
+          <Button size="sm" disabled={state === "running"} onClick={() => act("approve")}>
+            <Play className="mr-1 size-3.5" />
+            {state === "running" ? "Running…" : "Run"}
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant={settled ? "ghost" : known ? "outline" : "default"}
+          onClick={() => setOpen(true)}
+        >
           {settled ? "View" : "Review"}
         </Button>
+        {known && !settled && (
+          <Button size="sm" variant="ghost" disabled={state === "running"} onClick={() => act("decline")}>
+            <X className="mr-1 size-3.5" />
+            Discard
+          </Button>
+        )}
       </div>
 
       <Sheet open={open} onOpenChange={setOpen}>
@@ -294,7 +356,7 @@ export function PlanWidget({ id, summary, steps: proposed = [] }) {
                         worked; this says you are willing to have it repeat
                         without being asked — and only ever this script. */}
                     <span>
-                      Safe to run on its own — let Enio use this recipe without asking, when
+                      Safe to run on its own — let Enio use this script without asking, when
                       automatic running is on.
                     </span>
                   </label>
@@ -311,10 +373,10 @@ export function PlanWidget({ id, summary, steps: proposed = [] }) {
                         autoFocus
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="recipe name"
+                        placeholder="script name"
                         className="h-9 rounded-md border bg-background px-2 text-sm"
                         onKeyDown={(e) => {
-                          if (e.key === "Enter" && name.trim()) act("save", { name, safe });
+                          if (e.key === "Enter" && name.trim() && state !== "running") act("save", { name, safe });
                         }}
                       />
                       <Button
@@ -332,17 +394,23 @@ export function PlanWidget({ id, summary, steps: proposed = [] }) {
                       disabled={state === "running"}
                       onClick={() => setNaming(true)}
                     >
-                      Save as recipe
+                      Save as script
                     </Button>
                   )}
 
+                  {request && (
+                    <Button variant="ghost" disabled={state === "running"} onClick={tryAgain}>
+                      <RotateCcw className="mr-1 size-3.5" />
+                      Try again
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     disabled={state === "running"}
                     onClick={() => act("decline")}
                   >
                     <X className="mr-1 size-3.5" />
-                    Decline
+                    Discard
                   </Button>
                 </div>
               </>

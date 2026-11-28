@@ -110,8 +110,7 @@ describe("the traits table", () => {
       edit_file: "Wrote 12 bytes to notes.md\nReplaced 1 passage at line 3.",
       take_screenshot: "Screenshot saved to /tmp/assets/screen-1786307090790.png\n\nA window titled Notes.",
       send_email:
-        "DRY RUN — nothing was sent.\n\nTo: a@example.com\nSubject: Hello\n\nHi.\n" +
-        "Saved to /tmp/assets/draft-1786307090790.eml\nSet ENIO_EMAIL_SEND=1 to send for real.",
+        "Written, not sent.\nSaved to /tmp/assets/draft-1786307090790.eml\n\nFrom: me@example.com\nTo: a@example.com\nSubject: Hello\n\nHi.",
       propose_plan: "Proposed, not run. The user has been shown this plan and must approve it:\n\n1. Open Notes",
     };
     const makers = BUILTIN_TOOL_NAMES.filter((name) => BUILTIN_TRAITS[name].makes !== null);

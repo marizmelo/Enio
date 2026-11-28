@@ -57,6 +57,27 @@ export type Widget =
       id: string;
       summary: string;
       steps: Array<{ summary: string; script: string }>;
+      /** What was asked, when known: what Try again asks again. */
+      request?: string | null;
+      /** `saved:<name>` for a script the person saved, offered again;
+       *  `open` for an app the model went to open unasked. */
+      source?: string | null;
+    }
+  /**
+   * A message Enio wrote and has not sent (outbox.ts). The card shows the
+   * stored draft; Send, the edits and Discard all act on that row by id.
+   * `sendingOn` says whether Send can work on this machine at all.
+   */
+  | {
+      type: "mail";
+      id: string;
+      revision: number;
+      from: string;
+      to: string[];
+      cc: string[];
+      subject: string;
+      body: string;
+      sendingOn: boolean;
     }
   /**
    * A picture the user should see with their own eyes — a screenshot,
@@ -101,6 +122,14 @@ export type ToolOutput =
   | {
       text: string;
       widget?: Widget;
+      /**
+       * The reply for the turn, written by the harness. When a tool sets
+       * it the turn ends after this batch of calls: this is what the
+       * person reads, and the model gets no further round. For the one
+       * kind of result the model must not be the one to report -- after
+       * writing a message it said "sent".
+       */
+      final?: string;
       /**
        * Something the USER should know, which the model must not be told.
        *

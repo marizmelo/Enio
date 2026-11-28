@@ -194,6 +194,28 @@ function migrate(d: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_plans_status ON plans(status);
 
+    CREATE TABLE IF NOT EXISTS outbox (
+      id          TEXT PRIMARY KEY,
+      session_id  TEXT,
+      origin      TEXT,
+      account_id  TEXT,
+      from_addr   TEXT NOT NULL,
+      to_addrs    TEXT NOT NULL,
+      cc_addrs    TEXT NOT NULL,
+      subject     TEXT NOT NULL,
+      body        TEXT NOT NULL,
+      proposed    TEXT NOT NULL,
+      status      TEXT NOT NULL DEFAULT 'pending',
+      revision    INTEGER NOT NULL DEFAULT 1,
+      result      TEXT,
+      last_error  TEXT,
+      file        TEXT,
+      created_at  INTEGER NOT NULL,
+      decided_at  INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox(status);
+    CREATE INDEX IF NOT EXISTS idx_outbox_session ON outbox(session_id);
+
     CREATE TABLE IF NOT EXISTS saved_recipes (
       name        TEXT PRIMARY KEY,
       summary     TEXT NOT NULL,
@@ -252,6 +274,13 @@ function migrate(d: Database.Database): void {
   // has vouched for them. Both default to what the old rows already meant.
   addColumn(d, "saved_recipes", "kind", "TEXT NOT NULL DEFAULT 'applescript'");
   addColumn(d, "saved_recipes", "safe", "INTEGER NOT NULL DEFAULT 0");
+  // What the person asked for when a plan was written, quoted. A plan can
+  // be written again from it (Try again), and a script saved from the plan
+  // keeps it, so the same request later finds the script without a model.
+  // Where it came from says whether it is a saved script being run again.
+  addColumn(d, "plans", "request", "TEXT");
+  addColumn(d, "plans", "source", "TEXT");
+  addColumn(d, "saved_recipes", "request", "TEXT");
   // The running summary compaction produces mid-session, kept so the final
   // session summary can cover the whole arc instead of the first 12k chars.
   addColumn(d, "sessions", "fold_summary", "TEXT");

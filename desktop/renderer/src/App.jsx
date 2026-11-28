@@ -19,6 +19,7 @@ import {
   detachFromConversation,
   listConversations,
   pendingPlans,
+  pendingDrafts,
 } from "@/lib/conversations";
 import { HistoryDialog } from "@/components/HistoryDialog";
 import { ProjectsDialog } from "@/components/ProjectsDialog";
@@ -329,7 +330,7 @@ export function App() {
     if (d.sessionId !== conversationIdRef.current) return;
     setMessages((prior) => [
       ...prior,
-      { role: "assistant", content: d.reply, tools: [], artifacts: d.artifacts ?? [], agent: null },
+      { role: "assistant", content: d.reply, tools: [], artifacts: d.artifacts ?? [], agent: null, widgets: d.widgets ?? [] },
     ]);
   }, []);
   useEffect(() => {
@@ -348,6 +349,33 @@ export function App() {
     heldOutcomes.current = [];
     held.forEach(appendOutcome);
   }, [streaming, appendOutcome]);
+
+  // "Try again" on a plan card: the request the plan was written for,
+  // asked again as an ordinary message. In the open on purpose -- the
+  // thread shows it was asked twice, and the new plan arrives the way any
+  // plan does. Held while a reply is streaming; dropped only if the
+  // conversation changed, where asking again is one line.
+  const heldResend = useRef(null);
+  useEffect(() => {
+    const onResend = (e) => {
+      const d = e.detail;
+      if (!d?.text) return;
+      if (d.sessionId && d.sessionId !== conversationIdRef.current) return;
+      // While a reply is streaming the request waits for it to end: the
+      // plan was already set aside, and dropping the request here left a
+      // card saying it had been asked again when nothing was.
+      if (streamingRef.current) heldResend.current = d;
+      else sendRef.current?.(d.text);
+    };
+    window.addEventListener("enio:resend", onResend);
+    return () => window.removeEventListener("enio:resend", onResend);
+  }, []);
+  useEffect(() => {
+    const d = heldResend.current;
+    if (streaming || !d) return;
+    heldResend.current = null;
+    if (!d.sessionId || d.sessionId === conversationIdRef.current) sendRef.current?.(d.text);
+  }, [streaming]);
 
   const backendReady = status.phase === "ready";
   // Open a part of the app by its closed name: the harness asks for it over
@@ -583,11 +611,30 @@ export function App() {
             id: p.id,
             summary: p.summary,
             steps: p.steps,
+            request: p.request ?? null,
+            source: p.source ?? null,
           })),
         });
       }
     } catch {
       /* The thread is still usable without the cards. */
+    }
+    // The same for a message Enio wrote and nobody has sent: its card is
+    // the only place it can be sent from in this window.
+    try {
+      const drafts = await pendingDrafts(convId);
+      if (drafts.length > 0) {
+        msgs.push({
+          role: "assistant",
+          content:
+            drafts.length === 1
+              ? "This message is still waiting for you to send it."
+              : "These messages are still waiting for you to send them.",
+          widgets: drafts.map((d) => ({ type: "mail", ...d })),
+        });
+      }
+    } catch {
+      /* As above. */
     }
     return msgs;
   }, []);

@@ -21,7 +21,7 @@ process.env.ENIO_SMTP_HOST = "smtp.example.com";
 process.env.ENIO_EMAIL_FROM = "me@example.com";
 process.env.ENIO_EMAIL_ALLOWED_TO = "team@example.com,@trusted.org";
 
-const { emailTools, emailConfigured } = await import("./tools/email.js");
+const { emailTools, emailConfigured, addressesIn, recipientAllowed } = await import("./tools/email.js");
 const { buildDesktopTools, desktopEnabled, DESKTOP_COMMANDS } = await import("./tools/desktop.js");
 const desktopTools = buildDesktopTools();
 const { checkCommand } = await import("./tools/shell.js");
@@ -39,19 +39,20 @@ describe("email", () => {
     assert.equal(tool.name, "send_email");
   });
 
-  test("dry run by default — nothing is transmitted", async () => {
+  test("the tool writes the message and transmits nothing", async () => {
     // Sending is irreversible and the model deciding to send is exactly the
-    // judgement a small model gets wrong, so this is the shipping default.
+    // judgement a small model gets wrong: the call writes to the outbox,
+    // and a person sends.
     const out = toolText(await tool.run({
       to: "team@example.com",
       subject: "Weekly update",
       body: "All good.",
     }));
-    assert.match(out, /DRY RUN/);
+    assert.match(out, /^Written, not sent\./);
     assert.match(out, /Subject: Weekly update/);
   });
 
-  test("the dry run writes a readable .eml so it can be checked", async () => {
+  test("the message is also a readable .eml, so it can be checked with no app running", async () => {
     await tool.run({ to: "team@example.com", subject: "Check me", body: "Body text." });
     const drafts = readdirSync(process.env.ENIO_WORKSPACE!).filter((f) => f.endsWith(".eml"));
     assert.ok(drafts.length > 0, "a draft file should exist");
@@ -69,14 +70,69 @@ describe("email", () => {
 
   test("a domain rule permits everyone at that domain", async () => {
     const out = toolText(await tool.run({ to: "anyone@trusted.org", subject: "Hi", body: "x" }));
-    assert.match(out, /DRY RUN/, "should have been allowed through to the dry run");
+    assert.match(out, /^Written, not sent\./, "should have been allowed through");
+  });
+
+  test("the allow-list is asked about every address, in To and in Cc", async () => {
+    // What it was: one question of the whole string, "does it end with the
+    // rule". A stranger listed first rode in behind a permitted address at
+    // the end, and both transports send to a comma-separated list.
+    const send = async (to: string, cc?: string) => toolText(await tool.run({ to, cc, subject: "Hi", body: "x" }));
+    for (const to of [
+      "stranger@elsewhere.com, anyone@trusted.org",
+      "stranger@elsewhere.com; team@example.com",
+      "anyone@trusted.org, stranger@elsewhere.com",
+      "Stranger <stranger@elsewhere.com>, anyone@trusted.org",
+    ]) {
+      const out = await send(to);
+      assert.match(out, /^Refused: stranger@elsewhere\.com is not in the allowed recipient list/, to);
+      assert.doesNotMatch(out, /Written, not sent/, to);
+    }
+    // Cc was not asked at all.
+    assert.match(await send("team@example.com", "stranger@elsewhere.com"), /^Refused: stranger@elsewhere\.com is not/);
+    assert.match(await send("team@example.com", "a@elsewhere.com, b@elsewhere.com"), /^Refused: a@elsewhere\.com, b@elsewhere\.com are not/);
+    // A permitted list goes through, and what is shown is the parsed list.
+    const ok = await send('"Team, The" <Team@Example.com>; anyone@trusted.org', "second@trusted.org");
+    assert.match(ok, /^Written, not sent\./);
+    assert.match(ok, /^To: team@example\.com, anyone@trusted\.org$/m);
+    assert.match(ok, /^Cc: second@trusted\.org$/m);
+    // A domain rule is the end of an ADDRESS, not of any text that holds it.
+    assert.match(await send("anyone@trusted.org.elsewhere.com"), /^Refused/);
+    assert.match(await send("stranger@nottrusted.org"), /^Refused/);
+  });
+
+  test("a value that is not a list of addresses is refused whole, naming the part", async () => {
+    const parsed = (v: string) => addressesIn(v);
+    assert.deepEqual(parsed("ana@example.net"), { ok: true, addresses: ["ana@example.net"] });
+    assert.deepEqual(parsed(" Ana Costa <Ana@Example.net> ; bob@example.net, ana@example.net "), { ok: true, addresses: ["ana@example.net", "bob@example.net"] });
+    assert.deepEqual(parsed('"Costa, Ana" <ana@example.net>'), { ok: true, addresses: ["ana@example.net"] });
+    assert.deepEqual(parsed(""), { ok: true, addresses: [] });
+    for (const bad of ["Ana", "ana@", "@example.net", "ana@example", "ana@example.net bob@example.net", "ana@@example.net", "<ana@example.net", "ana@example..net"]) {
+      assert.equal(parsed(bad).ok, false, bad);
+    }
+    assert.deepEqual(parsed("team@example.com, Ana"), { ok: false, bad: "Ana" });
+    assert.equal(recipientAllowed("x@corp.com", ["@corp.com"]), true);
+    assert.equal(recipientAllowed("x@corp.com", ["y@corp.com"]), false);
+    assert.equal(recipientAllowed("x@anything.example", []), true);
+    // And at the tool: the part that would not parse, in the old words.
+    assert.equal(toolText(await tool.run({ to: "Ana", subject: "x", body: "y" })), '"Ana" is not an email address.');
+    assert.match(toolText(await tool.run({ to: "team@example.com, Ana", subject: "x", body: "y" })), /^"Ana" is not an email address\.$/);
+    assert.match(toolText(await tool.run({ to: "team@example.com", cc: "nobody", subject: "x", body: "y" })), /^"nobody" in the cc is not an email address\.$/);
+    assert.match(toolText(await tool.run({ to: " ; ", subject: "x", body: "y" })), /is not an email address/);
+  });
+
+  test("a subject is one line, whatever was written into it", async () => {
+    const out = toolText(await tool.run({ to: "team@example.com", subject: "Hello\r\nBcc: stranger@elsewhere.com\nX-Extra: 1", body: "y" }));
+    assert.match(out, /^Subject: Hello Bcc: stranger@elsewhere\.com X-Extra: 1$/m);
+    assert.doesNotMatch(out, /^Bcc:/m);
+    assert.doesNotMatch(out, /^X-Extra:/m);
   });
 
   test("rejects a malformed address and an empty subject", async () => {
     assert.match(toolText(await tool.run({ to: "not-an-address", subject: "x", body: "y" })), /not an email/);
     assert.match(
       toolText(await tool.run({ to: "team@example.com", subject: "", body: "y" })),
-      /no subject/,
+      /needs a subject/,
     );
   });
 });

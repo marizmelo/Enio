@@ -107,33 +107,38 @@ describe("mail tools over a connected account", () => {
     assert.match(out, /It is done\./);
   });
 
-  test("send stays dry-run until ENIO_EMAIL_SEND=1, whatever the backend", async () => {
-    // The invariant predates accounts and must survive them: an
-    // irreversible act is opt-in no matter what carries it.
+  test("send_email writes a message and sends nothing, whatever the backend", async () => {
+    // The invariant predates accounts and outlived the dry run: an
+    // irreversible act is not the model's to take. The tool writes to the
+    // outbox; a person sends.
     const calls = stubScript({ "mail.send": { sent: true } });
     const send = emailTools.find((t) => t.name === "send_email")!;
-    const out = String(await send.run({ to: "ana@x.com", subject: "hi", body: "there" }));
-    assert.match(out, /DRY RUN/);
+    const result = await send.run({ to: "ana@x.com", subject: "hi", body: "there" });
+    const out = typeof result === "string" ? result : result.text;
+    assert.match(out, /^Written, not sent\./);
     assert.equal(calls.length, 0, "nothing left the machine");
-    assert.match(out, /From: enio@example\.com/, "the draft names the account it would send from");
+    assert.match(out, /From: enio@example\.com/, "the message names the account it would go from");
   });
 
-  test("with the gate open, the send goes through the account", async () => {
-    process.env.ENIO_EMAIL_SEND = "1";
+  test("with sending on, a person's Send goes through the account, and the tool still does not", async () => {
     const { config } = await import("./config.js");
+    const outbox = await import("./outbox.js");
     const previous = config.emailSend;
     (config as { emailSend: boolean }).emailSend = true;
     try {
       const calls = stubScript({ "mail.send": { sent: true, to: "ana@x.com" } });
       const send = emailTools.find((t) => t.name === "send_email")!;
       const result = await send.run({ to: "ana@x.com", subject: "hi", body: "there" });
-      const out = typeof result === "string" ? result : result.text;
-      assert.match(out, /Sent to ana@x\.com from enio@example\.com/);
-      assert.match(String((result as { notice?: string }).notice ?? ""), /Sent from .*enio@example\.com/, "whose address it went from is announced");
+      assert.ok(typeof result !== "string");
+      assert.match(result.text, /^Written, not sent\./);
+      assert.equal(calls.length, 0, "the model's call sends nothing, with the switch on");
+      const sent = await outbox.sendDraft((result.widget as { id: string }).id);
+      assert.ok(sent.ok, JSON.stringify(sent));
+      assert.match(sent.draft.result ?? "", /^Sent to ana@x\.com from enio@example\.com/);
       assert.equal(calls[0]!.op, "mail.send");
+      assert.equal(calls.length, 1);
     } finally {
       (config as { emailSend: boolean }).emailSend = previous;
-      delete process.env.ENIO_EMAIL_SEND;
     }
   });
 });

@@ -173,7 +173,8 @@ dimensions. No embeddings → lexical matching. A tool that can only fail is
 *withheld* rather than offered, because a dead-end tool burns the model's
 limited attention. An attachment must never be able to fail a turn.
 
-**Irreversible actions are opt-in.** Email is dry-run until `ENIO_EMAIL_SEND=1`.
+**Irreversible actions are opt-in.** No tool sends mail (next entry), and a
+person's Send does nothing until `ENIO_EMAIL_SEND=1`.
 IMAP opens with `EXAMINE` so the *server* refuses changes. Anything that can
 change the machine is off until `ENIO_DESKTOP=1`. Clicking and typing on web
 pages is off until `ENIO_BROWSER_ACT=1` — that one gates a *security boundary*,
@@ -189,6 +190,39 @@ runs fixed read-only scripts chosen from a closed list, and needs no flag —
 macOS still prompts for Automation access, which is the consent that protects
 the data. Gating a read identically to arbitrary AppleScript made the safest
 capability carry the cost of the most dangerous one.
+
+**The model writes a message; a person sends it.** `send_email` keeps its
+name (model-facing) and no longer sends: it writes a row in the outbox
+(`src/outbox.ts`) and the turn ends there, on the harness's own account of
+the message (`ToolOutput.final`). The only code that reaches SMTP or a
+connected account is `sendDraft`, and nothing reaches it from a tool, a
+step of an automation or a schedule: an authed route, `enio outbox send`,
+`/send` in the terminal, the card's button. `ENIO_EMAIL_SEND` therefore
+means "Send works", not "the model's call sends" — do not give any tool a
+path to `sendDraft`, and do not let a turn carry on after a message is
+written (the model then reports it as sent, which is what the dry run
+taught it to do). What is sent is the stored row at the revision the
+person was shown: edits are saved to it first, and a send names its
+revision. The outcome goes back into the conversation assembled from the
+row, never from a model. Whoever holds the bearer token can send a waiting
+message; `docs/remote-access.md` says so and must keep saying so.
+
+**An app is opened when the person asked for it; otherwise it is
+proposed.** The harness marks every `open_app` call in a conversation with
+whether the message asked for that app (`openAsked` in `agent.ts`), written
+over whatever the call carried. Unasked and not running, the open becomes a
+one-step plan and the turn ends; unasked and already running, nothing
+happens and the model carries on. This is not the irreversibility gate —
+opening is as reversible as ever, and that plan alone can be run with
+desktop control off — it is that the person did not choose it. A proposed
+plan of any kind ends the turn (`final` again): the model does not get to
+report on steps that have not run. What a run did is written into the
+thread from the steps' own results (`recordPlanOutcome`). A plan keeps the
+request it was written for, which is what **Try again** asks again and
+what lets the same request later find the script saved from it
+(`matchSavedRecipe`) with no model round. That match only ever *offers*:
+it is the harness's guess from words, and a guess must not run anything,
+whatever auto-run says.
 
 **The agent's browser is its own; logins enter it only through `enio login`.**
 Session cookies persist in `browser-state.json` (owner-only, `ENIO_BROWSER_PERSIST=0`
@@ -475,6 +509,50 @@ MCP server. People reach for MCP when they needed a skill.
   not change the check without running it. The wording was judged by blind
   panels on replayed turns, which the script does not reproduce; the
   method and every number are in DECISIONS.md.
+- The mail agent is told to show a message before sending it, and the
+  check for an invented inbox email withdrew exactly that: a draft has the
+  same subject, greeting and sign-off, so "send Ana a note" ended on "I
+  answered that without looking anything up". Two rules written to tell
+  the two apart each let invented mail through; two reviews found 42 ways.
+  The fix was not a third rule but a draft with a call behind it: a
+  message is written by `send_email` into the outbox, so a message
+  written out in a reply is never right and is sent back to make the
+  call, with or without a read before it. Do not bring back a check that
+  tells a draft from arrived mail by its look. Replay
+  `scripts/whose-account-live.mjs 3 out.json send` before changing any of
+  it: it runs with sending on and fails if a turn reaches the transport.
+- A reply the harness wrote was judged like a model's. Two messages
+  written in one turn share their closing lines, the repetition check
+  called that a model stuck in a loop, and the reply was replaced with "I
+  got stuck repeating myself" above two cards that said otherwise. A
+  check written for the model's text must skip a turn that ended on the
+  harness's own (`harnessFinal`); when adding one, add that.
+- A draft left waiting made every later turn "about the draft". The
+  waiting message was passed to each turn as the draft on the table, so
+  "when did Tom send the invoice?" was answered and then replaced with "I
+  did not send anything", an honest quote of read mail was withdrawn, and
+  a send steered by a page was let through. A waiting message counts for
+  a turn only when the reply before was about it or the words are a
+  change to it (`onWaiting`). State that outlives a turn is not context
+  for every turn after.
+- The first saved-script match offered the opposite script. "Most of the
+  content words in common" with small words dropped as filler matched
+  "turn off dark mode" to the script saved for "turn on dark mode", and
+  the next thing on screen was a Run button. The match is now the same
+  words in the same order, and the words that turn a request around are
+  kept. Anything that ends in a button that runs something is matched
+  exactly or not at all.
+- "Chrome" opened Chrome Remote Desktop Host Uninstaller: the app
+  matcher tried a unique prefix before a whole word, and the uninstaller
+  was the one name beginning with it. A whole-word match now ranks with a
+  prefix and a tool for an app gives way to the app (`resolveApp`). The
+  same turn read the Mail app for a question about the browser, because a
+  recipe silently ignored an `app` argument it does not take, and gave
+  subjects with no dates from an inbox 173 days stale. A recipe that
+  reads one app now refuses another and says what it read and how old it
+  is. When replaying an operator turn, load the bundled skills: without
+  `computer-control` the model redirects to the mail agent and the turn
+  does not reproduce.
 - Page text for the model is never `textContent`. That is a subtree's text
   nodes end to end, so a minified `<li>ANC</li><li>30-hour battery</li>`
   read "ANC30-hour battery" and two stacked spans read "Lucid AirGrand

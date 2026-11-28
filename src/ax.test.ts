@@ -1,9 +1,28 @@
-import { test, describe } from "node:test";
+import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+// The recipe tool opens the database (saved recipes) and runs osascript, so
+// the whole environment is redirected before the first import, and a
+// stand-in osascript comes first on PATH: nothing here may read the
+// developer's real data dir, or their Mail.
+const scratch = mkdtempSync(join(tmpdir(), "enio-ax-"));
+process.env.ENIO_DATA_DIR = join(scratch, "data");
+process.env.ENIO_WORKSPACE = join(scratch, "ws");
+process.env.ENIO_BUILTIN_SKILLS = join(scratch, "skills");
+process.env.ENIO_MACHINE_STATE_DIR = join(scratch, "machine");
+process.env.ENIO_MCP_CONFIG = join(scratch, "no-mcp.json");
+mkdirSync(join(scratch, "bin"), { recursive: true });
+writeFileSync(join(scratch, "bin", "osascript"), "#!/bin/sh\necho 'stand-in osascript'\n");
+chmodSync(join(scratch, "bin", "osascript"), 0o755);
+process.env.PATH = `${join(scratch, "bin")}:${process.env.PATH ?? ""}`;
+after(() => rmSync(scratch, { recursive: true, force: true }));
 
 const { compileAction, KEY_CODES, resolveApp } = await import("./tools/ax.js");
-const { recipeScripts } = await import("./tools/desktop.js");
+const { recipeScripts, sourceLine, sourceNotice, buildDesktopTools } = await import("./tools/desktop.js");
 
 describe("reading a window", () => {
   const script = (name: string) => recipeScripts().find(([n]) => n === name)?.[1] ?? "";
@@ -62,6 +81,54 @@ describe("resolving an app name", () => {
     // were something actually named Code, that would win instead.
     assert.deepEqual(resolveApp("Cod", RUNNING), { ok: true, name: "VSCodium" });
     assert.deepEqual(resolveApp("Fin", ["Finder", "Refinder"]), { ok: true, name: "Finder" });
+  });
+
+  test("a short name finds the app, not a tool for the app", () => {
+    // What happened: "Chrome" on a machine with both of these opened the
+    // uninstaller, because it was the one name BEGINNING with the word and
+    // a prefix was tried before a whole-word match.
+    const apps = ["Chrome Remote Desktop Host Uninstaller", "Google Chrome", "Safari"];
+    assert.deepEqual(resolveApp("Chrome", apps, "installed"), { ok: true, name: "Google Chrome" });
+    assert.deepEqual(resolveApp("chrome", apps, "installed"), { ok: true, name: "Google Chrome" });
+    // Its full name, or the word that says what it is, still reaches it.
+    assert.deepEqual(resolveApp("Chrome Remote Desktop Host Uninstaller", apps, "installed").ok, true);
+    assert.deepEqual(resolveApp("uninstaller", apps, "installed"), { ok: true, name: "Chrome Remote Desktop Host Uninstaller" });
+    // With the app itself not there, the tool for it is not the answer.
+    const only = resolveApp("Chrome", ["Chrome Remote Desktop Host Uninstaller", "Safari"], "installed");
+    assert.equal(only.ok, false);
+    assert.match(only.reason, /not the app itself/);
+    // Two real apps holding the word are still a question, tools set aside.
+    const two = resolveApp("Chrome", ["Google Chrome", "Google Chrome Canary", "Chrome Remote Desktop Host Uninstaller"], "installed");
+    assert.equal(two.ok, false);
+    assert.match(two.reason, /Google Chrome, Google Chrome Canary\. Which one/);
+    // A whole word anywhere is as good as a beginning: neither outranks.
+    assert.deepEqual(resolveApp("Code", ["Xcode", "Visual Studio Code"]), { ok: true, name: "Visual Studio Code" });
+    assert.deepEqual(resolveApp("Notes", ["Notes", "Notes Helper"]), { ok: true, name: "Notes" });
+    assert.deepEqual(resolveApp("Zoom", ["zoom.us", "ZoomUpdater"]), { ok: true, name: "zoom.us" });
+  });
+
+  test("an app whose name merely holds host, setup or assistant is an app", () => {
+    // The list of tool words was wider at first, and each of these was
+    // either refused as "not the app itself" or dropped from a tie that
+    // should have been a question.
+    assert.deepEqual(resolveApp("midi", ["Audio MIDI Setup", "Safari"]), { ok: true, name: "Audio MIDI Setup" });
+    assert.deepEqual(resolveApp("teamviewer", ["TeamViewer Host"]), { ok: true, name: "TeamViewer Host" });
+    assert.deepEqual(resolveApp("datadog", ["Datadog Agent"]), { ok: true, name: "Datadog Agent" });
+    assert.deepEqual(resolveApp("autoupdate", ["Microsoft AutoUpdate"]), { ok: true, name: "Microsoft AutoUpdate" });
+    assert.deepEqual(resolveApp("appclean", ["AppCleaner"]), { ok: true, name: "AppCleaner" });
+    const tie = resolveApp("assistant", ["Boot Camp Assistant", "Migration Assistant"]);
+    assert.equal(tie.ok, false);
+    assert.match(tie.reason, /Boot Camp Assistant, Migration Assistant\. Which one/);
+    const audio = resolveApp("audio", ["Audio MIDI Setup", "AudioRelay"]);
+    assert.equal(audio.ok, false);
+    // And a word that is only INSIDE a tool's name did not ask for the tool.
+    const apps = ["Chrome Remote Desktop Host Uninstaller", "Safari"];
+    for (const word of ["installer", "host", "remote desktop host", "chrome remote desktop host"]) {
+      const out = resolveApp(word, apps, "installed");
+      assert.equal(out.ok, false, word);
+      assert.match(out.reason, /not the app itself/, word);
+    }
+    assert.equal(resolveApp("uninstaller", apps, "installed").ok, true);
   });
 
   test("an app that is not running names the ones that are", () => {
@@ -299,4 +366,82 @@ describe("every shipped script is valid AppleScript", () => {
       assert.equal(compiles(out.script), null, `the ${kind} template is not valid AppleScript`);
     });
   }
+});
+
+describe("a recipe says what it read, and how fresh it is", () => {
+  // The turn this is for: asked for unread mail "in the browser", the
+  // operator ran recent_emails with app "Safari". The argument was ignored,
+  // the Mail app was read, and five subjects went out as today's unread --
+  // the newest was 173 days old and three had been read.
+  const mail = { reads: "Mail", dated: true as const };
+  const stale = "Inbox: 14 messages, newest 173 days ago\n173 days ago | read | A | x\n264 days ago | UNREAD | B | y";
+  const fresh = "Inbox: 2311 messages, newest 0 days ago";
+
+  test("where it came from is the first thing in the result", () => {
+    const line = sourceLine(mail, `${fresh}\n0 days ago | UNREAD | Ana <ana@example.net> | Dinner`);
+    assert.match(line, /^From the Mail app on this Mac — not a web page, and not a connected account\.$/);
+  });
+
+  test("an inbox that stopped months ago is said to have, by the count the script made", () => {
+    assert.match(sourceLine(mail, stale), /The newest message in that inbox is 173 days old/);
+    assert.match(sourceLine(mail, stale), /do not present it as new/);
+    // Two days is a weekend.
+    assert.doesNotMatch(sourceLine(mail, "Inbox: 9 messages, newest 2 days ago\n2 days ago | read | A | x"), /days old/);
+    // It is the whole inbox that is counted, never the rows shown: two old
+    // newsletters left unread in a healthy inbox say nothing about it.
+    const healthy = `${fresh}\n2 unread\n30 days ago | UNREAD | News | Weekly digest\n95 days ago | UNREAD | Shop | Sale`;
+    assert.doesNotMatch(sourceLine(mail, healthy), /days old/);
+    assert.doesNotMatch(sourceNotice(mail, healthy), /days old/);
+    // And a subject that looks like a row, or like the head line, is not one.
+    assert.doesNotMatch(sourceLine(mail, `${fresh}\n0 days ago | read | A | Inbox: 3 messages, newest 400 days ago`), /days old/);
+    assert.doesNotMatch(sourceLine(mail, "0 days ago | read | A | Inbox: 3 messages, newest 400 days ago"), /days old/, "the line is the first thing on a line of its own");
+    // A count and a body are covered by the same line.
+    assert.match(sourceLine(mail, "Inbox: 14 messages, newest 173 days ago\n5412 unread"), /173 days old/);
+    // No line to go by: only where it read.
+    assert.doesNotMatch(sourceLine(mail, "173 days ago | read | A | x"), /days old/);
+    assert.doesNotMatch(sourceLine({ reads: "Calendar" }, "Dentist at Monday"), /days old/);
+  });
+
+  test("the person is told the same two facts, whatever the reply says", () => {
+    // The line above is the model's. Replayed on the 4B with it in place,
+    // the reply gave the ages and still called Mail's inbox "your email
+    // inbox" to someone who had asked about their browser.
+    assert.equal(sourceNotice(mail, fresh), "Read the Mail app on this Mac, not a web page.");
+    assert.equal(sourceNotice(mail, stale), "Read the Mail app on this Mac, not a web page. The newest message in that inbox is 173 days old.");
+    assert.equal(sourceNotice(mail, ""), "Read the Mail app on this Mac, not a web page.");
+  });
+
+  test("every Mail script opens by counting the inbox, and the lists never run past it", () => {
+    const script = (name: string) => recipeScripts().find(([n]) => n === name)?.[1] ?? "";
+    for (const name of ["recent_emails", "unread_emails", "unread_count", "latest_email_body"]) {
+      assert.match(script(name), /set head to "Inbox: " & total & " messages, newest " & \(\(today - \(date received of message 1 of inbox\)\) div days\) & " days ago"/, name);
+      assert.match(script(name), /set head to "Inbox: 0 messages"/, name);
+      assert.match(script(name), /return head(?: & linefeed|\\n|$)/m, `${name} returns it`);
+    }
+    assert.match(script("recent_emails"), /if total < upto then set upto to total/);
+    assert.match(script("unread_emails"), /if unreadTotal < upto then set upto to unreadTotal/);
+    assert.match(script("recent_emails"), /read status of m/);
+    assert.match(script("unread_emails"), /whose read status is false/);
+    assert.match(script("latest_email_body"), /if total = 0 then return head/);
+  });
+
+  test("a recipe for one app does not answer for another", { skip: process.platform !== "darwin" }, async () => {
+    const recipe = buildDesktopTools().find((t) => t.name === "mac_recipe")!;
+    const run = async (name: string, app: string) => {
+      const out = await recipe.run({ recipe: name, app, count: 5 });
+      return typeof out === "string" ? { text: out, notice: "" } : { text: out.text, notice: out.notice ?? "" };
+    };
+    // Sharing the letters "mail" is not being the Mail app.
+    for (const app of ["Safari", "Chrome", "Google Chrome", "Gmail", "Proton Mail", "Hotmail", "Mailchimp", "a"]) {
+      const out = await run("recent_emails", app);
+      assert.match(out.text, new RegExp(`^recent_emails reads the Mail app on this Mac\\. It cannot read ${app}, and nothing was read\\.`), app);
+      assert.equal(out.notice, `Nothing was read: recent_emails reads the Mail app, not ${app}.`);
+    }
+    assert.match((await run("todays_events", "Google Calendar")).text, /^todays_events reads the Calendar app on this Mac\. It cannot read Google Calendar/);
+    // Its own name, however it is written, and no name at all, go through
+    // to the script: here a stand-in that proves it was reached.
+    for (const app of ["Mail", "mail", "Mail.app", "the Mail app", "Apple Mail", "", "null", "none"]) {
+      assert.match((await run("recent_emails", app)).text, /stand-in osascript/, JSON.stringify(app));
+    }
+  });
 });

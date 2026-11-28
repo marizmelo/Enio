@@ -76,7 +76,7 @@ and old variables still work.
 | `ENIO_SMTP_HOST` / `_PORT` / `_USER` / `_PASS` | unset |
 | `ENIO_EMAIL_FROM` | the sending address |
 | `ENIO_EMAIL_ALLOWED_TO` | recipient allowlist; addresses or `@domain` |
-| `ENIO_EMAIL_SEND` | unset — **dry run until set to `1`** |
+| `ENIO_EMAIL_SEND` | unset — the Send button is off until set to `1`. Enio never sends by itself either way: it writes the message and [you send it](accounts.md) |
 
 ## Vision, voice and web
 

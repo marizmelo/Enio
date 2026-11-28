@@ -187,19 +187,49 @@ describe("named UI actions become scripts at propose time", () => {
   test("an opened app covers the steps after it, running or not", { skip: notMac }, async () => {
     // The app a plan opens is not in the process list at propose time --
     // opening it is what puts it there. A later step targeting it must not be
-    // refused for that.
+    // refused for that. The name is resolved against what is installed, as
+    // open_app does, so the step holds the app's real name and a later step
+    // that repeats the short one means the same app.
     const tool = desktopTools.find((t) => t.name === "propose_plan")!;
     const out = await tool.run({
       summary: "Open something and press a key in it",
       steps: [
-        { summary: "open it", open: "NoSuchAppForThisTest" },
-        { summary: "confirm", press: "return", app: "NoSuchAppForThisTest" },
+        { summary: "open it", open: "chess" },
+        { summary: "confirm", press: "return", app: "chess" },
       ],
     });
     const widget = (out as { widget: { steps: Array<{ script: string }> } }).widget;
     assert.equal(widget.steps.length, 2);
-    assert.match(widget.steps[0]!.script, /open -a " & quoted form of "NoSuchAppForThisTest"/);
-    assert.match(widget.steps[1]!.script, /tell process "NoSuchAppForThisTest"/);
+    assert.match(widget.steps[0]!.script, /open -a " & quoted form of "Chess"/);
+    assert.match(widget.steps[1]!.script, /tell process "Chess"/);
+
+    // A short name that is not the app's whole name: the later step that
+    // says it again means the app the first step opens.
+    const short = await tool.run({
+      summary: "Open the monitor and press a key in it",
+      steps: [
+        { summary: "open it", open: "activity" },
+        { summary: "confirm", press: "return", app: "activity" },
+      ],
+    });
+    const shortSteps = (short as { widget: { steps: Array<{ script: string }> } }).widget.steps;
+    assert.match(shortSteps[0]!.script, /open -a " & quoted form of "Activity Monitor"/);
+    assert.match(shortSteps[1]!.script, /tell process "Activity Monitor"/);
+  });
+
+  test("a plan cannot open an app that is not installed", { skip: notMac }, async () => {
+    // Taken as written, the name went to `open -a` at approval and the
+    // plan failed on its first step. It is refused when proposed, with the
+    // reason, like every other step that cannot work.
+    const tool = desktopTools.find((t) => t.name === "propose_plan")!;
+    const before = plans.listPendingPlans().length;
+    const out = await tool.run({
+      summary: "Open something that is not there",
+      steps: [{ summary: "open it", open: "NoSuchAppForThisTest" }],
+    });
+    assert.equal(typeof out, "string");
+    assert.match(String(out), /^Cannot propose "open it": /);
+    assert.equal(plans.listPendingPlans().length, before, "nothing is stored");
   });
 
   test("a step with no action is refused by name, with the list", { skip: notMac }, async () => {

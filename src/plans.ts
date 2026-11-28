@@ -4,6 +4,10 @@ import { promisify } from "node:util";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { getDb } from "./memory/db.js";
+import { logMessage } from "./memory/store.js";
+import { recordTurn } from "./memory/traces.js";
+import { currentModelId } from "./model-settings.js";
+import { stem } from "./suggest.js";
 import { config } from "./config.js";
 
 /**
@@ -64,7 +68,20 @@ export interface Plan {
   status: "pending" | "approved" | "declined" | "saved";
   result: string | null;
   createdAt: number;
+  /** What the person asked for, quoted. Null on plans from before it was
+   *  kept, and on ones proposed with no turn behind them. */
+  request?: string | null;
+  /**
+   * Where the steps came from, when not from the model writing them this
+   * turn: `saved:<name>` is a script the person saved, offered again;
+   * `open` is an app the model went to open without being asked to.
+   */
+  source?: string | null;
 }
+
+/** The columns of a plan, as every read here selects them. */
+const PLAN_COLUMNS = `id, session_id AS sessionId, summary, kind, payload, status, result,
+              created_at AS createdAt, request, source`;
 
 /**
  * The steps of a plan, whatever shape it was stored in.
@@ -115,6 +132,8 @@ export function proposePlan(input: {
   summary: string;
   kind: PlanKind;
   steps: PlanStep[];
+  request?: string | null;
+  source?: string | null;
 }): Plan {
   const plan: Plan = {
     id: randomUUID(),
@@ -125,14 +144,16 @@ export function proposePlan(input: {
     status: "pending",
     result: null,
     createdAt: now(),
+    request: input.request?.trim().slice(0, 600) || null,
+    source: input.source ?? null,
   };
 
   getDb()
     .prepare(
-      `INSERT INTO plans (id, session_id, summary, kind, payload, status, created_at)
-       VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
+      `INSERT INTO plans (id, session_id, summary, kind, payload, status, created_at, request, source)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
     )
-    .run(plan.id, plan.sessionId, plan.summary, plan.kind, plan.payload, plan.createdAt);
+    .run(plan.id, plan.sessionId, plan.summary, plan.kind, plan.payload, plan.createdAt, plan.request, plan.source);
 
   return plan;
 }
@@ -152,13 +173,11 @@ export function listPendingPlans(): Array<{
   summary: string;
   steps: PlanStep[];
   createdAt: number;
+  request: string | null;
+  source: string | null;
 }> {
   const rows = getDb()
-    .prepare(
-      `SELECT id, session_id AS sessionId, summary, kind, payload, status, result,
-              created_at AS createdAt
-         FROM plans WHERE status = 'pending' ORDER BY created_at ASC`,
-    )
+    .prepare(`SELECT ${PLAN_COLUMNS} FROM plans WHERE status = 'pending' ORDER BY created_at ASC`)
     .all() as Plan[];
   return rows.map((p) => ({
     id: p.id,
@@ -166,16 +185,14 @@ export function listPendingPlans(): Array<{
     summary: p.summary,
     steps: planSteps(p),
     createdAt: p.createdAt,
+    request: p.request ?? null,
+    source: p.source ?? null,
   }));
 }
 
 export function getPlan(id: string): Plan | null {
   const row = getDb()
-    .prepare(
-      `SELECT id, session_id AS sessionId, summary, kind, payload, status, result,
-              created_at AS createdAt
-         FROM plans WHERE id = ?`,
-    )
+    .prepare(`SELECT ${PLAN_COLUMNS} FROM plans WHERE id = ?`)
     .get(id) as Plan | undefined;
   return row ?? null;
 }
@@ -323,6 +340,12 @@ export async function approvePlan(
             script: steps.map((s) => s.script).join("\n"),
             kind: [...kinds][0] ?? "applescript",
             safe: opts.safe === true,
+            // Only when the plan was the whole answer to it. An app Enio
+            // went to open is a first step: saved with the request, "what
+            // does the chess board look like" was answered ever after by
+            // an offer to open Chess. A saved script offered again
+            // already has the request it was saved for.
+            request: plan.source ? null : (plan.request ?? null),
           });
     if (saved.ok) savedAs = saved.name;
   }
@@ -359,6 +382,9 @@ export interface SavedRecipe {
    * different judgement and not one the model or the save flow can make.
    */
   safe: boolean;
+  /** What the person asked for when the plan it was saved from was
+   *  written. Null for one written by hand in the panel. */
+  request?: string | null;
 }
 
 /**
@@ -381,16 +407,20 @@ export function saveRecipe(input: {
   script: string;
   kind?: PlanKind;
   safe?: boolean;
+  /** The request the plan was written for. Kept only when given: editing a
+   *  script in the panel must not forget what it was for. */
+  request?: string | null;
 }): { ok: true; name: string } | { ok: false; reason: string } {
   const name = normalizeRecipeName(input.name);
   if (!name) return { ok: false, reason: "Name is too short." };
 
   getDb()
     .prepare(
-      `INSERT INTO saved_recipes (name, summary, script, kind, safe, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO saved_recipes (name, summary, script, kind, safe, created_at, request)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(name) DO UPDATE SET summary = excluded.summary,
-         script = excluded.script, kind = excluded.kind, safe = excluded.safe`,
+         script = excluded.script, kind = excluded.kind, safe = excluded.safe,
+         request = COALESCE(excluded.request, saved_recipes.request)`,
     )
     .run(
       name,
@@ -399,6 +429,7 @@ export function saveRecipe(input: {
       input.kind ?? "applescript",
       input.safe ? 1 : 0,
       now(),
+      input.request?.trim() || null,
     );
 
   return { ok: true, name };
@@ -407,7 +438,7 @@ export function saveRecipe(input: {
 export function listSavedRecipes(): SavedRecipe[] {
   try {
     const rows = getDb()
-      .prepare(`SELECT name, summary, script, kind, safe FROM saved_recipes ORDER BY name`)
+      .prepare(`SELECT name, summary, script, kind, safe, request FROM saved_recipes ORDER BY name`)
       .all() as Array<Omit<SavedRecipe, "safe"> & { safe: number }>;
     return rows.map((r) => ({ ...r, kind: r.kind ?? "applescript", safe: r.safe === 1 }));
   } catch {
@@ -419,4 +450,205 @@ export function listSavedRecipes(): SavedRecipe[] {
 
 export function forgetRecipe(name: string): boolean {
   return getDb().prepare(`DELETE FROM saved_recipes WHERE name = ?`).run(name).changes > 0;
+}
+
+/**
+ * Whether a plan is exactly the one thing that runs with desktop control
+ * off: opening an app the model went to open unasked.
+ *
+ * By what is stored to run, not by the label alone. The steps of a
+ * pending plan can be replaced (the sheet is editable, and an edit is
+ * stored before the run), and the label stays; so the label says where
+ * the plan came from and the script says what it is.
+ */
+export function opensAnAppOnly(plan: Plan): boolean {
+  if (plan.source !== "open") return false;
+  const steps = planSteps(plan);
+  return (
+    steps.length === 1 &&
+    (steps[0]!.kind ?? "applescript") === "applescript" &&
+    /^do shell script "open -a " & quoted form of "[^"\\\n]*"$/.test(steps[0]!.script)
+  );
+}
+
+/* ---------- try again, and the same request again ------------------------ */
+
+/**
+ * Set a plan aside to have it written again.
+ *
+ * Declined, with the reason kept: the next turn for the same request in
+ * the same conversation finds it here and tells the model what was already
+ * turned down, so "again" is not the same plan a second time. Returns the
+ * request to ask again, or null when the plan cannot be retried (settled
+ * already, or from before the request was kept).
+ */
+export const RETRY_RESULT = "(set aside: asked to try again)";
+export function retryPlan(id: string): { ok: true; request: string } | { ok: false; reason: string } {
+  const plan = getPlan(id);
+  if (!plan) return { ok: false, reason: "No such plan." };
+  if (plan.status !== "pending") return { ok: false, reason: `This plan was already ${plan.status}.` };
+  if (!plan.request) return { ok: false, reason: "This plan does not record what was asked, so it cannot be written again. Ask again in your own words." };
+  settlePlan(plan.id, "declined", RETRY_RESULT);
+  return { ok: true, request: plan.request };
+}
+
+/** Plans for this request, in this conversation, that the person set
+ *  aside to be written again. Newest first. */
+export function plansSetAside(sessionId: string, request: string): Plan[] {
+  const asked = request.trim().slice(0, 600);
+  if (!asked) return [];
+  return getDb()
+    .prepare(
+      `SELECT ${PLAN_COLUMNS} FROM plans
+        WHERE session_id = ? AND request = ? AND status = 'declined' AND result = ?
+        ORDER BY created_at DESC LIMIT 3`,
+    )
+    .all(sessionId, asked, RETRY_RESULT) as Plan[];
+}
+
+/**
+ * The words of a request that say what is wanted, in the order said.
+ *
+ * Stemmed, accents and case set aside, and without the words that only
+ * dress a request ("please", "can you", "the", "my"). Numbers and quoted
+ * text are kept exactly as written: "an alarm for 7" and "an alarm for 8"
+ * are different requests, and a saved script is fixed text that does one
+ * of them.
+ *
+ * The small words that turn a request around are NOT dressing: on and
+ * off, up and down, to and from, with and without, in and out, not. The
+ * first version dropped most of them and compared what was left as a set,
+ * and review showed what that offers: the script saved for "turn on dark
+ * mode" for "turn off dark mode", the one that moves a file from Desktop
+ * to Documents for the request to move it back.
+ */
+const FILLER = new Set(
+  ("a an the my our your me i you we it its this that these those please pls can could would will shall may " +
+    "and so then just now hey hi ok okay enio want need like wanna gonna " +
+    "is are was be been do does did have has some any for of").split(" "),
+);
+export function requestWords(text: string): { words: string[]; exact: Set<string> } {
+  const exact = new Set<string>();
+  const plain = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[\u2018\u2019\u02BC]/g, "'");
+  const rest = plain.replace(/"([^"]+)"|“([^”]+)”|(?:^|\s)'([^']{2,})'(?=\s|$|[.,!?])/g, (_m, a, b, c) => {
+    exact.add(String(a ?? b ?? c).trim());
+    return " ";
+  });
+  const words: string[] = [];
+  for (const raw of rest.split(/[^a-z0-9:.@/_-]+/)) {
+    const w = raw.replace(/^[.:/_-]+|[.:/_-]+$/g, "");
+    if (!w) continue;
+    if (/\d/.test(w)) exact.add(w);
+    else if (w.length > 1 && !FILLER.has(w)) words.push(stem(w));
+  }
+  return { words, exact };
+}
+
+/**
+ * The saved script this request was already answered with, if exactly one
+ * fits.
+ *
+ * A saved script is selected by the model from a tool description, which
+ * costs a model round and is the model's pick. When the person asks for
+ * the same thing again, nothing needs picking: the script was written for
+ * this request, ran, and was kept by them. So the harness offers it, for
+ * one confirming press, with no model in between.
+ *
+ * The same thing: the same words that matter, in the same order, and
+ * every number and quoted phrase identical. Only dressing may differ
+ * ("please", "can you", an article, a plural). That is narrow on purpose.
+ * What this decides ends in a button that runs a script, and a looser
+ * rule -- most of the words in common -- is what offered the opposite
+ * script. A request that is merely similar goes to the model, which can
+ * still pick the script by name. Two scripts saved for the same words are
+ * no match, and a script written by hand in the panel has no request and
+ * is never matched here.
+ */
+export function matchSavedRecipe(request: string, recipes: SavedRecipe[] = listSavedRecipes()): SavedRecipe | null {
+  const asked = requestWords(request);
+  if (asked.words.length < 2) return null;
+  const sameSet = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((x) => b.has(x));
+  const fits = recipes.filter((recipe) => {
+    if (!recipe.request) return false;
+    const was = requestWords(recipe.request);
+    return sameSet(asked.exact, was.exact) && was.words.length === asked.words.length && was.words.every((w, i) => w === asked.words[i]);
+  });
+  return fits.length === 1 ? fits[0]! : null;
+}
+
+/* ---------- what a run did, said in the conversation ---------------------- */
+
+const clip = (text: string, limit: number) => (text.length > limit ? `${text.slice(0, limit)}…` : text);
+
+/**
+ * What an approved plan did, as a reply.
+ *
+ * Assembled from the steps' own results, never by a model: the run happens
+ * outside any turn, and before this the outcome lived only in the sheet
+ * that ran it. The thread never learned what happened, so "did that work?"
+ * was answered from nothing, and a plan that read something left its
+ * output where the next turn could not use it. Each step's output is in
+ * the reply (clipped), which is what lets a follow-up question be answered
+ * from it.
+ */
+export function planOutcomeReply(plan: Plan, outcome: ApprovalOutcome): string {
+  const lines = outcome.results.map((r) => {
+    const out = r.output.trim();
+    return `${r.step}. ${r.summary || "(step)"} — ${r.ok ? "done" : "failed"}` + (out ? `\n   ${clip(out, 600).replace(/\n/g, "\n   ")}` : "");
+  });
+  const notRun = outcome.totalSteps - outcome.ranSteps;
+  if (outcome.status === "failed") {
+    return (
+      `The plan stopped at step ${outcome.ranSteps} of ${outcome.totalSteps}: ${plan.summary}\n\n${lines.join("\n")}\n\n` +
+      (outcome.ranSteps > 1 ? "The steps before it already ran. " : "") +
+      (notRun > 0 ? `${notRun === 1 ? "The step" : `The ${notRun} steps`} after it did not run.` : "")
+    ).trim();
+  }
+  return (
+    `You ran the plan: ${plan.summary}\n\n${lines.join("\n")}` +
+    (outcome.savedAs
+      ? `\n\nSaved as the script "${outcome.savedAs}".` +
+        // Only when it will be: a script is found again by the request it
+        // was saved for, and this one may not have kept one.
+        (!plan.source && plan.request && requestWords(plan.request).words.length >= 2
+          ? " Ask for the same thing again and it is offered without writing a new plan."
+          : "")
+      : "") +
+    // An app opened on the way to something else: the rest is still owed.
+    (plan.source === "open" && plan.request ? `\n\nThat was the first step of what you asked. Say "go on" and I will carry on with it.` : "")
+  );
+}
+
+export function recordPlanOutcome(plan: Plan, outcome: ApprovalOutcome): string {
+  const reply = planOutcomeReply(plan, outcome);
+  if (!plan.sessionId) return reply;
+  try {
+    recordTurn({
+      sessionId: plan.sessionId,
+      question: "(ran the plan)",
+      reply,
+      specialist: "operator",
+      systemPrompt: "(harness: plan_run)",
+      memoryBlock: "",
+      startedAt: Date.now(),
+      durationMs: 0,
+      iterations: 0,
+      model: currentModelId(),
+      steps: [
+        {
+          seq: 0,
+          kind: "harness",
+          name: "plan_run",
+          args: JSON.stringify({ planId: plan.id, status: outcome.status, ranSteps: outcome.ranSteps, totalSteps: outcome.totalSteps, savedAs: outcome.savedAs }),
+          output: outcome.output,
+          error: null,
+          durationMs: 0,
+        },
+      ],
+    });
+  } catch {
+    /* Tracing must never cost the outcome its place in the thread. */
+  }
+  logMessage(plan.sessionId, "assistant", reply);
+  return reply;
 }

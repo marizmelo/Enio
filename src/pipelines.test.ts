@@ -123,7 +123,7 @@ test("artifact extraction is pinned to the tools' exact wording", () => {
   assert.deepEqual(
     extractArtifacts(
       "send_email",
-      "DRY RUN — nothing was sent.\n\nTo: a@b.c\n\nSaved to /Users/x/enio-workspace/draft-1.eml\nSet ENIO_EMAIL_SEND=1 to send for real.",
+      "Written, not sent.\nSaved to /Users/x/enio-workspace/draft-1.eml\n\nFrom: me@b.c\nTo: a@b.c\nSubject: Hi\n\nBody.",
     ),
     [{ type: "email_draft", path: "/Users/x/enio-workspace/draft-1.eml" }],
   );

@@ -1,4 +1,4 @@
-import { agentOnlyAccount, anyAccountWith, scriptAccountWith, type PickedAccount } from "../accounts.js";
+import { agentOnlyAccount, anyAccountWith, pinnedAccountNow, scriptAccountWith, type PickedAccount } from "../accounts.js";
 import { callScript } from "../appsscript.js";
 import type { BuiltinTool } from "../types.js";
 
@@ -31,6 +31,15 @@ function accountFor(grant: Parameters<typeof agentOnlyAccount>[0]): { account: P
   const agent = agentOnlyAccount(grant);
   return agent ? { account: agent, fallback: true } : null;
 }
+/**
+ * What a tool says when it has no account to use. In a step set to one
+ * account the reason is that account, not that nothing is connected: the
+ * step uses it or nothing, and Enio's own does not stand in for it.
+ */
+const noAccount = (usual: string): string =>
+  pinnedAccountNow()
+    ? "This step is set to an account that cannot do that, so nothing was done. Choose another account for the step."
+    : usual;
 /** The notice's tail when Enio's own account stood in for the person's. */
 const standIn = (fallback: boolean) =>
   fallback ? " Nothing of yours is connected; connect yours in [Connections](enio://panel/accounts/add)." : "";
@@ -49,7 +58,7 @@ const readCalendarTool: BuiltinTool = {
   },
   async run(args) {
     const pick = accountFor("calendar.read");
-    if (!pick) return "No connected account can read a calendar.";
+    if (!pick) return noAccount("No connected account can read a calendar.");
     const { account, fallback } = pick;
     const result = await callScript(account.url, account.secret, "calendar.upcoming", {
       days: Math.min(60, Math.max(1, Number(args.days ?? 7) || 7)),
@@ -88,7 +97,7 @@ const addEventTool: BuiltinTool = {
   },
   async run(args) {
     const pick = accountFor("calendar.write");
-    if (!pick) return "The connected account was not granted calendar changes.";
+    if (!pick) return noAccount("The connected account was not granted calendar changes.");
     const { account, fallback } = pick;
     const result = await callScript(account.url, account.secret, "calendar.add", {
       title: String(args.title ?? ""),
@@ -114,7 +123,7 @@ const listTodosTool: BuiltinTool = {
   parameters: { type: "object", properties: {}, required: [] },
   async run() {
     const pick = accountFor(null);
-    if (!pick) return "No account is connected.";
+    if (!pick) return noAccount("No account is connected.");
     const { account, fallback } = pick;
     const result = await callScript(account.url, account.secret, "tasks.list", {});
     if (!result.ok) return `Could not read todos: ${result.error}`;
@@ -152,7 +161,7 @@ const addTodoTool: BuiltinTool = {
     // of their own in the grant list, and an account connected read-only must
     // not gain a write path through the side door.
     const pick = accountFor("calendar.write");
-    if (!pick) return "The connected account was not granted changes.";
+    if (!pick) return noAccount("The connected account was not granted changes.");
     const { account, fallback } = pick;
     const result = await callScript(account.url, account.secret, "tasks.add", {
       title: String(args.title ?? ""),
@@ -181,7 +190,7 @@ const findContactTool: BuiltinTool = {
   },
   async run(args) {
     const pick = accountFor(null);
-    if (!pick) return "No account is connected.";
+    if (!pick) return noAccount("No account is connected.");
     const { account } = pick;
     const result = await callScript(account.url, account.secret, "contacts.find", {
       query: String(args.query ?? ""),
@@ -209,7 +218,7 @@ const searchDriveTool: BuiltinTool = {
   },
   async run(args) {
     const pick = accountFor("drive.read");
-    if (!pick) return "The connected account was not granted Drive reading.";
+    if (!pick) return noAccount("The connected account was not granted Drive reading.");
     const { account } = pick;
     const result = await callScript(account.url, account.secret, "drive.find", {
       query: String(args.query ?? ""),
@@ -238,7 +247,7 @@ const readDriveTool: BuiltinTool = {
   },
   async run(args) {
     const account = scriptAccountWith("drive.read");
-    if (!account) return "The connected account was not granted Drive reading.";
+    if (!account) return noAccount("The connected account was not granted Drive reading.");
     const result = await callScript(account.url, account.secret, "drive.read", {
       id: String(args.id ?? ""),
     });

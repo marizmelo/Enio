@@ -238,11 +238,38 @@ export async function runningApps(): Promise<string[]> {
  * rather than guessed -- picking the wrong window to click in is precisely the
  * mistake that is expensive to undo.
  *
+ * A name the word BEGINS and a name that holds it as a whole word are the
+ * same strength of match. Ranked apart, with the prefix first, "Chrome" on a
+ * machine with Google Chrome and Chrome Remote Desktop Host Uninstaller
+ * found one name beginning with it and stopped there: asked to open Chrome,
+ * Enio opened the uninstaller, and the person got its "remove Remote
+ * Desktop?" alert. Between such matches an app whose name says it is a
+ * tool FOR an app (an uninstaller, an updater, a helper) gives way to the
+ * app itself, and is never the answer to a word that did not ask for one.
+ * Only then: two apps that are both apps are still a question.
+ *
  * Only the *resolved* name is ever interpolated into a script. That preserves
  * what makes mac_recipe safe: the string reaching AppleScript comes from the
  * system's own process list, never from the model, so a recipe cannot be
  * talked into running something else by text the model read in a file.
  */
+// Only the words that mean "a tool for another app". The first list also
+// had host, agent, setup, update, migration, diagnostics and cleaner, which
+// are parts of real apps' names: it set Migration Assistant aside so that
+// "assistant" silently became Boot Camp Assistant, and refused "midi"
+// because Audio MIDI Setup was "not the app itself".
+const UTILITY = /\b(?:uninstaller|installer|updater|helper|handler|remover|daemon)\b/i;
+/** With a run-together name read as its words: "ZoomUpdater". */
+const words = (name: string) => name.replace(/([a-z])([A-Z])/g, "$1 $2");
+const isUtility = (name: string) => UTILITY.test(words(name));
+/** Whether the request itself asked for that tool: one of the tool words,
+ *  as a whole word of the candidate. "installer" is inside "Uninstaller"
+ *  and did not ask for it. */
+const askedForTool = (want: string, candidate: string) =>
+  (want.match(new RegExp(UTILITY.source, "gi")) ?? []).some((word) =>
+    new RegExp(`\\b${word}\\b`, "i").test(words(candidate)),
+  );
+
 export function resolveApp(
   raw: string,
   apps: string[],
@@ -257,18 +284,36 @@ export function resolveApp(
   const exact = apps.filter((a) => a.toLowerCase() === want);
   if (exact.length === 1) return { ok: true, name: exact[0]! };
 
+  let onlyTool: string | undefined;
+  const escaped = want.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const wholeWord = new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`);
   for (const test of [
-    (a: string) => a.toLowerCase().startsWith(want),
+    (a: string) => a.toLowerCase().startsWith(want) || wholeWord.test(a.toLowerCase()),
     (a: string) => a.toLowerCase().includes(want),
   ]) {
-    const hits = apps.filter(test);
-    if (hits.length === 1) return { ok: true, name: hits[0]! };
+    const all = apps.filter(test);
+    if (all.length === 0) continue;
+    const proper = all.filter((a) => !isUtility(a));
+    const hits = proper.length > 0 ? proper : all;
     if (hits.length > 1) {
       return { ok: false, reason: `"${raw}" matches ${hits.join(", ")}. Which one?` };
     }
+    // The only thing by that name here is a tool for an app. Not the
+    // answer to a word that did not ask for one: a looser match may still
+    // find the app, and if none does the refusal below says what was seen.
+    if (proper.length === 0 && !askedForTool(want, hits[0]!)) {
+      onlyTool ??= hits[0]!;
+      continue;
+    }
+    return { ok: true, name: hits[0]! };
   }
 
-  return { ok: false, reason: `"${raw}" is not ${what}. ${listed}` };
+  return {
+    ok: false,
+    reason: onlyTool
+      ? `"${raw}" is not ${what}. The only match is ${onlyTool}, which is not the app itself; say its full name to mean it. ${listed}`
+      : `"${raw}" is not ${what}. ${listed}`,
+  };
 }
 
 /**
@@ -284,7 +329,15 @@ export async function installedApps(): Promise<string[]> {
   const { readdirSync } = await import("node:fs");
   const { homedir } = await import("node:os");
   const names = new Set<string>();
-  for (const dir of ["/Applications", "/System/Applications", `${homedir()}/Applications`]) {
+  // Utilities too: Terminal, Activity Monitor and Screenshot live a folder
+  // down, and "open Terminal" was answered "not installed".
+  for (const dir of [
+    "/Applications",
+    "/Applications/Utilities",
+    "/System/Applications",
+    "/System/Applications/Utilities",
+    `${homedir()}/Applications`,
+  ]) {
     try {
       for (const entry of readdirSync(dir)) {
         if (entry.endsWith(".app")) names.add(entry.slice(0, -4));

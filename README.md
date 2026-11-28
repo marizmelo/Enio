@@ -75,7 +75,7 @@ See **[Getting started](docs/getting-started.md)** for permissions, the workspac
 
 So nearly everything turns generation into selection. A router picks one of six agents, each with at most six tools. Clicks are names read from the accessibility tree. Memory extraction uses a closed vocabulary of nine relations. Computer actions are tested scripts selected rather than written.
 
-**Nothing irreversible happens without you.** Email is dry-run until a flag is set. IMAP opens read-only so the *server* refuses changes. The model proposes scripts and never runs them — the only path from "composed" to "ran" goes through a person reading the exact text.
+**Nothing irreversible happens without you.** Enio writes an email and you send it; it has no way to send one itself. IMAP opens read-only so the *server* refuses changes. The model proposes scripts and never runs them — the only path from "composed" to "ran" goes through a person reading the exact text.
 
 **It degrades rather than fails.** No vision model → OCR. No OCR → image dimensions. No embeddings → keyword matching. A tool that cannot work is withheld rather than offered, because a dead end costs attention the model doesn't have to spare.
 

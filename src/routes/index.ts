@@ -11,6 +11,7 @@ import { handle as personality } from "./personality-routes.js";
 import { handle as avatar } from "./avatar-routes.js";
 import { handle as apps } from "./apps-routes.js";
 import { handle as assets } from "./assets-routes.js";
+import { handle as outbox } from "./outbox-routes.js";
 
 /**
  * The per-feature route modules, tried in order after the auth gate.
@@ -18,4 +19,4 @@ import { handle as assets } from "./assets-routes.js";
  * server.ts is organization, not behavior: every block moved verbatim,
  * and new features add a file here instead of a hundred lines there.
  */
-export const FEATURE_ROUTES = [meetings, library, memory, handoffs, notes, tasks, skills, cloud, accounts, personality, avatar, apps, assets];
+export const FEATURE_ROUTES = [meetings, library, memory, handoffs, notes, tasks, skills, cloud, accounts, personality, avatar, apps, assets, outbox];

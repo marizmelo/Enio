@@ -43,9 +43,12 @@ import {
   listPendingPlans,
   listSavedRecipes,
   normalizeRecipeName,
+  opensAnAppOnly,
   planSteps,
   PLAN_KINDS,
+  recordPlanOutcome,
   replacePlanSteps,
+  retryPlan,
   runAppleScript,
   runScript,
   type PlanKind,
@@ -118,6 +121,7 @@ import {
 import { buildIndexInBackground } from "./project-index.js";
 import { latestSessionForProject } from "./memory/store.js";
 import { recordFlowOutcome, type FlowStepResult } from "./flow.js";
+import { draftView, listDrafts } from "./outbox.js";
 import { embeddingsDegraded } from "./memory/embed.js";
 import { generatedFiles, mentionContext, parseMentions } from "./mentions.js";
 import { SPECIALISTS, allSpecialists } from "./specialists.js";
@@ -1008,7 +1012,16 @@ async function handle(
     // The flag gates execution, not just proposal. A plan proposed while
     // ENIO_DESKTOP was on must not run after the user turns it off — the plan
     // stays pending rather than settling, so re-enabling the flag revives it.
-    if (!desktopEnabled()) {
+    //
+    // One plan runs without it: opening an app the model went to open
+    // unasked. That open ran with no flag and no question before it was
+    // made a plan, so asking first cannot be what makes it need the flag.
+    // Only as stored, though -- an edited step is whatever was typed.
+    // Judged by what would run, not by the label the plan was stored
+    // with: the steps can have been edited and stored since (a save that
+    // failed on its name keeps the edit), and the label does not change.
+    const opensOnly = opensAnAppOnly(plan);
+    if (!desktopEnabled() && !opensOnly) {
       sendJson(res, 409, {
         error: {
           message:
@@ -1030,6 +1043,20 @@ async function handle(
       /* no body is the ordinary case: approve exactly what was proposed */
     }
 
+    // The name is checked before anything is stored or run: execution is
+    // one-shot, and a refusal here must leave the plan as it was. Checked
+    // after the edit was written, a bad name left the edited steps in a
+    // plan nobody had run.
+    let saveAs: string | undefined;
+    if (action === "save") {
+      const name = normalizeRecipeName(String(body.name ?? ""));
+      if (!name) {
+        sendJson(res, 400, { error: { message: "Name is too short." } });
+        return;
+      }
+      saveAs = name;
+    }
+
     if (Array.isArray(body.steps) && body.steps.length > 0) {
       const edited = (body.steps as Array<Record<string, unknown>>)
         .map((st) => ({
@@ -1044,24 +1071,31 @@ async function handle(
         sendJson(res, 400, { error: { message: "Every step was emptied." } });
         return;
       }
+      if (!desktopEnabled() && JSON.stringify(edited.map((st) => st.script)) !== JSON.stringify(planSteps(plan).map((st) => st.script))) {
+        sendJson(res, 409, {
+          error: { message: "Desktop control is switched off, so this step can only run as it was written. Start enio with ENIO_DESKTOP=1 to run a changed one." },
+        });
+        return;
+      }
       replacePlanSteps(plan.id, edited);
       plan.payload = JSON.stringify(edited);
     }
 
-    // The name is checked before anything runs: execution is one-shot, and
-    // discovering the name was invalid after the steps ran would leave a
-    // successful run unsaveable.
-    let saveAs: string | undefined;
-    if (action === "save") {
-      const name = normalizeRecipeName(String(body.name ?? ""));
-      if (!name) {
-        sendJson(res, 400, { error: { message: "Name is too short." } });
-        return;
-      }
-      saveAs = name;
-    }
+    const outcome = await approvePlan(plan, { saveAs, safe: body.safe === true });
+    // What ran, said in the conversation it was proposed in (plans.ts).
+    sendJson(res, 200, { ...outcome, reply: recordPlanOutcome(plan, outcome), sessionId: plan.sessionId });
+    return;
+  }
 
-    sendJson(res, 200, await approvePlan(plan, { saveAs, safe: body.safe === true }));
+  // Try again: the plan is set aside and the request it was written for
+  // comes back, for the client to ask again as an ordinary turn. Nothing
+  // is generated here -- a plan is written by a turn, with every guard a
+  // turn has, and the person sees it asked.
+  const retryMatch = url.pathname.match(/^\/plans\/([0-9a-f-]{8,})\/retry$/);
+  if (retryMatch && req.method === "POST") {
+    const retried = retryPlan(retryMatch[1]!);
+    if (retried.ok) sendJson(res, 200, { status: "declined", request: retried.request });
+    else sendJson(res, /No such/.test(retried.reason) ? 404 : 409, { error: { message: retried.reason } });
     return;
   }
 
@@ -1250,6 +1284,7 @@ async function handle(
     const stepResults: FlowStepResult[] = [];
     const made: Array<{ type: string; path: string }> = [];
     let finished: { status: "succeeded" | "failed" | "cancelled"; runId: string } | null = null;
+    const runStartedAt = Date.now();
     try {
       await runPipeline(
         {
@@ -1301,7 +1336,12 @@ async function handle(
         status: done.status,
         artifacts: made,
       });
-      res.write(`data: ${JSON.stringify({ type: "outcome", reply, status: done.status, artifacts: made })}\n\n`);
+      // Messages the steps wrote are waiting in this conversation: their
+      // cards go with the outcome, or the only Send would be in a terminal.
+      const wrote = listDrafts({ status: "pending", sessionId: conversation })
+        .filter((d) => d.createdAt >= runStartedAt)
+        .map((d) => ({ type: "mail", ...draftView(d) }));
+      res.write(`data: ${JSON.stringify({ type: "outcome", reply, status: done.status, artifacts: made, widgets: wrote })}\n\n`);
     }
     res.end();
     return;
