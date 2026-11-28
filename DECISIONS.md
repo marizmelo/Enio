@@ -5642,6 +5642,82 @@ Drive, todos and contacts have no step of their own and so no menu,
 though a mail or calendar step's setting holds for them too.
 
 
+### Qwen3.5 9B was measured and is not the default (November 2026)
+
+**Asked:** would `mlx-community/Qwen3.5-9B-4bit` (6.0GB, Apache-2.0, text
+and vision) be a significant improvement over the shipped Qwen3 4B
+Instruct, and worth replacing it as the base model.
+
+**Answer: no.** It is about half the speed, needs two settings Enio does
+not have before it is usable at all, and with them its answers were judged
+about level with the 4B's. Measured on an M4 with 24GB, both models served
+by the same runtime (the 9B on its own port), from one frozen build.
+
+| | Qwen3 4B (shipped) | 9B as Enio would run it | 9B, thinking off | 9B, thinking off, temp 0.7 / top-p 0.8 |
+|---|---|---|---|---|
+| decode speed | 35-40 tok/s | 20 tok/s | 20 tok/s | 20 tok/s |
+| short reply, warm | 1.4 s | 8.2 s | 2.7 s | |
+| routing decision, median | 0.42 s | 29-43 s | 0.78 s | |
+| routing, model tier (46 / 81) | 45 / 72 | 42 / 74 | 44 / 76 | |
+| follow-up completed (20) | 15 | 17 | 17 | |
+| coder: right tool (37) | 27 | 24 | 30 | 30 |
+| coder: says "not here" (12) | 12 | 0 | 0 | 0 |
+| coder task, median | 1.8 s | 6.6 s | 2.7 s | 2.7 s |
+| everyday requests lost (15) | 0 | 0 | 4 | 1 |
+| mail replay, right / no call / wrong or mixed (36) | 23 / 11 / 2 | | 23 / 9 / 4 | 26 / 6 / 4 |
+| runaway replies in 82 mail turns | 0 | | 8 | 3 |
+| harness corrections in 40 send turns | 4 | | 10 | 8 |
+| memory in use | 3.8GB | 5.7GB | 5.7GB | 5.7GB |
+
+- **As Enio would run it today it is unusable.** The 9B thinks before
+  every answer, and nothing in Enio turns that off for a model that does:
+  a routing decision took a median of 29 and 43 seconds on the two sets,
+  and an everyday answer took from 30 seconds to over 4 minutes.
+- **With thinking off and Enio's sampling (temperature 1.0, top-p 0.95) it
+  is unstable.** 4 of 15 everyday requests ended in a loop or ran out of
+  room, 3 of the 4 again on a second run, and 8 of 82 mail turns did the
+  same. The 4B had none. At temperature 0.7 and top-p 0.8, which is what
+  Qwen recommends for this model without thinking, those four answered
+  correctly in seconds. Sampling is one global setting in Enio.
+- **At its best settings the answers are level.** Fifteen everyday
+  requests, both models' answers paired with the model hidden, three
+  readers with the same key: the 9B was preferred on 5, the 4B on 4, and 6
+  were ties. The 4B's answers were called fully correct more often (24 of
+  45 readings against 18). With thinking on the 9B was preferred on 6
+  against 4, at about six times the wait (a median of 77 seconds an
+  answer against 12, both runs sharing the machine).
+- **It never says "not here".** On the coder's twelve questions about
+  things that do not exist it kept calling tools every time, in every
+  configuration; the 4B stopped on all twelve. In Enio's loop that is the
+  turn that ends on "Stopped after 8 tool rounds".
+- **Where it is better:** choosing the coder's tool (30 of 37 against 27),
+  completing a follow-up (17 of 20 against 15), and the harder routing set
+  (76 of 81 against 72). None is large, and routing is already decided by
+  the fast tier for about half of requests.
+
+**What this does not show.** One machine. Small sets, and the readers of
+the blind comparison were models. Enio's prompts, examples and guards were
+all tuned on the 4B, which is a home advantage the 9B cannot be given
+credit against. Its vision side was not tried, so "one model for chat and
+vision" is still open for it. The mail replays were not run with thinking
+on, and the timings of the two everyday-request runs that shared the
+machine are inflated (the speed rows above are from clean runs).
+
+**What adopting it would take:** thinking switched off per request for
+models that have it (at least for routing and the other classifications);
+sampling settings per model instead of one global pair; and something for
+the "not here" case. Then measure again. A larger Qwen3.5 is the same
+work, and the bandwidth rule in docs/models.md says what speed to expect
+before downloading it.
+
+**How it was run:** `scripts/engine-bench.mjs`, `scripts/route-bench.mjs`
+and `scripts/followup-bench.mjs` under `ENIO_BASE_URL` / `ENIO_MODEL`;
+`scripts/whose-account-live.mjs` for the mail and send replays; and
+`scripts/model-quality-live.mjs`, added for this, for the everyday
+requests. The server for "thinking off" was started with
+`--chat-template-args '{"enable_thinking":false}'`.
+
+
 ### Enio writes a message and a person sends it: the outbox (November 2026)
 
 `send_email` reached the mail transport. `ENIO_EMAIL_SEND=1` meant "the
